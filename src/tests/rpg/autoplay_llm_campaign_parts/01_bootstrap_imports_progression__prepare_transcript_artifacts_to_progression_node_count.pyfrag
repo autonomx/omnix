@@ -1,0 +1,474 @@
+
+
+def _prepare_transcript_artifacts(transcript: List[Dict[str, Any]], args: Any) -> Dict[str, Any]:
+    import json
+    detail = _effective_transcript_detail(args)
+    if detail == "slim":
+        slim_transcript = []
+        for row in transcript:
+            slim_row = _slim_transcript_row(row)
+            slim_transcript.append(slim_row)
+        full_bytes = len(json.dumps(transcript).encode('utf-8'))
+        slim_bytes = len(json.dumps(slim_transcript).encode('utf-8'))
+        summary = {
+            "used_slim_transcript": True,
+            "row_count": len(transcript),
+            "full_mb": full_bytes / (1024 * 1024),
+            "slim_mb": slim_bytes / (1024 * 1024),
+            "kept_keys": list(TRANSCRIPT_KEEP_KEYS),
+            "detail": detail,
+        }
+        debug_tail = transcript[-3:] if len(transcript) > 3 else None
+        return {
+            "transcript": slim_transcript,
+            "summary": summary,
+            "debug_tail": debug_tail,
+        }
+    else:
+        return {
+            "transcript": transcript,
+            "summary": {"detail": detail, "used_slim_transcript": False},
+            "debug_tail": None,
+        }
+
+
+def _progression_node_count(state: Dict[str, Any]) -> int:
+    """Count completed progression nodes, handling None safely."""
+    return len(_safe_dict(_safe_dict(state).get("progression_completed_nodes")))
+
+
+def _sidecar_progression_overlay(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+    """Overlay progression state, refusing stale overlays and logging overlays."""
+    base = _safe_dict(base)
+    overlay = _safe_dict(overlay)
+    base_nodes = _progression_node_count(base)
+    overlay_nodes = _progression_node_count(overlay)
+    base_rev = _progression_revision(base)
+    overlay_rev = _progression_revision(overlay)
+    if overlay_nodes < base_nodes or overlay_rev < base_rev:
+        # Refuse stale overlays, log the refusal.
+        log = base.setdefault("progression_overlay_log", [])
+        log.append({
+            "refused_overlay": True,
+            "base_nodes": base_nodes,
+            "overlay_nodes": overlay_nodes,
+            "base_rev": base_rev,
+            "overlay_rev": overlay_rev,
+        })
+        del log[:-50]
+        return base
+    # Accept overlay, log the merge.
+    log = base.setdefault("progression_overlay_log", [])
+    log.append({
+        "refused_overlay": False,
+        "base_nodes": base_nodes,
+        "overlay_nodes": overlay_nodes,
+        "base_rev": base_rev,
+        "overlay_rev": overlay_rev,
+    })
+    del log[:-50]
+    merged = dict(base)
+    merged.update(overlay)
+    return merged
+
+
+def _progression_fact_count(state: Dict[str, Any]) -> int:
+    return len(_safe_dict(_safe_dict(state).get("progression_facts")))
+
+
+def _progression_lead_count(state: Dict[str, Any]) -> int:
+    return len(_safe_dict(_safe_dict(state).get("progression_leads")))
+
+
+def _progression_revision(state: Dict[str, Any]) -> int:
+    state = _safe_dict(state)
+    explicit = int(state.get("progression_state_revision") or 0)
+    derived = (
+        _progression_node_count(state) * 10000
+        + _progression_fact_count(state) * 100
+        + _progression_lead_count(state)
+    )
+    return max(explicit, derived)
+
+
+def _scenario_progression_active(runtime_state: Dict[str, Any]) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    return bool(
+        _safe_list(runtime_state.get("scenario_progression_actions"))
+        or _safe_dict(runtime_state.get("progression_completed_nodes"))
+        or _safe_dict(runtime_state.get("progression_facts"))
+    )
+
+
+def _stamp_progression_authority(
+    state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int = 0,
+) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    node_count = _progression_node_count(state)
+    fact_count = _progression_fact_count(state)
+    lead_count = _progression_lead_count(state)
+    prior_revision = int(state.get("progression_state_revision") or 0)
+    derived_revision = node_count * 10000 + fact_count * 100 + lead_count
+    revision = max(prior_revision, derived_revision)
+    if reason in {"progression_applied", "progression_actions_recomputed"}:
+        revision = max(revision, prior_revision + 1)
+
+    state["progression_state_revision"] = revision
+    state["progression_completed_node_count"] = node_count
+    state["progression_fact_count"] = fact_count
+    state["progression_lead_count"] = lead_count
+    state["progression_authority_summary"] = {
+        "revision": revision,
+        "completed_node_count": node_count,
+        "fact_count": fact_count,
+        "lead_count": lead_count,
+        "reason": reason,
+        "turn_index": turn_index,
+    }
+    return state
+
+
+def _preserve_progression_state_fields(
+    base_state: Dict[str, Any],
+    candidate_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    base_state = _safe_dict(base_state)
+    candidate_state = _safe_dict(candidate_state)
+    out = dict(candidate_state)
+
+    base_revision = _progression_revision(base_state)
+    candidate_revision = _progression_revision(candidate_state)
+    base_nodes = _progression_node_count(base_state)
+    candidate_nodes = _progression_node_count(candidate_state)
+    base_facts = _progression_fact_count(base_state)
+    candidate_facts = _progression_fact_count(candidate_state)
+
+    candidate_is_stale = (
+        candidate_revision < base_revision
+        or candidate_nodes < base_nodes
+        or candidate_facts < base_facts
+    )
+
+    if candidate_is_stale:
+        for key in PROGRESSION_STATE_PRESERVE_KEYS:
+            if key in base_state:
+                out[key] = base_state[key]
+        out = _stamp_progression_authority(
+            out,
+            reason="stale_progression_merge_refused",
+            turn_index=int(out.get("turn_index") or 0),
+        )
+        stale_log = out.setdefault("progression_stale_merge_log", [])
+        if isinstance(stale_log, list):
+            stale_log.append(
+                {
+                    "base_revision": base_revision,
+                    "candidate_revision": candidate_revision,
+                    "base_nodes": base_nodes,
+                    "candidate_nodes": candidate_nodes,
+                    "base_facts": base_facts,
+                    "candidate_facts": candidate_facts,
+                }
+            )
+            del stale_log[:-50]
+        return out
+
+    for key in PROGRESSION_STATE_PRESERVE_KEYS:
+        base_value = base_state.get(key)
+        candidate_value = out.get(key)
+        if key not in out or candidate_value in (None, {}, []):
+            if base_value not in (None, {}, []):
+                out[key] = base_value
+            continue
+
+        if isinstance(base_value, dict) and isinstance(candidate_value, dict):
+            merged = dict(base_value)
+            merged.update(candidate_value)
+            out[key] = merged
+        elif isinstance(base_value, list) and isinstance(candidate_value, list):
+            # Preserve earlier progression logs while accepting new rows.
+            if key == "scenario_progression_log":
+                combined = list(base_value)
+                def _marker(row: Any) -> tuple:
+                    row = _safe_dict(row)
+                    node_ids = tuple(
+                        _safe_str(node_id)
+                        for node_id in _safe_list(row.get("matched_node_ids"))
+                    )
+                    if not node_ids:
+                        node_ids = tuple(
+                            _safe_str(_safe_dict(node).get("node_id"))
+                            for node in _safe_list(row.get("matched_nodes"))
+                        )
+                    return (
+                        _safe_str(row.get("graph_id")),
+                        int(row.get("turn_index") or 0),
+                        node_ids,
+                    )
+
+                seen = {_marker(row) for row in combined}
+                for row in candidate_value:
+                    marker = _marker(row)
+                    if marker not in seen:
+                        combined.append(row)
+                        seen.add(marker)
+                out[key] = combined[-100:]
+            else:
+                out[key] = candidate_value or base_value
+    return _stamp_progression_authority(
+        out,
+        reason="progression_merge_preserved",
+        turn_index=int(out.get("turn_index") or 0),
+    )
+
+
+def _authoritative_progression_state(
+    runtime_state: Dict[str, Any],
+    candidate_state: Dict[str, Any] | None = None,
+    *,
+    reason: str,
+    turn_index: int = 0,
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    candidate_state = _safe_dict(candidate_state) if candidate_state is not None else runtime_state
+    merged = _preserve_progression_state_fields(runtime_state, candidate_state)
+    return _stamp_progression_authority(
+        merged,
+        reason=reason,
+        turn_index=turn_index,
+    )
+
+
+def _assert_progression_monotonic(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    previous_node_count: int,
+    previous_revision: int,
+) -> None:
+    """Assert that progression node count and revision do not decrease."""
+    current_node_count = _progression_node_count(runtime_state)
+    current_revision = _progression_revision(runtime_state)
+    if current_node_count < previous_node_count:
+        raise RuntimeError(
+            "progression_completed_node_count_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_node_count}:"
+            f"current={current_node_count}"
+        )
+    if current_revision < previous_revision:
+        raise RuntimeError(
+            "progression_state_revision_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_revision}:"
+            f"current={current_revision}"
+        )
+
+
+def _extract_progression_authority_sidecar(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    sidecar: Dict[str, Any] = {}
+    for key in PROGRESSION_STATE_PRESERVE_KEYS:
+        if key in runtime_state:
+            sidecar[key] = deepcopy(runtime_state.get(key))
+    for key in ("progression_stale_merge_log", "progression_overlay_log"):
+        if key in runtime_state:
+            sidecar[key] = deepcopy(runtime_state.get(key))
+    graph_quest_state = _extract_scenario_progression_quest_state(runtime_state)
+    if graph_quest_state:
+        sidecar["scenario_progression_quest_state"] = graph_quest_state
+        sidecar["scenario_progression_quest_ids"] = sorted(graph_quest_state.keys())
+    return _stamp_progression_authority(
+        sidecar,
+        reason="progression_sidecar_extracted",
+        turn_index=int(runtime_state.get("turn_index") or 0),
+    )
+
+
+def _overlay_progression_authority_sidecar(
+    runtime_state: Dict[str, Any],
+    progression_authority_state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    progression_authority_state = _extract_progression_authority_sidecar(
+        progression_authority_state
+    )
+    runtime_nodes = _progression_node_count(runtime_state)
+    sidecar_nodes = _progression_node_count(progression_authority_state)
+    runtime_revision = _progression_revision(runtime_state)
+    sidecar_revision = _progression_revision(progression_authority_state)
+    merged = _sidecar_progression_overlay(runtime_state, progression_authority_state)
+    if sidecar_nodes > runtime_nodes or sidecar_revision > runtime_revision:
+        stale_log = merged.setdefault("progression_stale_merge_log", [])
+        if isinstance(stale_log, list):
+            stale_log.append(
+                {
+                    "base_revision": runtime_revision,
+                    "candidate_revision": sidecar_revision,
+                    "base_nodes": runtime_nodes,
+                    "candidate_nodes": sidecar_nodes,
+                    "reason": reason,
+                    "turn_index": turn_index,
+                }
+            )
+            del stale_log[:-50]
+    merged = _overlay_scenario_progression_quests(
+        merged,
+        _safe_dict(progression_authority_state.get("scenario_progression_quest_state")),
+    )
+    return _stamp_progression_authority(
+        merged,
+        reason=reason,
+        turn_index=turn_index,
+    )
+
+
+def _update_progression_authority_sidecar(
+    progression_authority_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    existing_sidecar = _extract_progression_authority_sidecar(progression_authority_state)
+    runtime_sidecar = _extract_progression_authority_sidecar(runtime_state)
+    merged = _sidecar_progression_overlay(existing_sidecar, runtime_sidecar)
+
+    current_graph_quests = _safe_dict(existing_sidecar.get("scenario_progression_quest_state"))
+    candidate_graph_quests = _safe_dict(runtime_sidecar.get("scenario_progression_quest_state"))
+    graph_quests = dict(current_graph_quests)
+    for quest_id, quest in candidate_graph_quests.items():
+        existing = _safe_dict(graph_quests.get(quest_id))
+        quest = _safe_dict(quest)
+        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
+        quest_completed = bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed"
+        if existing_completed and not quest_completed:
+            continue
+        merged_quest = dict(existing)
+        merged_quest.update(quest)
+        merged_quest.setdefault("source", "scenario_progression_graph")
+        graph_quests[quest_id] = merged_quest
+
+    if graph_quests:
+        merged["scenario_progression_quest_state"] = graph_quests
+        merged["scenario_progression_quest_ids"] = sorted(graph_quests.keys())
+
+    return _stamp_progression_authority(
+        merged,
+        reason=reason,
+        turn_index=turn_index,
+    )
+
+
+def _assert_progression_sidecar_monotonic(
+    progression_authority_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    previous_node_count: int,
+    previous_revision: int,
+) -> None:
+    current_node_count = _progression_node_count(progression_authority_state)
+    current_revision = _progression_revision(progression_authority_state)
+    if current_node_count < previous_node_count:
+        raise RuntimeError(
+            "progression_sidecar_completed_node_count_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_node_count}:"
+            f"current={current_node_count}"
+        )
+    if current_revision < previous_revision:
+        raise RuntimeError(
+            "progression_sidecar_revision_decreased:"
+            f"turn={turn_index}:"
+            f"previous={previous_revision}:"
+            f"current={current_revision}"
+        )
+
+
+def _require_progression_sidecar_present(
+    progression_authority_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    stage: str,
+) -> None:
+    if not isinstance(progression_authority_state, dict):
+        raise RuntimeError(
+            f"progression_sidecar_missing:turn={turn_index}:stage={stage}:not_dict"
+        )
+    if turn_index > 1 and not progression_authority_state:
+        raise RuntimeError(
+            f"progression_sidecar_missing:turn={turn_index}:stage={stage}:empty"
+        )
+
+
+def _assert_runtime_not_below_sidecar(
+    runtime_state: Dict[str, Any],
+    progression_authority_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    stage: str,
+) -> None:
+    runtime_nodes = _progression_node_count(runtime_state)
+    sidecar_nodes = _progression_node_count(progression_authority_state)
+    runtime_revision = _progression_revision(runtime_state)
+    sidecar_revision = _progression_revision(progression_authority_state)
+
+    if runtime_nodes < sidecar_nodes:
+        raise RuntimeError(
+            "progression_runtime_below_sidecar_nodes:"
+            f"turn={turn_index}:stage={stage}:"
+            f"runtime_nodes={runtime_nodes}:sidecar_nodes={sidecar_nodes}:"
+            f"runtime_revision={runtime_revision}:sidecar_revision={sidecar_revision}"
+        )
+
+    if runtime_revision < sidecar_revision:
+        raise RuntimeError(
+            "progression_runtime_below_sidecar_revision:"
+            f"turn={turn_index}:stage={stage}:"
+            f"runtime_nodes={runtime_nodes}:sidecar_nodes={sidecar_nodes}:"
+            f"runtime_revision={runtime_revision}:sidecar_revision={sidecar_revision}"
+        )
+
+
+def _overlay_and_assert_progression_sidecar(
+    runtime_state: Dict[str, Any],
+    progression_authority_state: Dict[str, Any],
+    *,
+    reason: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    _require_progression_sidecar_present(
+        progression_authority_state,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    overlaid = _overlay_progression_authority_sidecar(
+        runtime_state,
+        progression_authority_state,
+        reason=reason,
+        turn_index=turn_index,
+    )
+    _assert_runtime_not_below_sidecar(
+        overlaid,
+        progression_authority_state,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    _assert_graph_second_quest_invariant(
+        overlaid,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    _assert_graph_actions_available_for_active_objectives(
+
+        overlaid,
+        turn_index=turn_index,
+        stage=reason,
+    )
+    return overlaid

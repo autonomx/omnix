@@ -1,0 +1,34 @@
+            "message": "Suppressed graph actions must not keep driving player-agent turns.",
+        },
+    }
+
+    failed_gates = []
+    for name, gate in gates.items():
+        if isinstance(gate, dict):
+            if not bool(gate.get("ok")):
+                failed_gates.append(name)
+        elif not bool(gate):
+            failed_gates.append(name)
+
+    return {
+        "ok": not failed_gates,
+        "requested_turns": requested_turns,
+        "profile": "smoke_100",
+        "gates": gates,
+        "failed_gates": failed_gates,
+        "progression_changed_count": progression_changed_count,
+        "unique_progression_node_count": unique_progression_node_count,
+        "min_progression_turns": min_progression_turns,
+        "graph_count": graph_count,
+        "completed_graph_count": completed_graph_count,
+        "campaign_graphs_complete": campaign_graphs_complete,
+        "waiting_for_next_graph_pack": waiting_for_next_graph_pack,
+        "arc_complete_action_count": arc_complete_action_count,
+        "classification": (
+            "content_sufficient_for_requested_turns"
+            if bool(progression_changed_count >= requested_turns or unique_progression_node_count >= requested_turns)
+            else "content_exhausted_waiting_for_next_graph_pack"
+            if bool(waiting_for_next_graph_pack and campaign_graphs_complete)
+            else "active_or_incomplete"
+        ),
+    }

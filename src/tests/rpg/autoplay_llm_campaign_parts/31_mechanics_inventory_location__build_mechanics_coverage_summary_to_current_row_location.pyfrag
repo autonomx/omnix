@@ -1,0 +1,470 @@
+
+
+def _build_mechanics_coverage_summary(
+    transcript: List[Dict[str, Any]],
+    final_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    mechanics: Dict[str, Dict[str, Any]] = {
+        "travel": {"required": True, "count": 0, "turns": [], "examples": []},
+        "npc_interaction": {"required": True, "count": 0, "turns": [], "examples": []},
+        "quest_progress": {"required": True, "count": 0, "turns": [], "examples": []},
+        "service_or_lodging": {"required": True, "count": 0, "turns": [], "examples": []},
+        "buying": {"required": True, "count": 0, "turns": [], "examples": []},
+        "selling": {"required": False, "count": 0, "turns": [], "examples": []},
+        "currency_change": {"required": True, "count": 0, "turns": [], "examples": []},
+        "inventory_change": {"required": True, "count": 0, "turns": [], "examples": []},
+        "party_recruitment": {"required": True, "count": 0, "turns": [], "examples": []},
+        "combat_started": {"required": True, "count": 0, "turns": [], "examples": []},
+        "combat_resolved": {"required": True, "count": 0, "turns": [], "examples": []},
+        "xp_gain": {"required": True, "count": 0, "turns": [], "examples": []},
+        "level_up": {"required": False, "count": 0, "turns": [], "examples": []},
+        "loot_acquired": {"required": False, "count": 0, "turns": [], "examples": []},
+    }
+
+    def mark(name: str, turn_index: int, row: Dict[str, Any], reason: str, evidence_source: str = "explicit_payload") -> None:
+        item = mechanics.get(name)
+        if not item:
+            return
+
+        dedupe_key = f"{turn_index}:{name}"
+        if dedupe_key in marked_this_turn:
+            return
+        marked_this_turn.add(dedupe_key)
+
+        item["count"] = int(item.get("count") or 0) + 1
+        if turn_index not in item["turns"]:
+            item["turns"].append(turn_index)
+        source_counts = item.setdefault("evidence_source_counts", {})
+        source_counts[evidence_source] = int(source_counts.get(evidence_source, 0)) + 1
+        if len(item["examples"]) < 5:
+            item["examples"].append(
+                {
+                    "turn": turn_index,
+                    "reason": reason,
+                    "evidence_source": evidence_source,
+                    "player_action": _safe_str(row.get("player_action"))[:240],
+                    "mechanic": row.get("mechanic"),
+                }
+            )
+
+    available_mechanic_counts: Dict[str, int] = {}
+    available_mechanic_example_turns: Dict[str, List[int]] = {}
+    disabled_forced_action_candidates: List[Dict[str, Any]] = []
+
+    marked_this_turn: set[str] = set()
+
+    for index, raw_row in enumerate(_safe_list(transcript), start=1):
+        row = _safe_dict(raw_row)
+        turn_index = int(row.get("turn_index") or row.get("turn") or index)
+        action_text = _safe_str(row.get("player_action")).lower()
+
+        mechanic_resolution = _safe_dict(row.get("mechanic_resolution"))
+        result = _safe_dict(row.get("result"))
+        state_delta = _safe_dict(row.get("state_delta"))
+        turn_contract = _safe_dict(row.get("turn_contract"))
+        contract_result = _safe_dict(turn_contract.get("result"))
+        contract_delta = _safe_dict(turn_contract.get("state_delta"))
+        mechanic_result = _safe_dict(mechanic_resolution.get("result"))
+        mechanic_delta = _safe_dict(mechanic_resolution.get("state_delta"))
+
+        candidates = [
+            row,
+            result,
+            state_delta,
+            turn_contract,
+            contract_result,
+            contract_delta,
+            mechanic_resolution,
+            mechanic_result,
+            mechanic_delta,
+        ]
+
+        # Collect disabled forced action diagnostics
+        forced_action = _safe_dict(row.get("mechanics_forced_action"))
+        if forced_action and not forced_action.get("forced") and forced_action.get("disabled"):
+            disabled_forced_action_candidates.append({
+                "turn_index": turn_index,
+                "mechanic": forced_action.get("mechanic"),
+                "candidate_action": forced_action.get("candidate_action"),
+                "reason": forced_action.get("reason"),
+            })
+
+        evidence_source = _safe_str(
+            row.get("mechanics_evidence_source")
+            or result.get("mechanics_evidence_source")
+            or mechanic_resolution.get("mechanics_evidence_source")
+            or "explicit_payload"
+        )
+
+        for raw_opportunity in _safe_list(row.get("available_mechanics")):
+            opportunity = _safe_dict(raw_opportunity)
+            mechanic = _safe_str(opportunity.get("mechanic"))
+            if mechanic:
+                available_mechanic_counts[mechanic] = int(available_mechanic_counts.get(mechanic, 0)) + 1
+                turns = available_mechanic_example_turns.setdefault(mechanic, [])
+                if turn_index and len(turns) < 10:
+                    turns.append(turn_index)
+
+        resolved_mechanic = _safe_str(
+            row.get("mechanic")
+            or result.get("mechanic")
+            or mechanic_result.get("mechanic")
+            or mechanic_resolution.get("mechanic")
+        )
+
+        if resolved_mechanic in mechanics:
+            mark(resolved_mechanic, turn_index, row, "resolved_mechanic", evidence_source)
+
+        if any(_safe_dict(candidate).get("location_changed") for candidate in candidates):
+            mark("travel", turn_index, row, "location_changed", evidence_source)
+
+        if any(_safe_dict(candidate).get("travel_result") for candidate in candidates):
+            mark("travel", turn_index, row, "travel_result", evidence_source)
+
+        service_payload = {}
+        for candidate in candidates:
+            service_payload = _safe_dict(
+                _safe_dict(candidate).get("service_result")
+                or _safe_dict(candidate).get("lodging_result")
+                or _safe_dict(candidate).get("room_result")
+            )
+            if service_payload:
+                break
+
+        service_is_purchase = bool(
+            service_payload.get("purchase")
+            or service_payload.get("purchased")
+            or service_payload.get("selected_offer_id")
+            or service_payload.get("service_id")
+            or service_payload.get("ok") is True
+        )
+        if service_payload.get("status") == "offers_available" and not service_payload.get("purchase") and not service_payload.get("selected_offer_id"):
+            service_is_purchase = False
+
+        if service_payload and service_is_purchase:
+            mark("service_or_lodging", turn_index, row, "service_purchase_result", evidence_source)
+        elif any(token in action_text for token in ("rent a room", "pay bran", "common room", "buy a hot meal", "pay for lodging")):
+            mark("service_or_lodging", turn_index, row, "service_action_text", "action_text")
+
+        if any(_safe_dict(candidate).get("purchase_result") or _safe_dict(candidate).get("buy_result") for candidate in candidates):
+            mark("buying", turn_index, row, "purchase_result", evidence_source)
+
+        if any(_safe_dict(candidate).get("sale_result") or _safe_dict(candidate).get("sell_result") for candidate in candidates):
+            mark("selling", turn_index, row, "sale_result", evidence_source)
+
+        if any(_safe_dict(candidate).get("currency_delta") for candidate in candidates):
+            mark("currency_change", turn_index, row, "currency_delta", evidence_source)
+
+        if any(_safe_dict(candidate).get("inventory_delta") for candidate in candidates):
+            mark("inventory_change", turn_index, row, "inventory_delta", evidence_source)
+
+        if any(_safe_dict(candidate).get("party_delta") for candidate in candidates):
+            mark("party_recruitment", turn_index, row, "party_delta", evidence_source)
+
+        combat_payload = {}
+        for candidate in candidates:
+            combat_payload = _safe_dict(_safe_dict(candidate).get("combat_result"))
+            if combat_payload:
+                break
+
+        if combat_payload:
+            mark("combat_started", turn_index, row, "combat_result", evidence_source)
+            if combat_payload.get("resolved") or combat_payload.get("victory") or combat_payload.get("defeat") or combat_payload.get("ended"):
+                mark("combat_resolved", turn_index, row, "combat_result_resolved", evidence_source)
+
+        if any(_safe_dict(candidate).get("xp_delta") is not None for candidate in candidates):
+            mark("xp_gain", turn_index, row, "xp_delta", evidence_source)
+
+        if any(_safe_dict(candidate).get("loot_result") for candidate in candidates):
+            mark("loot_acquired", turn_index, row, "loot_result", evidence_source)
+
+        if any(_safe_dict(candidate).get("level_up") is True or _safe_dict(candidate).get("level_delta") for candidate in candidates):
+            mark("level_up", turn_index, row, "level_delta", evidence_source)
+
+        scenario_summary = _safe_dict(row.get("scenario_progression_summary"))
+        if scenario_summary.get("changed"):
+            if any(token in action_text for token in ("ask ", "tell ", "show ", "report ", "speak ", "talk ", "confront ")):
+                mark("npc_interaction", turn_index, row, "scenario_action_text", "scenario_graph")
+            mark("quest_progress", turn_index, row, "scenario_progression_changed", "scenario_graph")
+
+        for mechanic in _safe_list(row.get("mechanics_covered_this_turn")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                mark(mechanic_s, turn_index, row, "mechanics_covered_this_turn", "direct_graph")
+
+        direct = _safe_dict(row.get("direct_graph_action_completion"))
+        for mechanic in _safe_list(direct.get("mechanics")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                mark(mechanic_s, turn_index, row, "direct_graph_action_completion", "direct_graph")
+
+        for part in _safe_list(direct.get("changed_parts")):
+            part_s = _safe_str(part)
+            if part_s:
+                mark(part_s, turn_index, row, "direct_graph_changed_parts", "direct_graph")
+
+        # Apply coverage aliases for direct completion mechanics
+        coverage_aliases = {
+            "party_setup": ["party_recruitment"],
+            "lodging": ["service_or_lodging"],
+            "combat_resolved": ["combat_started"],
+        }
+
+        for mechanic in _safe_list(row.get("mechanics_covered_this_turn")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                for alias in coverage_aliases.get(mechanic_s, []):
+                    mark(alias, turn_index, row, f"alias_for_{mechanic_s}", "direct_graph")
+
+        for mechanic in _safe_list(direct.get("mechanics")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                for alias in coverage_aliases.get(mechanic_s, []):
+                    mark(alias, turn_index, row, f"alias_for_{mechanic_s}", "direct_graph")
+
+    required = {name: data for name, data in mechanics.items() if bool(data.get("required"))}
+    missing_required = {
+        name: data
+        for name, data in required.items()
+        if int(data.get("count") or 0) <= 0
+    }
+
+    real_required_missing: Dict[str, Dict[str, Any]] = {}
+    for name, data in required.items():
+        source_counts = _safe_dict(data.get("evidence_source_counts"))
+        real_count = sum(
+            int(count or 0)
+            for source, count in source_counts.items()
+            if source not in {"smoke_100_injection", "test_harness_injection"}
+        )
+        injected_count = sum(
+            int(count or 0)
+            for source, count in source_counts.items()
+            if source in {"smoke_100_injection", "test_harness_injection"}
+        )
+        data["real_count"] = real_count
+        data["injected_count"] = injected_count
+        if real_count <= 0:
+            real_required_missing[name] = data
+
+    return {
+        "format_version": "mechanics_coverage_v1",
+        "ok": not missing_required,
+        "required_ok": not missing_required,
+        "real_required_ok": not real_required_missing,
+        "mechanics": mechanics,
+        "required_mechanics": sorted(required.keys()),
+        "missing_required": sorted(missing_required.keys()),
+        "missing_real_required": sorted(real_required_missing.keys()),
+        "covered_required_count": len(required) - len(missing_required),
+        "real_covered_required_count": len(required) - len(real_required_missing),
+        "required_count": len(required),
+        "coverage_rate": (len(required) - len(missing_required)) / max(1, len(required)),
+        "real_coverage_rate": (len(required) - len(real_required_missing)) / max(1, len(required)),
+        "available_mechanic_counts": dict(sorted(available_mechanic_counts.items())),
+        "available_mechanic_example_turns": dict(sorted(available_mechanic_example_turns.items())),
+        "coverage_mode": "story_graph_opportunity_diagnostic",
+        "forced_action_override_enabled": False,
+        "forced_action_override_count": 0,
+        "disabled_forced_action_candidates": disabled_forced_action_candidates,
+    }
+
+
+def _current_row_location(row: Dict[str, Any], fallback: str = "scene:rusty_flagon") -> str:
+    row = _safe_dict(row)
+    result_travel = _safe_dict(_safe_dict(row.get("result")).get("travel_result"))
+    contract_result_travel = _safe_dict(
+        _safe_dict(_safe_dict(row.get("turn_contract")).get("result")).get("travel_result")
+    )
+    return _safe_str(
+        row.get("current_location")
+        or row.get("location")
+        or _safe_dict(row.get("state_delta")).get("current_location")
+        or _safe_dict(row.get("state_delta")).get("to_location")
+        or _safe_dict(row.get("travel_result")).get("to_location")
+        or result_travel.get("to_location")
+        or contract_result_travel.get("to_location")
+        or fallback
+    )
+
+
+def _inject_available_mechanics_for_row(
+    row: Dict[str, Any],
+    *,
+    mechanics_state: Dict[str, Any],
+    missing_mechanics: List[str],
+) -> None:
+    state = {
+        **_safe_dict(mechanics_state),
+        "current_location": _current_row_location(
+            row,
+            fallback=_safe_str(_safe_dict(mechanics_state).get("current_location") or "scene:rusty_flagon"),
+        ),
+    }
+
+    available = list_available_mechanic_opportunities(
+        state=state,
+        scenario_state={},
+        missing_mechanics=missing_mechanics,
+        limit=8,
+    )
+
+    available = [
+        opportunity
+        for opportunity in _safe_list(available)
+        if _opportunity_is_affordable(_safe_dict(opportunity), state)
+    ]
+
+    row["available_mechanics"] = available
+    row["mechanic_opportunity_diagnostics"] = describe_mechanic_opportunity_state(
+        state=state,
+        scenario_state={},
+        missing_mechanics=missing_mechanics,
+    )
+
+
+def _mechanics_priority_commands_from_row(
+    row: Dict[str, Any],
+    missing_mechanics: List[str],
+    failed_opportunity_ids: Optional[set[str]] = None,
+) -> List[Dict[str, Any]]:
+    missing = set(str(item) for item in _safe_list(missing_mechanics))
+    commands: List[Dict[str, Any]] = []
+
+    for raw in _safe_list(_safe_dict(row).get("available_mechanics")):
+        opportunity = _safe_dict(raw)
+        opportunity_id = _safe_str(opportunity.get("opportunity_id") or opportunity.get("id"))
+        if failed_opportunity_ids and opportunity_id in failed_opportunity_ids:
+            continue
+        mechanic = _safe_str(opportunity.get("mechanic"))
+        command = _safe_str(opportunity.get("command"))
+        if not mechanic or not command:
+            continue
+        if missing and mechanic not in missing:
+            continue
+
+        commands.append(
+            {
+                "mechanic": mechanic,
+                "command": command,
+                "label": opportunity.get("label"),
+                "resolver": opportunity.get("resolver"),
+                "opportunity_id": opportunity_id,
+            }
+        )
+
+    return commands[:6]
+
+
+def _maybe_force_missing_mechanic_action(
+    *,
+    proposed_action: str,
+    latest_row: Dict[str, Any],
+    missing_mechanics: List[str],
+    turn_index: int,
+    failed_opportunity_ids: Optional[set[str]] = None,
+) -> Dict[str, Any]:
+    if turn_index < 4:
+        return {
+            "forced": False,
+            "disabled": True,
+            "mode": "diagnostic_only",
+            "reason": "mechanics coverage must be achieved through story graph objectives, not command override",
+            "candidate_action": _safe_str(proposed_action),
+        }
+
+    priority = _mechanics_priority_commands_from_row(
+        latest_row,
+        missing_mechanics,
+        failed_opportunity_ids=failed_opportunity_ids,
+    )
+    if not priority:
+        return {
+            "forced": False,
+            "disabled": True,
+            "mode": "diagnostic_only",
+            "reason": "mechanics coverage must be achieved through story graph objectives, not command override",
+            "candidate_action": _safe_str(proposed_action),
+        }
+
+    preferred_order = [
+        "buying",
+        "service_or_lodging",
+        "party_recruitment",
+        "travel",
+        "combat_started",
+        "combat_resolved",
+        "xp_gain",
+        "quest_progress",
+        "currency_change",
+        "inventory_change",
+    ]
+
+    for mechanic in preferred_order:
+        for item in priority:
+            if item.get("mechanic") == mechanic:
+                return {
+                    "forced": False,
+                    "disabled": True,
+                    "mode": "diagnostic_only",
+                    "reason": "mechanics coverage must be achieved through story graph objectives, not command override",
+                    "candidate_action": _safe_str(item.get("command")) or _safe_str(proposed_action),
+                    "mechanic": mechanic,
+                    "opportunity_id": item.get("opportunity_id"),
+                }
+
+    item = priority[0]
+    return {
+        "forced": False,
+        "disabled": True,
+        "mode": "diagnostic_only",
+        "reason": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "candidate_action": _safe_str(item.get("command")) or _safe_str(proposed_action),
+        "mechanic": item.get("mechanic"),
+        "opportunity_id": item.get("opportunity_id"),
+    }
+
+
+def _merge_currency_delta(currency: Dict[str, int], delta: Dict[str, Any]) -> Dict[str, int]:
+    merged = dict(currency or {})
+    for key, value in _safe_dict(delta).items():
+        merged[str(key)] = int(merged.get(str(key), 0)) + int(value or 0)
+    return merged
+
+
+def _merge_inventory_delta(
+    inventory: List[Dict[str, Any]],
+    delta: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    items = [dict(item) for item in _safe_list(inventory)]
+
+    def add_item(item_id: str, quantity: int) -> None:
+        for existing in items:
+            if existing.get("id") == item_id:
+                existing["quantity"] = int(existing.get("quantity") or 0) + quantity
+                return
+        items.append({"id": item_id, "quantity": quantity})
+
+    def remove_item(item_id: str, quantity: int) -> None:
+        for existing in list(items):
+            if existing.get("id") == item_id:
+                existing["quantity"] = max(0, int(existing.get("quantity") or 0) - quantity)
+                if int(existing.get("quantity") or 0) <= 0:
+                    items.remove(existing)
+                return
+
+    delta = _safe_dict(delta)
+
+    for raw in _safe_list(delta.get("items_added")):
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if item_id:
+            add_item(item_id, int(item.get("quantity") or 1))
+
+    for raw in _safe_list(delta.get("items_removed")):
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if item_id:
+            remove_item(item_id, int(item.get("quantity") or 1))
+
+    return items

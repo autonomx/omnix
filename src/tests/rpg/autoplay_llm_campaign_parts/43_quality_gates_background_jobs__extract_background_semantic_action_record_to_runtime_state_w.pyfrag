@@ -1,0 +1,398 @@
+
+
+def _extract_background_semantic_action_record(turn_result: Dict[str, Any]) -> Dict[str, Any]:
+    turn_result = _safe_dict(turn_result)
+    return (
+        _safe_dict(turn_result.get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("turn_contract")).get("semantic_action"))
+        or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("raw_result")).get("semantic_action"))
+        or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action_v2"))
+        or _safe_dict(_safe_dict(turn_result.get("manual_turn_summary")).get("semantic_action"))
+        or {}
+    )
+
+
+def _runtime_state_with_loaded_profiles_for_background(
+    *,
+    turn_result: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Load NPC profiles before submitting the combined background LLM job.
+
+    The later promotion runtime also loads profiles, but that is too late for
+    the provider prompt. This helper prepares a row-local runtime_state snapshot
+    for the background job so loaded_npc_profiles is populated in the compact
+    provider context.
+    """
+    turn_result = _safe_dict(turn_result)
+    session = _safe_dict(turn_result.get("session"))
+    runtime_state = (
+        _safe_dict(turn_result.get("runtime_state"))
+        or _safe_dict(session.get("runtime_state"))
+        or {}
+    )
+    temp_row: Dict[str, Any] = {"runtime_state": runtime_state}
+    load_profiles_into_row_runtime(
+        row=temp_row,
+        simulation_state=_safe_dict(simulation_state),
+    )
+    return _safe_dict(temp_row.get("runtime_state"))
+
+
+def _resolve_turn_contract_for_report(
+    *,
+    turn_result: Dict[str, Any],
+    base_response_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    turn_result = _safe_dict(turn_result)
+    base_response_payload = _safe_dict(base_response_payload)
+    return (
+        _safe_dict(turn_result.get("turn_contract"))
+        or _safe_dict(_safe_dict(turn_result.get("result")).get("turn_contract"))
+        or _safe_dict(_safe_dict(_safe_dict(turn_result.get("session")).get("last_turn")).get("turn_contract"))
+        or _safe_dict(base_response_payload.get("turn_contract"))
+        or {}
+    )
+
+
+def _journal_turn_result_with_narration_sources(
+    *,
+    turn_result: Dict[str, Any],
+    combined_background_result: Dict[str, Any],
+    resolved_narration_payload: Dict[str, Any],
+    narration_text: str = "",
+) -> Dict[str, Any]:
+    """Return a turn_result-shaped payload enriched with presentation-only
+    narration fields so deterministic journal generation has readable prose.
+
+    This does not mutate authoritative state.
+    """
+    out = dict(_safe_dict(turn_result))
+    combined = _safe_dict(combined_background_result)
+    resolved = _safe_dict(resolved_narration_payload)
+
+    if combined:
+        out["combined_background_llm_result"] = combined
+    if resolved:
+        out["resolved_narration_payload"] = resolved
+    if narration_text:
+        out["narration"] = _safe_str(narration_text)
+
+    narration_payload = (
+        _safe_dict(out.get("narration_payload"))
+        or _safe_dict(resolved)
+        or _safe_dict(combined.get("narration_payload"))
+    )
+    if not narration_payload and _safe_str(combined.get("narration")):
+        narration_payload = {
+            "narration": _safe_str(combined.get("narration")),
+            "npc": _safe_dict(combined.get("npc")),
+        }
+    if narration_payload:
+        out["narration_payload"] = narration_payload
+    return out
+
+
+def _merge_unique_dict_list(
+    left: List[Any],
+    right: List[Any],
+    *,
+    key: str,
+) -> List[Any]:
+    out: List[Any] = []
+    seen = set()
+    for item in list(left or []) + list(right or []):
+        if not isinstance(item, dict):
+            continue
+        marker = _safe_str(item.get(key)) or str(item)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(item)
+    return out
+
+
+def _merge_campaign_calendar(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    left = _safe_dict(left)
+    right = _safe_dict(right)
+    if not left:
+        return dict(right)
+    if not right:
+        return dict(left)
+    merged = dict(left)
+    merged.update(right)
+    history = _merge_unique_dict_list(
+        _safe_list(left.get("history")),
+        _safe_list(right.get("history")),
+        key="turn_index",
+    )
+    history.sort(key=lambda item: int(_safe_dict(item).get("turn_index") or 0))
+    merged["history"] = history[-500:]
+    if history:
+        merged["current"] = history[-1]
+    return merged
+
+
+def _merge_player_journal(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
+    left = _safe_dict(left)
+    right = _safe_dict(right)
+    if not left:
+        return dict(right)
+    if not right:
+        return dict(left)
+    merged = dict(left)
+    merged.update(right)
+    merged["entries"] = _merge_unique_dict_list(
+        _safe_list(left.get("entries")),
+        _safe_list(right.get("entries")),
+        key="entry_id",
+    )[-100:]
+    # Pending values should come from the most recent runtime state.
+    merged["pending_actions"] = _safe_list(right.get("pending_actions"))
+    merged["pending_results"] = _safe_list(right.get("pending_results"))
+    return merged
+
+
+def _merge_base_runtime_namespaces(
+    carried_runtime_state: Dict[str, Any],
+    row_runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Preserve base runtime namespaces across autoplay rows.
+
+    Turn results can contain fresh row-local runtime_state. This helper keeps
+    campaign calendar / player journal cumulative while preserving other row
+    runtime namespaces such as deferred_advisory and npc_evolution.
+    """
+    carried_runtime_state = _safe_dict(carried_runtime_state)
+    row_runtime_state = _safe_dict(row_runtime_state)
+    merged = dict(carried_runtime_state)
+    merged.update(row_runtime_state)
+    merged["campaign_calendar"] = _merge_campaign_calendar(
+        _safe_dict(carried_runtime_state.get("campaign_calendar")),
+        _safe_dict(row_runtime_state.get("campaign_calendar")),
+    )
+    merged["player_journal"] = _merge_player_journal(
+        _safe_dict(carried_runtime_state.get("player_journal")),
+        _safe_dict(row_runtime_state.get("player_journal")),
+    )
+    if "quest_progress" in row_runtime_state:
+        merged["quest_progress"] = _safe_dict(row_runtime_state.get("quest_progress"))
+    elif "quest_progress" in carried_runtime_state:
+        merged["quest_progress"] = _safe_dict(carried_runtime_state.get("quest_progress"))
+    return merged
+
+
+def _new_background_result_timing_tracker() -> Dict[str, Any]:
+    return {
+        "submitted": {},
+        "attached": {},
+        "attachment_events": [],
+    }
+
+
+def _new_background_job_registry() -> Dict[str, Any]:
+    return {
+        "jobs": {},
+        "results": {},
+    }
+
+
+def _register_background_job(
+    registry: Dict[str, Any],
+    *,
+    job_id: str,
+    turn_index: int,
+    handle: Any = None,
+    pipeline: Any = None,
+) -> None:
+    if not job_id:
+        return
+    jobs = registry.setdefault("jobs", {})
+    jobs[job_id] = {
+        "job_id": job_id,
+        "turn_index": int(turn_index or 0),
+        "handle": handle,
+    }
+
+    # Try to capture the real Future/handle from common pipeline registries.
+    if pipeline is not None:
+        for attr in (
+            "jobs",
+            "_jobs",
+            "futures",
+            "_futures",
+            "background_jobs",
+            "_background_jobs",
+            "combined_background_jobs",
+            "_combined_background_jobs",
+            "job_futures",
+            "_job_futures",
+            "future_by_job_id",
+            "_future_by_job_id",
+        ):
+            store = getattr(pipeline, attr, None)
+            if isinstance(store, dict) and job_id in store:
+                jobs[job_id]["handle"] = store[job_id]
+                jobs[job_id]["pipeline_attr"] = attr
+                break
+
+
+def _store_background_result(
+    registry: Dict[str, Any],
+    *,
+    job_id: str,
+    result: Dict[str, Any],
+) -> None:
+    if job_id and result:
+        registry.setdefault("results", {})[job_id] = result
+
+
+def _track_background_submit(
+    tracker: Dict[str, Any],
+    *,
+    job_id: str,
+    turn_index: int,
+    phase: str = "turn_submit",
+) -> None:
+    if not job_id:
+        return
+    submitted = tracker.setdefault("submitted", {})
+    submitted[job_id] = {
+        "job_id": job_id,
+        "submitted_turn": int(turn_index or 0),
+        "phase": phase,
+    }
+
+
+def _track_background_attach(
+    tracker: Dict[str, Any],
+    *,
+    job_id: str,
+    source_turn: int,
+    attach_turn: int,
+    phase: str,
+) -> None:
+    if not job_id:
+        return
+    attached = tracker.setdefault("attached", {})
+    if job_id in attached:
+        return
+    source_turn = int(source_turn or 0)
+    attach_turn = int(attach_turn or 0)
+    event = {
+        "job_id": job_id,
+        "source_turn": source_turn,
+        "attach_turn": attach_turn,
+        "phase": phase,
+        "lag_turns": max(0, attach_turn - source_turn),
+    }
+    attached[job_id] = event
+    tracker.setdefault("attachment_events", []).append(event)
+
+
+def _summarize_background_result_timing(
+    tracker: Dict[str, Any],
+    *,
+    turn_count: int,
+    strict_eval_turns: int = 100,
+    max_turn_lag: int = 5,
+) -> Dict[str, Any]:
+    tracker = _safe_dict(tracker)
+    submitted = _safe_dict(tracker.get("submitted"))
+    attached = _safe_dict(tracker.get("attached"))
+    events = _safe_list(tracker.get("attachment_events"))
+
+    jobs_submitted = len(submitted)
+    jobs_attached_total = len(attached)
+    pre_turn_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "pre_turn"]
+    final_events = [event for event in events if _safe_str(_safe_dict(event).get("phase")) == "final"]
+    timeout_events = [
+        event for event in events
+        if _safe_str(_safe_dict(event).get("kind")) == "background_timeout"
+        or "timeout" in _safe_str(_safe_dict(event).get("error")).lower()
+    ]
+    lag_values = [
+        int(_safe_dict(event).get("lag_turns") or 0)
+        for event in events
+        if isinstance(event, dict)
+    ]
+    pre_turn_attach_rate = (
+        round(len(pre_turn_events) / jobs_submitted, 4)
+        if jobs_submitted
+        else 0.0
+    )
+    final_attach_rate = (
+        round(len(final_events) / jobs_submitted, 4)
+        if jobs_submitted
+        else 0.0
+    )
+    strict = int(turn_count or 0) >= int(strict_eval_turns or 100)
+
+    missing_job_ids = sorted(
+        [job_id for job_id in submitted.keys() if job_id not in attached]
+    )
+    only_finalized_count = len(final_events)
+    max_lag = max(lag_values) if lag_values else 0
+    avg_lag = round(sum(lag_values) / len(lag_values), 4) if lag_values else 0.0
+
+    warnings: List[Dict[str, Any]] = []
+    if missing_job_ids:
+        warnings.append(
+            {
+                "code": "background_results_missing",
+                "severity": "error",
+                "message": "Some submitted background jobs were never attached.",
+                "details": {"missing_job_ids": missing_job_ids[:20]},
+            }
+        )
+    if jobs_submitted and only_finalized_count == jobs_submitted:
+        warnings.append(
+            {
+                "code": "background_results_only_finalized",
+                "severity": "error" if strict else "warning",
+                "message": "All background results attached during final drain, so they could not influence future turns.",
+                "details": {"only_finalized_count": only_finalized_count},
+            }
+        )
+    if strict and pre_turn_attach_rate < 0.50:
+        warnings.append(
+            {
+                "code": "background_pre_turn_attach_rate_low",
+                "severity": "error",
+                "message": "Too few background results were attached before later turns.",
+                "details": {"pre_turn_attach_rate": pre_turn_attach_rate},
+            }
+        )
+    if strict and max_lag > int(max_turn_lag or 5):
+        warnings.append(
+            {
+                "code": "background_attach_lag_high",
+                "severity": "error",
+                "message": "Background results attached too many turns after submission.",
+                "details": {"max_attach_lag_turns": max_lag, "limit": int(max_turn_lag or 5)},
+            }
+        )
+
+    error_count = sum(1 for warning in warnings if _safe_dict(warning).get("severity") == "error")
+    return {
+        "ok": error_count == 0,
+        "strict_100_turn_mode": strict,
+        "jobs_submitted": jobs_submitted,
+        "jobs_attached_total": jobs_attached_total,
+        "jobs_attached_pre_turn": len(pre_turn_events),
+        "jobs_attached_final": len(final_events),
+        "pre_turn_attach_rate": pre_turn_attach_rate,
+        "final_attach_rate": final_attach_rate,
+        "only_finalized_count": only_finalized_count,
+        "missing_job_count": len(missing_job_ids),
+        "missing_job_ids": missing_job_ids[:50],
+        "avg_attach_lag_turns": avg_lag,
+        "max_attach_lag_turns": max_lag,
+        "attachment_events": events[-200:],
+        "timeout_events": timeout_events[-50:],
+        "warning_count": len(warnings),
+        "error_count": error_count,
+        "warnings": warnings,
+    }

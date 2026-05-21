@@ -1,0 +1,480 @@
+
+
+def _n11618_deep_prompt_veto(
+    value: Any,
+    *,
+    action_text: str,
+    path: tuple[str, ...] = (),
+    _seen: set[int] | None = None,
+    _depth: int = 0,
+    _max_depth: int = 24,
+) -> bool:
+    """Bounded recursive scrub for prompt/debug artifacts.
+
+    N116.18 originally walked the entire final transcript row. Some autoplay
+    rows contain shared/cyclic diagnostic/runtime objects, so an unbounded walk
+    can recurse forever during final artifact sync. Keep the veto deep enough for
+    prompt contracts, but make it cycle-safe and depth-limited.
+    """
+    if _depth > _max_depth:
+        return False
+    if _seen is None:
+        _seen = set()
+    if isinstance(value, (dict, list)):
+        marker = id(value)
+        if marker in _seen:
+            return False
+        _seen.add(marker)
+
+    changed = False
+    if isinstance(value, dict):
+        if isinstance(value.get("service_result"), dict):
+            original_service = _safe_dict(value.get("service_result"))
+            scrubbed_service = _n11617_veto_service_result(original_service, action_text=action_text)
+            if scrubbed_service != original_service:
+                value["service_result"] = scrubbed_service
+                changed = True
+        for key in ("semantic_action", "semantic_action_v2"):
+            if isinstance(value.get(key), dict):
+                original_semantic = _safe_dict(value.get(key))
+                scrubbed_semantic = _n11617_veto_semantic_action(original_semantic, action_text=action_text)
+                if scrubbed_semantic != original_semantic:
+                    value[key] = scrubbed_semantic
+                    changed = True
+        for focus_key in (
+            "required_focus",
+            "required_response_focus",
+            "focus",
+            "must_address",
+            "required_response_focuses",
+        ):
+            if isinstance(value.get(focus_key), list):
+                repaired_focus, focus_changed = _n11618_repair_focus_list(value.get(focus_key))
+                if focus_changed:
+                    value[focus_key] = repaired_focus
+                    changed = True
+        if (
+            path
+            and (path[-1] in _N11618_PROMPT_CONTRACT_KEYS or any("prompt_contract" in part for part in path))
+        ) or any(key in value for key in ("required_focus", "semantic_action", "current_action_response")):
+            changed = _n11618_apply_veto_policy(value, action_text=action_text) or changed
+
+        for key, child in list(value.items()):
+            if key in _N11618_SKIP_DEEP_KEYS:
+                continue
+            if key in {
+                "runtime_state",
+                "session",
+                "turn_result",
+                "transcript",
+                "full_transcript",
+                "debug_tail",
+                "history",
+                "event_log",
+                "console_log",
+            }:
+                continue
+            if isinstance(child, (dict, list)):
+                changed = _n11618_deep_prompt_veto(
+                    child,
+                    action_text=action_text,
+                    path=path + (str(key),),
+                    _seen=_seen,
+                    _depth=_depth + 1,
+                    _max_depth=_max_depth,
+                ) or changed
+    elif isinstance(value, list):
+        for idx, item in enumerate(value[:200]):
+            if isinstance(item, (dict, list)):
+                changed = _n11618_deep_prompt_veto(
+                    item,
+                    action_text=action_text,
+                    path=path + (str(idx),),
+                    _seen=_seen,
+                    _depth=_depth + 1,
+                    _max_depth=_max_depth,
+                ) or changed
+    return changed
+
+
+def _n11618_prompt_sync_targets(row: Dict[str, Any]) -> List[tuple[tuple[str, ...], Any]]:
+    """Return prompt-related objects to veto-sync without walking the whole row."""
+    row = _safe_dict(row)
+    targets: List[tuple[tuple[str, ...], Any]] = []
+
+    def add(path: tuple[str, ...], value: Any) -> None:
+        if isinstance(value, (dict, list)):
+            targets.append((path, value))
+
+    for key in (
+        "llm_prompt_contract",
+        "current_turn_prompt_contract",
+        "current_action_response",
+        "npc_response_architecture",
+        "background_presentation_result",
+    ):
+        add((key,), row.get(key))
+
+    prompt_debug = _safe_dict(row.get("llm_prompt_debug") or row.get("prompt_debug"))
+    add(("llm_prompt_debug",), prompt_debug)
+    add(("llm_prompt_debug", "current_turn_prompt_contract"), prompt_debug.get("current_turn_prompt_contract"))
+    add(("llm_prompt_debug", "prompt_contract"), prompt_debug.get("prompt_contract"))
+
+    background = _safe_dict(row.get("background_presentation_result"))
+    add(("background_presentation_result", "current_turn_prompt_contract"), background.get("current_turn_prompt_contract"))
+    add(("background_presentation_result", "prompt_debug"), background.get("prompt_debug"))
+    add(("background_presentation_result", "current_action_response"), background.get("current_action_response"))
+    add(("background_presentation_result", "npc_response_architecture"), background.get("npc_response_architecture"))
+
+    # Include top-level semantic/service payloads only; do not traverse runtime
+    # snapshots or result/session graphs here.
+    add(("semantic_action",), row.get("semantic_action"))
+    add(("semantic_action_v2",), row.get("semantic_action_v2"))
+    add(("service_result",), row.get("service_result"))
+    return targets
+
+
+def _n11618_sync_prompt_contract_veto_to_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    action_text = _n11617_row_action_text(row)
+    if not _n11617_is_document_evidence_without_explicit_service(action_text):
+        return row
+
+    changed = False
+    seen_targets: set[int] = set()
+    for target_path, target in _n11618_prompt_sync_targets(row):
+        if isinstance(target, (dict, list)):
+            marker = id(target)
+            if marker in seen_targets:
+                continue
+            seen_targets.add(marker)
+            changed = _n11618_deep_prompt_veto(
+                target,
+                action_text=action_text,
+                path=("row",) + target_path,
+            ) or changed
+
+    if changed:
+        row["service_false_positive_vetoed"] = True
+        row["prompt_contract_service_veto_synced"] = True
+        row["service_resolver_veto"] = {
+            **_safe_dict(row.get("service_resolver_veto")),
+            "format_version": "n11618_prompt_contract_veto_sync_v1",
+            "service_false_positive_vetoed": True,
+            "reason": "document_evidence_without_explicit_service_request",
+            "veto_only": True,
+            "forced_positive_classification": False,
+            "llm_classifies_presentation_intent": True,
+            "prompt_contract_veto_synced": True,
+            "action_text": action_text[:500],
+        }
+    return row
+
+
+def _sync_current_action_response_artifact_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    synced = _N11618_PREVIOUS_SYNC_CURRENT_ACTION_RESPONSE_ARTIFACT_ROWS(rows)
+    if not isinstance(synced, list):
+        return synced
+    return [_n11618_sync_prompt_contract_veto_to_row(row) for row in synced]
+
+
+def _n11618_walk_prompt_offenders(
+    value: Any,
+    *,
+    path: tuple[str, ...] = (),
+    _seen: set[int] | None = None,
+    _depth: int = 0,
+    _max_depth: int = 24,
+) -> List[str]:
+    """Cycle-safe nested prompt-contract offender scan."""
+    if _depth > _max_depth:
+        return []
+    if _seen is None:
+        _seen = set()
+    if isinstance(value, (dict, list)):
+        marker = id(value)
+        if marker in _seen:
+            return []
+        _seen.add(marker)
+
+    offenders: List[str] = []
+    if isinstance(value, dict):
+        service_result = _safe_dict(value.get("service_result"))
+        status = _safe_str(service_result.get("status") or service_result.get("service_status")).lower()
+        if service_result and _n11617_service_result_looks_false_positive(service_result) and status != "service_false_positive_vetoed":
+            offenders.append(".".join(path + ("service_result",)))
+        for key in ("semantic_action", "semantic_action_v2"):
+            semantic = _safe_dict(value.get(key))
+            if semantic and _n11617_semantic_action_looks_service(semantic):
+                offenders.append(".".join(path + (key,)))
+        for focus_key in (
+            "required_focus",
+            "required_response_focus",
+            "focus",
+            "must_address",
+            "required_response_focuses",
+        ):
+            focus = value.get(focus_key)
+            if isinstance(focus, list):
+                bad_focus = [item for item in focus if _n11618_focus_is_service_or_economy(item)]
+                if bad_focus:
+                    offenders.append(".".join(path + (focus_key,)) + ":" + ",".join(_safe_str(item) for item in bad_focus[:6]))
+        for key, child in value.items():
+            if key in _N11618_SKIP_DEEP_KEYS:
+                continue
+            if key in {
+                "runtime_state",
+                "session",
+                "turn_result",
+                "transcript",
+                "full_transcript",
+                "debug_tail",
+                "history",
+                "event_log",
+                "console_log",
+            }:
+                continue
+            if isinstance(child, (dict, list)):
+                offenders.extend(
+                    _n11618_walk_prompt_offenders(
+                        child,
+                        path=path + (str(key),),
+                        _seen=_seen,
+                        _depth=_depth + 1,
+                        _max_depth=_max_depth,
+                    )
+                )
+    elif isinstance(value, list):
+        for idx, item in enumerate(value[:200]):
+            if isinstance(item, (dict, list)):
+                offenders.extend(
+                    _n11618_walk_prompt_offenders(
+                        item,
+                        path=path + (str(idx),),
+                        _seen=_seen,
+                        _depth=_depth + 1,
+                        _max_depth=_max_depth,
+                    )
+                )
+    return offenders
+
+
+def _n11618_prompt_contract_veto_regression_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in rows if isinstance(row, dict)]
+    violations: List[Dict[str, Any]] = []
+    synced: List[Dict[str, Any]] = []
+    for row in rows:
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        action_text = _n11617_row_action_text(row)
+        if not _n11617_is_document_evidence_without_explicit_service(action_text):
+            continue
+        if row.get("prompt_contract_service_veto_synced"):
+            synced.append({"turn_index": turn_index, "player_action": row.get("player_action")})
+        offenders = _n11618_walk_prompt_offenders(row, path=("row",))
+        if offenders:
+            violations.append(
+                {
+                    "turn_index": turn_index,
+                    "player_action": row.get("player_action"),
+                    "offenders": offenders[:25],
+                }
+            )
+    return {
+        "format_version": "n11618_prompt_contract_veto_regression_summary_v1",
+        "ok": not violations,
+        "synced_count": len(synced),
+        "remaining_violation_count": len(violations),
+        "synced_turns": synced[:50],
+        "remaining_violations": violations[:50],
+        "policy": "veto_only_no_forced_investigation_classification_llm_keeps_intent_classification",
+    }
+
+
+def _n11618_attachment_repair_counts_from_summary(summary: Dict[str, Any]) -> Dict[str, int]:
+    summary = _safe_dict(summary)
+    attachment = (
+        _safe_dict(summary.get("background_presentation_attachment_summary"))
+        or _safe_dict(summary.get("background_attachment_summary"))
+        or _safe_dict(summary.get("background_result_timing_summary"))
+    )
+    def as_int(*keys: str) -> int:
+        for key in keys:
+            value = attachment.get(key)
+            if value is None:
+                continue
+            try:
+                return int(value or 0)
+            except Exception:
+                continue
+        return 0
+    return {
+        "metadata_repaired_count": as_int("metadata_repaired_count", "metadata_repair_count"),
+        "category_reclassified_count": as_int("category_reclassified_count", "category_reclassification_count"),
+        "metadata_repair_source_count": as_int("metadata_repaired_count", "metadata_repair_count"),
+        "category_reclassification_source_count": as_int("category_reclassified_count", "category_reclassification_count"),
+    }
+
+
+def _n11618_merge_repair_pressure_counts(
+    breakdown: Dict[str, Any],
+    *,
+    attachment_counts: Dict[str, int],
+) -> Dict[str, Any]:
+    breakdown = dict(_safe_dict(breakdown))
+    metadata_count = max(
+        int(breakdown.get("metadata_repaired_count") or 0),
+        int(attachment_counts.get("metadata_repaired_count") or 0),
+    )
+    category_count = max(
+        int(breakdown.get("category_reclassified_count") or 0),
+        int(attachment_counts.get("category_reclassified_count") or 0),
+    )
+    breakdown["metadata_repaired_count"] = metadata_count
+    breakdown["category_reclassified_count"] = category_count
+    breakdown["metadata_repair_count_source"] = "background_presentation_attachment_summary"
+    breakdown["category_reclassified_count_source"] = "background_presentation_attachment_summary"
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["provider_metadata_or_shape_repair"] = metadata_count
+    dominant["provider_category_reclassification"] = category_count
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11618_repair_pressure_breakdown_v2"
+    return breakdown
+
+
+def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _N11618_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY(rows)
+    prompt_contract_summary = _n11618_prompt_contract_veto_regression_summary(rows)
+    summary["prompt_contract_service_veto_summary"] = prompt_contract_summary
+    if "service_resolver_veto_summary" in summary:
+        service_summary = _safe_dict(summary.get("service_resolver_veto_summary"))
+        service_summary["nested_prompt_contract_scan_ok"] = bool(prompt_contract_summary.get("ok", True))
+        service_summary["nested_prompt_contract_remaining_violation_count"] = int(prompt_contract_summary.get("remaining_violation_count") or 0)
+        summary["service_resolver_veto_summary"] = service_summary
+    summary["ok"] = bool(summary.get("ok", True)) and bool(prompt_contract_summary.get("ok", True))
+    if not prompt_contract_summary.get("ok", True):
+        failures = _safe_list(summary.get("failed_gates"))
+        if "prompt_contract_service_veto_regression_ok" not in failures:
+            failures.append("prompt_contract_service_veto_regression_ok")
+        summary["failed_gates"] = failures
+    return summary
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    health = _N11618_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH(summary)
+    llm_summary = _safe_dict(summary.get("llm_prompt_and_fallback_summary"))
+    attachment_counts = _n11618_attachment_repair_counts_from_summary(summary)
+    if llm_summary:
+        llm_summary["repair_pressure_breakdown"] = _n11618_merge_repair_pressure_counts(
+            _safe_dict(llm_summary.get("repair_pressure_breakdown")),
+            attachment_counts=attachment_counts,
+        )
+        summary["llm_prompt_and_fallback_summary"] = llm_summary
+    prompt_contract_summary = _safe_dict(llm_summary.get("prompt_contract_service_veto_summary"))
+    if prompt_contract_summary and not bool(prompt_contract_summary.get("ok", True)):
+        health = dict(health)
+        health["ok"] = False
+        health["prompt_contract_service_veto_regression_ok"] = False
+        warnings = _safe_list(health.get("warnings"))
+        if "prompt_contract_service_veto_regression_failed" not in warnings:
+            warnings.append("prompt_contract_service_veto_regression_failed")
+        health["warnings"] = warnings
+        health["failed_gate_count"] = int(health.get("failed_gate_count") or 0) + 1
+    return health
+
+
+
+# N116.18.2 — Strictly Bounded Prompt Veto Sync Hotfix
+# N116.18 and N116.18.1 still walked too much nested diagnostic structure in
+# final transcript rows.  On some runs those rows contain very large shared
+# graphs, so even cycle-safe recursion can exhaust memory while building the
+# visited-id set.  Override the N116.18 helpers with a strictly target-scoped
+# implementation: only known prompt-facing objects are traversed, traversal is
+# iterative, and hard node/depth caps are enforced.
+
+_N116182_CONTAINER_CHILD_KEYS = (
+    "current_turn_prompt_contract",
+    "prompt_contract",
+    "llm_prompt_contract",
+    "current_action_response",
+    "npc_response_architecture",
+    "presentation_intent",
+    "semantic_action",
+    "semantic_action_v2",
+    "service_result",
+)
+_N116182_SKIP_KEYS = {
+    "original_service_result",
+    "original_semantic_action",
+    "n11615_original_semantic_action",
+    "runtime_state",
+    "session",
+    "turn_result",
+    "result",
+    "transcript",
+    "full_transcript",
+    "debug_tail",
+    "history",
+    "event_log",
+    "console_log",
+    "provider_trace",
+    "manual_harness_trace",
+    "manual_stage_trace",
+}
+
+
+def _n116182_get_path(root: Dict[str, Any], path: tuple[str, ...]) -> Any:
+    cursor: Any = root
+    for key in path:
+        if not isinstance(cursor, dict):
+            return None
+        cursor = cursor.get(key)
+    return cursor
+
+
+def _n116182_apply_local_veto(value: Any, *, action_text: str) -> bool:
+    """Apply veto only to this object, without recursive descent."""
+    if not isinstance(value, dict):
+        return False
+    changed = False
+    if isinstance(value.get("service_result"), dict):
+        original_service = _safe_dict(value.get("service_result"))
+        scrubbed_service = _n11617_veto_service_result(original_service, action_text=action_text)
+        if scrubbed_service != original_service:
+            value["service_result"] = scrubbed_service
+            changed = True
+    for key in ("semantic_action", "semantic_action_v2"):
+        if isinstance(value.get(key), dict):
+            original_semantic = _safe_dict(value.get(key))
+            scrubbed_semantic = _n11617_veto_semantic_action(original_semantic, action_text=action_text)
+            if scrubbed_semantic != original_semantic:
+                value[key] = scrubbed_semantic
+                changed = True
+    for focus_key in (
+        "required_focus",
+        "required_response_focus",
+        "focus",
+        "must_address",
+        "required_response_focuses",
+    ):
+        if isinstance(value.get(focus_key), list):
+            repaired_focus, focus_changed = _n11618_repair_focus_list(value.get(focus_key))
+            if focus_changed:
+                value[focus_key] = repaired_focus
+                changed = True
+    if any(
+        key in value
+        for key in (
+            "required_focus",
+            "required_response_focus",
+            "focus",
+            "must_address",
+            "semantic_action",
+            "semantic_action_v2",
+            "service_result",
+            "current_action_response",
+            "npc_response_architecture",
+            "presentation_intent",
+        )
+    ):
+        changed = _n11618_apply_veto_policy(value, action_text=action_text) or changed
+    return changed

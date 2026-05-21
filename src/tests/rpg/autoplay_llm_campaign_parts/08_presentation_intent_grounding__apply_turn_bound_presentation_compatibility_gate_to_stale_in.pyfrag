@@ -1,0 +1,428 @@
+
+
+def _apply_turn_bound_presentation_compatibility_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    presentation_text = _visible_presentation_text_for_compatibility(row)
+    action_text = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+
+    row["validated_presentation_intent"] = _validate_presentation_intent_for_row(
+        row,
+        action_text=action_text,
+    )
+    row["validated_presentation_category"] = _safe_str(
+        _safe_dict(row.get("validated_presentation_intent")).get("primary_category")
+    )
+    row = _sync_public_presentation_intent_from_validated(row)
+    row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+    row = _apply_validated_presentation_category_to_relevance(row)
+
+    compat_ok, compat_diag = _dialogue_presentation_is_category_compatible(
+        action_text=action_text,
+        presentation_text=presentation_text,
+        row=row,
+    )
+
+    hard_diag = _presentation_hard_grounding_check(row, presentation_text)
+    soft_diag = _presentation_soft_classification_check(
+        compat_ok=compat_ok,
+        compat_diag=compat_diag,
+    )
+
+    soft_repair_reason = _soft_metadata_repair_reason_for_row(row=row, soft_diag=soft_diag)
+    if soft_repair_reason:
+        soft_diag = dict(_safe_dict(soft_diag))
+        soft_diag["ok"] = False
+        soft_diag["metadata_repair_required"] = True
+        soft_diag["reason"] = soft_repair_reason
+        soft_diag["requires_visible_text_replacement"] = False
+
+    row["dialogue_presentation_compatibility"] = compat_diag
+    row["presentation_hard_grounding"] = hard_diag
+    row["presentation_soft_classification"] = soft_diag
+    row["background_semantic_reviewer"] = _background_semantic_reviewer_diagnostic(
+        row=row,
+        soft_diag=soft_diag,
+        hard_diag=hard_diag,
+    )
+    row["unsupported_combat_claim_suppressed"] = any(
+        reason in _safe_list(hard_diag.get("reasons"))
+        for reason in (
+            "unsupported_combat_claim",
+            "unsupported_damage_claim",
+            "unsupported_defeat_claim",
+            "unsupported_combat_resolution_claim",
+        )
+    )
+
+    if not bool(hard_diag.get("ok", True)):
+        fallback = _build_category_compatible_presentation_fallback(row)
+        row["narration"] = fallback
+        row["display_narration"] = fallback
+        row["selected_narration"] = fallback
+        row = _clear_visible_npc_fields(row)
+
+        relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+        relevance["repaired"] = True
+        relevance["fallback_applied"] = True
+        relevance["reason"] = ",".join(_safe_list(hard_diag.get("reasons"))) or "hard_grounding_violation"
+        relevance["source"] = _safe_str(
+            row.get("selected_narration_source")
+            or row.get("narration_source")
+            or row.get("presentation_attached_from")
+            or "unknown"
+        )
+        relevance["compatibility"] = compat_diag
+        relevance["hard_grounding"] = hard_diag
+        relevance["validated_presentation_intent"] = row.get("validated_presentation_intent")
+        row["dialogue_action_relevance"] = relevance
+        row["dialogue_action_relevance_repaired"] = True
+        row["presentation_status"] = "attached_hard_repaired"
+        row["presentation_repair_tier"] = "hard_grounding"
+        row["presentation_repair_type"] = "visible_text_replaced"
+        row["visible_text_replaced"] = True
+        row["hard_grounding_repair"] = True
+        row["soft_classification_repair"] = False
+
+    elif bool(soft_diag.get("metadata_repair_required")):
+        relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+        relevance["repaired"] = True
+        relevance["fallback_applied"] = False
+        relevance["reason"] = _safe_str(soft_diag.get("reason")) or "soft_classification_metadata_repaired"
+        relevance["compatibility"] = compat_diag
+        relevance["soft_classification"] = soft_diag
+        relevance["validated_presentation_intent"] = row.get("validated_presentation_intent")
+        row["dialogue_action_relevance"] = relevance
+        row["dialogue_action_relevance_repaired"] = True
+        soft_reason = _safe_str(soft_diag.get("reason"))
+        row["presentation_status"] = (
+            "attached_metadata_repaired"
+            if soft_reason == "action_presentation_category_mismatch"
+            else "attached_soft_reclassified"
+        )
+        row["presentation_repair_tier"] = "soft_classification"
+        row["presentation_repair_type"] = "metadata_only"
+        row["visible_text_replaced"] = False
+        row["hard_grounding_repair"] = False
+        row["soft_classification_repair"] = True
+
+    else:
+        row.setdefault("presentation_status", "attached")
+        row["visible_text_replaced"] = False
+        row["hard_grounding_repair"] = False
+        row["soft_classification_repair"] = False
+
+    row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+    row = _rewrite_public_presentation_intent_fields_from_validated(row)
+    row = _apply_presentation_meta_leakage_gate(row)
+    return row
+
+
+STALE_INVESTIGATION_TOPIC_TERMS = (
+    "traveler",
+    "witness",
+    "side door",
+    "frightened",
+    "afraid",
+    "bridge story",
+    "cloaked",
+    "person who frightened",
+)
+
+ECONOMY_SERVICE_RESPONSE_TERMS = (
+    "ration",
+    "rations",
+    "supply",
+    "supplies",
+    "coin",
+    "coins",
+    "gold",
+    "silver",
+    "copper",
+    "price",
+    "cost",
+    "pay",
+    "paid",
+    "sale",
+    "sell",
+    "buy",
+    "bought",
+    "take them",
+    "keep them",
+    "keep it",
+    "wrapped",
+    "bundle",
+    "bundled",
+    "road food",
+    "trail food",
+    "dry",
+    "hungry",
+    "counted",
+    "plain road food",
+    "here you are",
+    "can spare",
+    "in stock",
+    "room",
+    "lodging",
+    "bed",
+    "rest",
+)
+
+
+COMMERCE_ACTION_VERBS = (
+    "buy",
+    "bought",
+    "purchase",
+    "purchased",
+    "pay for",
+    "pay bran for",
+    "pay the innkeeper for",
+    "order",
+    "sell",
+    "trade",
+    "hire",
+)
+
+COMMERCE_OBJECT_TERMS = (
+    "ration",
+    "rations",
+    "supply",
+    "supplies",
+    "meal",
+    "ale",
+    "room",
+    "lodging",
+    "bed",
+
+    "service",
+)
+
+EVIDENCE_PAYMENT_FALSE_POSITIVE_TERMS = (
+    "marked coin",
+    "coin proof",
+    "coin lead",
+    "payment mark",
+    "payment marks",
+    "manifest payment",
+    "sealed order",
+    "sealed orders",
+    "route paper",
+    "route papers",
+    "captured order",
+    "captured orders",
+    "captured route paper",
+    "captured route papers",
+    "written order",
+    "written orders",
+    "orders from",
+    "orders signed",
+    "orders naming",
+    "ledger",
+    "ledger entries",
+    "paymaster",
+    "funded",
+    "backer",
+    "proof",
+    "evidence",
+)
+
+
+def _action_is_evidence_payment_phrase(action: str) -> bool:
+    action = _normalize_turn_action_text(action)
+    return any(term in action for term in EVIDENCE_PAYMENT_FALSE_POSITIVE_TERMS)
+
+
+def _action_is_commerce_request(action: str, service_result: Dict[str, Any] | None = None) -> bool:
+    action = _normalize_turn_action_text(action)
+    service_result = _safe_dict(service_result)
+    if service_result.get("purchase") or service_result.get("sale"):
+        return True
+    if _action_is_evidence_payment_phrase(action) and not any(
+        verb in action for verb in COMMERCE_ACTION_VERBS
+    ):
+        return False
+    has_commerce_verb = any(verb in action for verb in COMMERCE_ACTION_VERBS)
+    has_commerce_object = any(term in action for term in COMMERCE_OBJECT_TERMS)
+    return bool(has_commerce_verb and (has_commerce_object or "coin" in action or "price" in action))
+
+
+def _action_is_service_request(action: str, service_result: Dict[str, Any] | None = None) -> bool:
+    action = _normalize_turn_action_text(action)
+    service_result = _safe_dict(service_result)
+    if service_result.get("service"):
+        return True
+    if _action_is_evidence_payment_phrase(action) and not any(
+        verb in action for verb in ("rent", "sleep", "rest", "book", "pay for")
+    ):
+        return False
+    return any(term in action for term in ("rent room", "rent a room", "lodging", "book room", "sleep", "rest here", "pay for room"))
+
+
+def _build_transcript_row_prompt_contract(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Reconstruct a current-turn prompt contract from final row facts.
+
+    Some local-model partial JSON repairs preserve a valid NPC/narration but lose
+    the original prompt_debug/current_turn_prompt_contract fields before final
+    artifact persistence.  The transcript row still has authoritative action,
+    turn_contract, and focus metadata, so keep the diagnostics complete without
+    trusting provider output.
+    """
+    row = _safe_dict(row)
+    action = _safe_str(
+        row.get("display_player_action")
+        or row.get("visible_player_action")
+        or row.get("canonical_turn_action")
+        or row.get("player_action")
+    )
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    semantic_action = _safe_dict(turn_contract.get("semantic_action")) or _safe_dict(row.get("semantic_action_record"))
+    required_focus = [
+        _safe_str(item)
+        for item in _safe_list(_safe_dict(row.get("current_action_response")).get("required_focus"))
+        if _safe_str(item)
+    ]
+    for item in _deterministic_current_action_required_focus(row):
+        if item not in required_focus:
+            required_focus.append(item)
+    if not required_focus:
+        required_focus = ["answer_the_current_player_action_before_old_context"]
+    forbidden_stale_topics = [
+        "do_not_continue_previous_quest_investigation_unless_current_action_asks",
+        "do_not_answer_profile_memory_instead_of_current_action",
+    ]
+    if set(required_focus).intersection(
+        {
+            "purchase_acknowledgement",
+            "item_quantity_or_availability",
+            "price_or_payment",
+            "service_request_acknowledgement",
+            "lodging_or_rest_terms",
+        }
+    ):
+        forbidden_stale_topics.extend(
+            [
+                "ambush_investigation",
+                "bandit_road_investigation",
+                "traveler_or_road_question",
+                "who_frightened_them_followup",
+            ]
+        )
+    return {
+        "format_version": "current_turn_prompt_contract_v1",
+        "priority": "highest",
+        "turn_index_scope": "current_turn_only",
+        "reconstructed_from_transcript_row": True,
+        "current_player_action": action[:800],
+        "resolved_action": _safe_str(turn_contract.get("resolved_action")),
+        "resolved_result": _safe_str(turn_contract.get("resolved_result")),
+        "semantic_action": semantic_action,
+        "service_result": _safe_dict(turn_contract.get("service_result")),
+        "required_focus": required_focus[:8],
+        "forbidden_stale_topics": sorted(set(forbidden_stale_topics)),
+        "background_only_sections": [
+            "recent_events",
+            "loaded_npc_profiles",
+            "profile_context_summary",
+            "advisory_context",
+            "old_quest_or_rumor_context",
+        ],
+        "npc_line_rules": [
+            "must_answer_current_action_first",
+            "may_use_profile_for_tone_only",
+            "must_not_use_memory_as_new_authoritative_fact",
+            "must_not_introduce_rewards_or_outcomes_absent_from_turn_contract",
+        ],
+    }
+
+
+def _build_transcript_row_prompt_debug(row: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    result = _safe_dict(result)
+    diagnostics = _safe_dict(result.get("diagnostics"))
+    return {
+        "format_version": "llm_prompt_debug_v1",
+        "reconstructed_from_transcript_row": True,
+        "turn_index": int(row.get("turn_index") or row.get("turn") or result.get("turn_index") or 0),
+        "source": _safe_str(result.get("source")),
+        "context_packet_keys": _safe_list(diagnostics.get("context_packet_keys")),
+        "provider_payload_error": _safe_str(diagnostics.get("provider_payload_error")),
+        "provider_payload_keys": _safe_list(diagnostics.get("provider_payload_keys")),
+        "prompt_metrics": _safe_dict(result.get("prompt_metrics") or diagnostics.get("prompt_metrics")),
+        "current_turn_prompt_contract": _build_transcript_row_prompt_contract(row),
+    }
+
+
+def _deterministic_current_action_required_focus(row: Dict[str, Any]) -> List[str]:
+    """Derive current-action obligations without trusting provider metadata.
+
+    N116.9.1 keeps this small and deterministic so transcript artifacts can
+    prove why an NPC line is considered responsive to the player's latest
+    action.  Provider ``current_action_response`` may be missing or stale; this
+    fallback makes economy/service actions such as buying rations visible in
+    every row's diagnostics.
+    """
+    row = _safe_dict(row)
+    category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
+    action = _normalize_turn_action_text(
+        _safe_str(
+            row.get("display_player_action")
+            or row.get("visible_player_action")
+            or row.get("canonical_turn_action")
+            or row.get("player_action")
+        )
+    )
+    focus: List[str] = []
+
+    def add(item: str) -> None:
+        if item and item not in focus:
+            focus.append(item)
+
+    service_result = _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))
+    question_terms = ("ask", "question", "tell", "report", "warn", "explain", "who", "what", "where", "why")
+    observe_terms = ("look", "inspect", "search", "scout", "examine", "watch", "listen", "study", "decode")
+    travel_terms = ("travel", "follow", "leave", "go", "road", "route", "walk", "move")
+
+    if category == "economy" or _action_is_commerce_request(action, service_result):
+        add("purchase_acknowledgement")
+        add("item_quantity_or_availability")
+        add("price_or_payment")
+    if category == "service" or _action_is_service_request(action, service_result):
+        add("service_request_acknowledgement")
+        add("lodging_or_rest_terms")
+    if category in {"dialogue", "evidence", "investigation"} or any(term in action for term in question_terms):
+        add("current_question_or_evidence")
+    if category in {"observe", "investigation", "evidence"} or any(term in action for term in observe_terms):
+        add("observed_evidence_or_limits")
+    if category == "travel" or any(term in action for term in travel_terms):
+        add("current_travel_or_route_action")
+    return focus[:8]
+
+
+def _row_current_action_response_focus(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    candidate, source = _find_current_action_response_candidate(row)
+    normalized = _normalize_current_action_response(candidate)
+    normalized["parse_source"] = source
+
+    required_focus: List[str] = [
+        _safe_str(item)
+        for item in _safe_list(normalized.get("required_focus"))
+        if _safe_str(item)
+    ]
+    deterministic_focus = _deterministic_current_action_required_focus(row)
+    for item in deterministic_focus:
+        if item not in required_focus:
+            required_focus.append(item)
+    if required_focus:
+        normalized["required_focus"] = required_focus[:8]
+        if not normalized.get("reason"):
+            normalized["reason"] = "deterministic_focus_from_current_action"
+
+    npc_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    heuristic_addresses = _npc_line_addresses_focus_terms(npc_line, required_focus) if required_focus else False
+    provider_addresses = bool(normalized.get("npc_line_addresses_current_action"))
+    normalized["npc_line_addresses_current_action"] = bool(provider_addresses or heuristic_addresses)
+    normalized["provider_addresses_current_action"] = provider_addresses
+    normalized["heuristic_addresses_current_action"] = bool(heuristic_addresses)
+    normalized["deterministic_required_focus"] = deterministic_focus
+    return normalized

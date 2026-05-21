@@ -1,0 +1,87 @@
+
+
+def _build_turn_action_consistency_summary(
+    *,
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    checked_count = 0
+    mismatch_count = 0
+    repaired_count = 0
+    unrepaired_count = 0
+    forced_override_count = 0
+    by_field: Dict[str, int] = {}
+    examples: List[Dict[str, Any]] = []
+
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        consistency = _safe_dict(row.get("turn_action_consistency"))
+
+        if not consistency:
+            canonical = _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+            if canonical:
+                consistency = _build_turn_action_consistency(
+                    row=row,
+                    canonical_turn_action=canonical,
+                )
+            else:
+                continue
+
+        checked_count += 1
+
+        current_mismatches = _safe_dict(consistency.get("mismatches"))
+
+        source_check = _safe_dict(row.get("turn_action_source_check"))
+        if source_check and not source_check.get("ok", True):
+            current_mismatches = dict(current_mismatches)
+            current_mismatches["canonical_turn_action"] = {
+                "expected": source_check.get("original_player_action"),
+                "actual": source_check.get("canonical_turn_action"),
+            }
+
+        forced = _safe_dict(row.get("mechanics_forced_action"))
+        if forced.get("forced") is True:
+            forced_override_count += 1
+
+        if current_mismatches:
+            mismatch_count += 1
+            for field_name in current_mismatches.keys():
+                by_field[field_name] = by_field.get(field_name, 0) + 1
+
+        if row.get("turn_action_consistency_repaired"):
+            repaired_count += 1
+
+        if current_mismatches and not row.get("turn_action_consistency_repaired"):
+            unrepaired_count += 1
+
+        if (current_mismatches or row.get("turn_action_consistency_repaired")) and len(examples) < 20:
+            examples.append(
+                {
+                    "turn_index": row.get("turn_index") or row.get("turn"),
+                    "canonical_turn_action": consistency.get("canonical_turn_action"),
+                    "ok": consistency.get("ok"),
+                    "mismatches": consistency.get("mismatches"),
+                    "before_repair": row.get("turn_action_consistency_before_repair"),
+                    "progress_quality_player_action": _safe_dict(row.get("progress_quality")).get("player_action"),
+                    "player_action": row.get("player_action"),
+                }
+            )
+
+    mismatch_rate = float(mismatch_count) / float(checked_count or 1)
+    repaired_rate = float(repaired_count) / float(checked_count or 1)
+    unrepaired_rate = float(unrepaired_count) / float(checked_count or 1)
+
+    return {
+        "format_version": "turn_action_consistency_summary_v1",
+        "ok": checked_count > 0 and unrepaired_count == 0 and forced_override_count == 0,
+        "checked_count": checked_count,
+        "mismatch_count": mismatch_count,
+        "mismatch_rate": mismatch_rate,
+        "repaired_count": repaired_count,
+        "repaired_rate": repaired_rate,
+        "unrepaired_count": unrepaired_count,
+        "unrepaired_rate": unrepaired_rate,
+        "forced_override_count": forced_override_count,
+        "forced_action_override_count": forced_override_count,
+        "by_field": by_field,
+        "examples": examples,
+    }

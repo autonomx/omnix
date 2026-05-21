@@ -1,0 +1,442 @@
+
+
+def _cleanup_bad_generic_fallback_narration(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if row.get("direct_graph_display_override"):
+        return row
+
+    narration = (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+    narration_l = narration.lower()
+
+    if not narration:
+        return row
+
+    if not any(snippet in narration_l for snippet in _BAD_GENERIC_FALLBACK_SNIPPETS):
+        return row
+
+    cleaned = _fallback_narration_for_action_category(row)
+
+    row["narration"] = cleaned
+    row["display_narration"] = cleaned
+    row["visible_narration"] = cleaned
+    row["selected_narration_text"] = cleaned
+    row["fallback_narration_cleanup_applied"] = True
+    row["fallback_narration_category"] = _classify_visible_action_category(row)
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    if selected:
+        selected["narration"] = cleaned
+        selected["source"] = _safe_str(selected.get("source") or "deterministic_category_fallback")
+        row["selected_narration"] = selected
+        row["selected_output"] = selected
+        row["resolved_narration_payload"] = selected
+        row["narration_payload"] = selected
+        row["structured_narration"] = selected
+
+    return row
+
+
+def _infer_social_target_npc(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(_safe_dict(row.get("direct_graph_action_completion")).get("action_id")),
+            ]
+        )
+    )
+
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    if "bran" in action_id:
+        return "Bran"
+    if "garran" in action_id:
+        return "Garran"
+    if "mira" in action_id:
+        return "Mira"
+    if "marlowe" in action_id:
+        return "Agent Marlowe"
+    if "magistrate" in action_id:
+        return "Magistrate"
+    if "voss" in action_id:
+        return "Captain Voss"
+    if "veska" in action_id:
+        return "Handler Veska"
+    if "teamster" in action_id:
+        return "Old Teamster"
+    if "bandit" in action_id:
+        return "Captured Bandit"
+    if "ally" in action_id or "allies" in action_id:
+        return "Garran"
+    if "magistrate" in action_id:
+        return "Magistrate"
+    if "patron" in action_id:
+        return "Local Patron"
+    if "local" in action_id and "patron" in action_id:
+        return "Local Patron"
+
+    if "bran" in text:
+        return "Bran"
+    if "garran" in text:
+        return "Garran"
+    if "mira" in text:
+        return "Mira"
+    if "sera" in text:
+        return "Sera"
+    if "marlowe" in text:
+        return "Agent Marlowe"
+    if "voss" in text:
+        return "Captain Voss"
+    if "veska" in text:
+        return "Handler Veska"
+    if "bandit" in text:
+        return "Captured Bandit"
+
+    if "magistrate" in text:
+        return "Magistrate"
+    if "teamster" in text:
+        return "Old Teamster"
+    if "agent" in text or "route pressure agent" in text:
+        return "Route Agent"
+    if "ally" in text or "allies" in text:
+        return "Garran"
+    if "local patron" in text or "patron" in text:
+        return "Local Patron"
+
+    return ""
+
+
+def _bounded_social_npc_line(
+    row: Dict[str, Any],
+    *,
+    speaker: str,
+    variant_family: str,
+    templates: List[str],
+    facts: Dict[str, Any] | None = None,
+) -> Dict[str, str]:
+    line, meta = _select_bounded_response_variant(
+        row,
+        variant_family=variant_family,
+        templates=templates,
+        facts=facts or {},
+    )
+    if not line:
+        return {}
+    _store_npc_response_variant(row, line, meta)
+    return {"speaker": speaker, "line": line}
+
+
+def _deterministic_social_npc_line(row: Dict[str, Any]) -> Dict[str, str]:
+    row = _safe_dict(row)
+    speaker = _infer_social_target_npc(row)
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(_safe_dict(row.get("direct_graph_action_completion")).get("action_id")),
+            ]
+        )
+    )
+
+    action_id = _safe_str(
+        _safe_dict(row.get("direct_graph_action_completion")).get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    if not speaker:
+        return {}
+
+    if _action_is_commerce_request(text, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))) and "ration" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.economy.rations",
+            templates=[
+                "Two rations. That should keep you moving if the road turns bad.",
+                "Two wrapped rations. Keep them dry until the road gives you a reason not to.",
+                "That is two rations counted out. They are road food, not comfort, but they will hold.",
+            ],
+            facts={"item": "rations", "quantity": 2},
+        )
+
+    if speaker == "Local Patron":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.local_patron.bridge",
+            templates=[
+                "If you mean the old bridge, folk avoid it before dawn. Too many quiet wagons, too few honest reasons.",
+                "The old bridge draws the wrong kind of traffic before sunrise; I would not call those wagons honest.",
+                "Ask around the old bridge and you will hear the same thing: wagons move there when decent folk stay indoors.",
+            ],
+            facts={"topic": "old_bridge"},
+        )
+
+    if action_id.startswith("ask_") and speaker == "Bran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.bran",
+            templates=[
+                "Ask plainly. If it touches the road, the side door, or that traveler, I will tell you what I know.",
+                "Put the question straight, and I will separate what I know from what I only suspect.",
+                "Ask it cleanly, and I will answer from facts, not tavern smoke.",
+                "Name the point you need, and I will tell you what I can stand behind.",
+            ],
+            facts={"dialogue": "ask_bran"},
+        )
+
+    if action_id.startswith("ask_") and speaker == "Garran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.garran",
+            templates=[
+                "If this is about the road, say it straight. I would rather know the danger before the wheels hit it.",
+                "Give me the plain question. Wagons survive on clear warnings, not hints.",
+                "If the road is part of it, I need the sharp version, not the polite one.",
+            ],
+            facts={"dialogue": "ask_garran"},
+        )
+
+    if action_id.startswith("warn_") and speaker == "Garran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.warn.garran",
+            templates=[
+                "Then we move carefully. I will not drive blind into a trap.",
+                "Then the wagon waits until we know where the danger sits.",
+                "I will treat the warning as real until the road proves otherwise.",
+            ],
+            facts={"warning": "road_danger"},
+        )
+
+    if action_id.startswith("warn_") or "warn" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.warn.generic",
+            templates=[
+                "Then we treat it as real trouble and warn anyone still exposed.",
+                "Then this stops being gossip. We move like someone could get hurt.",
+                "If the warning is sound, we act before the vulnerable are left alone with it.",
+            ],
+            facts={"warning": "current_action"},
+        )
+
+    if action_id.startswith("report_") and speaker == "Bran":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.report.bran",
+            templates=[
+                "That is enough to stop guessing. Show me where the proof points next.",
+                "That moves us from suspicion to proof. Now tell me where it leads.",
+                "Good. If the proof holds, we follow it before someone buries it.",
+                "That gives us a firm edge. Point it at the next name.",
+            ],
+            facts={"evidence": "reported_to_bran"},
+        )
+
+    if action_id.startswith("return_") and "proof" in action_id:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.return.proof",
+            templates=[
+                "That proof gives us a name to push on. Now we make sure it cannot disappear.",
+                "If that proof is solid, we copy it, guard it, and press the name it gives us.",
+                "Then the proof needs daylight and witnesses before anyone can make it vanish.",
+            ],
+            facts={"evidence": "returned_proof"},
+        )
+
+    if action_id.startswith("question_") and speaker == "Captured Bandit":
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.question.captured_bandit",
+            templates=[
+                "I only carried what I was paid to carry. The mark on it is the part you should fear.",
+                "I did not choose the mark. I was paid to move it, and that should worry you more.",
+                "The coin was not mine. Whoever stamped it wanted the trail seen by the right eyes.",
+            ],
+            facts={"dialogue": "captured_bandit"},
+        )
+
+    if action_id.startswith("confront_") or action_id.startswith("counter_"):
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.confront",
+            templates=[
+                "Careful. If you are going to press this, make sure the proof is already in other hands.",
+                "Press them, but do it with proof secured somewhere they cannot reach.",
+                "A confrontation only works if the evidence survives the first denial.",
+            ],
+            facts={"dialogue": "confrontation"},
+        )
+
+    if "magistrate" in speaker.lower() or "arrest" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.magistrate.proof",
+            templates=[
+                "Bring me proof that holds under daylight, and I will act on it.",
+                "Give me evidence that survives public scrutiny, and I can move openly.",
+                "I need proof that cannot be dismissed as tavern panic before I put law behind it.",
+            ],
+            facts={"authority": "magistrate"},
+        )
+
+    if "teamster" in speaker.lower():
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.teamster.road",
+            templates=[
+                "If the east road is being watched, the wagons need to move in pairs or not at all.",
+                "A watched road means paired wagons, extra eyes, or no run at all.",
+                "If watchers are on the east road, one wagon alone is an invitation.",
+            ],
+            facts={"road": "teamster_warning"},
+        )
+
+    if "report" in text or "proof" in text or "evidence" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.report.evidence",
+            templates=[
+                "That is something we can act on. Tell me exactly where it points next.",
+                "That gives us more than rumor. Now we follow the part that names someone.",
+                "Good. Proof narrows the road; show me which direction it leaves open.",
+                "Then we stop circling guesses and follow the strongest mark.",
+                "That is useful because it can be tested. Tell me the next verifiable step.",
+            ],
+            facts={"dialogue": "evidence_report"},
+        )
+
+    if "ask" in text or "question" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.ask.generic",
+            templates=[
+                "Ask it plainly, and I will answer what I know.",
+                "Put the question plainly, and I will keep to what I know.",
+                "Ask straight, and I will not dress the answer up.",
+                "Name what you need answered, and I will stay with the facts.",
+                "Ask the point directly; I will not chase rumors around it.",
+            ],
+            facts={"dialogue": "generic_question"},
+        )
+
+    if "confront" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.confront.accusation",
+            templates=[
+                "Careful. Accusations like that need proof, not just nerve.",
+                "If you confront them, carry proof strong enough to outlast denial.",
+                "Nerve opens the door, but proof keeps it from slamming shut.",
+            ],
+            facts={"dialogue": "accusation"},
+        )
+
+    if "tell" in text:
+        return _bounded_social_npc_line(
+            row,
+            speaker=speaker,
+            variant_family="social.tell.generic",
+            templates=[
+                "Then we should move before someone else decides the next step for us.",
+                "Then say it clearly and we decide what changes because of it.",
+                "If that is the truth of it, we need to act before it cools.",
+            ],
+            facts={"dialogue": "tell"},
+        )
+
+    return _bounded_social_npc_line(
+        row,
+        speaker=speaker,
+        variant_family="social.direction.generic",
+        templates=[
+            "That gives us a direction. Now we need the next solid piece of proof.",
+            "That points somewhere useful. The next step is finding what confirms it.",
+            "It is a direction, not an answer yet. We need the next hard piece.",
+            "Then we follow the part that can be checked, not the part that merely sounds right.",
+        ],
+        facts={"dialogue": "direction"},
+    )
+
+
+def _sync_selected_narration_npc_to_top_level(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    existing_npc = _safe_dict(row.get("npc"))
+    existing_speaker = _safe_str(row.get("npc_speaker") or existing_npc.get("speaker"))
+    existing_line = _safe_str(row.get("npc_line") or existing_npc.get("line"))
+
+    if existing_speaker and existing_line:
+        row["npc"] = {
+            "speaker": existing_speaker,
+            "line": existing_line,
+        }
+        row["npc_speaker"] = existing_speaker
+        row["npc_line"] = existing_line
+        return row
+
+    selected = _safe_dict(
+        row.get("selected_narration")
+        or row.get("selected_output")
+        or row.get("resolved_narration_payload")
+        or row.get("narration_payload")
+        or row.get("structured_narration")
+    )
+    selected_npc = _safe_dict(selected.get("npc"))
+
+    selected_speaker = _safe_str(selected_npc.get("speaker"))
+    selected_line = _safe_str(selected_npc.get("line"))
+
+    if not selected_speaker or not selected_line:
+        return row
+
+    npc = {
+        "speaker": selected_speaker,
+        "line": selected_line,
+    }
+
+    row["npc"] = npc
+    row["npc_speaker"] = selected_speaker
+    row["npc_line"] = selected_line
+    row["top_level_npc_sync_applied"] = True
+    row["top_level_npc_sync_source"] = "selected_narration.npc"
+
+    # Keep all narration payload aliases consistent.
+    selected["npc"] = npc
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
+
+    return row

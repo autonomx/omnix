@@ -1,0 +1,472 @@
+
+
+def _apply_autoplay_profile_defaults(args: Any) -> Any:
+    profile = _safe_str(getattr(args, "autoplay_profile", "") or "custom")
+
+    if profile == "smoke_20":
+        if getattr(args, "turns", None) is None:
+            args.turns = 20
+        return args
+
+    if profile == "smoke_100":
+        # smoke_100 defaults to 100, but explicit --turns is allowed for fast
+        # compile/runtime smoke checks that keep the same profile settings.
+        if getattr(args, "turns", None) is None:
+            args.turns = 100
+        if not getattr(args, "checkpoint_every", None):
+            args.checkpoint_every = 25
+        if not getattr(args, "transcript_detail", None) or args.transcript_detail == "auto":
+            args.transcript_detail = "auto"
+        return args
+
+    if getattr(args, "turns", None) is None:
+        args.turns = 25
+    return args
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run an LLM autoplay RPG campaign.")
+    parser.add_argument("--turns", type=int, default=None)
+    parser.add_argument("--session-id", default="")
+    parser.add_argument("--scenario-seed", default="tavern_story_seed")
+    parser.add_argument("--autoplay-profile", choices=["smoke_20", "smoke_100"], default="smoke_20")
+    parser.add_argument("--random-seed", type=int, default=None)
+    parser.add_argument("--list-scenario-seeds", action="store_true")
+    parser.add_argument("--player-agent", choices=["scripted", "llm"], default="scripted")
+    parser.add_argument(
+        "--player-agent-context-mode",
+        choices=["legacy", "compact"],
+        default="compact",
+        help="compact uses a smaller action-only prompt for the autoplay LLM player-agent.",
+    )
+    parser.add_argument(
+        "--player-agent-cache",
+        choices=["off", "on"],
+        default="on",
+        help="Cache successful compact player-agent decisions by compact context hash.",
+    )
+    parser.add_argument(
+        "--deferred-advisory-promotion",
+        choices=["off", "on"],
+        default="on",
+        help="Run deterministic promotion gate over deferred advisory candidates after background jobs attach.",
+    )
+    parser.add_argument(
+        "--max-advisory-promotions-per-turn",
+        type=int,
+        default=5,
+        help="Maximum advisory candidates promoted per turn by the deterministic gate.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-promotion-max-rows",
+        type=int,
+        default=6,
+        help=(
+            "Maximum recent transcript rows to process during pre-turn deferred "
+            "advisory promotion. Final report promotion still processes the full transcript."
+        ),
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-candidate-limit",
+        type=int,
+        default=30,
+        help="Maximum deferred advisory candidates carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-pending-limit",
+        type=int,
+        default=30,
+        help="Maximum deferred advisory pending items carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-accepted-limit",
+        type=int,
+        default=60,
+        help="Maximum accepted advisory history items carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-carry-rejected-limit",
+        type=int,
+        default=60,
+        help="Maximum rejected advisory history items carried into incremental pre-turn promotion.",
+    )
+    parser.add_argument(
+        "--disable-pre-turn-advisory-promotion",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip pre-turn deferred advisory promotion. Final promotion still runs "
+            "for reports when --deferred-advisory-promotion is on."
+        ),
+    )
+    parser.add_argument(
+        "--player-agent-max-context-chars",
+        type=int,
+        default=5000,
+        help="Max compact context chars for autoplay player-agent prompt.",
+    )
+    parser.add_argument("--strategy", default="balanced_story_player")
+    parser.add_argument("--player-agent-max-tokens", type=int, default=600)
+    parser.add_argument("--debug-provider-shape", action="store_true")
+    parser.add_argument("--debug-turn-runtime-shape", action="store_true")
+    parser.add_argument("--suggested-action-limit", type=int, default=12)
+    parser.add_argument("--artifact-detail", choices=["summary", "full"], default="summary")
+    parser.add_argument("--transcript-detail", choices=["auto", "full"], default="auto")
+    parser.add_argument("--max-transcript-artifact-mb", type=int, default=50)
+    parser.add_argument("--output-dir", default=str(Path("resources") / "data" / "test-results" / "autoplay"))
+    parser.add_argument("--base-url", default=os.environ.get("RPG_AUTOPLAY_BASE_URL", "http://127.0.0.1:5000"), help="Ignored by default manual-harness runtime; reserved for optional HTTP smoke tests.")
+    parser.add_argument("--start-app-server", action="store_true", help="Ignored by default manual-harness runtime; reserved for optional HTTP smoke tests.")
+    parser.add_argument("--server-startup-timeout", type=int, default=60, help="Ignored by default manual-harness runtime.")
+    parser.add_argument("--max-repeated-actions", type=int, default=5)
+    parser.add_argument("--max-no-progress-turns", type=int, default=0)
+    parser.add_argument("--stop-on-loop", action="store_true")
+    parser.add_argument("--fail-on-runtime-error", action="store_true")
+    parser.add_argument("--fail-on-compatibility-turn-runtime", action="store_true")
+    parser.add_argument("--max-player-agent-fallback-rate", type=float, default=1.0)
+    parser.add_argument("--fail-on-regression-warnings", action="store_true")
+    parser.add_argument(
+        "--n101-stabilization-gate",
+        action="store_true",
+        help="Run N101 grounding stabilization smoke without failing on unrelated NPC profile grounding diagnostics.",
+    )
+    parser.add_argument(
+        "--fail-on-narration-grounding-violations",
+        action="store_true",
+        help="Fail autoplay quality gates when grounded narration validation rejects LLM output.",
+    )
+    parser.add_argument("--checkpoint-every", type=int, default=0)
+    parser.add_argument("--checkpoint-interval", type=int, default=0, dest="checkpoint_every")
+    parser.add_argument("--max-state-bytes", type=int, default=2_000_000)
+    parser.add_argument("--max-roots", type=int, default=80)
+    parser.add_argument("--max-state-list-length", type=int, default=500)
+    parser.add_argument("--max-state-dict-keys", type=int, default=500)
+    parser.add_argument("--allow-checkpoint-failures", action="store_true")
+    parser.add_argument("--allow-state-bound-warnings", action="store_true")
+    parser.add_argument("--min-meaningful-progress-rate", type=float, default=0.0)
+    parser.add_argument("--max-churn-only-rate", type=float, default=1.0)
+    parser.add_argument("--max-churn-only-streak", type=int, default=0)
+    parser.add_argument("--max-objective-target-no-progress-streak", type=int, default=0)
+    parser.add_argument("--fail-on-post-objective-weak-progress", action="store_true")
+    parser.add_argument("--autoplay-base-response", choices=["off", "deterministic", "provider"], default="deterministic")
+    parser.add_argument("--base-response-max-tokens", type=int, default=220)
+    parser.add_argument("--fail-on-dialogue-coverage-gap", action="store_true")
+    parser.add_argument("--action-diversity-window", type=int, default=12)
+    parser.add_argument("--min-action-diversity-rate", type=float, default=0.0)
+    parser.add_argument(
+        "--player-agent-anti-loop-streak-threshold",
+        type=int,
+        default=3,
+        help=(
+            "When the trailing semantic_action:target streak reaches this value, "
+            "inject anti-loop pressure into the player-agent prompt."
+        ),
+    )
+    parser.add_argument(
+        "--player-agent-anti-loop-repair",
+        action="store_true",
+        default=True,
+        help="Repair the player-agent action once if it repeats the forbidden semantic target pair.",
+    )
+    parser.add_argument(
+        "--no-player-agent-anti-loop-repair",
+        action="store_false",
+        dest="player_agent_anti_loop_repair",
+        help="Disable one-shot anti-loop action repair.",
+    )
+    parser.add_argument(
+        "--player-agent-executable-action-repair",
+        action="store_true",
+        default=True,
+        help="Repair meta/planner/vague player actions into executable in-world commands.",
+    )
+    parser.add_argument(
+        "--no-player-agent-executable-action-repair",
+        action="store_false",
+        dest="player_agent_executable_action_repair",
+        help="Disable executable action repair.",
+    )
+    parser.add_argument(
+        "--player-agent-goal-pressure",
+        action="store_true",
+        default=True,
+        help="Inject deterministic goal-pressure/director nudges when strict progress is low.",
+    )
+    parser.add_argument(
+        "--no-player-agent-goal-pressure",
+        action="store_false",
+        dest="player_agent_goal_pressure",
+        help="Disable goal-pressure/director nudges.",
+    )
+    parser.add_argument(
+        "--player-agent-reasoning-planner",
+        action="store_true",
+        default=True,
+        help="Use a bounded reasoning-plan step before choosing the final player action.",
+    )
+    parser.add_argument(
+        "--no-player-agent-reasoning-planner",
+        action="store_false",
+        dest="player_agent_reasoning_planner",
+        help="Disable bounded player reasoning planner.",
+    )
+    parser.add_argument(
+        "--player-agent-goal-pressure-repair",
+        action="store_true",
+        default=True,
+        help="Repair passive micro-actions under goal pressure using a deterministic suggested action.",
+    )
+    parser.add_argument(
+        "--no-player-agent-goal-pressure-repair",
+        action="store_false",
+        dest="player_agent_goal_pressure_repair",
+        help="Disable deterministic goal-pressure repair.",
+    )
+    parser.add_argument(
+        "--goal-pressure-no-change-threshold",
+        type=int,
+        default=8,
+        help="Activate goal pressure when strict no-change turns exceed this threshold.",
+    )
+    parser.add_argument(
+        "--goal-pressure-passive-rate-threshold",
+        type=float,
+        default=0.45,
+        help="Activate goal pressure when recent passive micro-action rate reaches this value.",
+    )
+    parser.add_argument("--min-category-diversity-rate", type=float, default=0.0)
+    parser.add_argument("--latency-profile", choices=["evaluation", "playable"], default="evaluation")
+    parser.add_argument("--narration-mode", choices=["blocking", "deferred"], default="blocking")
+    parser.add_argument(
+        "--background-llm-mode",
+        choices=["split", "combined"],
+        default="split",
+        help="split = separate deferred narration/advisory jobs; combined = one provider job for both.",
+    )
+    parser.add_argument("--checkpoint-mode", choices=["blocking", "background"], default="blocking")
+    parser.add_argument("--background-workers", type=int, default=4)
+    parser.add_argument(
+        "--pre-turn-background-drain-ms",
+        type=int,
+        default=250,
+        help=(
+            "Small wait budget before each autoplay turn to drain completed "
+            "background LLM results from prior turns. This lets completed "
+            "advisory/profile/narration work affect future-turn context without "
+            "blocking same-turn authoritative outcomes."
+        ),
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-fast-path",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable the fast pre-turn deferred advisory promotion path.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-skip-profile-load",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip NPC profile loads during pre-turn advisory promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-skip-evolution",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip NPC evolution work during pre-turn advisory promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-skip-mutation-compare",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip expensive authoritative-state deep comparison during pre-turn fast advisory promotion.",
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-slow-guard-ms",
+        type=int,
+        default=5000,
+        help=(
+            "Auto-disable pre-turn advisory promotion if one promotion pass exceeds "
+            "this many milliseconds."
+        ),
+    )
+    parser.add_argument(
+        "--pre-turn-advisory-auto-disable-on-slow",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Auto-disable pre-turn advisory promotion for the rest of the run after "
+            "one slow pre-turn promotion pass."
+        ),
+    )
+    parser.add_argument(
+        "--final-background-drain-timeout-seconds",
+        type=float,
+        default=90.0,
+        help="Maximum seconds to wait for remaining background jobs during final artifact/report drain.",
+    )
+    parser.add_argument(
+        "--cancel-unfinished-background-on-final-timeout",
+        action="store_true",
+        default=True,
+        help="Cancel/mark unfinished background jobs when final drain timeout is reached.",
+    )
+    parser.add_argument(
+        "--no-cancel-unfinished-background-on-final-timeout",
+        action="store_false",
+        dest="cancel_unfinished_background_on_final_timeout",
+        help="Do not cancel unfinished background jobs when final drain timeout is reached.",
+    )
+    parser.add_argument(
+        "--force-exit-after-artifacts-on-background-timeout",
+        action="store_true",
+        default=True,
+        help=(
+            "After report/zip artifacts are written, force-exit the CLI if "
+            "background provider threads are still alive. This prevents "
+            "ThreadPoolExecutor provider calls from hanging autoplay forever."
+        ),
+    )
+    parser.add_argument(
+        "--no-force-exit-after-artifacts-on-background-timeout",
+        action="store_false",
+        dest="force_exit_after_artifacts_on_background_timeout",
+        help="Do not force-exit after artifact write even if background threads remain alive.",
+    )
+    parser.add_argument(
+        "--background-result-max-turn-lag",
+        type=int,
+        default=5,
+        help="Warn/fail in strict mode when a background result attaches more than this many turns late.",
+    )
+    parser.add_argument(
+        "--debug-autoplay-stage-timing",
+        action="store_true",
+        help="Print detailed before/after timing probes around autoplay blocking stages.",
+    )
+    parser.add_argument("--provider-workers", type=int, default=1)
+    parser.add_argument(
+        "--campaign-minutes-per-turn",
+        type=int,
+        default=30,
+        help="Deterministic campaign calendar minutes advanced per turn for report/journal metadata.",
+    )
+    parser.add_argument(
+        "--journal-every-turns",
+        type=int,
+        default=4,
+        help="Create a deterministic player-perspective journal entry every N turns.",
+    )
+    parser.add_argument(
+        "--capture-console-log",
+        action="store_true",
+        default=True,
+        help="Capture stdout/stderr into output-dir/console-log.txt and include it in reports/artifacts.",
+    )
+    parser.add_argument(
+        "--no-capture-console-log",
+        action="store_false",
+        dest="capture_console_log",
+        help="Disable stdout/stderr capture.",
+    )
+    parser.add_argument(
+        "--console-log-max-chars",
+        type=int,
+        default=250000,
+        help="Maximum console log characters retained in console-log.txt/report summary.",
+    )
+    parser.add_argument(
+        "--strict-eval-turns",
+        type=int,
+        default=100,
+        help="Turn count at which long-run/100-turn quality gates become strict errors.",
+    )
+    parser.add_argument(
+        "--max-100turn-no-progress-streak",
+        type=int,
+        default=10,
+        help="Maximum no-progress streak allowed in strict 100-turn evaluation.",
+    )
+    parser.add_argument(
+        "--max-100turn-repeat-semantic-target-streak",
+        type=int,
+        default=8,
+        help="Maximum repeated semantic action/target streak allowed in strict 100-turn evaluation.",
+    )
+    return parser
+
+
+def _assert_real_autoplay_runner_present() -> None:
+    import inspect
+
+    fn = globals().get("_run_autoplay_campaign")
+    if not callable(fn):
+        raise RuntimeError("real_autoplay_runner_missing:_run_autoplay_campaign")
+
+    try:
+        source = inspect.getsource(fn)
+    except Exception as exc:
+        raise RuntimeError(
+            f"real_autoplay_runner_uninspectable:{type(exc).__name__}:{exc}"
+        ) from exc
+
+    required_markers = (
+        "write_results_zip.start",
+        "write_results_zip.end",
+        "artifact_paths",
+        "_force_exit_if_background_threads_remain",
+    )
+
+    missing = [marker for marker in required_markers if marker not in source]
+    if missing:
+        raise RuntimeError(
+            "real_autoplay_runner_truncated:"
+            f"missing_markers:{','.join(missing)}"
+        )
+
+    # Do not require the literal text "return summary".
+    # The function may return through a parenthesized/typed path or after future
+    # finalization edits. The important invariant is that we still have the real
+    # large runner, not a stub.
+    if len(source) < 100_000:
+        raise RuntimeError(
+            "real_autoplay_runner_too_small:"
+            f"source_chars={len(source)}"
+        )
+
+
+def _run_with_console_capture(args: argparse.Namespace) -> int:
+    global _ACTIVE_CONSOLE_CAPTURE
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    console_log_path = output_dir / "console-log.txt"
+    if not getattr(args, "capture_console_log", True):
+        summary = _run_autoplay_campaign(args)
+        if summary is None:
+            raise RuntimeError(
+                "autoplay_runner_returned_none:_run_autoplay_campaign ended before returning a summary. "
+                "The real turn loop was likely truncated or helper functions were inserted inside/over the runner."
+            )
+        return 0 if _safe_dict(summary).get("ok") else 1
+
+    with ConsoleCapture(
+        output_path=console_log_path,
+        max_chars=int(getattr(args, "console_log_max_chars", 250000) or 250000),
+    ) as capture:
+        _ACTIVE_CONSOLE_CAPTURE = capture
+        try:
+            summary = _run_autoplay_campaign(args)
+            capture.write_file()
+        finally:
+            _ACTIVE_CONSOLE_CAPTURE = None
+
+
+    if summary is None:
+        raise RuntimeError(
+            "autoplay_runner_returned_none:_run_autoplay_campaign ended before returning a summary. "
+            "The real turn loop was likely truncated or helper functions were inserted inside/over the runner."
+        )
+
+    if not _safe_dict(summary).get("ok"):
+        for error in _safe_list(_safe_dict(summary).get("runtime_errors")):
+            _timestamped_print(f"[AUTOPLAY-ERROR] {error}")
+
+    return 0 if _safe_dict(summary).get("ok") else 1

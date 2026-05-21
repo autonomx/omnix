@@ -1,0 +1,477 @@
+
+
+def _normalize_final_transcript_presentation_intents(rows: Any) -> List[Dict[str, Any]]:
+    normalized_rows: List[Dict[str, Any]] = []
+    for row_any in _safe_list(rows):
+        row = dict(_safe_dict(row_any))
+
+        current_intent = _normalize_presentation_intent(row.get("presentation_intent"))
+        current_parse_source = _safe_str(
+            _safe_dict(row.get("presentation_intent")).get("parse_source")
+            or row.get("presentation_intent_parse_source")
+        )
+
+        presentation_intent = current_intent
+        parse_source = current_parse_source
+
+        if (
+            not current_intent
+            or current_intent.get("primary_category") == "general"
+            and not current_intent.get("secondary_categories")
+        ):
+            nested_candidate = dict(row)
+            for key in ("presentation_intent", "presentationIntent", "intent"):
+                nested_candidate.pop(key, None)
+            nested_intent, nested_source = _find_presentation_intent_candidate(nested_candidate)
+            if nested_intent and nested_source != "missing":
+                presentation_intent = _normalize_presentation_intent(nested_intent)
+                parse_source = nested_source
+
+        if not presentation_intent:
+            presentation_intent = _extract_row_presentation_intent(row)
+
+        presentation_intent["parse_source"] = _safe_str(
+            parse_source or presentation_intent.get("parse_source") or "missing"
+        )
+        row["presentation_intent"] = presentation_intent
+        row["presentation_intent_parse_source"] = _safe_str(
+            row.get("presentation_intent_parse_source")
+            or presentation_intent.get("parse_source")
+        )
+        row["llm_presentation_category"] = _safe_str(
+            _safe_dict(row.get("presentation_intent")).get("primary_category")
+        )
+        row = _apply_turn_bound_presentation_compatibility_gate(row)
+        row["final_transcript_intent_normalized"] = True
+        normalized_rows.append(row)
+
+    return normalized_rows
+
+
+def _classify_visible_action_category_without_validated_intent(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+
+    if action_id.startswith(("ask_", "report_", "warn_", "tell_", "question_", "confront_", "counter_", "press_", "persuade_", "accuse_", "negotiate_")):
+        return "dialogue"
+    if action_id.startswith(("return_", "search_", "inspect_", "decipher_", "read_", "recover_", "deliver_")):
+        return "evidence"
+    if action_id == "buy_rations_from_bran":
+        return "economy"
+    if action_id in {
+        "protect_wagon_or_lure_bandits",
+        "ambush_bandits",
+        "fight_bandit_scouts",
+        "fight_bandits",
+        "defeat_bandit_scouts",
+        "resolve_bandit_ambush",
+    }:
+        return "combat"
+
+    return _turn_action_category(
+        " ".join(
+            [
+                _safe_str(row.get("player_action")),
+                _safe_str(row.get("canonical_turn_action")),
+                action_id,
+            ]
+        )
+    )
+
+
+def _authoritative_category_support(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    action_id = _row_direct_action_id(row)
+    mechanics = _row_mechanics_set(row)
+    result = _safe_dict(row.get("result"))
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    contract_result = _safe_dict(turn_contract.get("result"))
+    state_delta = _safe_dict(row.get("state_delta"))
+    contract_delta = _safe_dict(turn_contract.get("state_delta"))
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+
+    supports = {
+        "combat": bool(_turn_has_combat_support(row)),
+        "economy": bool(
+            "buying" in mechanics
+            or "economy" in mechanics
+            or "purchase" in mechanics
+            or result.get("purchase_result")
+            or contract_result.get("purchase_result")
+            or action_id.startswith("buy_")
+        ),
+        "service": bool(
+            "service" in mechanics
+            or "lodging" in mechanics
+            or "rent_room" in action_id
+            or action_id.startswith("rent_")
+            or result.get("service_result")
+            or contract_result.get("service_result")
+        ),
+        "travel": bool(
+            "travel" in mechanics
+            or "location_changed" in mechanics
+            or state_delta.get("location_changed")
+            or contract_delta.get("location_changed")
+            or result.get("location_changed")
+            or contract_result.get("location_changed")
+            or direct.get("location_delta")
+        ),
+        "evidence": bool(
+            "evidence" in mechanics
+            or "investigation" in mechanics
+            or action_id.startswith(("report_", "return_", "search_", "inspect_", "recover_", "deliver_", "decipher_", "read_"))
+        ),
+        "investigation": bool(
+            "investigation" in mechanics
+            or action_id.startswith(("search_", "inspect_", "scout_", "watch_", "track_", "examine_"))
+        ),
+        "dialogue": bool(
+            "dialogue" in mechanics
+            or "social" in mechanics
+            or action_id.startswith(("ask_", "tell_", "warn_", "report_", "question_", "persuade_", "confront_", "negotiate_"))
+        ),
+        "quest": bool("quest" in mechanics or action_id.startswith(("accept_", "complete_", "advance_quest_"))),
+        "lore": bool("lore" in mechanics),
+        "stealth": bool("stealth" in mechanics),
+    }
+    supports["social"] = supports["dialogue"]
+    supports["mixed"] = True
+    supports["general"] = True
+    return supports
+
+
+PRESENTATION_INTENT_SPECIFIC_PRIORITY = (
+    "combat",
+    "economy",
+    "service",
+    "travel",
+    "evidence",
+    "investigation",
+    "dialogue",
+    "quest",
+    "lore",
+    "stealth",
+)
+
+
+def _background_presentation_action_category(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    category = _normalize_presentation_category(
+        _safe_dict(row.get("background_presentation_result")).get("action_category")
+        or row.get("action_category")
+    )
+    return category
+
+
+def _presentation_category_is_specific(category: str) -> bool:
+    return category not in {"", "general", "mixed"}
+
+
+def _specific_supported_presentation_category(
+    *,
+    row: Dict[str, Any],
+    support: Dict[str, Any],
+    fallback_category: str = "",
+    action_text: str = "",
+) -> str:
+    """Choose a specific supported category before falling back to mixed/general.
+
+    The N115.2 fallback safely exposed categories but over-selected ``mixed``
+    because mixed is always supportable. This selector gives concrete
+    authoritative evidence a chance to win first, so rows like ``report ambush
+    evidence`` become evidence and ``scout ambush signs`` becomes
+    investigation instead of mixed/general.
+    """
+    row = _safe_dict(row)
+    action_id = _row_direct_action_id(row)
+    mechanics = _row_mechanics_set(row)
+    text_n = _normalize_turn_action_text(
+        " ".join(
+            part
+            for part in (
+                action_text,
+                _safe_str(row.get("canonical_turn_action")),
+                _safe_str(row.get("player_action")),
+                action_id,
+            )
+            if part
+        )
+    )
+
+    specific_fallback = _normalize_presentation_category(fallback_category)
+    if (
+        specific_fallback == "mixed"
+        and support.get("service")
+        and support.get("dialogue")
+        and not support.get("evidence")
+        and not support.get("investigation")
+    ):
+        return "mixed"
+
+    if _presentation_category_is_specific(specific_fallback) and support.get(specific_fallback):
+        # Do not let a broad text fallback override a more precise action id.
+        if specific_fallback == "dialogue" and (
+            "evidence" in mechanics
+            or action_id.startswith(("report_", "return_", "recover_", "deliver_", "decipher_", "read_"))
+            or any(t in text_n for t in ("evidence", "proof", "clue", "ledger", "note", "marked coin"))
+        ) and support.get("evidence"):
+            return "evidence"
+        return specific_fallback
+
+    if support.get("combat") and (
+        "combat_started" in mechanics
+        or "combat_resolved" in mechanics
+        or action_id.startswith(("attack_", "fight_", "defend_", "ambush_", "resolve_bandit_ambush"))
+    ):
+        return "combat"
+
+    if support.get("economy") and (
+        "economy" in mechanics
+        or "buying" in mechanics
+        or "purchase" in mechanics
+        or action_id.startswith(("buy_", "purchase_"))
+    ):
+        return "economy"
+
+    if support.get("service") and (
+        "service" in mechanics
+        or "lodging" in mechanics
+        or "rent_room" in action_id
+        or action_id.startswith(("rent_", "book_lodging"))
+    ):
+        return "service"
+
+    if support.get("travel") and (
+        "travel" in mechanics
+        or "location_changed" in mechanics
+        or action_id.startswith(("travel_", "go_to_", "enter_", "leave_"))
+    ):
+        return "travel"
+
+    if support.get("evidence") and (
+        "evidence" in mechanics
+        or action_id.startswith(("report_", "return_", "recover_", "deliver_", "decipher_", "read_"))
+        or any(t in text_n for t in ("evidence", "proof", "clue", "ledger", "note", "marked coin"))
+    ):
+
+        return "evidence"
+
+    if support.get("investigation") and (
+        "investigation" in mechanics
+        or action_id.startswith(("search_", "inspect_", "scout_", "watch_", "track_", "examine_"))
+        or any(t in text_n for t in ("scout", "search", "inspect", "track", "examine", "look for", "signs"))
+    ):
+        return "investigation"
+
+    if support.get("dialogue") and (
+        "dialogue" in mechanics
+        or "social" in mechanics
+        or action_id.startswith(("ask_", "tell_", "warn_", "question_", "persuade_", "confront_", "negotiate_"))
+        or any(t in text_n for t in ("ask", "tell", "warn", "question", "speak", "talk"))
+    ):
+        return "dialogue"
+
+    for category in PRESENTATION_INTENT_SPECIFIC_PRIORITY:
+        if support.get(category):
+            return category
+
+    if support.get("mixed"):
+        return "mixed"
+    return "general"
+
+
+def _derive_fallback_presentation_intent_for_row(
+    row: Dict[str, Any],
+    *,
+    support: Optional[Dict[str, Any]] = None,
+    action_text: str = "",
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    support = _safe_dict(support) or _authoritative_category_support(row)
+    fallback_category = _normalize_presentation_category(
+        _background_presentation_action_category(row)
+        or _classify_visible_action_category_without_validated_intent(row)
+        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    )
+    primary = _specific_supported_presentation_category(
+        row=row,
+        support=support,
+        fallback_category=fallback_category,
+        action_text=action_text,
+    )
+
+    secondary: List[str] = []
+    for category in PRESENTATION_INTENT_SPECIFIC_PRIORITY:
+        if category != primary and bool(support.get(category)) and category not in secondary:
+            secondary.append(category)
+        if len(secondary) >= 4:
+            break
+
+    return {
+        "format_version": "presentation_intent_v1",
+        "primary_category": primary,
+        "secondary_categories": secondary,
+        "confidence": 0.0,
+        "reason": "deterministic_specific_fallback_from_authoritative_turn",
+    }
+
+
+def _display_action_kind_for_validated_category(category: str) -> str:
+    category = _normalize_presentation_category(category)
+    if category in {"dialogue", "social"}:
+        return "social"
+    if category == "economy":
+        return "commerce"
+    return category
+
+
+def _apply_validated_presentation_category_to_relevance(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    relevance = dict(_safe_dict(row.get("dialogue_action_relevance")))
+    if not relevance:
+        return row
+
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    category = _normalize_presentation_category(validated.get("primary_category"))
+    if category == "general":
+        category = _normalize_presentation_category(
+            _background_presentation_action_category(row)
+            or _classify_visible_action_category_without_validated_intent(row)
+        )
+    if category == "general":
+        return row
+
+    action_kind = _display_action_kind_for_validated_category(category)
+    old_action_kind = _safe_str(relevance.get("action_kind"))
+    if old_action_kind and old_action_kind != action_kind:
+        relevance["original_action_kind"] = old_action_kind
+        relevance["action_kind_source"] = "validated_presentation_category"
+    relevance["action_kind"] = action_kind
+    relevance["validated_presentation_category"] = category
+    relevance["validated_presentation_intent"] = validated
+    row["dialogue_action_relevance"] = relevance
+    return row
+
+
+def _rewrite_public_presentation_intent_fields_from_validated(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Force public transcript LLM-intent fields to mirror validated provider intent.
+
+    ``validated_presentation_intent.primary_category`` is the authoritative,
+    clamped presentation category.  ``validated_presentation_intent.proposed_category``
+    is the category proposed by the provider/LLM before clamping.  Public fields
+    named ``presentation_intent`` and ``llm_presentation_category`` are intended
+    to report that provider proposal, not the deterministic fallback/default.
+
+    This helper is intentionally artifact-time and unconditional when a proposed
+    category exists, because run artifacts showed validated intent was correct
+    while public row fields still serialized as ``general``/``missing``.
+    """
+    row = dict(_safe_dict(row))
+    validated = _safe_dict(row.get("validated_presentation_intent"))
+    if not validated:
+        return row
+
+    proposed_category = _normalize_presentation_category(
+        validated.get("proposed_category")
+        or validated.get("provider_category")
+        or validated.get("llm_category")
+        or "general"
+    )
+    if not proposed_category:
+        proposed_category = "general"
+
+    parse_source = _safe_str(
+        validated.get("provider_intent_parse_source")
+        or row.get("presentation_intent_parse_source")
+        or "missing"
+    )
+
+    secondary_categories: List[str] = []
+    for item in _safe_list(validated.get("secondary_categories")):
+        normalized = _normalize_presentation_category(item)
+        if normalized and normalized != proposed_category and normalized not in secondary_categories:
+            secondary_categories.append(normalized)
+
+    try:
+        confidence = float(validated.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    public_intent = {
+        "format_version": "presentation_intent_v1",
+        "primary_category": proposed_category,
+        "secondary_categories": secondary_categories[:4],
+        "confidence": round(confidence, 3),
+        "reason": _safe_str(validated.get("provider_reason") or "")[:240],
+        "parse_source": parse_source,
+    }
+
+    row["presentation_intent"] = public_intent
+    row["presentation_intent_parse_source"] = parse_source
+    row["llm_presentation_category"] = proposed_category
+    return row
+
+
+def _validate_presentation_intent_for_row(
+    row: Dict[str, Any],
+    *,
+    action_text: str = "",
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    proposed = _extract_row_presentation_intent(row)
+    proposed_category = _normalize_presentation_category(proposed.get("primary_category"))
+    support = _authoritative_category_support(row)
+
+    fallback_category = _normalize_presentation_category(
+        _background_presentation_action_category(row)
+        or _classify_visible_action_category_without_validated_intent(row)
+        or _turn_action_category(action_text or _safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    )
+
+    provider_intent_ok = bool(support.get(proposed_category, False)) and _presentation_category_is_specific(proposed_category)
+    if provider_intent_ok:
+        repaired_category = proposed_category
+        reason = "provider_intent_supported"
+    else:
+        repaired_category = _specific_supported_presentation_category(
+            row=row,
+            support=support,
+            fallback_category=fallback_category,
+            action_text=action_text,
+        )
+        reason = (
+            "provider_intent_supported_but_specific_fallback_preferred"
+            if bool(support.get(proposed_category, False))
+            else "provider_intent_not_supported_by_authoritative_turn"
+        )
+
+    if not support.get(repaired_category, False) and repaired_category in {"combat", "travel", "service", "economy"}:
+        repaired_category = _specific_supported_presentation_category(
+            row=row,
+            support=support,
+            fallback_category="",
+            action_text=action_text,
+        )
+
+    validated_intent_ok = bool(support.get(repaired_category, False)) or repaired_category in {"general", "mixed"}
+    provider_intent_repaired = repaired_category != proposed_category
+
+    return {
+        "format_version": "validated_presentation_intent_v1",
+        "ok": validated_intent_ok,
+        "provider_intent_ok": provider_intent_ok,
+        "validated_intent_ok": validated_intent_ok,
+        "provider_intent_repaired": provider_intent_repaired,
+        "primary_category": repaired_category,
+        "proposed_category": proposed_category,
+        "fallback_category": fallback_category,
+        "secondary_categories": proposed.get("secondary_categories") or [],
+        "confidence": proposed.get("confidence") or 0.0,
+        "reason": reason,
+        "provider_reason": proposed.get("reason") or "",
+        "provider_intent_parse_source": proposed.get("parse_source") or row.get("presentation_intent_parse_source") or "missing",
+        "support": support,
+    }

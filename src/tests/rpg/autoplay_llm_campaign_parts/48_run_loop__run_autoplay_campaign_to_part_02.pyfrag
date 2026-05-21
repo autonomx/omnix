@@ -1,0 +1,480 @@
+            # Limit recent_turns to prevent memory explosion in long campaigns
+            context["recent_turns"] = [
+                {k: v for k, v in turn.items() if k in {"turn_index", "player_action", "narration"}}
+                for turn in transcript[-5:]
+            ]
+        context["story_hook_hints"] = autoplay_story_hook_player_hints(simulation_state)
+        current_progress_quality_metrics = compute_progress_quality_metrics(transcript)
+        current_diversity_metrics = action_diversity_metrics(
+            transcript,
+            window=int(args.action_diversity_window),
+        )
+        context["suggested_actions"] = rerank_suggested_actions_for_strategy(
+            list(context.get("suggested_actions") or []),
+            strategy=args.strategy,
+            recent_transcript=transcript,
+            progress_quality_metrics=current_progress_quality_metrics,
+        )
+        context["strategy_guidance"] = build_strategy_guidance(
+            strategy=args.strategy,
+            progress_quality_metrics=current_progress_quality_metrics,
+            diversity_metrics=current_diversity_metrics,
+            recent_transcript=transcript,
+        )
+        goal_pressure_context = build_goal_pressure_context(
+            transcript=transcript,
+            player_action_context=context,
+            progress_quality_metrics=current_progress_quality_metrics,
+            turn_index=turn_index,
+            no_change_streak_threshold=int(getattr(args, "goal_pressure_no_change_threshold", 8) or 8),
+            passive_rate_threshold=float(getattr(args, "goal_pressure_passive_rate_threshold", 0.45) or 0.45),
+        ) if bool(getattr(args, "player_agent_goal_pressure", True)) else {"active": False}
+        context["goal_pressure"] = goal_pressure_context
+        if goal_pressure_context.get("active"):
+            pressure_candidates = _safe_list(goal_pressure_context.get("candidate_actions"))
+            existing_commands = {
+                _safe_str(row.get("command"))
+                for row in _safe_list(context.get("suggested_actions"))
+                if _safe_str(_safe_dict(row).get("command"))
+            }
+            promoted = []
+            for row in pressure_candidates:
+                row = _safe_dict(row)
+                command = _safe_str(row.get("command"))
+                if command and command not in existing_commands:
+                    promoted.append(row)
+            context["suggested_actions"] = (promoted + _safe_list(context.get("suggested_actions")))[: int(args.suggested_action_limit)]
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_goal_pressure_context",
+            turn_index=turn_index,
+            active=goal_pressure_context.get("active"),
+            meaningful_progress_rate=goal_pressure_context.get("meaningful_progress_rate"),
+            no_change_turns=goal_pressure_context.get("no_change_turns"),
+            passive_micro_action_rate=goal_pressure_context.get("passive_micro_action_rate"),
+            active_objective_count=goal_pressure_context.get("active_objective_count"),
+            completed_objective_count=goal_pressure_context.get("completed_objective_count"),
+        )
+        anti_loop_context = _build_player_agent_anti_loop_context(
+            transcript=transcript,
+            threshold=int(getattr(args, "player_agent_anti_loop_streak_threshold", 3) or 3),
+            window=int(getattr(args, "action_diversity_window", 12) or 12),
+        )
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_anti_loop_context",
+            turn_index=turn_index,
+            active=anti_loop_context.get("active"),
+            pair=anti_loop_context.get("pair"),
+            streak=anti_loop_context.get("streak"),
+            threshold=anti_loop_context.get("threshold"),
+            source=anti_loop_context.get("source"),
+            recent_pairs=",".join(
+                [
+                    _safe_str(pair)
+                    for pair in _safe_list(anti_loop_context.get("recent_pairs"))[-6:]
+                ]
+            ),
+            recent_sources=",".join(
+                [
+                    _safe_str(_safe_dict(item).get("source"))
+                    for item in _safe_list(anti_loop_context.get("canonical_recent_pairs"))[-6:]
+                ]
+            ),
+        )
+        player_reasoning_plan = {}
+        if bool(getattr(args, "player_agent_reasoning_planner", True)):
+            try:
+                reasoning_messages = build_player_reasoning_prompt(context)
+                provider = get_provider()
+                raw_plan = provider.chat(
+                    messages=reasoning_messages,
+                    temperature=0.2,
+                    max_tokens=420,
+                )
+                player_reasoning_plan = normalize_player_reasoning_payload(raw_plan)
+                if player_reasoning_plan.get("best_next_action"):
+                    context["reasoning_planner"] = player_reasoning_plan
+                    # Push the planner action to the top of suggested actions.
+                    context["suggested_actions"] = [
+                        {
+                            "action_id": "reasoning_planner:best_next_action",
+                            "label": "Reasoned best next action",
+                            "command": player_reasoning_plan["best_next_action"],
+                            "category": "objective",
+                            "priority": 160,
+                            "reason": player_reasoning_plan.get("why_this_advances_progress") or "Bounded reasoning planner.",
+                        }
+                    ] + _safe_list(context.get("suggested_actions"))
+            except Exception as exc:
+                player_reasoning_plan = {
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "best_next_action": deterministic_concrete_player_action(context),
+                }
+                context["reasoning_planner"] = player_reasoning_plan
+
+        with _ProbeTimer(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_select_action",
+            turn_index=turn_index,
+            player_agent=getattr(args, "player_agent", ""),
+            context_mode=getattr(args, "player_agent_context_mode", ""),
+        ):
+            with timed_stage(turn_performance, "player_agent_ms"):
+                if args.player_agent == "llm" and args.player_agent_context_mode == "compact":
+                    selected = _select_compact_llm_player_action(
+                        provider=provider,
+                        session=simulation_state,
+                        transcript=transcript,
+                        latest_context=context,
+                        player_action_context=context,
+                        strategy=args.strategy,
+                        action_diversity_window=int(args.action_diversity_window),
+                        max_context_chars=int(args.player_agent_max_context_chars),
+                        cache=player_agent_cache,
+                        cache_enabled=args.player_agent_cache == "on",
+                        turn_index=turn_index,
+                        debug_autoplay_stage_timing=bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        scenario_progression_suppressed_actions=scenario_progression_suppressed_actions,
+                        anti_loop_context=anti_loop_context,
+                        goal_pressure_context=goal_pressure_context,
+                    )
+                else:
+                    selected = _select_player_action(
+                        provider=provider,
+                        player_action_context=context,
+                        transcript=transcript,
+                        strategy=args.strategy,
+                        use_llm_player=args.player_agent == "llm",
+                        max_tokens=args.player_agent_max_tokens,
+                        progress_quality_metrics=current_progress_quality_metrics,
+                        diversity_metrics=current_diversity_metrics,
+                        turn_index=turn_index,
+                        debug_autoplay_stage_timing=bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    )
+
+                suppressed_selection_guard = {
+                    "retargeted": False,
+                    "command": "",
+                    "reason": "not_checked",
+                    "suppressed_match": {},
+                    "replacement_action": {},
+                }
+                selected_command_before_suppression_guard = ""
+
+                player_agent_selection_source = _safe_str(selected.get("source")) or "player_agent"
+                player_agent_selection_reason = _safe_str(selected.get("reason")) or "player_agent"
+                player_action = _safe_str(selected.get("action"))
+                canonical_turn_action = _safe_str(player_action)
+
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "player_agent_select_action.result",
+            turn_index=turn_index,
+            action_preview=_safe_str(player_action)[:220],
+        )
+
+        recent_exact_actions = [
+            _safe_str(_safe_dict(row).get("player_action")).strip().lower()
+            for row in transcript[-4:]
+        ]
+        progression_actions = _safe_list(authoritative_state.get("scenario_progression_actions"))
+        if progression_actions:
+            selected_progression_action = ""
+            for candidate in progression_actions:
+                command = _safe_str(_safe_dict(candidate).get("command")).strip()
+                if command and command.lower() not in recent_exact_actions:
+                    selected_progression_action = command
+                    break
+            if (
+                not player_action
+                or player_action.strip().lower() in recent_exact_actions[-2:]
+                or "follow up on the lead" in player_action.lower()
+                or "review my quest log" in player_action.lower()
+            ):
+                if selected_progression_action:
+                    player_action = selected_progression_action
+                    player_agent_selection_source = "scenario_progression_graph"
+
+        if (
+            bool(getattr(args, "player_agent_anti_loop_repair", True))
+            and _action_violates_anti_loop(_safe_str(player_action), anti_loop_context)
+        ):
+            repaired_action = _deterministic_anti_loop_fallback_action(anti_loop_context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_anti_loop_repair.applied",
+                turn_index=turn_index,
+                forbidden_pair=anti_loop_context.get("pair"),
+                original_action=_safe_str(player_action)[:220],
+                repaired_action=repaired_action[:220],
+            )
+            player_action = repaired_action
+
+        if (
+            bool(getattr(args, "player_agent_goal_pressure_repair", True))
+            and action_violates_goal_pressure(_safe_str(player_action), goal_pressure_context)
+        ):
+            repaired_goal_action = deterministic_goal_pressure_action(goal_pressure_context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_goal_pressure_repair.applied",
+                turn_index=turn_index,
+                original_action=_safe_str(player_action)[:220],
+                repaired_action=repaired_goal_action[:220],
+            )
+            player_action = repaired_goal_action
+            if isinstance(selected, dict):
+                selected["goal_pressure_repaired"] = True
+                selected["goal_pressure_original_action"] = _safe_str(selected.get("action"))
+                selected["action"] = repaired_goal_action
+
+        if action_is_vague_objective(_safe_str(player_action)):
+            repaired_goal_action = deterministic_goal_pressure_action(goal_pressure_context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_vague_objective_repair.applied",
+                turn_index=turn_index,
+                original_action=_safe_str(player_action)[:220],
+                repaired_action=repaired_goal_action[:220],
+            )
+            player_action = repaired_goal_action
+            if isinstance(selected, dict):
+                selected["vague_objective_repaired"] = True
+                selected["vague_objective_original_action"] = _safe_str(selected.get("action"))
+                selected["action"] = repaired_goal_action
+
+        if is_vague_player_action(_safe_str(player_action)):
+            repaired = _safe_str(
+                _safe_dict(context.get("reasoning_planner")).get("best_next_action")
+            )
+            if not repaired or is_vague_player_action(repaired):
+                repaired = deterministic_concrete_player_action(context)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "player_agent_reasoning_repair.applied",
+                turn_index=turn_index,
+                original_action=_safe_str(player_action)[:240],
+                repaired_action=repaired[:240],
+            )
+            player_action = repaired
+            if isinstance(selected, dict):
+                selected["reasoning_repaired"] = True
+                selected["reasoning_original_action"] = _safe_str(selected.get("action"))
+                selected["action"] = repaired
+
+        if isinstance(selected, dict):
+                player_agent_prompt_rows.append(
+                    {
+                        "turn_index": turn_index,
+                        "source": selected.get("source"),
+                        "ok": bool(selected.get("ok")),
+                        "cache_hit": bool(selected.get("cache_hit")),
+                        "prompt_metrics": selected.get("prompt_metrics") or {},
+                    }
+                )
+
+        player_agent_debug = _safe_dict(selected.get("debug")) if isinstance(selected, dict) else {}
+
+        raw_graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
+        graph_action_state = _filtered_graph_action_state_for_selection(
+            raw_graph_action_state,
+            suppressed_actions=scenario_progression_suppressed_actions,
+            completed_action_ids=scenario_progression_completed_action_ids,
+            completed_mechanics=scenario_progression_completed_mechanics,
+            turn_index=int(turn_index),
+        )
+        pre_apply_graph_action_state = graph_action_state
+        pre_apply_top_graph_action = _top_scenario_progression_action(pre_apply_graph_action_state)
+        top_graph_action = _top_scenario_progression_action(graph_action_state)
+        top_graph_action_id = _safe_str(top_graph_action.get("action_id"))
+        top_graph_command = _safe_str(top_graph_action.get("command"))
+        top_graph_source = _safe_str(top_graph_action.get("source"))
+        top_graph_action_id = _safe_str(top_graph_action_id)
+        top_graph_mechanic = _safe_str(
+            top_graph_action.get("mechanic")
+            or top_graph_action.get("required_mechanic")
+            or top_graph_action.get("completes_mechanic")
+        )
+
+        top_graph_is_unavailable = (
+            (top_graph_action_id and top_graph_action_id in scenario_progression_completed_action_ids)
+            or (top_graph_mechanic and top_graph_mechanic in scenario_progression_completed_mechanics)
+            or _is_graph_action_suppressed(
+                top_graph_action_id,
+                suppressed_actions=scenario_progression_suppressed_actions,
+                turn_index=int(turn_index),
+            )
+        )
+
+        if (
+            not top_graph_is_unavailable
+            and top_graph_source not in {
+                "scenario_progression_arc_complete_idle",
+                "scenario_progression_arc_complete_bridge",
+            }
+            and _recent_same_graph_action_without_progress(
+                transcript,
+                action_id=top_graph_action_id,
+                command=top_graph_command,
+                max_repeats=2,
+            )
+        ):
+            repeat_event = {
+                "type": "scenario_progression_graph_action_repeated_without_progress",
+                "turn": int(turn_index),
+                "action_id": _safe_str(top_graph_action_id),
+                "command": _safe_str(top_graph_command),
+                "active_graph_id": _safe_str(graph_action_state.get('scenario_progression_active_graph_id')),
+                "severity": "warning",
+                "repair": "suppress_action_and_retarget",
+            }
+            scenario_progression_warnings.append(repeat_event)
+            action_id_s = _safe_str(top_graph_action_id)
+            if action_id_s not in scenario_progression_suppressed_actions:
+                scenario_progression_suppressed_actions[action_id_s] = {
+                    "action_id": action_id_s,
+                    "command": _safe_str(top_graph_command),
+                    "suppressed_turn": int(turn_index),
+                    "cooldown_turns": 12,
+                    "reason": "repeated_without_progress",
+                }
+            else:
+                existing = dict(_safe_dict(scenario_progression_suppressed_actions[action_id_s]))
+                existing["repeat_count"] = int(existing.get("repeat_count") or 1) + 1
+                existing.setdefault("suppressed_turn", int(turn_index))
+                existing.setdefault("cooldown_turns", 12)
+                existing["last_seen_turn"] = int(turn_index)
+                scenario_progression_suppressed_actions[action_id_s] = existing
+        (
+            player_action,
+            player_agent_selection_source,
+            player_agent_selection_reason,
+            player_agent_debug,
+        ) = _apply_graph_action_selection_override(
+            player_action=player_action,
+            player_agent_selection_source=player_agent_selection_source,
+            player_agent_selection_reason=player_agent_selection_reason,
+            player_agent_debug=player_agent_debug,
+            graph_state=graph_action_state,
+            args=args,
+        )
+
+        arc_complete_action = _arc_complete_graph_action_from_state(authoritative_state)
+        if arc_complete_action and _scenario_arc_complete_from_state(authoritative_state, args):
+            original_player_action = _safe_str(player_action)
+            if original_player_action.strip() != arc_complete_action.strip():
+                player_action = arc_complete_action
+                player_agent_selection_source = "scenario_progression_arc_complete_bridge"
+                player_agent_selection_reason = "arc_complete_graph_action_preferred_over_llm"
+                player_agent_debug["arc_complete_graph_action_preferred"] = {
+                    "changed": True,
+                    "original_action": original_player_action,
+                    "replacement_action": arc_complete_action,
+                    "reason": "arc_complete_graph_action_preferred_over_llm",
+                }
+
+        executable_action_repair = {"changed": False, "action": _safe_str(player_action)}
+        handoff_semantic = ""
+        if bool(getattr(args, "player_agent_executable_action_repair", True)):
+            authoritative_state = _overlay_and_assert_progression_sidecar(
+                authoritative_state,
+                progression_authority_state,
+                reason="before_executable_repair",
+                turn_index=turn_index,
+            )
+            authoritative_state = _refresh_scenario_progression_actions_for_turn(
+                authoritative_state,
+                args,
+                turn_index=turn_index,
+            )
+            context["progression_authority_summary"] = authoritative_state.get("progression_authority_summary") or {}
+            context["progression_completed_nodes"] = authoritative_state.get("progression_completed_nodes") or {}
+            context["progression_sidecar_completed_node_count"] = _progression_node_count(
+                progression_authority_state
+            )
+            context["progression_sidecar_revision"] = _progression_revision(
+                progression_authority_state
+            )
+            context["scenario_progression_active"] = _scenario_progression_active(authoritative_state)
+            context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
+            raw_graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
+            graph_action_state = _filtered_graph_action_state_for_selection(
+                raw_graph_action_state,
+                suppressed_actions=scenario_progression_suppressed_actions,
+                completed_action_ids=scenario_progression_completed_action_ids,
+                completed_mechanics=scenario_progression_completed_mechanics,
+                turn_index=int(turn_index),
+            )
+            context["top_scenario_progression_action"] = _top_scenario_progression_action(
+                graph_action_state
+            )
+            context["scenario_progression_actions"] = _safe_list(
+                graph_action_state.get("scenario_progression_actions")
+            )
+            context["scenario_progression_actions_all"] = _safe_list(
+                graph_action_state.get("scenario_progression_actions_all")
+            )
+            context["scenario_progression_active_graph_id"] = graph_action_state.get(
+                "scenario_progression_active_graph_id"
+            )
+            context["scenario_progression_arc_summary"] = _scenario_progression_arc_summary(
+                authoritative_state,
+                scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+            )
+            context["scenario_arc_complete"] = bool(
+                _safe_dict(context.get("scenario_progression_arc_summary")).get("arc_complete")
+            )
+            context["player_agent_selection_source"] = player_agent_selection_source
+            executable_action_repair = repair_action_if_needed(_safe_str(player_action), context, transcript)
+            if executable_action_repair.get("changed"):
+                _probe_log(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "player_agent_executable_action_repair.applied",
+                    turn_index=turn_index,
+                    original_action=_safe_str(executable_action_repair.get("original_action"))[:240],
+                    repaired_action=_safe_str(executable_action_repair.get("action"))[:240],
+                    reason=_safe_str(executable_action_repair.get("reason")),
+                )
+                player_action = _safe_str(executable_action_repair.get("action"))
+                handoff_semantic = _safe_str(executable_action_repair.get("handoff_semantic"))
+                if _safe_str(executable_action_repair.get("reason")) == "scenario_progression_graph_priority_repair":
+                    player_agent_selection_source = "scenario_progression_graph"
+                if isinstance(selected, dict):
+                    selected["executable_action_repaired"] = True
+                    selected["executable_action_original_action"] = _safe_str(executable_action_repair.get("original_action"))
+                    selected["action"] = player_action
+
+        selected_command_before_suppression_guard = _safe_str(player_action)
+
+        suppressed_selection_guard = _guard_suppressed_selected_action(
+            selected_command=selected_command_before_suppression_guard,
+            all_graph_actions=_safe_list(graph_action_state.get("scenario_progression_actions_all")),
+            suppressed_actions=scenario_progression_suppressed_actions,
+            completed_action_ids=scenario_progression_completed_action_ids,
+            completed_mechanics=scenario_progression_completed_mechanics,
+            turn_index=int(turn_index),
+        )
+
+        if suppressed_selection_guard.get("retargeted"):
+            player_action = _safe_str(suppressed_selection_guard.get("command"))
+            player_agent_selection_source = "suppressed_selection_guard"
+            player_agent_selection_reason = _safe_str(
+                suppressed_selection_guard.get("reason")
+            ) or "suppressed_selected_action_retargeted"
+            if isinstance(selected, dict):
+                selected["suppressed_selection_guard_retargeted"] = True
+                selected["suppressed_selection_guard_original_action"] = (
+                    selected_command_before_suppression_guard
+                )
+                selected["action"] = player_action
+
+        actual_sent_action = _safe_str(player_action)
+        canonical_turn_action = actual_sent_action
+
+        graph_action_selection_diagnostic = {}
+
+        raw_graph_action_state = _graph_action_source_state(runtime_state, authoritative_state)
+        graph_action_state = _filtered_graph_action_state_for_selection(
+            raw_graph_action_state,
+            suppressed_actions=scenario_progression_suppressed_actions,

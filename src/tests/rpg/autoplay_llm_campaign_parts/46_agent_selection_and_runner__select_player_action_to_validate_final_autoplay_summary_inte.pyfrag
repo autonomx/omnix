@@ -1,0 +1,170 @@
+
+
+def _select_player_action(
+    *,
+    provider: Any,
+    player_action_context: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    strategy: str,
+    use_llm_player: bool,
+    max_tokens: int,
+    progress_quality_metrics: Dict[str, Any] | None = None,
+    diversity_metrics: Dict[str, Any] | None = None,
+    turn_index: int,
+    debug_autoplay_stage_timing: bool,
+) -> Dict[str, Any]:
+    if not use_llm_player:
+        return choose_fallback_player_action(
+            player_action_context=player_action_context,
+            recent_transcript=transcript,
+        )
+
+    prompt = build_player_agent_prompt(
+        player_action_context=player_action_context,
+        recent_transcript=transcript,
+        strategy=strategy,
+        progress_quality_metrics=progress_quality_metrics,
+        diversity_metrics=diversity_metrics,
+    )
+    try:
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.start",
+            turn_index=turn_index,
+            provider_type=type(provider).__name__,
+            message_count=1,
+            prompt_chars=len(prompt),
+        )
+        provider_call_start_ms = _now_ms()
+        raw = call_provider_text(provider, prompt, max_tokens=max_tokens)
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.end",
+            turn_index=turn_index,
+            elapsed_ms=_now_ms() - provider_call_start_ms,
+            response_type=type(raw).__name__,
+        )
+        parsed = parse_player_agent_response(raw)
+        if not parsed.get("ok"):
+            fallback = choose_fallback_player_action(
+                player_action_context=player_action_context,
+                recent_transcript=transcript,
+            )
+            fallback["player_agent_error"] = parsed
+            return fallback
+        validation = validate_player_action_against_context(
+            player_action=parsed,
+            player_action_context=player_action_context,
+        )
+        if not validation.get("ok"):
+            fallback = choose_fallback_player_action(
+                player_action_context=player_action_context,
+                recent_transcript=transcript,
+            )
+            fallback["player_agent_validation"] = validation
+            fallback["raw_player_agent_action"] = parsed
+            return fallback
+        parsed["strategy"] = strategy
+        parsed["strategy_guidance"] = build_strategy_guidance(
+            strategy=strategy,
+            progress_quality_metrics=progress_quality_metrics,
+            diversity_metrics=diversity_metrics,
+            recent_transcript=transcript,
+        )
+        return parsed
+    except Exception as exc:
+        fallback = choose_fallback_player_action(
+            player_action_context=player_action_context,
+            recent_transcript=transcript,
+        )
+        fallback["player_agent_exception"] = f"{type(exc).__name__}: {exc}"
+        return fallback
+
+
+def _validate_final_autoplay_summary_integrity(
+    *,
+    summary: Dict[str, Any],
+    requested_turns: int,
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    requested_turns = int(requested_turns or 0)
+    runtime_errors: List[str] = []
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    evaluation_gates = _safe_dict(evaluation.get("gates"))
+    readiness_gates = _safe_dict(readiness.get("gates"))
+
+    if int(requested_turns or 0) >= 100:
+        if not evaluation_gates:
+            runtime_errors.append("final_summary_integrity:hundred_turn_evaluation_gates_empty")
+
+        if not readiness_gates:
+            runtime_errors.append("final_summary_integrity:hundred_turn_readiness_gates_empty")
+
+        if evaluation and evaluation.get("ok") is False:
+            runtime_errors.append("final_summary_integrity:hundred_turn_evaluation_failed")
+
+        if readiness and readiness.get("ok") is False:
+            runtime_errors.append("final_summary_integrity:hundred_turn_readiness_failed")
+
+    required_summary_keys = {
+        "hundred_turn_evaluation",
+        "hundred_turn_readiness_summary",
+        "story_arc_lifecycle_summary",
+        "followup_arc_progression_summary",
+        "faction_pressure_summary",
+        "followup_arc_resolution_summary",
+        "pressure_pacing_summary",
+        "world_signal_summary",
+        "escalation_arc_progression_summary",
+        "world_state_compression_summary",
+        "npc_agency_summary",
+        "economy_pressure_summary",
+        "combat_lifecycle_summary",
+        "faction_consequence_summary",
+        "npc_reaction_summary",
+        "dialogue_action_relevance_summary",
+        "turn_action_consistency_summary",
+        "suppressed_selection_guard_summary",
+    }
+
+    required_gate_keys = {
+        "story_arc_resolution_present",
+        "followup_arc_progression_present",
+        "faction_pressure_present",
+        "followup_arc_resolution_present",
+        "escalation_branch_seeded",
+        "pressure_pacing_active",
+        "world_signal_summary_present",
+        "escalation_arc_progression_present",
+        "world_state_compression_active",
+        "npc_agency_present",
+        "economy_pressure_present",
+        "combat_lifecycle_present",
+        "faction_consequence_present",
+        "npc_reaction_present",
+        "dialogue_action_relevance_ok",
+        "turn_action_consistency_ok",
+        "suppressed_selection_guard_ok",
+    }
+
+    for key in required_summary_keys:
+        if key not in summary:
+            runtime_errors.append(f"final_summary_integrity:missing_summary_key:{key}")
+
+    for key in required_gate_keys:
+        if key == "suppressed_selection_guard_ok":
+            gates_dict = evaluation_gates
+        else:
+            gates_dict = readiness_gates
+        if key not in gates_dict:
+            runtime_errors.append(f"final_summary_integrity:missing_gate_key:{key}")
+
+    return {
+        "ok": not runtime_errors,
+        "runtime_errors": runtime_errors,
+        "required_summary_keys": sorted(required_summary_keys),
+        "required_gate_keys": sorted(required_gate_keys),
+    }

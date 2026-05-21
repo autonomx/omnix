@@ -1,0 +1,266 @@
+
+
+def _n11621_repair_pressure_by_category_from_summary(summary: Dict[str, Any], rows: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    rows = _safe_list(rows)
+    if rows:
+        base = _n11620_repair_pressure_by_category(rows)
+        if _safe_dict(base.get("categories")):
+            base["format_version"] = "n11621_repair_pressure_by_category_v2"
+            base["source"] = "final_transcript_rows"
+            return base
+
+    categories: Dict[str, Dict[str, Any]] = {}
+    dialogue_summary = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+    for category, count in _safe_dict(dialogue_summary.get("by_action_kind")).items():
+        bucket = categories.setdefault(
+            _safe_str(category) or "unknown",
+            {
+                "turn_count": int(count or 0),
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["turn_count"] = max(bucket["turn_count"], int(count or 0))
+
+    for example in _safe_list(dialogue_summary.get("examples")):
+        example = _safe_dict(example)
+        relevance = _safe_dict(example.get("relevance"))
+        action = _safe_str(example.get("player_action"))
+        category = _safe_str(relevance.get("validated_presentation_category")) or _n11621_category_bucket_for_action(action)
+        bucket = categories.setdefault(
+            category,
+            {
+                "turn_count": 0,
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        if example.get("repaired") or relevance.get("presentation_intent_sync_repaired"):
+            bucket["dialogue_relevance_repaired_count"] += 1
+        if len(bucket["example_turns"]) < 8:
+            bucket["example_turns"].append({
+                "turn_index": int(example.get("turn_index") or 0),
+                "player_action": action[:220],
+            })
+
+    attachment = _safe_dict(summary.get("background_presentation_attachment_summary"))
+    attachment_events = _safe_list(summary.get("background_presentation_attachment_events"))
+    if attachment or attachment_events:
+        bucket = categories.setdefault(
+            "provider_attachment_all",
+            {
+                "turn_count": int(attachment.get("attached_row_count") or len(attachment_events) or 0),
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["turn_count"] = max(bucket["turn_count"], int(attachment.get("attached_row_count") or len(attachment_events) or 0))
+        bucket["metadata_repaired_count"] = int(attachment.get("metadata_repaired_count") or 0)
+        bucket["category_reclassified_count"] = int(attachment.get("category_reclassified_count") or 0)
+        for event in attachment_events[:8]:
+            event = _safe_dict(event)
+            bucket["example_turns"].append({
+                "turn_index": int(event.get("turn_index") or event.get("source_turn") or 0),
+                "player_action": "background attachment event",
+            })
+
+    selected_health = _safe_dict(summary.get("selected_output_grounding_health"))
+    unsupported = int(selected_health.get("unsupported_combat_claim_preselection_suppressed_count") or 0)
+    if unsupported:
+        bucket = categories.setdefault(
+            "combat",
+            {
+                "turn_count": int(_safe_dict(dialogue_summary.get("by_action_kind")).get("combat") or 0),
+                "metadata_repaired_count": 0,
+                "category_reclassified_count": 0,
+                "dialogue_relevance_repaired_count": 0,
+                "unsupported_combat_claim_suppressed_count": 0,
+                "service_resolver_veto_count": 0,
+                "example_turns": [],
+            },
+        )
+        bucket["unsupported_combat_claim_suppressed_count"] = unsupported
+
+    for bucket in categories.values():
+        turns = max(1, int(bucket.get("turn_count") or 0))
+        bucket["metadata_repaired_rate"] = round(int(bucket.get("metadata_repaired_count") or 0) / turns, 4)
+        bucket["category_reclassified_rate"] = round(int(bucket.get("category_reclassified_count") or 0) / turns, 4)
+        bucket["dialogue_relevance_repaired_rate"] = round(int(bucket.get("dialogue_relevance_repaired_count") or 0) / turns, 4)
+        bucket["unsupported_combat_claim_suppressed_rate"] = round(int(bucket.get("unsupported_combat_claim_suppressed_count") or 0) / turns, 4)
+        bucket["service_resolver_veto_rate"] = round(int(bucket.get("service_resolver_veto_count") or 0) / turns, 4)
+
+    return {
+        "format_version": "n11621_repair_pressure_by_category_v2",
+        "source": "summary_artifacts_and_attachment_events",
+        "categories": categories,
+        "category_count": len(categories),
+    }
+
+
+def _n11621_update_repair_pressure_breakdown(summary: Dict[str, Any], rows: List[Dict[str, Any]] | None = None) -> None:
+    summary = _safe_dict(summary)
+    llm_summary = _safe_dict(summary.get("llm_prompt_and_fallback_summary"))
+    if not llm_summary:
+        return
+    breakdown = dict(_safe_dict(llm_summary.get("repair_pressure_breakdown")))
+    by_category = _n11621_repair_pressure_by_category_from_summary(summary, rows)
+    breakdown["repair_pressure_by_category"] = by_category
+    selected_health = _safe_dict(summary.get("selected_output_grounding_health"))
+    suppressed = int(selected_health.get("unsupported_combat_claim_preselection_suppressed_count") or 0)
+    raw_unsupported = int(selected_health.get("raw_unsupported_combat_claim_count") or 0)
+    breakdown["unsupported_combat_claim_preselection_suppressed_count"] = suppressed
+    breakdown["raw_unsupported_combat_claim_count"] = raw_unsupported
+    breakdown["unsupported_combat_claim_preselection_suppression_match_ok"] = (suppressed == raw_unsupported)
+    dominant = dict(_safe_dict(breakdown.get("dominant_sources")))
+    dominant["unsupported_combat_claim_preselection_suppressed"] = suppressed
+    breakdown["dominant_sources"] = dominant
+    breakdown["format_version"] = "n11621_repair_pressure_breakdown_v5"
+    llm_summary["repair_pressure_breakdown"] = breakdown
+    llm_summary["unsupported_combat_claim_cleanup"] = {
+        "format_version": "unsupported_combat_claim_cleanup_v2_n11621",
+        "preselection_suppressed_count": suppressed,
+        "raw_unsupported_combat_claim_count": raw_unsupported,
+        "suppression_match_ok": suppressed == raw_unsupported,
+        "ok": suppressed == raw_unsupported,
+        "policy": "unsupported combat claims are sanitized into llm_safe_fallback before deterministic fallback selection",
+    }
+    summary["llm_prompt_and_fallback_summary"] = llm_summary
+
+
+def _build_llm_prompt_and_fallback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    sanitized_rows = _n11621_sanitize_rows_before_grounding_summary(rows)
+    if isinstance(rows, list):
+        rows[:] = sanitized_rows
+    summary = _N11621_PREVIOUS_BUILD_LLM_PROMPT_AND_FALLBACK_SUMMARY(sanitized_rows)
+    pseudo_summary = {"llm_prompt_and_fallback_summary": summary}
+    _n11621_update_repair_pressure_breakdown(pseudo_summary, sanitized_rows)
+    return _safe_dict(pseudo_summary.get("llm_prompt_and_fallback_summary"))
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    rows = _safe_list(summary.get("final_transcript_rows") or summary.get("transcript_rows") or summary.get("transcript") or [])
+    if rows:
+        sanitized_rows = _n11621_sanitize_rows_before_grounding_summary(rows)
+        if isinstance(summary.get("final_transcript_rows"), list):
+            summary["final_transcript_rows"] = sanitized_rows
+        elif isinstance(summary.get("transcript_rows"), list):
+            summary["transcript_rows"] = sanitized_rows
+        elif isinstance(summary.get("transcript"), list):
+            summary["transcript"] = sanitized_rows
+    if summary.get("narration_grounding_summary"):
+        summary["selected_output_grounding_health"] = _build_selected_output_grounding_health(
+            _safe_dict(summary.get("narration_grounding_summary")),
+            requested_turns=int(summary.get("requested_turns") or summary.get("turns_executed") or 100),
+        )
+    _n11621_update_repair_pressure_breakdown(summary, rows)
+    health = _N11621_PREVIOUS_FORCE_FINAL_AUTOPLAY_HEALTH(summary)
+    selected_health = _safe_dict(summary.get("selected_output_grounding_health"))
+    cleanup = _safe_dict(_safe_dict(summary.get("llm_prompt_and_fallback_summary")).get("unsupported_combat_claim_cleanup"))
+    health = dict(_safe_dict(health))
+    health["unsupported_combat_claim_preselection_suppressed_count"] = int(selected_health.get("unsupported_combat_claim_preselection_suppressed_count") or 0)
+    health["raw_unsupported_combat_claim_count"] = int(selected_health.get("raw_unsupported_combat_claim_count") or 0)
+    health["unsupported_combat_claim_preselection_suppression_match_ok"] = bool(
+        selected_health.get("unsupported_combat_claim_preselection_suppression_match_ok", True)
+    )
+    if cleanup and not bool(cleanup.get("ok", True)):
+        health["ok"] = False
+        warnings = _safe_list(health.get("warnings"))
+        if "unsupported_combat_claim_preselection_suppression_mismatch" not in warnings:
+            warnings.append("unsupported_combat_claim_preselection_suppression_mismatch")
+        health["warnings"] = warnings
+        health["failed_gate_count"] = int(health.get("failed_gate_count") or 0) + 1
+    return health
+
+# =============================================================================
+# N117.2 — 1000-Turn Readiness Gap Hardening Report
+# =============================================================================
+# Keep the existing 100-turn readiness gates authoritative, but add a separate
+# 1000-turn candidate/gap report so scaffold coverage is not mistaken for real
+# endurance readiness.
+_N1172_PREVIOUS_BUILD_100_TURN_READINESS_SUMMARY = _build_100_turn_readiness_summary
+
+
+def _n1172_count_any(mapping: Dict[str, Any], *keys: str) -> int:
+    mapping = _safe_dict(mapping)
+    total = 0
+    for key in keys:
+        value = mapping.get(key)
+        if isinstance(value, bool):
+            total += 1 if value else 0
+            continue
+        try:
+            total += int(value or 0)
+        except Exception:
+            if isinstance(value, (list, tuple, set, dict)):
+                total += len(value)
+    return total
+
+
+def _n1172_float_any(mapping: Dict[str, Any], *keys: str) -> float:
+    mapping = _safe_dict(mapping)
+    for key in keys:
+        try:
+            value = mapping.get(key)
+            if value is not None:
+                return float(value or 0.0)
+        except Exception:
+            continue
+    return 0.0
+
+
+def _n1172_summary_from_args(summary: Dict[str, Any], explicit: Optional[Dict[str, Any]], key: str) -> Dict[str, Any]:
+    explicit_dict = _safe_dict(explicit)
+    if explicit_dict:
+        return explicit_dict
+    return _safe_dict(_safe_dict(summary).get(key))
+
+
+def _n1172_gate(ok: bool, *, value: Any, expected: str, message: str, severity: str = "advisory") -> Dict[str, Any]:
+    return {
+        "ok": bool(ok),
+        "severity": severity,
+        "value": value,
+        "expected": expected,
+        "message": message,
+    }
+
+
+def _n1172_transcript_growth_summary(summary: Dict[str, Any], transcript: List[Dict[str, Any]], requested_turns: int) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    turns = max(1, int(summary.get("turns_executed") or len(_safe_list(transcript)) or requested_turns or 1))
+    explicit_bytes = int(
+        summary.get("full_transcript_json_bytes_estimate")
+        or summary.get("transcript_json_bytes_estimate")
+        or _safe_dict(summary.get("transcript_artifact_quality_summary")).get("full_transcript_json_bytes_estimate")
+        or 0
+    )
+    if explicit_bytes <= 0:
+        try:
+            explicit_bytes = len(json.dumps(_safe_list(transcript), ensure_ascii=False, default=str).encode("utf-8"))
+        except Exception:
+            explicit_bytes = 0
+    bytes_per_turn = float(explicit_bytes) / float(turns) if turns else 0.0
+    projected_1000 = int(bytes_per_turn * 1000.0) if bytes_per_turn else 0
+    # Advisory budget: keep full transcript artifacts under 750 MB for 1000-turn runs.
+    budget_1000 = 750 * 1024 * 1024
+    return {
+        "turns_sampled": turns,
+        "bytes_sampled": explicit_bytes,
+        "bytes_per_turn": round(bytes_per_turn, 2),
+        "projected_1000_turn_bytes": projected_1000,
+        "budget_1000_turn_bytes": budget_1000,
+        "ok": bool(projected_1000 <= budget_1000) if projected_1000 else True,
+    }

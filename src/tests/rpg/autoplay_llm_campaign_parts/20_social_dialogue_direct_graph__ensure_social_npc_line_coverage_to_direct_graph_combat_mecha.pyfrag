@@ -1,0 +1,420 @@
+
+
+def _ensure_social_npc_line_coverage(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if row.get("direct_graph_display_override"):
+        return row
+
+    category = _classify_visible_action_category(row)
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    action_id = _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+    )
+
+    socialish_action = (
+        action_id.startswith("ask_")
+        or action_id.startswith("report_")
+        or action_id.startswith("warn_")
+        or action_id.startswith("tell_")
+        or action_id.startswith("question_")
+        or action_id.startswith("confront_")
+        or action_id.startswith("counter_")
+        or action_id.startswith("return_")
+        or action_id.startswith("choose_")
+    )
+
+    if category not in {"social", "evidence"} and not socialish_action:
+        return row
+
+    existing_line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    if existing_line:
+        return row
+
+    npc = _deterministic_social_npc_line(row)
+    if not npc:
+        return row
+
+    row["npc"] = npc
+    row["npc_speaker"] = _safe_str(npc.get("speaker"))
+    row["npc_line"] = _safe_str(npc.get("line"))
+    row["npc_line_fallback_applied"] = True
+    row["npc_line_fallback_source"] = "deterministic_social_graph_line"
+
+    selected = dict(_safe_dict(row.get("selected_narration") or row.get("selected_output")))
+    selected["npc"] = npc
+    selected["dialogue_source"] = "deterministic_social_graph_line"
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+    row["resolved_narration_payload"] = selected
+    row["narration_payload"] = selected
+    row["structured_narration"] = selected
+
+    return row
+
+
+_DIRECT_GRAPH_COMBAT_MECHANICS = {
+    "combat_started",
+    "combat_resolved",
+    "xp_gain",
+}
+
+
+_DIRECT_GRAPH_EXPLICIT_COMBAT_ACTION_IDS = {
+    "protect_wagon_or_lure_bandits",
+    "ambush_bandits",
+    "fight_bandit_scouts",
+    "fight_bandits",
+    "defeat_bandit_scouts",
+    "resolve_bandit_ambush",
+}
+
+
+_DIRECT_GRAPH_NONCOMBAT_ACTION_IDS = {
+    "report_findings_to_bran",
+    "warn_garran",
+    "tell_garran_about_ambush",
+    "scout_quarry_road",
+    "spot_bridge_watchers",
+    "choose_ambush_response",
+    "question_captured_bandit",
+    "search_bandit_satchel",
+    "return_to_bran_with_proof",
+    "return_marked_coin_proof",
+    "ask_bran_about_witness",
+    "ask_bran_who_saw_witness",
+    "question_bran_about_traveler",
+    "search_for_witness",
+    "return_to_allies_with_voss_proof",
+    "counter_voss_intimidation",
+    "detect_safehouse_watchers",
+    "prepare_safehouse_defense",
+    "scout_east_road_pressure_points",
+    "scout_ridge_hideout",
+    "intercept_veska_courier",
+    "question_veska_courier",
+    "recover_veska_route_map",
+    "confront_route_pressure_agents",
+    "warn_east_road_teamsters",
+    "return_with_veska_name",
+    "plan_veska_pursuit",
+}
+
+
+def _is_direct_graph_explicit_combat_action_id(action_id: str) -> bool:
+    return _safe_str(action_id) in _DIRECT_GRAPH_EXPLICIT_COMBAT_ACTION_IDS
+
+
+def _is_direct_graph_known_noncombat_action_id(action_id: str) -> bool:
+    action_id_s = _safe_str(action_id)
+    if action_id_s in _DIRECT_GRAPH_NONCOMBAT_ACTION_IDS:
+        return True
+
+    noncombat_prefixes = (
+        "ask_",
+        "report_",
+        "warn_",
+        "tell_",
+        "question_",
+        "search_",
+        "scout_",
+        "spot_",
+        "detect_",
+        "prepare_",
+        "return_",
+        "recover_",
+        "confront_",
+        "counter_",
+        "plan_",
+        "choose_",
+        "read_",
+        "decipher_",
+        "inspect_",
+    )
+
+    return any(action_id_s.startswith(prefix) for prefix in noncombat_prefixes)
+
+
+def _strip_combat_mechanics_from_noncombat_direct_graph_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    direct = dict(_safe_dict(row.get("direct_graph_action_completion")))
+    action_id = _safe_str(direct.get("action_id") or row.get("direct_graph_execution_kind"))
+
+    if not action_id:
+        return row
+
+    if _is_direct_graph_explicit_combat_action_id(action_id):
+        return row
+
+    if not _is_direct_graph_known_noncombat_action_id(action_id):
+        return row
+
+    def _clean_list(values: Any) -> List[Any]:
+        return [
+            value
+            for value in _safe_list(values)
+            if _safe_str(value) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+
+    direct["mechanics"] = _clean_list(direct.get("mechanics"))
+    direct["changed_parts"] = _clean_list(direct.get("changed_parts"))
+    row["direct_graph_action_completion"] = direct
+
+    row["mechanics_covered_this_turn"] = _clean_list(row.get("mechanics_covered_this_turn"))
+    row["direct_graph_changed_parts"] = _clean_list(row.get("direct_graph_changed_parts"))
+
+    cleaned_hooks = []
+    changed = False
+    for hook in _safe_list(row.get("fired_hooks")):
+        hook = dict(_safe_dict(hook))
+        if _safe_str(hook.get("kind")) == "graph_direct_completion":
+            hook["mechanics"] = _clean_list(hook.get("mechanics"))
+            hook["changed_parts"] = _clean_list(hook.get("changed_parts"))
+            effects = dict(_safe_dict(hook.get("effects")))
+            flags = dict(_safe_dict(effects.get("flags")))
+            for mechanic_name in _DIRECT_GRAPH_COMBAT_MECHANICS:
+                flags.pop(f"mechanic:{mechanic_name}", None)
+            effects["flags"] = flags
+            hook["effects"] = effects
+            changed = True
+        cleaned_hooks.append(hook)
+
+    if changed:
+        row["fired_hooks"] = cleaned_hooks
+        row["direct_graph_noncombat_mechanics_cleanup_applied"] = True
+        row["direct_graph_noncombat_mechanics_cleanup_action_id"] = action_id
+
+    return row
+
+
+def _apply_direct_graph_display_quality_pass(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    row = _sync_direct_graph_canonical_action_display(row)
+    row = _cleanup_bad_generic_fallback_narration(row)
+    row = _ensure_social_npc_line_coverage(row)
+    row = _sync_selected_narration_npc_to_top_level(row)
+    row = _strip_combat_mechanics_from_noncombat_direct_graph_row(row)
+
+    return row
+
+
+def _direct_complete_graph_action_from_command(
+    *,
+    command: str,
+    row: Dict[str, Any],
+
+    all_graph_actions: List[Dict[str, Any]],
+    completed_action_ids: set[str],
+    completed_mechanics: set[str],
+) -> Dict[str, Any]:
+    command_s = _safe_str(command)
+    row = dict(_safe_dict(row))
+
+    matched = _find_matching_graph_action_for_command(
+        command_s,
+        _safe_list(all_graph_actions),
+    )
+
+    if not matched:
+        return {
+            "completed": False,
+            "reason": "no_matching_graph_action",
+        }
+
+    action_id = _graph_action_id(matched)
+    mechanics = _infer_mechanics_from_graph_action(matched, command_s)
+    mechanic = mechanics[0] if mechanics else ""
+    changed_parts = _direct_completion_changed_parts_for_mechanics(mechanics)
+
+    completed_parts: List[str] = []
+
+    if action_id:
+        completed_action_ids.add(action_id)
+        completed_parts.append(f"action:{action_id}")
+
+    for mechanic_name in mechanics:
+        completed_mechanics.add(mechanic_name)
+        completed_parts.append(f"mechanic:{mechanic_name}")
+
+    effects = _safe_dict(matched.get("effects"))
+    flags = _safe_dict(effects.get("flags"))
+    for key, value in flags.items():
+        key_s = _safe_str(key)
+        if value is True and key_s.startswith("mechanic:"):
+            completed_mechanics.add(key_s.split("mechanic:", 1)[1])
+            completed_parts.append(key_s)
+
+    covered_this_turn = list(_safe_list(row.get("mechanics_covered_this_turn")))
+    for mechanic_name in mechanics:
+        if mechanic_name not in covered_this_turn:
+            covered_this_turn.append(mechanic_name)
+    row["mechanics_covered_this_turn"] = sorted(covered_this_turn)
+
+    direct_changed_parts = list(_safe_list(row.get("direct_graph_changed_parts")))
+    for part in changed_parts:
+        if part not in direct_changed_parts:
+            direct_changed_parts.append(part)
+    row["direct_graph_changed_parts"] = sorted(direct_changed_parts)
+
+    # Special deterministic completion for Garran party setup.
+    text = _normalize_turn_action_text(command_s)
+    matched_id_l = _safe_str(action_id).lower()
+    if (
+        "ask_garran_to_join" in matched_id_l
+        or ("garran" in text and ("join" in text or "come with" in text or "travel with" in text))
+    ):
+        completed_action_ids.add("ask_garran_to_join")
+        completed_mechanics.add("party_setup")
+        completed_mechanics.add("party_recruitment")
+        completed_parts.extend(
+            [
+                "action:ask_garran_to_join",
+                "mechanic:party_setup",
+                "mechanic:party_recruitment",
+            ]
+        )
+
+        for mechanic_name in ("party_setup", "party_recruitment"):
+            completed_mechanics.add(mechanic_name)
+            if mechanic_name not in row["mechanics_covered_this_turn"]:
+                row["mechanics_covered_this_turn"].append(mechanic_name)
+
+        row["party_setup_completed"] = True
+        row["party_recruitment_completed"] = True
+        row["garran_recruited"] = True
+
+        party = dict(_safe_dict(row.get("party")))
+        companions = list(_safe_list(party.get("companions")))
+        if not any("garran" in _safe_str(c).lower() for c in companions):
+            companions.append("npc:garran")
+        party["companions"] = companions
+        row["party"] = party
+
+        fired_hooks = list(_safe_list(row.get("fired_hooks")))
+        fired_hooks.append(
+            {
+                "hook_id": "hook:mechanic:recruit_garran",
+                "action_id": "ask_garran_to_join",
+                "graph_action_id": "ask_garran_to_join",
+                "kind": "mechanic_objective_progress",
+                "mechanic": "party_setup",
+                "changed_parts": [
+                    "party_setup",
+                    "party_recruitment",
+                    "companion_added",
+                    "milestone_progressed",
+                    "mechanic_completed",
+                ],
+                "effects": {
+                    "party": {"add_companion": "npc:garran"},
+                    "flags": {
+                        "party:garran_recruited": True,
+                        "mechanic:party_setup": True,
+                        "mechanic:party_recruitment": True,
+                    },
+                },
+                "summary": "Garran joins the party for the mill road.",
+                "display": {
+                    "narration": "Garran accepts the danger of the mill road and prepares to travel with you.",
+                    "npc": {
+                        "speaker": "Garran",
+                        "line": "If the road is involved, you should not walk it alone.",
+                    },
+                    "summary": "Garran recruited for the road.",
+                },
+            }
+        )
+        row["fired_hooks"] = fired_hooks
+
+    fired_hooks = list(_safe_list(row.get("fired_hooks")))
+    fired_hooks.append(
+        {
+            "hook_id": f"hook:graph_direct:{action_id or 'unknown'}",
+            "action_id": action_id,
+            "graph_action_id": action_id,
+            "kind": "graph_direct_completion",
+            "mechanic": mechanic,
+            "mechanics": mechanics,
+            "changed_parts": changed_parts,
+            "effects": {
+                "flags": {
+                    **{f"mechanic:{m}": True for m in mechanics},
+                },
+            },
+            "summary": f"Graph action completed: {action_id or command_s}",
+        }
+    )
+    row["fired_hooks"] = fired_hooks
+
+    if action_id == "buy_rations_from_bran":
+        row = _apply_buy_rations_direct_graph_execution(row)
+
+    if _is_direct_graph_explicit_xp_combat_action(action_id):
+        row = _apply_explicit_combat_xp_direct_graph_execution(
+            row,
+            action_id=action_id,
+        )
+
+    if (
+        _is_direct_graph_known_noncombat_action_id(action_id)
+        and not _is_direct_graph_explicit_combat_action_id(action_id)
+    ):
+        mechanics = [
+            mechanic_name
+            for mechanic_name in _safe_list(mechanics)
+            if _safe_str(mechanic_name) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+        changed_parts = [
+            part
+            for part in _safe_list(changed_parts)
+            if _safe_str(part) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+        completed_parts = [
+            part
+            for part in _safe_list(completed_parts)
+            if _safe_str(part) not in _DIRECT_GRAPH_COMBAT_MECHANICS
+        ]
+
+    return {
+        "completed": bool(completed_parts),
+        "action_id": action_id,
+        "mechanic": mechanic,
+        "mechanics": mechanics,
+        "changed_parts": changed_parts,
+        "completed_parts": sorted(set(completed_parts)),
+        "execution_applied": bool(row.get("direct_graph_execution_applied")),
+        "execution_kind": _safe_str(row.get("direct_graph_execution_kind")),
+        "xp_execution_applied": bool(row.get("direct_graph_xp_execution_applied")),
+        "xp_delta": _safe_dict(row.get("state_delta")).get("xp_delta"),
+        "row": row,
+    }
+
+
+def _collect_direct_completion_mechanics(transcript: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        direct = _safe_dict(row.get("direct_graph_action_completion"))
+
+        for mechanic in _safe_list(direct.get("mechanics")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                counts[mechanic_s] = counts.get(mechanic_s, 0) + 1
+
+        for mechanic in _safe_list(row.get("mechanics_covered_this_turn")):
+            mechanic_s = _safe_str(mechanic)
+            if mechanic_s:
+                counts[mechanic_s] = counts.get(mechanic_s, 0) + 1
+
+    return counts
+
+
+def _safe_positive_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except Exception:
+        return 0

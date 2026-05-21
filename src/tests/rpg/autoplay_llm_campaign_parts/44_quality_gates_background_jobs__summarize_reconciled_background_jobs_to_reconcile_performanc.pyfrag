@@ -1,0 +1,403 @@
+
+
+def _summarize_reconciled_background_jobs(
+    *,
+    existing_background_jobs: Dict[str, Any],
+    background_results: List[Dict[str, Any]],
+    background_result_timing_summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build a background job summary that includes pre-turn drained jobs.
+
+    `background_results` only contains jobs returned by the final drain. Once
+    pre-turn drain is working, many jobs are consumed before final drain and
+    therefore never appear in that final result list. The timing tracker is the
+    authoritative source for submitted/attached counts.
+    """
+    existing_background_jobs = _safe_dict(existing_background_jobs)
+    timing = _safe_dict(background_result_timing_summary)
+    results = [_safe_dict(row) for row in _safe_list(background_results)]
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+
+    attachment_payloads: List[Dict[str, Any]] = []
+    timeout_payloads: List[Dict[str, Any]] = []
+    error_payloads: List[Dict[str, Any]] = []
+
+    for row in rows:
+        payload = _safe_dict(row.get("combined_background_llm_result"))
+        if not payload:
+            continue
+        attachment_payloads.append(payload)
+        kind = _safe_str(payload.get("kind"))
+        error = _safe_str(payload.get("error"))
+        if kind == "background_timeout" or "timeout" in error.lower():
+            timeout_payloads.append(payload)
+        elif payload.get("ok") is False or error:
+            error_payloads.append(payload)
+
+    for result in results:
+        kind = _safe_str(result.get("kind"))
+        error = _safe_str(result.get("error"))
+        if kind == "background_timeout" or "timeout" in error.lower():
+            timeout_payloads.append(result)
+        elif result.get("ok") is False or error:
+            error_payloads.append(result)
+
+    jobs_submitted = int(timing.get("jobs_submitted") or 0)
+    jobs_attached_total = int(timing.get("jobs_attached_total") or 0)
+    jobs_attached_pre_turn = int(timing.get("jobs_attached_pre_turn") or 0)
+    jobs_attached_final = int(timing.get("jobs_attached_final") or 0)
+    missing_job_count = int(timing.get("missing_job_count") or 0)
+
+    # If timing is unavailable, preserve old behavior.
+    if jobs_submitted <= 0:
+        return existing_background_jobs
+
+    errors = list(_safe_list(existing_background_jobs.get("errors")))
+    for payload in timeout_payloads:
+        message = _safe_str(payload.get("error")) or _safe_str(payload.get("kind"))
+        if message and message not in errors:
+            errors.append(message)
+    for payload in error_payloads:
+        message = _safe_str(payload.get("error")) or _safe_str(payload.get("kind"))
+        if message and message not in errors:
+            errors.append(message)
+
+    failed_jobs = max(
+        int(existing_background_jobs.get("failed_jobs") or 0),
+        len(timeout_payloads) + len(error_payloads),
+        missing_job_count,
+    )
+
+    summary = dict(existing_background_jobs)
+    summary.update(
+        {
+            "source": "background_result_timing_summary",
+            "legacy_final_drain_result_count": len(results),
+            "combined_background_llm_jobs": jobs_submitted,
+            "total_jobs": jobs_submitted,
+            "jobs_submitted": jobs_submitted,
+            "jobs_attached_total": jobs_attached_total,
+            "jobs_attached_pre_turn": jobs_attached_pre_turn,
+            "jobs_attached_final": jobs_attached_final,
+            "missing_job_count": missing_job_count,
+            "timeout_job_count": len(timeout_payloads),
+            "failed_jobs": failed_jobs,
+            "ok_jobs": max(0, jobs_attached_total - failed_jobs),
+            "errors": errors[:50],
+            "pre_turn_drain_accounted": jobs_attached_pre_turn > 0,
+        }
+    )
+    return summary
+
+
+def _reconcile_performance_budget_background_llm_counts(
+    *,
+    performance_budget_summary: Dict[str, Any],
+    background_jobs: Dict[str, Any],
+    background_result_timing_summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Make performance_budget_summary.background_llm use reconciled job counts.
+
+    The background performance section originally counted only the final drain
+    result list. Once pre-turn drain consumes completed jobs during the playable
+    loop, those final-drain-only counts are no longer the correct denominator.
+    Keep any existing timing fields, but source count fields from the reconciled
+    background_jobs/timing tracker.
+    """
+    summary = deepcopy(_safe_dict(performance_budget_summary))
+    background_llm = deepcopy(_safe_dict(summary.get("background_llm")))
+    jobs = _safe_dict(background_jobs)
+    timing = _safe_dict(background_result_timing_summary)
+
+    jobs_submitted = int(
+        jobs.get("jobs_submitted")
+        or jobs.get("combined_background_llm_jobs")
+        or timing.get("jobs_submitted")
+        or 0
+    )
+    jobs_attached_total = int(
+        jobs.get("jobs_attached_total")
+        or timing.get("jobs_attached_total")
+        or 0
+
+    )
+    jobs_attached_pre_turn = int(
+        jobs.get("jobs_attached_pre_turn")
+        or timing.get("jobs_attached_pre_turn")
+        or 0
+    )
+    jobs_attached_final = int(
+        jobs.get("jobs_attached_final")
+        or timing.get("jobs_attached_final")
+        or 0
+    )
+    failed_jobs = int(jobs.get("failed_jobs") or background_llm.get("failed_jobs") or 0)
+    timeout_job_count = int(jobs.get("timeout_job_count") or background_llm.get("timeout_job_count") or 0)
+    missing_job_count = int(jobs.get("missing_job_count") or timing.get("missing_job_count") or 0)
+
+    if jobs_submitted > 0:
+        background_llm.update(
+            {
+                "source": "reconciled_background_jobs",
+                "legacy_final_drain_result_count": int(
+                    jobs.get("legacy_final_drain_result_count")
+                    or background_llm.get("legacy_final_drain_result_count")
+                    or background_llm.get("total_jobs")
+                    or 0
+                ),
+                "combined_background_llm_jobs": jobs_submitted,
+                "total_jobs": jobs_submitted,
+                "jobs_submitted": jobs_submitted,
+                "jobs_attached_total": jobs_attached_total,
+                "jobs_attached_pre_turn": jobs_attached_pre_turn,
+                "jobs_attached_final": jobs_attached_final,
+                "pre_turn_drain_accounted": jobs_attached_pre_turn > 0,
+                "failed_jobs": failed_jobs,
+                "timeout_job_count": timeout_job_count,
+                "missing_job_count": missing_job_count,
+                "ok_jobs": max(0, jobs_attached_total - failed_jobs),
+            }
+        )
+
+    summary["background_llm"] = background_llm
+    return summary
+
+
+def _future_done(handle: Any) -> bool:
+    done = getattr(handle, "done", None)
+    if callable(done):
+        try:
+            return bool(done())
+        except Exception:
+            return False
+    return False
+
+
+def _future_result_now(handle: Any) -> Dict[str, Any]:
+    result_fn = getattr(handle, "result", None)
+    if not callable(result_fn):
+        return {}
+    try:
+        return _safe_dict(result_fn(timeout=0))
+    except TypeError:
+        try:
+            return _safe_dict(result_fn())
+        except Exception:
+            return {}
+    except Exception:
+        return {}
+
+
+def _try_get_combined_background_result_from_registry(
+    *,
+    registry: Dict[str, Any],
+    pipeline: Any,
+    job_id: str,
+) -> Dict[str, Any]:
+    registry = _safe_dict(registry)
+    if not job_id:
+        return {}
+
+    cached = _safe_dict(_safe_dict(registry.get("results")).get(job_id))
+    if cached:
+        return cached
+
+    job = _safe_dict(_safe_dict(registry.get("jobs")).get(job_id))
+    handle = job.get("handle")
+    if handle is not None and _future_done(handle):
+        result = _future_result_now(handle)
+        if result:
+            _store_background_result(registry, job_id=job_id, result=result)
+            return result
+
+    # Common completed-result/result-cache stores.
+    for attr in (
+        "completed_results",
+        "_completed_results",
+        "results",
+        "_results",
+        "result_cache",
+        "_result_cache",
+        "job_results",
+        "_job_results",
+        "combined_background_results",
+        "_combined_background_results",
+    ):
+        store = getattr(pipeline, attr, None)
+        if isinstance(store, dict) and job_id in store:
+            result = _safe_dict(store.get(job_id))
+            if result:
+                _store_background_result(registry, job_id=job_id, result=result)
+                return result
+
+    return {}
+
+
+def _try_get_combined_background_result(
+    *,
+    pipeline: Any,
+    job_registry: Dict[str, Any],
+    job_id: str,
+    wait_ms: int = 0,
+) -> Dict[str, Any]:
+    """Best-effort adapter over the background pipeline's existing result API.
+
+    Different local versions of the pipeline have used slightly different
+    method names. Keep this adapter defensive so the timing patch is easy to
+    apply over recent code.
+    """
+    if not pipeline or not job_id:
+        return {}
+
+    registry_result = _try_get_combined_background_result_from_registry(
+        registry=job_registry,
+        pipeline=pipeline,
+        job_id=job_id,
+    )
+    if registry_result:
+        return registry_result
+
+    wait_seconds = max(0.0, float(wait_ms or 0) / 1000.0)
+    method_names = (
+        "get_completed_result",
+        "get_result_if_done",
+        "try_get_result",
+        "get_result",
+        "await_result",
+    )
+    for name in method_names:
+        method = getattr(pipeline, name, None)
+        if not callable(method):
+            continue
+        try:
+            # Prefer non-blocking/short-timeout forms when supported.
+            try:
+                result = method(job_id, timeout=wait_seconds)
+            except TypeError:
+                try:
+                    result = method(job_id, timeout_seconds=wait_seconds)
+                except TypeError:
+                    try:
+                        result = method(job_id, wait_seconds=wait_seconds)
+                    except TypeError:
+                        result = method(job_id)
+            result = _safe_dict(result)
+            if result:
+                _store_background_result(job_registry, job_id=job_id, result=result)
+                return result
+        except TimeoutError:
+            return {}
+        except Exception:
+            # Do not make drain adapter fatal; console/report gates will expose
+            # real pipeline errors elsewhere.
+            return {}
+    return {}
+
+
+def _extract_combined_background_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    if result.get("kind") == "background_timeout":
+        return result
+    return (
+        _safe_dict(result.get("combined_background_llm_result"))
+        or _safe_dict(result.get("payload"))
+        or _safe_dict(result.get("result"))
+        or result
+    )
+
+
+def _attach_completed_background_job_to_record(
+    *,
+    record: Dict[str, Any],
+    job_id: str,
+    result: Dict[str, Any],
+    attach_turn: int,
+    phase: str,
+    timing_tracker: Dict[str, Any],
+) -> bool:
+    record = _safe_dict(record)
+    if not job_id or not result:
+        return False
+    payload = _extract_combined_background_payload(result)
+    existing_payload = _safe_dict(record.get("combined_background_llm_result"))
+    if existing_payload:
+        payload = existing_payload
+    if not payload:
+        return False
+    source_turn = int(record.get("turn_index") or 0)
+    # Even if a legacy path already assigned the payload, still attach timing
+    # metadata exactly once.
+    already_tracked = bool(_safe_dict(record.get("combined_background_llm_attach")))
+    if already_tracked:
+        return False
+    record["combined_background_llm_result"] = payload
+    record["combined_background_llm_attach"] = {
+        "job_id": job_id,
+        "source_turn": source_turn,
+        "attach_turn": int(attach_turn or 0),
+        "phase": phase,
+        "lag_turns": max(0, int(attach_turn or 0) - source_turn),
+        "ok": bool(payload.get("ok", True)),
+        "kind": _safe_str(payload.get("kind")),
+        "error": _safe_str(payload.get("error")),
+    }
+
+    # Attach narration in the same slots used by split narration jobs.
+    record["deferred_narration_result"] = {
+        "ok": result.get("ok"),
+        "kind": "deferred_narration",
+        "session_id": result.get("session_id"),
+        "turn_index": result.get("turn_index"),
+        "narration_status": "ready" if result.get("ok") else "error",
+        "narration": result.get("narration"),
+        "npc": result.get("npc") or {},
+        "narration_payload": result.get("narration_payload") or {},
+        "diagnostics": result.get("diagnostics") or {},
+        "worker_ms": result.get("worker_ms"),
+        "queue_timing": result.get("queue_timing") or {},
+    }
+    record["narration_status"] = "ready" if result.get("ok") else "error"
+    if result.get("ok") and result.get("narration"):
+        record["resolved_narration"] = result.get("narration")
+        record["resolved_narration_payload"] = result.get("narration_payload") or {}
+        record["narration"] = result.get("narration")
+
+    # Attach advisory in the same slots used by split advisory jobs.
+    record["deferred_advisory_result"] = {
+        "ok": result.get("ok"),
+        "kind": "deferred_advisory",
+        "session_id": result.get("session_id"),
+        "turn_index": result.get("turn_index"),
+        "source": result.get("source"),
+        "candidate_count": result.get("candidate_count"),
+        "candidates": result.get("candidates") or [],
+        "summary": result.get("advisory_summary") or {},
+        "diagnostics": result.get("diagnostics") or {},
+        "worker_ms": result.get("worker_ms"),
+        "queue_timing": result.get("queue_timing") or {},
+    }
+    record["deferred_advisory_status"] = "ready" if result.get("ok") else "error"
+    if result.get("ok"):
+        runtime_state = _safe_dict(record.get("runtime_state"))
+        try:
+            from app.rpg.advisory.runtime_store import (
+                ingest_deferred_advisory_candidates,
+            )
+            record["deferred_advisory_ingest_result"] = ingest_deferred_advisory_candidates(
+                runtime_state=runtime_state,
+                candidates=result.get("candidates") if isinstance(result.get("candidates"), list) else [],
+                turn_index=int(result.get("turn_index") or record.get("turn_index") or 0),
+                source=_safe_str(result.get("source")) or "combined_background_llm",
+            )
+        except ImportError:
+            pass  # Advisory ingestion may not be available in all versions
+
+    _track_background_attach(
+        timing_tracker,
+        job_id=job_id,
+        source_turn=source_turn,
+        attach_turn=attach_turn,
+        phase=phase,
+    )
+    return True

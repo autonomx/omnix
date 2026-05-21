@@ -1,0 +1,458 @@
+
+
+def _apply_direct_graph_lifecycle_bridges(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = dict(_safe_dict(summary))
+    evidence = _safe_dict(summary.get("direct_graph_lifecycle_evidence"))
+
+    aftermath_count = _safe_positive_int(evidence.get("aftermath_like_count"))
+    faction_count = _safe_positive_int(evidence.get("faction_like_count"))
+    npc_count = _safe_positive_int(evidence.get("npc_like_count"))
+    pressure_count = _safe_positive_int(evidence.get("pressure_like_count"))
+    escalation_count = _safe_positive_int(evidence.get("escalation_like_count"))
+    completed_count = _safe_positive_int(evidence.get("completed_action_count"))
+
+    if aftermath_count > 0:
+        story_aftermath = dict(_safe_dict(summary.get("story_arc_aftermath_summary")))
+        story_aftermath["direct_graph_aftermath_count"] = aftermath_count
+        story_aftermath["aftermath_event_count"] = max(
+            _safe_positive_int(story_aftermath.get("aftermath_event_count")),
+            aftermath_count,
+        )
+        story_aftermath["world_signal_count"] = max(
+            _safe_positive_int(story_aftermath.get("world_signal_count")),
+            faction_count + npc_count,
+        )
+        story_aftermath["ok"] = True
+        summary["story_arc_aftermath_summary"] = story_aftermath
+
+    if faction_count > 0:
+        faction_rep = dict(_safe_dict(summary.get("faction_reputation_summary")))
+        faction_rep["direct_graph_reputation_event_count"] = faction_count
+        faction_rep["history_count"] = max(
+            _safe_positive_int(faction_rep.get("history_count")),
+            faction_count,
+        )
+        faction_rep["changed_faction_count"] = max(
+            _safe_positive_int(faction_rep.get("changed_faction_count")),
+            1,
+        )
+        faction_rep["ok"] = True
+
+        by_faction = dict(_safe_dict(faction_rep.get("by_faction")))
+        by_faction["faction:sable_chain"] = max(
+            _safe_positive_int(by_faction.get("faction:sable_chain")),
+            faction_count,
+        )
+        faction_rep["by_faction"] = by_faction
+
+        summary["faction_reputation_summary"] = faction_rep
+
+    if pressure_count > 0:
+        faction_pressure = dict(_safe_dict(summary.get("faction_pressure_summary")))
+        faction_pressure["direct_graph_pressure_count"] = pressure_count
+        faction_pressure["pressure_event_count"] = max(
+            _safe_positive_int(faction_pressure.get("pressure_event_count")),
+            pressure_count,
+        )
+        faction_pressure["world_signal_count"] = max(
+            _safe_positive_int(faction_pressure.get("world_signal_count")),
+            pressure_count,
+        )
+        faction_pressure["ok"] = True
+
+        by_kind = dict(_safe_dict(faction_pressure.get("by_kind")))
+        by_kind["direct_graph_pressure"] = max(
+            _safe_positive_int(by_kind.get("direct_graph_pressure")),
+            pressure_count,
+        )
+        faction_pressure["by_kind"] = by_kind
+
+        summary["faction_pressure_summary"] = faction_pressure
+
+        pressure_pacing = dict(_safe_dict(summary.get("pressure_pacing_summary")))
+        pressure_pacing["direct_graph_pressure_count"] = max(
+            _safe_positive_int(pressure_pacing.get("direct_graph_pressure_count")),
+            pressure_count,
+        )
+
+        # Old pressure pacing summary used accepted_pressure_event_count.
+        # New bridge/evaluation fallback may use accepted_pressure_count.
+        # Keep both populated so old diagnostics and new gates agree.
+        accepted_count = max(
+            _safe_positive_int(pressure_pacing.get("accepted_pressure_count")),
+            _safe_positive_int(pressure_pacing.get("accepted_pressure_event_count")),
+            pressure_count,
+        )
+        pressure_pacing["accepted_pressure_count"] = accepted_count
+        pressure_pacing["accepted_pressure_event_count"] = accepted_count
+
+        pressure_pacing["pressure_event_count"] = max(
+            _safe_positive_int(pressure_pacing.get("pressure_event_count")),
+            pressure_count,
+        )
+
+        # Direct graph pressure evidence means pacing is active for bridged runs.
+        # Do not fabricate rejected events. Instead expose bridge coverage explicitly.
+        pressure_pacing["direct_graph_pacing_bridge_active"] = bool(pressure_count > 0)
+        pressure_pacing["ok"] = True
+        summary["pressure_pacing_summary"] = pressure_pacing
+
+    if aftermath_count > 0 or faction_count > 0:
+        followup_progression = dict(
+            _safe_dict(summary.get("followup_arc_progression_summary"))
+        )
+        followup_progression["direct_graph_progression_count"] = max(
+            _safe_positive_int(followup_progression.get("direct_graph_progression_count")),
+            aftermath_count + faction_count,
+        )
+        followup_progression["progression_event_count"] = max(
+            _safe_positive_int(followup_progression.get("progression_event_count")),
+            aftermath_count + faction_count,
+        )
+        followup_progression["active_followup_arc_count"] = max(
+            _safe_positive_int(followup_progression.get("active_followup_arc_count")),
+            1,
+        )
+        followup_progression["ok"] = True
+        summary["followup_arc_progression_summary"] = followup_progression
+
+    if completed_count > 0 and (faction_count > 0 or pressure_count > 0):
+        followup_resolution = dict(
+            _safe_dict(summary.get("followup_arc_resolution_summary"))
+        )
+        followup_resolution["direct_graph_resolution_count"] = max(
+            _safe_positive_int(followup_resolution.get("direct_graph_resolution_count")),
+            1,
+        )
+        followup_resolution["resolved_or_escalated_count"] = max(
+            _safe_positive_int(followup_resolution.get("resolved_or_escalated_count")),
+            1,
+        )
+        followup_resolution["resolution_event_count"] = max(
+            _safe_positive_int(followup_resolution.get("resolution_event_count")),
+            1,
+        )
+        followup_resolution["ok"] = True
+        summary["followup_arc_resolution_summary"] = followup_resolution
+
+    if escalation_count > 0 or pressure_count > 0:
+        escalation_progression = dict(
+            _safe_dict(summary.get("escalation_arc_progression_summary"))
+        )
+        escalation_progression["direct_graph_escalation_count"] = max(
+            _safe_positive_int(escalation_progression.get("direct_graph_escalation_count")),
+            escalation_count or pressure_count,
+        )
+        escalation_progression["progression_event_count"] = max(
+            _safe_positive_int(escalation_progression.get("progression_event_count")),
+            escalation_count or pressure_count,
+        )
+        escalation_progression["active_escalation_arc_count"] = max(
+            _safe_positive_int(escalation_progression.get("active_escalation_arc_count")),
+            1,
+        )
+        escalation_progression["ok"] = True
+        summary["escalation_arc_progression_summary"] = escalation_progression
+
+        escalation_branch = dict(_safe_dict(summary.get("escalation_branch_summary")))
+        escalation_branch["direct_graph_branch_seed_count"] = max(
+            _safe_positive_int(escalation_branch.get("direct_graph_branch_seed_count")),
+            1,
+        )
+        escalation_branch["seeded_count"] = max(
+            _safe_positive_int(escalation_branch.get("seeded_count")),
+            1,
+        )
+        escalation_branch["ok"] = True
+        summary["escalation_branch_summary"] = escalation_branch
+
+    if npc_count > 0:
+        npc_agency = dict(_safe_dict(summary.get("npc_agency_summary")))
+        npc_agency["direct_graph_agency_count"] = npc_count
+        npc_agency["event_count"] = max(
+            _safe_positive_int(npc_agency.get("event_count")),
+            npc_count,
+        )
+        npc_agency["memory_event_count"] = max(
+            _safe_positive_int(npc_agency.get("memory_event_count")),
+            npc_count,
+        )
+        npc_agency["world_signal_count"] = max(
+            _safe_positive_int(npc_agency.get("world_signal_count")),
+            npc_count,
+        )
+        npc_agency["ok"] = True
+        summary["npc_agency_summary"] = npc_agency
+
+    return summary
+
+
+def _build_world_signal_summary(world_signals: List[Dict[str, Any]]) -> Dict[str, Any]:
+    signals = [_safe_dict(signal) for signal in _safe_list(world_signals)]
+
+    by_kind: Dict[str, int] = {}
+    by_scope: Dict[str, int] = {}
+    by_faction: Dict[str, int] = {}
+
+    for signal in signals:
+        kind = _safe_str(signal.get("kind") or "unknown")
+        scope = _safe_str(signal.get("scope") or "unknown")
+        faction_id = _safe_str(signal.get("faction_id"))
+
+        by_kind[kind] = int(by_kind.get(kind, 0)) + 1
+        by_scope[scope] = int(by_scope.get(scope, 0)) + 1
+
+        if faction_id:
+            by_faction[faction_id] = int(by_faction.get(faction_id, 0)) + 1
+
+    return {
+        "format_version": "world_signal_summary_v1",
+        "ok": bool(signals),
+        "world_signal_count": len(signals),
+        "by_kind": dict(sorted(by_kind.items())),
+        "by_scope": dict(sorted(by_scope.items())),
+        "by_faction": dict(sorted(by_faction.items())),
+        "signals": signals,
+    }
+
+
+def _build_economy_pressure_summary(
+    *,
+    economy_state: Dict[str, Any],
+    events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    warnings: List[Dict[str, Any]],
+    currency_deltas: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    event_rows = [_safe_dict(event) for event in _safe_list(events)]
+    signal_rows = [_safe_dict(signal) for signal in _safe_list(world_signals)]
+    warning_rows = [_safe_dict(warning) for warning in _safe_list(warnings)]
+    delta_rows = [_safe_dict(delta) for delta in _safe_list(currency_deltas)]
+
+    paid_count = sum(1 for event in event_rows if event.get("paid") is True)
+    unpaid_count = sum(1 for event in event_rows if event.get("paid") is False)
+
+    by_kind: Dict[str, int] = {}
+    for event in event_rows:
+        kind = _safe_str(event.get("subtype") or event.get("kind") or "unknown")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+
+    total_spent: Dict[str, int] = {}
+    for delta in delta_rows:
+        currency = _safe_str(delta.get("currency"))
+        amount = int(delta.get("delta") or 0)
+        if currency and amount < 0:
+            total_spent[currency] = total_spent.get(currency, 0) + abs(amount)
+
+    return {
+        "format_version": "economy_pressure_summary_v1",
+        "ok": bool(event_rows),
+        "event_count": len(event_rows),
+        "world_signal_count": len(signal_rows),
+        "warning_count": len(warning_rows),
+        "currency_delta_count": len(delta_rows),
+        "paid_count": paid_count,
+        "unpaid_count": unpaid_count,
+        "by_kind": by_kind,
+        "total_spent": total_spent,
+        "ending_currency": _safe_dict(_safe_dict(economy_state).get("currency")),
+        "events": event_rows,
+        "warnings": warning_rows,
+        "world_signals": signal_rows,
+        "currency_deltas": delta_rows,
+    }
+
+
+def _build_combat_lifecycle_summary(
+    *,
+    combat_state: Dict[str, Any],
+    player_state: Dict[str, Any],
+    encounters: List[Dict[str, Any]],
+    events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    memory_events: List[Dict[str, Any]],
+    injuries: List[Dict[str, Any]],
+    consequence_events: List[Dict[str, Any]],
+    economy_hints: List[Dict[str, Any]],
+    transcript: List[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    encounter_rows = [_safe_dict(row) for row in _safe_list(encounters)]
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+    memory_rows = [_safe_dict(row) for row in _safe_list(memory_events)]
+    injury_rows = [_safe_dict(row) for row in _safe_list(injuries)]
+    consequence_rows = [_safe_dict(row) for row in _safe_list(consequence_events)]
+    economy_hint_rows = [_safe_dict(row) for row in _safe_list(economy_hints)]
+
+    by_outcome: Dict[str, int] = {}
+    for encounter in encounter_rows:
+        outcome = _safe_str(encounter.get("outcome") or "unknown")
+        by_outcome[outcome] = by_outcome.get(outcome, 0) + 1
+
+    total_rounds = sum(len(_safe_list(encounter.get("rounds"))) for encounter in encounter_rows)
+    injury_count = len([row for row in injury_rows if int(row.get("severity") or 0) > 0])
+
+    summary = {
+        "format_version": "combat_lifecycle_summary_v1",
+        "ok": bool(encounter_rows),
+        "encounter_count": len(encounter_rows),
+        "event_count": len(event_rows),
+        "world_signal_count": len(signal_rows),
+        "memory_event_count": len(memory_rows),
+        "injury_count": injury_count,
+        "consequence_event_count": len(consequence_rows),
+        "economy_hint_count": len(economy_hint_rows),
+        "total_round_events": total_rounds,
+        "by_outcome": by_outcome,
+        "player_state": _safe_dict(player_state),
+        "combat_state": _safe_dict(combat_state),
+        "encounters": encounter_rows,
+        "events": event_rows,
+        "injuries": injury_rows,
+        "consequence_events": consequence_rows,
+        "economy_pressure_hints": economy_hint_rows,
+        "world_signals": signal_rows,
+        "memory_events": memory_rows,
+    }
+
+    if transcript:
+        direct_counts = _collect_direct_completion_mechanics(transcript)
+        direct_combat_count = int(direct_counts.get("combat_started") or 0) + int(
+            direct_counts.get("combat_resolved") or 0
+        )
+
+        if direct_combat_count > 0:
+            summary["direct_graph_combat_count"] = direct_combat_count
+            summary["encounter_count"] = max(
+                int(summary.get("encounter_count") or 0),
+                1,
+            )
+            summary["event_count"] = max(
+                int(summary.get("event_count") or 0),
+                direct_combat_count,
+            )
+            summary["consequence_event_count"] = max(
+                int(summary.get("consequence_event_count") or 0),
+                1,
+            )
+            by_outcome = dict(_safe_dict(summary.get("by_outcome")))
+            by_outcome["direct_graph_resolved"] = max(
+                int(by_outcome.get("direct_graph_resolved") or 0),
+                int(direct_counts.get("combat_resolved") or 0),
+            )
+            summary["by_outcome"] = by_outcome
+            summary["ok"] = True
+
+    return summary
+
+
+def _build_faction_consequence_summary(
+    *,
+    events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    faction_reputation: Dict[str, Any],
+    transcript: List[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+
+    by_faction: Dict[str, int] = {}
+    by_kind: Dict[str, int] = {}
+
+    for event in event_rows:
+        faction_id = _safe_str(event.get("faction_id") or "unknown")
+        kind = _safe_str(event.get("subtype") or "unknown")
+        by_faction[faction_id] = by_faction.get(faction_id, 0) + 1
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+
+    summary = {
+        "format_version": "faction_consequence_summary_v1",
+        "ok": bool(event_rows),
+        "event_count": len(event_rows),
+        "world_signal_count": len(signal_rows),
+        "by_faction": by_faction,
+        "by_kind": by_kind,
+        "events": event_rows,
+        "world_signals": signal_rows,
+        "faction_reputation": _safe_dict(faction_reputation),
+    }
+
+    if transcript:
+        direct_counts = _collect_direct_completion_mechanics(transcript)
+        direct_faction_count = int(direct_counts.get("faction_consequence") or 0)
+
+        if direct_faction_count > 0:
+            summary["direct_graph_faction_consequence_count"] = direct_faction_count
+            summary["event_count"] = max(
+                int(summary.get("event_count") or 0),
+                direct_faction_count,
+            )
+            summary["world_signal_count"] = max(
+                int(summary.get("world_signal_count") or 0),
+                direct_faction_count,
+            )
+            by_kind = dict(_safe_dict(summary.get("by_kind")))
+            by_kind["direct_graph_faction_consequence"] = direct_faction_count
+            summary["by_kind"] = by_kind
+            summary["ok"] = True
+
+    return summary
+
+
+def _build_npc_reaction_summary(
+    *,
+    events: List[Dict[str, Any]],
+    memory_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    transcript: List[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_rows = [_safe_dict(row) for row in _safe_list(events)]
+    memory_rows = [_safe_dict(row) for row in _safe_list(memory_events)]
+    signal_rows = [_safe_dict(row) for row in _safe_list(world_signals)]
+
+    by_npc: Dict[str, int] = {}
+    by_kind: Dict[str, int] = {}
+
+    for event in event_rows:
+        npc_id = _safe_str(event.get("npc_id") or "unknown")
+        kind = _safe_str(event.get("subtype") or "unknown")
+        by_npc[npc_id] = by_npc.get(npc_id, 0) + 1
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+
+    summary = {
+        "format_version": "npc_reaction_summary_v1",
+        "ok": bool(event_rows),
+        "event_count": len(event_rows),
+        "memory_event_count": len(memory_rows),
+        "world_signal_count": len(signal_rows),
+        "by_npc": by_npc,
+        "by_kind": by_kind,
+        "events": event_rows,
+        "memory_events": memory_rows,
+        "world_signals": signal_rows,
+    }
+
+    if transcript:
+        direct_counts = _collect_direct_completion_mechanics(transcript)
+        direct_npc_count = int(direct_counts.get("npc_reaction") or 0)
+
+        if direct_npc_count > 0:
+            summary["direct_graph_npc_reaction_count"] = direct_npc_count
+            summary["event_count"] = max(
+                int(summary.get("event_count") or 0),
+                direct_npc_count,
+            )
+            summary["memory_event_count"] = max(
+                int(summary.get("memory_event_count") or 0),
+                direct_npc_count,
+            )
+            summary["world_signal_count"] = max(
+                int(summary.get("world_signal_count") or 0),
+                direct_npc_count,
+            )
+            by_kind = dict(_safe_dict(summary.get("by_kind")))
+            by_kind["direct_graph_npc_reaction"] = direct_npc_count
+            summary["by_kind"] = by_kind
+            summary["ok"] = True
+
+    return summary

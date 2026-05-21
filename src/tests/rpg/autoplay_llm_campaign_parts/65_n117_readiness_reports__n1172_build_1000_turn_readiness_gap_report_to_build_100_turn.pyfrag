@@ -1,0 +1,437 @@
+
+
+def _n1172_build_1000_turn_readiness_gap_report(
+    *,
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    requested_turns: int,
+    hundred_turn_readiness: Dict[str, Any],
+    world_state_compression_summary: Optional[Dict[str, Any]] = None,
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
+    economy_pressure_summary: Optional[Dict[str, Any]] = None,
+    combat_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    faction_consequence_summary: Optional[Dict[str, Any]] = None,
+    dialogue_action_relevance_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    transcript = _safe_list(transcript)
+    hundred_turn_readiness = _safe_dict(hundred_turn_readiness)
+    world_compression = _n1172_summary_from_args(summary, world_state_compression_summary, "world_state_compression_summary")
+    npc_agency = _n1172_summary_from_args(summary, npc_agency_summary, "npc_agency_summary")
+    economy_pressure = _n1172_summary_from_args(summary, economy_pressure_summary, "economy_pressure_summary")
+    combat_lifecycle = _n1172_summary_from_args(summary, combat_lifecycle_summary, "combat_lifecycle_summary")
+    faction_consequence = _n1172_summary_from_args(summary, faction_consequence_summary, "faction_consequence_summary")
+    dialogue_relevance = _n1172_summary_from_args(summary, dialogue_action_relevance_summary, "dialogue_action_relevance_summary")
+
+    compression_event_count = _n1172_count_any(world_compression, "compression_event_count", "event_count")
+    latest_state_budget = _safe_dict(world_compression.get("latest_state_budget"))
+    state_budget_ok = bool(latest_state_budget.get("ok", True))
+    memory_aging_count = _n1172_count_any(
+        world_compression,
+        "npc_memory_dropped_count",
+        "npc_memory_summarized_count",
+        "memory_dropped_count",
+        "memory_summarized_count",
+        "aged_memory_count",
+        "expired_memory_count",
+    )
+    compaction_count = _n1172_count_any(
+        world_compression,
+        "compacted_arc_count",
+        "compacted_faction_count",
+        "arc_history_compacted_count",
+        "faction_history_compacted_count",
+        "pressure_event_summarized_count",
+        "old_pressure_event_summarized_count",
+    )
+
+    schedule_event_count = _n1172_count_any(npc_agency, "schedule_event_count")
+    agency_event_count = _n1172_count_any(npc_agency, "agency_event_count", "autonomous_goal_event_count")
+    goal_count = _n1172_count_any(npc_agency, "autonomous_goal_count", "goal_count", "active_goal_count")
+    movement_count = _n1172_count_any(npc_agency, "movement_event_count", "location_movement_count", "schedule_event_count")
+
+    economy_event_count = _n1172_count_any(economy_pressure, "event_count")
+    recurring_expense_count = _n1172_count_any(economy_pressure, "recurring_expense_count", "upkeep_event_count", "paid_count")
+    stock_refresh_count = _n1172_count_any(economy_pressure, "stock_refresh_count", "merchant_stock_refresh_count")
+    scarcity_count = _n1172_count_any(economy_pressure, "scarcity_event_count", "price_variation_count", "location_price_modifier_count")
+
+    encounter_count = _n1172_count_any(combat_lifecycle, "encounter_count")
+    combat_event_count = _n1172_count_any(combat_lifecycle, "event_count")
+    round_event_count = _n1172_count_any(combat_lifecycle, "total_round_events", "round_event_count", "initiative_event_count")
+    resolved_encounter_count = _n1172_count_any(combat_lifecycle, "resolved_encounter_count")
+    injury_count = _n1172_count_any(combat_lifecycle, "injury_count")
+    direct_graph_combat_count = _n1172_count_any(combat_lifecycle, "direct_graph_combat_count")
+
+    faction_event_count = _n1172_count_any(faction_consequence, "event_count", "world_signal_count")
+    faction_compaction_count = _n1172_count_any(world_compression, "compacted_faction_count", "faction_history_compacted_count")
+    dialogue_repair_rate = _n1172_float_any(dialogue_relevance, "repair_rate", "mismatch_rate")
+    dialogue_repaired_count = _n1172_count_any(dialogue_relevance, "repaired_count")
+
+    growth = _n1172_transcript_growth_summary(summary, transcript, requested_turns)
+
+    gates = {
+        "compression_loop_present": _n1172_gate(
+            compression_event_count >= 1 and state_budget_ok,
+            value={
+                "compression_event_count": compression_event_count,
+                "latest_state_budget": latest_state_budget,
+            },
+            expected="compression events occur and state budget remains OK",
+            message="The long-run compression loop must be active before 1000-turn runs.",
+        ),
+        "memory_aging_real": _n1172_gate(
+            memory_aging_count >= 1,
+            value={
+                "memory_aging_count": memory_aging_count,
+                "npc_memory_dropped_count": world_compression.get("npc_memory_dropped_count"),
+                "npc_memory_summarized_count": world_compression.get("npc_memory_summarized_count"),
+            },
+            expected="old NPC memories are dropped or summarized by deterministic budget policy",
+            message="Memory aging is not yet proven; 1000-turn state may grow without bound.",
+        ),
+        "arc_faction_compaction_real": _n1172_gate(
+            compaction_count >= 1,
+            value={
+                "compaction_count": compaction_count,
+                "compacted_arc_count": world_compression.get("compacted_arc_count"),
+                "compacted_faction_count": world_compression.get("compacted_faction_count"),
+                "pressure_event_summarized_count": world_compression.get("pressure_event_summarized_count"),
+            },
+            expected="old arc/faction/pressure history is compacted or summarized",
+            message="Arc/faction compaction is not yet proven for endurance runs.",
+        ),
+        "npc_schedule_present": _n1172_gate(
+            schedule_event_count >= 1 and movement_count >= 1,
+            value={
+                "schedule_event_count": schedule_event_count,
+                "movement_count": movement_count,
+                "npc_count": npc_agency.get("npc_count"),
+            },
+            expected="NPC schedules/movement exist",
+            message="Schedule-driven NPC presence should be visible before endurance runs.",
+        ),
+        "npc_goal_agency_real": _n1172_gate(
+            agency_event_count >= 1 and goal_count >= 1,
+            value={
+                "agency_event_count": agency_event_count,
+                "autonomous_goal_count": goal_count,
+                "schedule_event_count": schedule_event_count,
+                "memory_event_count": npc_agency.get("memory_event_count"),
+            },
+            expected="NPCs pursue autonomous goals, not only schedule/memory events",
+            message="NPC agency is still mostly schedule/memory scaffolding.",
+        ),
+        "economy_pressure_foundation": _n1172_gate(
+            economy_event_count >= 1 and recurring_expense_count >= 1,
+            value={
+                "event_count": economy_event_count,
+                "recurring_expense_count": recurring_expense_count,
+                "paid_count": economy_pressure.get("paid_count"),
+                "warning_count": economy_pressure.get("warning_count"),
+            },
+            expected="recurring upkeep/resource pressure exists",
+            message="Economy pressure should include recurring costs before endurance tests.",
+        ),
+        "economy_long_term_sinks_real": _n1172_gate(
+            stock_refresh_count >= 1 and scarcity_count >= 1,
+            value={
+                "stock_refresh_count": stock_refresh_count,
+                "scarcity_or_price_variation_count": scarcity_count,
+            },
+            expected="merchant stock refresh and scarcity/price variation are exercised",
+            message="Long-term economy is missing stock refresh/scarcity pressure.",
+        ),
+        "combat_coverage_present": _n1172_gate(
+            encounter_count >= 1 and combat_event_count >= 1,
+            value={
+                "encounter_count": encounter_count,
+                "event_count": combat_event_count,
+                "direct_graph_combat_count": direct_graph_combat_count,
+            },
+            expected="some deterministic combat/consequence coverage exists",
+            message="Combat must at least appear in the deterministic run.",
+        ),
+        "combat_rounds_real": _n1172_gate(
+            round_event_count >= 1 and (resolved_encounter_count >= 1 or injury_count >= 1),
+            value={
+                "round_event_count": round_event_count,
+                "resolved_encounter_count": resolved_encounter_count,
+                "injury_count": injury_count,
+                "direct_graph_combat_count": direct_graph_combat_count,
+            },
+            expected="initiative/rounds plus injury/resolution lifecycle are exercised",
+            message="Combat is still direct-graph/scaffold coverage, not a real lifecycle.",
+        ),
+        "faction_consequence_present": _n1172_gate(
+            faction_event_count >= 1,
+            value={
+                "event_count": faction_consequence.get("event_count"),
+                "world_signal_count": faction_consequence.get("world_signal_count"),
+                "faction_compaction_count": faction_compaction_count,
+            },
+            expected="faction consequences exist",
+            message="Faction consequences should remain visible in endurance reports.",
+        ),
+        "dialogue_repair_pressure_bounded": _n1172_gate(
+            dialogue_repair_rate <= 0.35,
+            value={
+                "repaired_count": dialogue_repaired_count,
+                "repair_or_mismatch_rate": dialogue_repair_rate,
+            },
+            expected="dialogue/action relevance repairs stay below 35%",
+            message="High repair pressure can hide provider drift in long runs.",
+        ),
+        "transcript_growth_budget_projected_1000": _n1172_gate(
+            bool(growth.get("ok", True)),
+            value=growth,
+            expected="projected 1000-turn transcript artifact stays below budget",
+            message="Full transcript artifacts may become too large for 1000-turn endurance runs.",
+        ),
+    }
+
+    blocked_reasons = [name for name, gate in gates.items() if not bool(_safe_dict(gate).get("ok"))]
+    hard_blockers = [
+        name
+        for name, gate in gates.items()
+        if not bool(_safe_dict(gate).get("ok")) and _safe_str(_safe_dict(gate).get("severity") or "advisory") == "hard"
+    ]
+    # For now these are hardening/advisory diagnostics: a 100-turn run can pass
+    # while still clearly reporting why a 1000-turn run is blocked.
+    readiness = {
+        "format_version": "n1172_1000_turn_readiness_gap_report_v1",
+        "ok": True,
+        "requested_turns": requested_turns,
+        "profile": "1000_turn_gap_hardening",
+        "hundred_turn_ready": bool(hundred_turn_readiness.get("ok")),
+        "one_thousand_turn_candidate": not blocked_reasons,
+        "one_thousand_turn_blocked_reasons": blocked_reasons,
+        "one_thousand_turn_hard_blockers": hard_blockers,
+        "gates": gates,
+        "rollup": {
+            "compression_loop_present": bool(_safe_dict(gates.get("compression_loop_present")).get("ok")),
+            "memory_compaction_real": bool(_safe_dict(gates.get("memory_aging_real")).get("ok"))
+            and bool(_safe_dict(gates.get("arc_faction_compaction_real")).get("ok")),
+            "npc_schedule_present": bool(_safe_dict(gates.get("npc_schedule_present")).get("ok")),
+            "npc_goal_agency_real": bool(_safe_dict(gates.get("npc_goal_agency_real")).get("ok")),
+            "economy_pressure_foundation": bool(_safe_dict(gates.get("economy_pressure_foundation")).get("ok")),
+            "economy_long_term_sinks_real": bool(_safe_dict(gates.get("economy_long_term_sinks_real")).get("ok")),
+            "combat_coverage_present": bool(_safe_dict(gates.get("combat_coverage_present")).get("ok")),
+            "combat_rounds_real": bool(_safe_dict(gates.get("combat_rounds_real")).get("ok")),
+            "transcript_growth_budget_ok": bool(_safe_dict(gates.get("transcript_growth_budget_projected_1000")).get("ok")),
+        },
+        "notes": [
+            "This report is advisory for 100-turn runs and does not flip hundred_turn_readiness_summary.ok.",
+            "It separates scaffold/direct-graph coverage from real endurance lifecycle readiness.",
+            "Run 1000-turn tests only after one_thousand_turn_candidate is true or after accepting listed risks.",
+        ],
+    }
+    return readiness
+
+
+def _build_100_turn_readiness_summary(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    readiness = _N1172_PREVIOUS_BUILD_100_TURN_READINESS_SUMMARY(*args, **kwargs)
+    try:
+        gap_report = _n1172_build_1000_turn_readiness_gap_report(
+            summary=_safe_dict(kwargs.get("summary")),
+            transcript=_safe_list(kwargs.get("transcript")),
+            requested_turns=int(kwargs.get("requested_turns") or 0),
+            hundred_turn_readiness=_safe_dict(readiness),
+            world_state_compression_summary=kwargs.get("world_state_compression_summary"),
+            npc_agency_summary=kwargs.get("npc_agency_summary"),
+            economy_pressure_summary=kwargs.get("economy_pressure_summary"),
+            combat_lifecycle_summary=kwargs.get("combat_lifecycle_summary"),
+            faction_consequence_summary=kwargs.get("faction_consequence_summary"),
+            dialogue_action_relevance_summary=kwargs.get("dialogue_action_relevance_summary"),
+        )
+        readiness = dict(_safe_dict(readiness))
+        readiness["one_thousand_turn_readiness_gap_report"] = gap_report
+        readiness["one_thousand_turn_candidate"] = bool(gap_report.get("one_thousand_turn_candidate"))
+        readiness["one_thousand_turn_blocked_reasons"] = _safe_list(gap_report.get("one_thousand_turn_blocked_reasons"))
+        readiness["readiness_grades"] = {
+            "hundred_turn_ready": bool(readiness.get("ok")),
+            "one_thousand_turn_candidate": bool(gap_report.get("one_thousand_turn_candidate")),
+            "one_thousand_turn_blocked_reasons": _safe_list(gap_report.get("one_thousand_turn_blocked_reasons")),
+        }
+    except Exception as exc:
+        readiness = dict(_safe_dict(readiness))
+        readiness["one_thousand_turn_readiness_gap_report"] = {
+            "format_version": "n1172_1000_turn_readiness_gap_report_v1",
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "one_thousand_turn_candidate": False,
+            "one_thousand_turn_blocked_reasons": ["gap_report_builder_exception"],
+        }
+        readiness["one_thousand_turn_candidate"] = False
+        readiness["one_thousand_turn_blocked_reasons"] = ["gap_report_builder_exception"]
+    return readiness
+
+
+def _n1172_html_escape(value: Any) -> str:
+    return _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _n1172_render_1000_turn_gap_section(final_summary: Dict[str, Any]) -> str:
+    final_summary = _safe_dict(final_summary)
+    readiness = _safe_dict(final_summary.get("hundred_turn_readiness_summary"))
+    gap = _safe_dict(
+        final_summary.get("one_thousand_turn_readiness_gap_report")
+        or readiness.get("one_thousand_turn_readiness_gap_report")
+    )
+    if not gap:
+        return ""
+    esc = _n1172_html_escape
+    blocked = _safe_list(gap.get("one_thousand_turn_blocked_reasons"))
+    rollup = _safe_dict(gap.get("rollup"))
+    rows = []
+    for key, gate_any in _safe_dict(gap.get("gates")).items():
+        gate = _safe_dict(gate_any)
+        status = "OK" if bool(gate.get("ok")) else "Gap"
+        css = "quality" if bool(gate.get("ok")) else "danger"
+        rows.append(
+            f"""
+            <tr>
+              <td>{esc(key)}</td>
+              <td><span class=\"badge {css}\">{esc(status)}</span></td>
+              <td>{esc(gate.get('expected'))}</td>
+              <td>{esc(gate.get('message'))}</td>
+            </tr>
+            """
+        )
+    return f"""
+    <section class=\"card\" id=\"one-thousand-turn-readiness-gaps\">
+      <h2>1000-Turn Readiness Gaps</h2>
+      <p class=\"muted\">Separates 100-turn scaffold coverage from true endurance readiness. This section is advisory for 100-turn runs.</p>
+      <div class=\"grid metrics-grid\">
+        <div class=\"metric\"><strong>100-Turn Ready</strong><span>{esc(gap.get('hundred_turn_ready'))}</span></div>
+        <div class=\"metric\"><strong>1000-Turn Candidate</strong><span>{esc(gap.get('one_thousand_turn_candidate'))}</span></div>
+        <div class=\"metric\"><strong>Blocked Reasons</strong><span>{esc(len(blocked))}</span></div>
+      </div>
+      <h3>Blocked Reasons</h3>
+      <pre>{esc(json.dumps(blocked, ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Rollup</h3>
+      <pre>{esc(json.dumps(rollup, ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Gate Details</h3>
+      <table class=\"readiness-table\">
+        <thead><tr><th>Gate</th><th>Status</th><th>Expected</th><th>Message</th></tr></thead>
+        <tbody>{''.join(rows)}</tbody>
+      </table>
+      <details>
+        <summary>Raw 1000-turn readiness gap report</summary>
+        <pre>{esc(json.dumps(gap, ensure_ascii=False, indent=2, default=str))}</pre>
+      </details>
+    </section>
+    """
+
+
+
+# =============================================================================
+# N117.2.1 — Readiness Gap Report Source Consistency
+# =============================================================================
+# The N117.2 1000-turn gap report can be first embedded while the 100-turn
+# readiness summary is being built.  Later artifact summaries can be refined
+# (notably dialogue-action-relevance-summary.json).  Refresh the gap report
+# before HTML/ZIP persistence so report values and artifact values agree.
+
+_N11721_GATE_SOURCES: Dict[str, str] = {
+    "compression_loop_present": "world-state-compression-summary.json",
+    "memory_aging_real": "world-state-compression-summary.json",
+
+    "arc_faction_compaction_real": "world-state-compression-summary.json + faction-consequence-summary.json",
+    "npc_schedule_present": "npc-agency-summary.json",
+    "npc_goal_agency_real": "npc-agency-summary.json",
+    "economy_pressure_foundation": "economy-pressure-summary.json",
+    "economy_long_term_sinks_real": "economy-pressure-summary.json",
+    "combat_coverage_present": "combat-lifecycle-summary.json",
+    "combat_rounds_real": "combat-lifecycle-summary.json",
+    "faction_consequence_present": "faction-consequence-summary.json",
+    "dialogue_repair_pressure_bounded": "dialogue-action-relevance-summary.json",
+    "transcript_growth_budget_projected_1000": "transcript-size-summary.json + final transcript rows",
+}
+
+
+def _n11721_dialogue_summary_for_gap_report(summary: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
+    summary = _safe_dict(summary)
+    dialogue_action = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+    if dialogue_action:
+        return dialogue_action, "dialogue-action-relevance-summary.json"
+
+    dialogue_repair_quality = _safe_dict(summary.get("dialogue_repair_quality_summary"))
+    if dialogue_repair_quality:
+        # Keep the same count/rate field names expected by the N117.2 builder.
+        normalized = dict(dialogue_repair_quality)
+        if "repaired_count" not in normalized and "dialogue_relevance_repaired_count" in normalized:
+            normalized["repaired_count"] = normalized.get("dialogue_relevance_repaired_count")
+        if "repair_rate" not in normalized and "dialogue_relevance_repair_rate" in normalized:
+            normalized["repair_rate"] = normalized.get("dialogue_relevance_repair_rate")
+        return normalized, "dialogue-repair-quality-summary.json"
+
+    embedded = _safe_dict(summary.get("dialogue_relevance_summary"))
+    if embedded:
+        return embedded, "summary.dialogue_relevance_summary"
+    return {}, "missing"
+
+
+def _n11721_gate_value_repaired_count(gap_report: Dict[str, Any]) -> int:
+    gate = _safe_dict(_safe_dict(gap_report).get("gates")).get("dialogue_repair_pressure_bounded")
+    value = _safe_dict(_safe_dict(gate).get("value"))
+    try:
+        return int(value.get("repaired_count") or 0)
+    except Exception:
+        return 0
+
+
+def _n11721_gate_value_repair_rate(gap_report: Dict[str, Any]) -> float:
+    gate = _safe_dict(_safe_dict(gap_report).get("gates")).get("dialogue_repair_pressure_bounded")
+    value = _safe_dict(_safe_dict(gate).get("value"))
+    try:
+        return float(value.get("repair_or_mismatch_rate") or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _n11721_add_gap_gate_sources(gap_report: Dict[str, Any], *, dialogue_source: str) -> Dict[str, Any]:
+    gap_report = dict(_safe_dict(gap_report))
+    gates = {}
+    for name, gate_any in _safe_dict(gap_report.get("gates")).items():
+        gate = dict(_safe_dict(gate_any))
+        source = _N11721_GATE_SOURCES.get(name, "summary.json")
+        if name == "dialogue_repair_pressure_bounded" and dialogue_source:
+            source = dialogue_source
+        gate.setdefault("source", source)
+        gate.setdefault("source_artifact", source)
+        gates[name] = gate
+    gap_report["gates"] = gates
+    gap_report["source_fields_added"] = True
+    gap_report["source_map"] = dict(_N11721_GATE_SOURCES)
+    if dialogue_source:
+        gap_report["source_map"]["dialogue_repair_pressure_bounded"] = dialogue_source
+    return gap_report
+
+
+def _n11721_build_gap_report_source_consistency(
+    *,
+    previous_gap_report: Dict[str, Any],
+    refreshed_gap_report: Dict[str, Any],
+    dialogue_summary: Dict[str, Any],
+    dialogue_source: str,
+) -> Dict[str, Any]:
+    previous_count = _n11721_gate_value_repaired_count(previous_gap_report)
+    refreshed_count = _n11721_gate_value_repaired_count(refreshed_gap_report)
+    artifact_count = _n1172_count_any(_safe_dict(dialogue_summary), "repaired_count")
+    previous_rate = _n11721_gate_value_repair_rate(previous_gap_report)
+    refreshed_rate = _n11721_gate_value_repair_rate(refreshed_gap_report)
+    artifact_rate = _n1172_float_any(_safe_dict(dialogue_summary), "repair_rate", "mismatch_rate")
+    return {
+        "format_version": "n11721_readiness_gap_source_consistency_v1",
+        "ok": refreshed_count == artifact_count,
+        "advisory_only": True,
+        "dialogue_repair_count_source": dialogue_source,
+        "previous_gap_dialogue_repaired_count": previous_count,
+        "refreshed_gap_dialogue_repaired_count": refreshed_count,
+        "artifact_dialogue_repaired_count": artifact_count,
+        "previous_gap_repair_or_mismatch_rate": previous_rate,
+        "refreshed_gap_repair_or_mismatch_rate": refreshed_rate,
+        "artifact_repair_or_mismatch_rate": artifact_rate,
+        "changed_by_refresh": previous_count != refreshed_count or previous_rate != refreshed_rate,
+        "message": "1000-turn readiness gap report was refreshed from final artifact summaries before persistence.",
+    }

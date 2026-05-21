@@ -1,0 +1,463 @@
+
+
+def _rough_semantic_pair_for_player_action(action: str, *, default_target: str = "unknown") -> Dict[str, str]:
+    """Cheap deterministic classifier for anti-loop repair.
+
+    This does not replace the authoritative semantic extractor. It only catches
+    obvious soft-loop player-agent outputs before submitting the action.
+    """
+    text = _safe_str(action).strip()
+    normalized_action = normalize_command_label_action(text)
+    lower = _safe_str(normalized_action).lower()
+    target = default_target or "unknown"
+    for name in ("bran", "silas", "cloaked traveler", "traveler", "patron", "innkeeper", "bartender", "guard", "merchant", "side door", "street", "road"):
+        if name in lower:
+            if name in ("bran", "innkeeper", "bartender"):
+                target = "Bran"
+            elif name == "traveler":
+                target = "Cloaked Traveler"
+            elif name in ("side door", "street"):
+                target = "tavern_exit"
+            elif name == "road":
+                target = "road"
+            else:
+                target = name.title()
+            break
+
+    observe_terms = (
+        "listen",
+        "watch",
+        "observe",
+        "wait",
+        "nod",
+        "scan",
+        "look around",
+        "maintaining eye contact",
+        "eye contact",
+    )
+    ask_terms = ("ask", "question", "press", "inquire", "say", "tell me")
+    travel_terms = ("leave", "go to", "travel", "head outside", "step outside", "move to")
+    service_terms = ("buy", "pay", "rent", "room", "drink", "meal", "order")
+    inspect_terms = ("inspect", "examine", "search", "check")
+
+    if (
+        ("ask" in lower and "bran" in lower and ("saw" in lower or "personally saw" in lower) and "cloaked traveler" in lower)
+        or ("where" in lower and ("witness" in lower or "cloaked traveler" in lower or "side door" in lower))
+    ):
+        semantic = "ask_witness_lead"
+        if target == "unknown":
+            target = "Bran"
+    elif "report" in lower and ("witness" in lower or "cloaked traveler" in lower or "trail" in lower):
+        semantic = "report_witness_findings"
+        if target == "unknown":
+            target = "Bran"
+    elif any(term in lower for term in ("side door", "nearby street", "boot prints", "mud", "torn cloth", "hurried exit")):
+        semantic = "inspect_witness_trail"
+        target = "tavern_exit"
+    elif any(term in lower for term in ("follow the road", "road outside", "fresh tracks", "follow the trail", "bandit road trail")):
+        semantic = "follow_witness_trail"
+        target = "road"
+    elif any(term in lower for term in travel_terms):
+        semantic = "travel"
+    elif any(term in lower for term in service_terms):
+        semantic = "service"
+    elif any(term in lower for term in inspect_terms):
+        semantic = "inspect"
+    elif any(term in lower for term in ask_terms):
+        semantic = "ask"
+    elif any(term in lower for term in observe_terms):
+        semantic = "observe"
+    else:
+        semantic = "unknown"
+
+    return {
+        "semantic_action": semantic,
+        "target": target,
+        "pair": f"{semantic}:{target}",
+    }
+
+
+def _action_violates_anti_loop(action: str, anti_loop_context: Dict[str, Any]) -> bool:
+    context = _safe_dict(anti_loop_context)
+    if not context.get("active"):
+        return False
+    forbidden_semantic = _safe_str(context.get("semantic_action")).lower()
+    forbidden_target = _safe_str(context.get("target")).lower()
+    proposed = _rough_semantic_pair_for_player_action(
+        action,
+        default_target=_safe_str(context.get("target")) or "unknown",
+    )
+    proposed_semantic = _safe_str(proposed.get("semantic_action")).lower()
+    proposed_target = _safe_str(proposed.get("target")).lower()
+
+    if not forbidden_semantic or not forbidden_target:
+        return False
+    if proposed_semantic == forbidden_semantic and proposed_target == forbidden_target:
+        return True
+    # Catch vague observe/listen/wait text against the same target even if the
+    # proposed classifier lands on unknown.
+    if forbidden_semantic == "observe" and proposed_target == forbidden_target:
+        lower = _safe_str(action).lower()
+        if any(term in lower for term in ("listen", "watch", "observe", "wait", "nod", "eye contact")):
+            return True
+    return False
+
+
+def _deterministic_anti_loop_fallback_action(anti_loop_context: Dict[str, Any]) -> str:
+    context = _safe_dict(anti_loop_context)
+    target = _safe_str(context.get("target")) or "Bran"
+    if target.lower() == "bran":
+        return (
+            "Turn away from Bran for the moment and speak to a nearby patron, asking what they have heard "
+            "about Silas or trouble on the road."
+        )
+    return (
+        "Change focus to a different part of the scene: inspect the room, look for a notice board, "
+        "or ask a different nearby NPC about the current lead."
+    )
+
+
+def _force_exit_if_background_threads_remain(
+    *,
+    args: Any,
+    pipeline: Any,
+    exit_code: int,
+) -> None:
+    if not bool(getattr(args, "force_exit_after_artifacts_on_background_timeout", False)):
+        return
+    diagnostics: Dict[str, Any] = {}
+    try:
+        diagnostics = pipeline.executor_thread_diagnostics()
+    except Exception:
+        diagnostics = {}
+    alive = int(diagnostics.get("alive_provider_thread_count") or 0) + int(
+        diagnostics.get("alive_background_thread_count") or 0
+    )
+    pending = int(diagnostics.get("pending_job_count") or 0)
+    if alive <= 0 and pending <= 0:
+        return
+    print(
+        "[autoplay] Force-exiting after artifact write because background "
+        f"threads remain alive. alive={alive} pending={pending} "
+        f"exit_code={exit_code}",
+        flush=True,
+    )
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(int(exit_code or 0))
+
+
+try:
+    from app.providers.base import ChatMessage
+except Exception:
+    ChatMessage = None
+
+
+def _provider_messages(messages: List[Dict[str, str]]) -> List[Any]:
+    if ChatMessage is None:
+        return messages
+    converted: List[Any] = []
+    for message in messages:
+        role = str(message.get("role") or "user")
+        content = str(message.get("content") or "")
+        try:
+            converted.append(ChatMessage(role=role, content=content))
+        except TypeError:
+            converted.append(ChatMessage(role, content))
+    return converted
+
+
+def _provider_text_from_response(response: Any) -> str:
+    for attr in ("content", "text", "message"):
+        value = getattr(response, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    if isinstance(response, dict):
+        for key in ("content", "text", "message"):
+            value = response.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+
+def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
+    import json
+    import re
+
+    cleaned = text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        return json.loads(fenced.group(1))
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+    start = cleaned.find("{")
+    if start < 0:
+        raise ValueError("no_json_object_start")
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(cleaned)):
+        char = cleaned[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(cleaned[start : index + 1])
+    raise ValueError("unterminated_json_object")
+
+
+def _summarize_player_agent_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "turns": 0,
+        "fallback_turns": 0,
+        "llm_turns": 0,
+        "unknown_turns": 0,
+        "avg_player_agent_ms": 0.0,
+        "max_player_agent_ms": 0.0,
+        "selected_source_counts": {},
+        "fallback_reason_counts": {},
+        "errors": {},
+    }
+
+    timings: List[float] = []
+    for row in transcript:
+        if not isinstance(row, dict):
+            continue
+        summary["turns"] += 1
+        perf = _safe_dict(row.get("performance"))
+        ms = float(perf.get("player_agent_ms") or 0.0)
+        if ms:
+            timings.append(ms)
+
+        selected = _safe_dict(row.get("selected_player_action"))
+        source = (
+            _safe_str(selected.get("source"))
+            or _safe_str(selected.get("agent_source"))
+            or _safe_str(selected.get("mode"))
+            or "unknown"
+        )
+        if source == "unknown" and selected.get("ok") is True and selected.get("raw"):
+            source = "llm_player_agent"
+        summary["selected_source_counts"][source] = (
+            int(summary["selected_source_counts"].get(source) or 0) + 1
+        )
+        if "fallback" in source:
+            summary["fallback_turns"] += 1
+        elif "llm" in source or "provider" in source:
+            summary["llm_turns"] += 1
+        else:
+            summary["unknown_turns"] += 1
+
+        reason = _safe_str(selected.get("fallback_reason")) or _safe_str(selected.get("reason_code"))
+        if reason:
+            summary["fallback_reason_counts"][reason] = (
+                int(summary["fallback_reason_counts"].get(reason) or 0) + 1
+            )
+        error = _safe_str(selected.get("error")) or _safe_str(selected.get("provider_error"))
+        if error:
+            summary["errors"][error] = int(summary["errors"].get(error) or 0) + 1
+
+    if timings:
+        summary["avg_player_agent_ms"] = round(sum(timings) / len(timings), 3)
+        summary["max_player_agent_ms"] = round(max(timings), 3)
+    return summary
+
+
+def _summarize_deferred_narration_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "turns": 0,
+        "ok_jobs": 0,
+        "failed_jobs": 0,
+        "sources": {},
+        "avg_worker_ms": 0.0,
+        "max_worker_ms": 0.0,
+        "provider_present": 0,
+        "provider_missing": 0,
+        "errors": {},
+        "diagnostics_examples": [],
+    }
+    timings: List[float] = []
+    for row in transcript:
+        if not isinstance(row, dict):
+            continue
+        result = _safe_dict(row.get("deferred_narration_result"))
+        if not result:
+            continue
+        summary["turns"] += 1
+        if result.get("ok"):
+            summary["ok_jobs"] += 1
+        else:
+            summary["failed_jobs"] += 1
+        ms = float(result.get("worker_ms") or 0.0)
+        if ms:
+            timings.append(ms)
+        payload = _safe_dict(result.get("narration_payload"))
+        source = _safe_str(payload.get("source")) or "unknown"
+        summary["sources"][source] = int(summary["sources"].get(source) or 0) + 1
+        diagnostics = _safe_dict(result.get("diagnostics"))
+        provider_shape = _safe_dict(diagnostics.get("provider_shape"))
+        if provider_shape.get("present"):
+            summary["provider_present"] += 1
+        else:
+            summary["provider_missing"] += 1
+        error = (
+            _safe_str(result.get("error"))
+            or _safe_str(payload.get("error"))
+            or _safe_str(payload.get("original_error"))
+            or _safe_str(diagnostics.get("exception"))
+            or _safe_str(diagnostics.get("payload_error"))
+            or _safe_str(diagnostics.get("payload_original_error"))
+        )
+        if error:
+            summary["errors"][error] = int(summary["errors"].get(error) or 0) + 1
+        if len(summary["diagnostics_examples"]) < 3:
+            summary["diagnostics_examples"].append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "source": source,
+                    "worker_ms": ms,
+                    "provider_shape": provider_shape,
+                    "payload_error": diagnostics.get("payload_error"),
+                    "payload_original_error": diagnostics.get("payload_original_error"),
+                }
+            )
+    if timings:
+        summary["avg_worker_ms"] = round(sum(timings) / len(timings), 3)
+        summary["max_worker_ms"] = round(max(timings), 3)
+    return summary
+
+
+def _summarize_deferred_advisory_trace(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "turns": 0,
+        "ok_jobs": 0,
+        "failed_jobs": 0,
+        "sources": {},
+        "candidate_count": 0,
+        "candidate_kinds": {},
+        "avg_worker_ms": 0.0,
+        "max_worker_ms": 0.0,
+        "errors": {},
+    }
+    timings: List[float] = []
+    for row in transcript:
+        result = _safe_dict(row.get("deferred_advisory_result"))
+        if not result:
+            continue
+        summary["turns"] += 1
+        if result.get("ok"):
+            summary["ok_jobs"] += 1
+        else:
+            summary["failed_jobs"] += 1
+        source = _safe_str(result.get("source")) or "unknown"
+        summary["sources"][source] = int(summary["sources"].get(source) or 0) + 1
+        ms = float(result.get("worker_ms") or 0.0)
+        if ms:
+            timings.append(ms)
+        candidates = result.get("candidates") if isinstance(result.get("candidates"), list) else []
+        summary["candidate_count"] += len(candidates)
+        for candidate in candidates:
+            kind = _safe_str(_safe_dict(candidate).get("kind")) or "unknown"
+            summary["candidate_kinds"][kind] = int(summary["candidate_kinds"].get(kind) or 0) + 1
+        error = _safe_str(result.get("error")) or _safe_str(_safe_dict(result.get("diagnostics")).get("provider_payload_error"))
+        if error:
+            summary["errors"][error] = int(summary["errors"].get(error) or 0) + 1
+    if timings:
+        summary["avg_worker_ms"] = round(sum(timings) / len(timings), 3)
+        summary["max_worker_ms"] = round(max(timings), 3)
+    return summary
+
+
+def _summarize_performance_budget(
+    *,
+    transcript: List[Dict[str, Any]],
+    background_summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    def avg(values: List[float]) -> float:
+        return round(sum(values) / len(values), 3) if values else 0.0
+
+    manual = []
+    player = []
+    human = []
+    autoplay = []
+    for row in transcript:
+        perf = _safe_dict(row.get("performance"))
+        manual.append(float(perf.get("manual_turn_ms") or 0.0))
+        player.append(float(perf.get("player_agent_ms") or 0.0))
+        human.append(_authoritative_human_playable_blocking_ms(row))
+        autoplay.append(float(perf.get("playable_blocking_ms") or 0.0))
+
+    legacy_blocking_values = [
+        float(_safe_dict(row).get("performance", {}).get("human_playable_blocking_ms") or 0.0)
+        for row in transcript
+    ]
+    player_agent_values = [
+        _timing_ms(_safe_dict(row), "player_agent_ms", "player_agent_wall_ms")
+        for row in transcript
+    ]
+    manual_turn_values = [
+        _timing_ms(_safe_dict(row), "manual_turn_ms")
+        for row in transcript
+    ]
+
+    provider_queue = _safe_dict(background_summary.get("provider_queue_summary"))
+    return {
+        "live_blocking": {
+            "avg_manual_turn_ms": avg(manual),
+            "max_manual_turn_ms": round(max(manual), 3) if manual else 0.0,
+            "avg_human_playable_blocking_ms": avg(human),
+            "max_human_playable_blocking_ms": round(max(human), 3) if human else 0.0,
+            "blocking_metric_mode": "authoritative_deterministic_only",
+            "legacy_max_human_playable_blocking_ms": round(max(legacy_blocking_values), 3) if legacy_blocking_values else 0.0,
+            "max_player_agent_ms": round(max(player_agent_values), 3) if player_agent_values else 0.0,
+            "max_manual_turn_ms_diagnostic": round(max(manual_turn_values), 3) if manual_turn_values else 0.0,
+        },
+        "autoplay_only": {
+            "avg_player_agent_ms": avg(player),
+            "max_player_agent_ms": round(max(player), 3) if player else 0.0,
+            "avg_autoplay_blocking_ms": avg(autoplay),
+            "max_autoplay_blocking_ms": round(max(autoplay), 3) if autoplay else 0.0,
+        },
+        "background_llm": {
+            "total_jobs": background_summary.get("total_jobs"),
+            "narration_jobs": background_summary.get("narration_jobs"),
+            "advisory_jobs": background_summary.get("advisory_jobs"),
+            "combined_background_llm_jobs": background_summary.get("combined_background_llm_jobs"),
+            "background_job_seconds": background_summary.get("background_job_seconds"),
+            "provider_queue_summary": provider_queue,
+            "provider_queue_by_kind": background_summary.get("provider_queue_by_kind") or {},
+        },
+    }
+
+
+def _build_player_agent_latency_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    values = [
+        _timing_ms(_safe_dict(row), "player_agent_ms", "player_agent_wall_ms")
+        for row in _safe_list(transcript)
+    ]
+    values = [value for value in values if value > 0]
+    return {
+        "ok": True,
+        "count": len(values),
+        "avg_ms": sum(values) / max(1, len(values)),
+        "p95_ms": _percentile(values, 95),
+        "max_ms": max(values or [0.0]),
+        "quality_gate": "diagnostic_only",
+        "note": "Player-agent LLM planning is measured separately and is not counted as authoritative human-playable blocking.",
+    }

@@ -1,0 +1,41 @@
+            "value": {
+                "checked_count": turn_action_consistency.get("checked_count"),
+                "mismatch_count": turn_action_consistency.get("mismatch_count"),
+                "mismatch_rate": turn_action_consistency.get("mismatch_rate"),
+                "repaired_count": turn_action_consistency.get("repaired_count"),
+                "unrepaired_count": turn_action_consistency.get("unrepaired_count"),
+                "by_field": turn_action_consistency.get("by_field"),
+            },
+            "expected": "visible player action, progress action, resolver action, and hook action context all derive from canonical_turn_action",
+            "message": "A turn must not mix player actions from different commands.",
+        },
+        "suppressed_selection_guard_ok": {
+            "ok": int(suppressed_selection.get("no_replacement_count") or 0) == 0,
+            "value": {
+                "checked_count": suppressed_selection.get("checked_count"),
+                "retargeted_count": suppressed_selection.get("retargeted_count"),
+                "no_replacement_count": suppressed_selection.get("no_replacement_count"),
+                "by_action_id": suppressed_selection.get("by_action_id"),
+            },
+            "expected": "suppressed selected actions are retargeted before resolver execution",
+            "message": "Suppressed graph actions must not keep driving player-agent turns.",
+        },
+    }
+
+    failed = {
+        name: gate
+        for name, gate in gates.items()
+        if not bool(_safe_dict(gate).get("ok"))
+    }
+
+    return {
+        "ok": not failed,
+        "requested_turns": requested_turns,
+        "turns_executed": turns_executed,
+        "failed_gate_count": len(failed),
+        "passed_gate_count": len(gates) - len(failed),
+        "gates": gates,
+        "failed_gates": failed,
+        "warnings_count": len(warnings),
+        "top_warnings": warnings[:20],
+    }

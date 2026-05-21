@@ -1,0 +1,480 @@
+
+    summary = _finalize_background_presentation_attachment_tracking(
+        summary,
+        final_transcript_rows,
+    )
+
+    _assert_no_cross_turn_background_presentation(final_transcript_rows)
+
+    summary["background_presentation_attachment_summary"] = (
+        _build_background_presentation_attachment_summary(summary, final_transcript_rows)
+    )
+
+    # N116.9.5: one final sync after background attachment accounting and
+    # before every JSON transcript artifact is derived.  The previous patch
+    # synced before this phase, but the final artifact gate still caught rows
+    # whose architecture.required_focus was not reflected in
+    # current_action_response.required_focus.
+    final_transcript_rows = _sync_current_action_response_artifact_rows(final_transcript_rows)
+    transcript = final_transcript_rows
+    if isinstance(transcript_artifacts, dict):
+        transcript_artifacts["transcript"] = final_transcript_rows
+
+    bounded_transcript_rows = _build_bounded_transcript_rows(
+        final_transcript_rows,
+        max_row_bytes=50000,
+    )
+    bounded_transcript_rows = _sync_current_action_response_artifact_rows(
+        bounded_transcript_rows
+    )
+
+    slim_transcript_rows = [
+        _slim_transcript_row(row, max_row_bytes=25000)
+        for row in final_transcript_rows
+    ]
+    slim_transcript_rows = _sync_current_action_response_artifact_rows(
+        slim_transcript_rows
+    )
+
+    if any(row is None for row in slim_transcript_rows):
+        raise RuntimeError("slim_transcript_rows_null_after_build")
+
+    if any(row is None for row in bounded_transcript_rows):
+        raise RuntimeError("bounded_transcript_rows_null_after_build")
+
+    _assert_current_action_response_artifact_rows_synced(
+        final_transcript_rows,
+        artifact_name="full-transcript.json",
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        bounded_transcript_rows,
+        artifact_name="transcript.json",
+    )
+    _assert_current_action_response_artifact_rows_synced(
+        slim_transcript_rows,
+        artifact_name="slim-transcript.json",
+    )
+
+    wrote_full_transcript = _should_write_full_transcript(args)
+
+    summary["transcript_size_summary"] = _build_transcript_size_summary(
+        final_transcript_rows=final_transcript_rows,
+        bounded_transcript_rows=bounded_transcript_rows,
+        slim_transcript_rows=slim_transcript_rows,
+        wrote_full_transcript=wrote_full_transcript,
+    )
+
+    summary["llm_prompt_and_fallback_summary"] = _build_llm_prompt_and_fallback_summary(
+        final_transcript_rows
+    )
+
+    _assert_bounded_transcript_artifacts_valid(
+        bounded_transcript_rows=bounded_transcript_rows,
+        slim_transcript_rows=slim_transcript_rows,
+        summary=summary,
+    )
+
+    # Final health must be the absolute last writer before artifacts
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
+
+    _assert_final_artifact_consistency(summary)
+
+    final_health = _safe_dict(summary.get("autoplay_health"))
+    if bool(summary.get("ok")):
+        if not bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok")):
+            raise RuntimeError("final_health_rebuild_order_invalid:evaluation_not_ok")
+        if not bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok")):
+            raise RuntimeError("final_health_rebuild_order_invalid:readiness_not_ok")
+        if not bool(final_health.get("ok")):
+            raise RuntimeError(
+                "final_health_rebuild_order_invalid:"
+                f"summary_ok={summary.get('ok')}:"
+                f"health={final_health}"
+            )
+    # Temporary fallback only. The canonical HTML report is rebuilt below from
+    # final_transcript_rows after late evaluation/health normalization.
+    html_report = _build_minimal_autoplay_html_report(final_summary=html_report_source)
+
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary = _rebuild_final_100_turn_evaluation(
+        args=args,
+        summary=summary,
+        transcript=transcript,
+        dialogue_action_relevance_summary=_safe_dict(
+            summary.get("dialogue_action_relevance_summary")
+        ),
+        turn_action_consistency_summary=_safe_dict(
+            summary.get("turn_action_consistency_summary")
+        ),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            summary.get("scenario_progression_action_repeat_summary")
+        ),
+        escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+        direct_graph_lifecycle_evidence=_safe_dict(summary.get("direct_graph_lifecycle_evidence")),
+    )
+
+    dialogue_eval_gate = _safe_dict(
+        _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+    ).get("dialogue_action_relevance_ok")
+
+    dialogue_eval_gate = _safe_dict(dialogue_eval_gate)
+    dialogue_eval_value = _safe_dict(dialogue_eval_gate.get("value"))
+    dialogue_summary = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+
+    if dialogue_summary and dialogue_eval_value.get("checked_count") is None:
+        raise RuntimeError(
+            "dialogue_action_relevance_final_eval_not_wired:"
+            "summary exists but evaluation gate has null checked_count"
+        )
+
+    turn_action_eval_gate = _safe_dict(
+        _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+    ).get("turn_action_consistency_ok")
+    turn_action_eval_gate = _safe_dict(turn_action_eval_gate)
+    turn_action_eval_value = _safe_dict(turn_action_eval_gate.get("value"))
+    turn_action_summary = _safe_dict(summary.get("turn_action_consistency_summary"))
+
+    if turn_action_summary and turn_action_eval_value.get("checked_count") is None:
+        raise RuntimeError(
+            "turn_action_consistency_final_eval_not_wired:"
+            "summary exists but evaluation gate has null checked_count"
+        )
+
+    if turn_action_summary and int(turn_action_summary.get("unrepaired_count") or 0) > 0:
+        raise RuntimeError(
+            "turn_action_consistency_unrepaired:"
+            f"{turn_action_summary.get('unrepaired_count')} unrepaired action-context mismatches"
+        )
+
+
+    scenario_repeat_eval_gate = _safe_dict(
+        _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+    ).get("scenario_progression_repeats_bounded")
+    scenario_repeat_eval_gate = _safe_dict(scenario_repeat_eval_gate)
+    scenario_repeat_eval_value = _safe_dict(scenario_repeat_eval_gate.get("value"))
+    scenario_repeat_summary = _safe_dict(summary.get("scenario_progression_action_repeat_summary"))
+
+    if scenario_repeat_summary and scenario_repeat_eval_value.get("repeat_warning_count") is None:
+        raise RuntimeError(
+            "scenario_progression_action_repeat_final_eval_not_wired:"
+            "summary exists but evaluation gate has null repeat_warning_count"
+        )
+
+    repeat_summary = _safe_dict(summary.get("scenario_progression_action_repeat_summary"))
+    guard_summary = _safe_dict(summary.get("suppressed_selection_guard_summary"))
+
+    if (
+        int(repeat_summary.get("repeat_warning_count") or 0) > 5
+        and int(guard_summary.get("checked_count") or 0) == 0
+    ):
+        raise RuntimeError(
+            "suppressed_selection_guard_not_wired:"
+            "repeat warnings exceeded threshold but guard checked_count is zero"
+        )
+
+    if int(guard_summary.get("no_replacement_count") or 0) > 0:
+        raise RuntimeError(
+            "suppressed_selection_guard_no_replacement:"
+            f"{guard_summary.get('no_replacement_count')} suppressed selections had no replacement"
+        )
+
+    # Rebuild final health again after direct-graph bridges and final evaluation
+    # have run. Earlier health normalization happens before those late passes,
+    # so it can keep summary_ok/evaluation_ok as false even when the final
+    # authoritative summary is green.
+    summary["autoplay_health"] = _force_final_autoplay_health(summary)
+
+    with _ProbeTimer(
+        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+        "write_results_zip",
+    ):
+        # write_results_zip.start
+        # write_results_zip.end
+        # Create zip artifact with N79/N81 completeness
+        output_dir_path = Path(args.output_dir)
+        zip_path = output_dir_path / "autoplay-campaign-results.zip"
+
+        artifact_manifest = {
+            "format_version": "autoplay_artifact_manifest_v1",
+            "turns_requested": int(args.turns or 0),
+            "generated_files": [],
+        }
+
+        artifact_paths_base: Dict[str, str] = {}
+
+        def _zip_writestr_json(
+            zip_handle: Any,
+            artifact_manifest: Dict[str, Any],
+            name: str,
+            value: Any,
+        ) -> None:
+            generated_files = artifact_manifest.setdefault("generated_files", [])
+            if name in generated_files:
+                return
+            zip_handle.writestr(
+                name,
+                json.dumps(value, ensure_ascii=False, indent=2, default=str),
+            )
+            generated_files.append(name)
+
+        def _zip_writestr_once(
+            zip_handle: Any,
+            artifact_manifest: Dict[str, Any],
+            name: str,
+            payload: Any,
+        ) -> None:
+            generated_files = artifact_manifest.setdefault("generated_files", [])
+            if name in generated_files:
+                return
+            zip_handle.writestr(name, payload if isinstance(payload, str) else str(payload))
+            generated_files.append(name)
+
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary = _rebuild_final_100_turn_evaluation(
+        args=args,
+        summary=summary,
+        transcript=transcript,
+        dialogue_action_relevance_summary=_safe_dict(
+            summary.get("dialogue_action_relevance_summary")
+        ),
+        turn_action_consistency_summary=_safe_dict(
+            summary.get("turn_action_consistency_summary")
+        ),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            summary.get("scenario_progression_action_repeat_summary")
+        ),
+        suppressed_selection_guard_summary=_safe_dict(
+            summary.get("suppressed_selection_guard_summary")
+        ),
+        escalation_branch_summary=_safe_dict(summary.get("escalation_branch_summary")),
+        direct_graph_lifecycle_evidence=_safe_dict(
+            summary.get("direct_graph_lifecycle_evidence")
+        ),
+    )
+
+    # Direct bridge hard postcondition
+    direct_lifecycle = _safe_dict(summary.get("direct_graph_lifecycle_evidence"))
+    requested_turns_for_bridge_gate = int(
+        getattr(args, "turns", None)
+        or summary.get("requested_turns")
+        or 0
+    )
+
+    if (
+        requested_turns_for_bridge_gate >= 100
+        and direct_lifecycle
+        and int(direct_lifecycle.get("aftermath_like_count") or 0) > 0
+    ):
+        evaluation_gates = _safe_dict(
+            _safe_dict(summary.get("hundred_turn_evaluation")).get("gates")
+        )
+        for gate_name in (
+            "story_arc_aftermath_present",
+            "faction_reputation_changed",
+            "faction_pressure_present",
+            "pressure_pacing_active",
+            "followup_arc_progression_present",
+            "followup_arc_resolution_present",
+            "escalation_branch_seeded",
+            "escalation_arc_progression_present",
+            "npc_agency_present",
+        ):
+            gate = _safe_dict(evaluation_gates.get(gate_name))
+            if gate and not gate.get("ok"):
+                raise RuntimeError(
+                    "direct_graph_lifecycle_bridge_not_wired:"
+                    f"{gate_name} failed despite direct graph lifecycle evidence"
+                )
+
+        _annotate_background_result_timing_perf_warning(summary)
+        summary["quality_gate_summary"] = _final_lifecycle_quality_gates(summary)
+        summary["ok"] = bool(_safe_dict(summary.get("quality_gate_summary")).get("ok", True))
+        summary["autoplay_health"] = _force_final_autoplay_health(summary)
+        if bool(summary.get("ok")) and not bool(_safe_dict(summary.get("autoplay_health")).get("ok")):
+            raise RuntimeError(
+                "summary_json_health_stale_before_write:"
+                f"summary_ok={summary.get('ok')}:"
+                f"evaluation_ok={_safe_dict(summary.get('hundred_turn_evaluation')).get('ok')}:"
+                f"readiness_ok={_safe_dict(summary.get('hundred_turn_readiness_summary')).get('ok')}:"
+                f"autoplay_health={summary.get('autoplay_health')}"
+            )
+
+        _assert_final_artifact_consistency(summary)
+
+        # N116.13: keep the original rich/styled report, but make the
+        # visible transcript/timeline authoritative by replacing only that
+        # section with final_transcript_rows. If the rich writer is not
+        # available, fall back to the compact artifact-first report.
+        if args.artifact_detail == "full":
+            final_html_report_source = dict(summary)
+            final_html_report_source.update(_safe_dict(report_payload))
+            final_html_report_source["final_transcript_rows"] = final_transcript_rows
+            final_html_report_source["transcript"] = final_transcript_rows
+
+            final_report_html_path = Path(args.output_dir) / "autoplay-campaign-report.html"
+            rich_report_html_path = Path(args.output_dir) / "autoplay-campaign-report-rich.html"
+
+            rich_source_html = _build_rich_campaign_report_html_from_existing_writer(
+                args=args,
+                output_dir_path=Path(args.output_dir),
+                rich_html_path=rich_report_html_path,
+                summary=summary,
+                report_payload=_safe_dict(report_payload),
+                metrics=_safe_dict(metrics),
+                final_transcript_rows=final_transcript_rows,
+                final_state=_safe_dict(last_committed_state),
+            )
+            if not rich_source_html:
+                rich_source_html = _build_minimal_autoplay_html_report(
+                    final_summary=final_html_report_source,
+                )
+
+            html_report = _restore_rich_report_with_final_transcript_timeline(
+                rich_source_html,
+                final_transcript_rows,
+            )
+            html_report = _sanitize_known_stale_report_text(
+                html_report,
+                final_transcript_rows,
+            )
+            html_report = _n1172_inject_1000_turn_gap_section(html_report, final_html_report_source)
+            final_report_html_path.write_text(html_report, encoding="utf-8")
+            rich_report_html_path.write_text(html_report, encoding="utf-8")
+            extra_paths["campaign_report_html"] = str(final_report_html_path)
+            extra_paths["campaign_report_rich_html"] = str(rich_report_html_path)
+            _assert_html_report_matches_final_transcript_rows(
+                html_report=html_report,
+                final_transcript_rows=final_transcript_rows,
+            )
+
+        # N116.13.5: Always build the canonical HTML from the original
+        # rich/styled report writer when it is available. Earlier patches only
+        # rebuilt the rich report inside the full-detail/direct-lifecycle branch,
+        # so normal report ZIPs fell back to the compact/minimal HTML and lost
+        # Chronicle, quest, NPC, location, performance, and debug features.
+        final_html_report_source = dict(summary)
+        final_html_report_source.update(_safe_dict(report_payload))
+        final_html_report_source["final_transcript_rows"] = final_transcript_rows
+        final_html_report_source["transcript"] = final_transcript_rows
+
+        final_report_html_path = output_dir_path / "autoplay-campaign-report.html"
+        rich_report_html_path = output_dir_path / "autoplay-campaign-report-rich.html"
+
+        rich_source_html = _build_rich_campaign_report_html_from_existing_writer(
+            args=args,
+            output_dir_path=output_dir_path,
+            rich_html_path=rich_report_html_path,
+            summary=summary,
+            report_payload=_safe_dict(report_payload),
+            metrics=_safe_dict(metrics),
+            final_transcript_rows=final_transcript_rows,
+            final_state=_safe_dict(last_committed_state),
+        )
+        if not rich_source_html:
+            rich_source_html = _build_minimal_autoplay_html_report(
+                final_summary=final_html_report_source,
+            )
+
+        html_report = _restore_rich_report_with_final_transcript_timeline(
+            rich_source_html,
+            final_transcript_rows,
+        )
+        html_report = _sanitize_known_stale_report_text(
+            html_report,
+
+            final_transcript_rows,
+        )
+        summary = _n11721_refresh_1000_turn_readiness_gap_report_sources(
+            summary,
+            final_transcript_rows,
+            requested_turns=int(getattr(args, "turns", 0) or summary.get("requested_turns") or summary.get("turns_executed") or 0),
+        )
+        final_html_report_source["one_thousand_turn_readiness_gap_report"] = summary.get("one_thousand_turn_readiness_gap_report")
+        final_html_report_source["hundred_turn_readiness_summary"] = summary.get("hundred_turn_readiness_summary")
+        final_html_report_source["n11721_readiness_gap_source_consistency"] = summary.get("n11721_readiness_gap_source_consistency")
+        html_report = _n1172_inject_1000_turn_gap_section(html_report, final_html_report_source)
+        final_report_html_path.write_text(html_report, encoding="utf-8")
+        rich_report_html_path.write_text(html_report, encoding="utf-8")
+        extra_paths["campaign_report_html"] = str(final_report_html_path)
+        extra_paths["campaign_report_rich_html"] = str(rich_report_html_path)
+        _assert_html_report_matches_final_transcript_rows(
+            html_report=html_report,
+            final_transcript_rows=final_transcript_rows,
+        )
+
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_handle:
+            # Write summary.json first
+            summary_path = output_dir_path / "autoplay-summary.json"
+            summary = _n11721_refresh_1000_turn_readiness_gap_report_sources(
+                summary,
+                final_transcript_rows,
+                requested_turns=int(getattr(args, "turns", 0) or summary.get("requested_turns") or summary.get("turns_executed") or 0),
+            )
+            if not _safe_dict(summary.get("one_thousand_turn_readiness_gap_report")):
+                summary["one_thousand_turn_readiness_gap_report"] = _safe_dict(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("one_thousand_turn_readiness_gap_report"))
+            summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            zip_handle.write(summary_path, "summary.json")
+            artifact_manifest["generated_files"].append("summary.json")
+
+            # Write N79/N81 split artifacts
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "hundred-turn-evaluation.json",
+                summary.get("hundred_turn_evaluation", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "arc-completion-quality-summary.json",
+                summary.get("arc_completion_quality_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "dialogue-repair-quality-summary.json",
+                summary.get("dialogue_repair_quality_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "llm-prompt-and-fallback-summary.json",
+                summary.get("llm_prompt_and_fallback_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "dialogue-stale-source-summary.json",
+                summary.get("dialogue_stale_source_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "narration-grounding-summary.json",
+                summary.get("narration_grounding_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "suppressed-selection-guard-summary.json",
+                summary.get("suppressed_selection_guard_summary", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,
+                "selected-output-grounding-health.json",
+                summary.get("selected_output_grounding_health", {}),
+            )
+
+            _zip_writestr_json(
+                zip_handle,
+                artifact_manifest,

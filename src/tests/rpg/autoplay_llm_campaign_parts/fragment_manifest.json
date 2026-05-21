@@ -1,0 +1,407 @@
+{
+  "format_version": "n1175_autoplay_fragment_manifest_v1",
+  "fragments": [
+    {
+      "file": "00_bootstrap_imports_progression__progression_state_preserve_keys_to_transcript_keep_keys.pyfrag",
+      "source_start_line": 1,
+      "source_end_line": 457,
+      "line_count": 457
+    },
+    {
+      "file": "01_bootstrap_imports_progression__prepare_transcript_artifacts_to_progression_node_count.pyfrag",
+      "source_start_line": 458,
+      "source_end_line": 931,
+      "line_count": 474
+    },
+    {
+      "file": "02_bootstrap_imports_progression__update_sidecar_and_overlay_to_sidecar_monotonicity_check_ove.pyfrag",
+      "source_start_line": 932,
+      "source_end_line": 1372,
+      "line_count": 441
+    },
+    {
+      "file": "03_transcript_artifacts_html__bounded_transcript_row_to_build_bounded_transcript_rows.pyfrag",
+      "source_start_line": 1373,
+      "source_end_line": 1820,
+      "line_count": 448
+    },
+    {
+      "file": "04_transcript_artifacts_html__attach_llm_prompt_debug_to_row_to_build_llm_prompt_and_fallb.pyfrag",
+      "source_start_line": 1821,
+      "source_end_line": 2218,
+      "line_count": 398
+    },
+    {
+      "file": "05_transcript_artifacts_html__build_rich_campaign_report_html_from_existing_writer_to_fina.pyfrag",
+      "source_start_line": 2219,
+      "source_end_line": 2695,
+      "line_count": 477
+    },
+    {
+      "file": "06_presentation_intent_grounding__stable_json_hash_to_turn_action_hash.pyfrag",
+      "source_start_line": 2696,
+      "source_end_line": 3138,
+      "line_count": 443
+    },
+    {
+      "file": "07_presentation_intent_grounding__extract_legacy_background_result_from_event_to_build_backgro.pyfrag",
+      "source_start_line": 3139,
+      "source_end_line": 3508,
+      "line_count": 370
+    },
+    {
+      "file": "08_presentation_intent_grounding__apply_turn_bound_presentation_compatibility_gate_to_stale_in.pyfrag",
+      "source_start_line": 3509,
+      "source_end_line": 3936,
+      "line_count": 428
+    },
+    {
+      "file": "09_presentation_intent_grounding__sync_current_action_response_from_npc_response_architecture_.pyfrag",
+      "source_start_line": 3937,
+      "source_end_line": 4373,
+      "line_count": 437
+    },
+    {
+      "file": "10_npc_response_architecture__apply_bounded_response_variation_to_static_npc_line_to_fallb.pyfrag",
+      "source_start_line": 4374,
+      "source_end_line": 4834,
+      "line_count": 461
+    },
+    {
+      "file": "11_npc_response_architecture__assert_background_presentation_attachment_wired_to_assert_tu.pyfrag",
+      "source_start_line": 4835,
+      "source_end_line": 5275,
+      "line_count": 441
+    },
+    {
+      "file": "12_npc_response_architecture__assert_final_artifact_consistency_to_get_scenario_progressio.pyfrag",
+      "source_start_line": 5276,
+      "source_end_line": 5411,
+      "line_count": 136
+    },
+    {
+      "file": "13_hundred_turn_readiness__build_100_turn_readiness_summary_to_part_01.pyfrag",
+      "source_start_line": 5412,
+      "source_end_line": 5891,
+      "line_count": 480
+    },
+    {
+      "file": "14_hundred_turn_readiness__build_100_turn_readiness_summary_to_part_02.pyfrag",
+      "source_start_line": 5892,
+      "source_end_line": 5925,
+      "line_count": 34
+    },
+    {
+      "file": "15_hundred_turn_readiness__behavioral_autoplay_eval_summary_to_build_strict_progress_qu.pyfrag",
+      "source_start_line": 5926,
+      "source_end_line": 6376,
+      "line_count": 451
+    },
+    {
+      "file": "16_hundred_turn_readiness__force_canonical_turn_action_fields_to_apply_turn_action_cons.pyfrag",
+      "source_start_line": 6377,
+      "source_end_line": 6838,
+      "line_count": 462
+    },
+    {
+      "file": "17_story_progression_objectives__is_graph_action_suppressed_to_filter_suppressed_graph_action.pyfrag",
+      "source_start_line": 6839,
+      "source_end_line": 7239,
+      "line_count": 401
+    },
+    {
+      "file": "18_story_progression_objectives__apply_buy_rations_direct_graph_execution_to_direct_graph_xp_.pyfrag",
+      "source_start_line": 7240,
+      "source_end_line": 7683,
+      "line_count": 444
+    },
+    {
+      "file": "19_story_progression_objectives__cleanup_bad_generic_fallback_narration_to_infer_social_targe.pyfrag",
+      "source_start_line": 7684,
+      "source_end_line": 8125,
+      "line_count": 442
+    },
+    {
+      "file": "20_social_dialogue_direct_graph__ensure_social_npc_line_coverage_to_direct_graph_combat_mecha.pyfrag",
+      "source_start_line": 8126,
+      "source_end_line": 8545,
+      "line_count": 420
+    },
+    {
+      "file": "21_social_dialogue_direct_graph__collect_direct_graph_lifecycle_evidence_to_record_completed_.pyfrag",
+      "source_start_line": 8546,
+      "source_end_line": 9022,
+      "line_count": 477
+    },
+    {
+      "file": "22_social_dialogue_direct_graph__rough_semantic_pair_for_player_action_to_action_violates_ant.pyfrag",
+      "source_start_line": 9023,
+      "source_end_line": 9485,
+      "line_count": 463
+    },
+    {
+      "file": "23_coverage_deferred_background__build_narration_grounding_summary_to_summarize_background_pr.pyfrag",
+      "source_start_line": 9486,
+      "source_end_line": 9927,
+      "line_count": 442
+    },
+    {
+      "file": "24_coverage_deferred_background__normalize_final_transcript_presentation_intents_to_classify_.pyfrag",
+      "source_start_line": 9928,
+      "source_end_line": 10404,
+      "line_count": 477
+    },
+    {
+      "file": "25_coverage_deferred_background__presentation_text_category_to_hard_presentation_claim_catego.pyfrag",
+      "source_start_line": 10405,
+      "source_end_line": 10870,
+      "line_count": 466
+    },
+    {
+      "file": "26_evaluation_and_repair_quality__row_authoritative_state_sources_to_row_has_authoritative_com.pyfrag",
+      "source_start_line": 10871,
+      "source_end_line": 11293,
+      "line_count": 423
+    },
+    {
+      "file": "27_evaluation_and_repair_quality__build_turn_action_consistency_summary.pyfrag",
+      "source_start_line": 11294,
+      "source_end_line": 11380,
+      "line_count": 87
+    },
+    {
+      "file": "28_evaluation_and_repair_quality__build_100_turn_evaluation_summary_to_part_01.pyfrag",
+      "source_start_line": 11381,
+      "source_end_line": 11860,
+      "line_count": 480
+    },
+    {
+      "file": "29_evaluation_and_repair_quality__build_100_turn_evaluation_summary_to_part_02.pyfrag",
+      "source_start_line": 11861,
+      "source_end_line": 11901,
+      "line_count": 41
+    },
+    {
+      "file": "30_evaluation_and_repair_quality__extract_health_progress_quality_to_row_has_location_progress.pyfrag",
+      "source_start_line": 11902,
+      "source_end_line": 12118,
+      "line_count": 217
+    },
+    {
+      "file": "31_mechanics_inventory_location__build_mechanics_coverage_summary_to_current_row_location.pyfrag",
+      "source_start_line": 12119,
+      "source_end_line": 12588,
+      "line_count": 470
+    },
+    {
+      "file": "32_mechanics_inventory_location__apply_mechanics_delta_to_runtime_state_to_build_character_in.pyfrag",
+      "source_start_line": 12589,
+      "source_end_line": 13038,
+      "line_count": 450
+    },
+    {
+      "file": "33_mechanics_inventory_location__build_canonical_progress_quality_summary_to_build_selected_o.pyfrag",
+      "source_start_line": 13039,
+      "source_end_line": 13366,
+      "line_count": 328
+    },
+    {
+      "file": "34_html_report_quality_gates__build_minimal_autoplay_html_report_to_safe_lower_text.pyfrag",
+      "source_start_line": 13367,
+      "source_end_line": 13770,
+      "line_count": 404
+    },
+    {
+      "file": "35_html_report_quality_gates__summarize_profile_grounded_output_to_summarize_npc_arc_progr.pyfrag",
+      "source_start_line": 13771,
+      "source_end_line": 14238,
+      "line_count": 468
+    },
+    {
+      "file": "36_html_report_quality_gates__compact_campaign_state_transcript_tail_to_strict_progress_he.pyfrag",
+      "source_start_line": 14239,
+      "source_end_line": 14569,
+      "line_count": 331
+    },
+    {
+      "file": "37_lifecycle_bridges_and_summaries__final_lifecycle_quality_gates_to_build_story_arc_lifecycle_s.pyfrag",
+      "source_start_line": 14570,
+      "source_end_line": 14985,
+      "line_count": 416
+    },
+    {
+      "file": "38_lifecycle_bridges_and_summaries__apply_direct_graph_lifecycle_bridges_to_build_world_signal_s.pyfrag",
+      "source_start_line": 14986,
+      "source_end_line": 15443,
+      "line_count": 458
+    },
+    {
+      "file": "39_lifecycle_bridges_and_summaries__build_followup_arc_progression_summary_to_build_faction_pres.pyfrag",
+      "source_start_line": 15444,
+      "source_end_line": 15775,
+      "line_count": 332
+    },
+    {
+      "file": "40_lifecycle_bridges_and_summaries__build_authoritative_final_lifecycle_summary_to_build_escalat.pyfrag",
+      "source_start_line": 15776,
+      "source_end_line": 16188,
+      "line_count": 413
+    },
+    {
+      "file": "41_lifecycle_bridges_and_summaries__rebuild_final_100_turn_evaluation_to_assert_final_lifecycle_.pyfrag",
+      "source_start_line": 16189,
+      "source_end_line": 16596,
+      "line_count": 408
+    },
+    {
+      "file": "42_lifecycle_bridges_and_summaries__summarize_player_journal_quality_to_summarize_quality_gates.pyfrag",
+      "source_start_line": 16597,
+      "source_end_line": 17072,
+      "line_count": 476
+    },
+    {
+      "file": "43_quality_gates_background_jobs__extract_background_semantic_action_record_to_runtime_state_w.pyfrag",
+      "source_start_line": 17073,
+      "source_end_line": 17470,
+      "line_count": 398
+    },
+    {
+      "file": "44_quality_gates_background_jobs__summarize_reconciled_background_jobs_to_reconcile_performanc.pyfrag",
+      "source_start_line": 17471,
+      "source_end_line": 17873,
+      "line_count": 403
+    },
+    {
+      "file": "45_quality_gates_background_jobs__drain_completed_background_jobs_for_transcript_to_reconcile_.pyfrag",
+      "source_start_line": 17874,
+      "source_end_line": 18273,
+      "line_count": 400
+    },
+    {
+      "file": "46_agent_selection_and_runner__select_player_action_to_validate_final_autoplay_summary_inte.pyfrag",
+      "source_start_line": 18274,
+      "source_end_line": 18443,
+      "line_count": 170
+    },
+    {
+      "file": "47_run_loop__run_autoplay_campaign_to_part_01.pyfrag",
+      "source_start_line": 18444,
+      "source_end_line": 18923,
+      "line_count": 480
+    },
+    {
+      "file": "48_run_loop__run_autoplay_campaign_to_part_02.pyfrag",
+      "source_start_line": 18924,
+      "source_end_line": 19403,
+      "line_count": 480
+    },
+    {
+      "file": "49_run_loop__run_autoplay_campaign_to_part_03.pyfrag",
+      "source_start_line": 19404,
+      "source_end_line": 19883,
+      "line_count": 480
+    },
+    {
+      "file": "50_run_loop__run_autoplay_campaign_to_part_04.pyfrag",
+      "source_start_line": 19884,
+      "source_end_line": 20363,
+      "line_count": 480
+    },
+    {
+      "file": "51_run_loop__run_autoplay_campaign_to_part_05.pyfrag",
+      "source_start_line": 20364,
+      "source_end_line": 20843,
+      "line_count": 480
+    },
+    {
+      "file": "52_run_loop__run_autoplay_campaign_to_part_06.pyfrag",
+      "source_start_line": 20844,
+      "source_end_line": 21323,
+      "line_count": 480
+    },
+    {
+      "file": "53_run_loop__run_autoplay_campaign_to_part_07.pyfrag",
+      "source_start_line": 21324,
+      "source_end_line": 21803,
+      "line_count": 480
+    },
+    {
+      "file": "54_run_loop__run_autoplay_campaign_to_part_08.pyfrag",
+      "source_start_line": 21804,
+      "source_end_line": 22283,
+      "line_count": 480
+    },
+    {
+      "file": "55_run_loop__run_autoplay_campaign_to_part_09.pyfrag",
+      "source_start_line": 22284,
+      "source_end_line": 22763,
+      "line_count": 480
+    },
+    {
+      "file": "56_run_loop__run_autoplay_campaign_to_part_10.pyfrag",
+      "source_start_line": 22764,
+      "source_end_line": 23243,
+      "line_count": 480
+    },
+    {
+      "file": "57_run_loop__run_autoplay_campaign_to_part_11.pyfrag",
+      "source_start_line": 23244,
+      "source_end_line": 23614,
+      "line_count": 371
+    },
+    {
+      "file": "58_cli_profile_and_entrypoint__apply_autoplay_profile_defaults_to_build_arg_parser.pyfrag",
+      "source_start_line": 23615,
+      "source_end_line": 24086,
+      "line_count": 472
+    },
+    {
+      "file": "59_n116_n117_hotfixes__n11617_previous_sync_current_action_response_artifact_rows_t.pyfrag",
+      "source_start_line": 24087,
+      "source_end_line": 24489,
+      "line_count": 403
+    },
+    {
+      "file": "60_n116_n117_hotfixes__n11618_deep_prompt_veto_to_n11618_prompt_sync_targets.pyfrag",
+      "source_start_line": 24490,
+      "source_end_line": 24969,
+      "line_count": 480
+    },
+    {
+      "file": "61_n116_n117_hotfixes__n11618_deep_prompt_veto_to_n11618_prompt_sync_targets.pyfrag",
+      "source_start_line": 24970,
+      "source_end_line": 25406,
+      "line_count": 437
+    },
+    {
+      "file": "62_n116_n117_hotfixes__n11618_prompt_contract_veto_regression_summary_to_n11619_pre.pyfrag",
+      "source_start_line": 25407,
+      "source_end_line": 25848,
+      "line_count": 442
+    },
+    {
+      "file": "63_n116_n117_hotfixes__n11620_repair_pressure_by_category_to_n11620_update_repair_p.pyfrag",
+      "source_start_line": 25849,
+      "source_end_line": 26248,
+      "line_count": 400
+    },
+    {
+      "file": "64_n116_n117_hotfixes__n11621_repair_pressure_by_category_from_summary_to_n11621_up.pyfrag",
+      "source_start_line": 26249,
+      "source_end_line": 26514,
+      "line_count": 266
+    },
+    {
+      "file": "65_n117_readiness_reports__n1172_build_1000_turn_readiness_gap_report_to_build_100_turn.pyfrag",
+      "source_start_line": 26515,
+      "source_end_line": 26951,
+      "line_count": 437
+    },
+    {
+      "file": "66_n117_readiness_reports__n11721_refresh_1000_turn_readiness_gap_report_sources_to_n11.pyfrag",
+      "source_start_line": 26952,
+      "source_end_line": 27061,
+      "line_count": 110
+    }
+  ]
+}

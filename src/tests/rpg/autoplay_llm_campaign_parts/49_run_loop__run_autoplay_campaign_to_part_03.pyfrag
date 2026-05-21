@@ -1,0 +1,480 @@
+            completed_action_ids=scenario_progression_completed_action_ids,
+            completed_mechanics=scenario_progression_completed_mechanics,
+            turn_index=int(turn_index),
+        )
+        filtered_graph_actions = _safe_list(graph_action_state.get("scenario_progression_actions"))
+        if not filtered_graph_actions:
+            graph_action_expected = False
+            top_graph_action = {}
+            top_graph_command = ""
+        else:
+            top_graph_action = _top_scenario_progression_action(graph_action_state)
+            top_graph_command = _safe_str(top_graph_action.get("command"))
+            graph_action_expected = (
+                _should_force_graph_action(graph_action_state, args)
+                and top_graph_command
+            )
+        graph_action_selected = _safe_str(player_action).strip() == top_graph_command.strip()
+        expected_action_id = _safe_str(top_graph_action.get("action_id"))
+        expected_command = top_graph_command
+        player_action_s = _safe_str(player_action)
+
+        if graph_action_expected:
+            expected_action_available = _graph_expected_action_is_available(
+                top_graph_action,
+                suppressed_actions=scenario_progression_suppressed_actions,
+                completed_action_ids=scenario_progression_completed_action_ids,
+                completed_mechanics=scenario_progression_completed_mechanics,
+                turn_index=int(turn_index),
+            )
+
+            selection_was_suppression_retarget = (
+                _safe_str(player_agent_selection_source) == "suppressed_selection_guard"
+                or bool(_safe_dict(suppressed_selection_guard).get("retargeted"))
+            )
+
+            if (
+                expected_action_available
+                and not selection_was_suppression_retarget
+                and not graph_action_selected
+            ):
+                raise RuntimeError(
+
+                    "scenario_progression_graph_action_not_selected:"
+                    f"turn={turn_index}:"
+                    f"expected_action_id={expected_action_id}:"
+                    f"expected={expected_command!r}:"
+                    f"actual={player_action_s!r}:"
+                    f"source={_safe_str(player_agent_selection_source)}"
+                )
+
+            if graph_action_selected and selection_was_suppression_retarget:
+                graph_action_selection_diagnostic = {
+                    "ok": True,
+                    "retargeted": True,
+                    "reason": "suppressed_selection_guard_retargeted_expected_graph_action",
+                    "expected_action_id": expected_action_id,
+                    "expected_command": expected_command,
+                    "actual_command": player_action_s,
+                    "source": _safe_str(player_agent_selection_source),
+                }
+            elif graph_action_selected and not expected_action_available:
+                graph_action_selection_diagnostic = {
+                    "ok": True,
+                    "retargeted": False,
+                    "reason": "expected_graph_action_suppressed_or_completed",
+                    "expected_action_id": expected_action_id,
+                    "expected_command": expected_command,
+                    "actual_command": player_action_s,
+                    "source": _safe_str(player_agent_selection_source),
+                }
+            else:
+                graph_action_selection_diagnostic = {
+                    "ok": True,
+                    "retargeted": False,
+                    "reason": "",
+                    "expected_action_id": expected_action_id,
+                    "expected_command": expected_command,
+                    "actual_command": player_action_s,
+                    "source": _safe_str(player_agent_selection_source),
+                }
+
+        authoritative_state = _apply_scenario_progression_for_action(
+            authoritative_state,
+            scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+            player_action=player_action,
+            turn_index=turn_index,
+        )
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
+        authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
+            authoritative_state,
+            progression_authority_state,
+            reason="after_scenario_progression_apply",
+            turn_index=turn_index,
+        )
+        authoritative_state = _commit_campaign_state_authority(
+            authoritative_state,
+            transcript_tail=transcript[-12:],
+            phase="turn",
+        )
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
+        authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
+            authoritative_state,
+            progression_authority_state,
+            reason="after_campaign_state_commit",
+            turn_index=turn_index,
+        )
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "scenario_progression.state",
+            turn_index=turn_index,
+            revision=_progression_revision(authoritative_state),
+            completed_node_count=len(_safe_dict(authoritative_state.get("progression_completed_nodes"))),
+            fact_count=len(_safe_dict(authoritative_state.get("progression_facts"))),
+            lead_count=len(_safe_dict(authoritative_state.get("progression_leads"))),
+            npc_count=len(_safe_dict(authoritative_state.get("progression_unlocked_npcs"))),
+            location_count=len(_safe_dict(authoritative_state.get("progression_unlocked_locations"))),
+            stale_merge_count=len(_safe_list(authoritative_state.get("progression_stale_merge_log"))),
+            next_actions=[
+                _safe_str(_safe_dict(row).get("action_id"))
+                for row in _safe_list(authoritative_state.get("scenario_progression_actions"))[:5]
+            ],
+        )
+        simulation_state = deepcopy(authoritative_state)
+
+        runtime_error = ""
+        turn_result: Dict[str, Any]
+        before_state = deepcopy(expected_baseline_state)
+        before_digest = state_digest(before_state)
+        baseline_check = _baseline_mismatch_warning(
+            expected_state=expected_baseline_state,
+            actual_before_state=before_state,
+        )
+        story_hook_result: Dict[str, Any] = {}
+        try:
+            with _ProbeTimer(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "runtime_turn_execution",
+                turn_index=turn_index,
+            ):
+                with timed_stage(turn_performance, "manual_turn_ms"):
+                    turn_result = _call_turn_runtime(
+                        session_id=session_id,
+                        player_action=player_action,
+                        turn_index=turn_index,
+                        runtime_narration=args.narration_mode,
+                        debug_narration_trace=args.debug_provider_shape,
+                    )
+            returned_state = _safe_dict(turn_result.get("simulation_state"))
+            if returned_state:
+                authoritative_state = merge_autoplay_simulation_state(
+                    before_state=authoritative_state,
+                    returned_state=returned_state,
+                )
+            simulation_state = deepcopy(authoritative_state)
+            with timed_stage(turn_performance, "story_hooks_ms"):
+                story_hook_result = apply_autoplay_story_hooks(
+                    simulation_state=authoritative_state,
+                    player_action=player_action,
+                    turn_index=turn_index,
+                )
+            if story_hook_result.get("changed"):
+                authoritative_state = merge_autoplay_simulation_state(
+                    before_state=authoritative_state,
+                    returned_state=_safe_dict(story_hook_result.get("simulation_state")),
+                )
+            authoritative_state = _commit_authoritative_state(
+                session_id=session_id,
+                authoritative_state=authoritative_state,
+                runtime_narration=args.narration_mode,
+            )
+            simulation_state = deepcopy(authoritative_state)
+
+            try:
+                from tests.rpg.autoplay.story_hooks import (
+                    apply_autoplay_travel_authority,
+                )
+
+                travel_authority_result = apply_autoplay_travel_authority(
+                    simulation_state,
+                    player_action=_safe_str(player_action),
+                    turn_index=turn_index,
+                )
+                if travel_authority_result.get("changed"):
+                    simulation_state = _safe_dict(travel_authority_result.get("simulation_state")) or simulation_state
+                    _probe_log(
+                        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        "autoplay_travel_authority.applied",
+                        turn_index=turn_index,
+                        events=travel_authority_result.get("events"),
+                        current_location=simulation_state.get("current_location"),
+                        current_location_name=simulation_state.get("current_location_name"),
+                    )
+            except Exception as exc:
+                _probe_log(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "autoplay_travel_authority.failed",
+                    turn_index=turn_index,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+
+        except Exception as exc:
+            runtime_error = f"{type(exc).__name__}: {exc}"
+            turn_result = {
+                "ok": False,
+                "error": runtime_error,
+                "traceback": traceback.format_exc(),
+            }
+            story_hook_result = {}
+
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "runtime_turn_execution.result",
+            turn_index=turn_index,
+            ok=_safe_dict(turn_result).get("ok"),
+            keys=",".join(sorted(_safe_dict(turn_result).keys())[:80]),
+        )
+        authoritative_state = _merge_turn_result_authoritative_state(authoritative_state, turn_result)
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
+        authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
+            authoritative_state,
+            progression_authority_state,
+            reason="after_turn_result_merge",
+            turn_index=turn_index,
+        )
+        authoritative_state = _commit_campaign_state_authority(
+            authoritative_state,
+            transcript_tail=transcript[-12:],
+            phase="turn",
+        )
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
+        authoritative_state, progression_authority_state = _update_sidecar_and_overlay(
+            authoritative_state,
+            progression_authority_state,
+            reason="after_campaign_state_commit",
+            turn_index=turn_index,
+        )
+
+        base_response_payload: Dict[str, Any] = {}
+        raw_payload = _safe_dict(
+            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_narration_payload")
+        )
+        raw_npc = _safe_dict(
+            _safe_dict(turn_result.get("manual_turn_summary")).get("raw_npc")
+        )
+        runtime_has_dialogue = bool(
+            _safe_str(raw_payload.get("narration"))
+            and (
+                _safe_dict(raw_payload.get("npc")).get("line")
+                or raw_npc.get("line")
+                or _autoplay_report_action_type(player_action) != "social"
+            )
+        )
+        with timed_stage(turn_performance, "base_response_ms"):
+            if args.autoplay_base_response != "off" and not runtime_has_dialogue:
+                base_response_payload = build_autoplay_base_response(
+                    provider=provider,
+                    player_action=player_action,
+                    simulation_state=authoritative_state,
+                    turn_index=turn_index,
+                    use_provider=args.autoplay_base_response == "provider",
+                    max_tokens=int(args.base_response_max_tokens),
+                )
+
+        # Final turn commit. This is the state that the next turn must use as
+        # before_state. Do not reload from the manual session here.
+        authoritative_state = _commit_authoritative_state(
+            session_id=session_id,
+            authoritative_state=authoritative_state,
+        )
+        final_turn_state = deepcopy(authoritative_state)
+        with timed_stage(turn_performance, "progress_eval_ms"):
+            progress_delta = classify_progress_delta(
+                before_state=before_state,
+                after_state=final_turn_state,
+            )
+            after_digest = state_digest(final_turn_state)
+        state_preservation_debug = {
+            "baseline_source": "runner_authoritative_state",
+            "commit_policy": "no_manual_reload_after_turn_start",
+            "next_turn_baseline_source": "last_committed_state",
+            "baseline_check": baseline_check,
+            "before_counts": before_digest.get("counts", {}),
+            "after_counts": after_digest.get("counts", {}),
+            "committed_counts": after_digest.get("counts", {}),
+            "journal_entries_delta": (
+                after_digest.get("counts", {}).get("journal_entries", 0)
+                - before_digest.get("counts", {}).get("journal_entries", 0)
+            ),
+        }
+        progress_quality = classify_turn_progress_quality(
+            {
+                "progress_delta": progress_delta,
+                "player_action_context": context,
+                "selected_player_action": selected,
+                "player_action": player_action,
+            }
+        )
+        progress_quality = dict(_safe_dict(progress_quality))
+        progress_quality["player_action"] = actual_sent_action
+        with timed_stage(turn_performance, "state_bounds_ms"):
+            state_bounds = collect_state_bounds(
+                final_turn_state,
+                max_state_bytes=int(args.max_state_bytes),
+                max_root_count=int(args.max_roots),
+                max_list_length=int(args.max_state_list_length),
+                max_dict_keys=int(args.max_state_dict_keys),
+            )
+        save_load_checkpoint = {}
+        checkpoint_every = int(args.checkpoint_every or 0)
+        if checkpoint_every > 0 and turn_index % checkpoint_every == 0:
+            if args.checkpoint_mode == "background":
+                with timed_stage(turn_performance, "background_enqueue_ms"):
+                    checkpoint_job_id = pipeline.submit_checkpoint(
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        checkpoint_dir=checkpoint_dir,
+                        simulation_state=final_turn_state,
+                    )
+                save_load_checkpoint = {
+                    "ok": True,
+                    "status": "pending",
+                    "job_id": checkpoint_job_id,
+                    "mode": "background",
+                }
+            else:
+                with timed_stage(turn_performance, "checkpoint_ms"):
+                    save_load_checkpoint = validate_save_load_checkpoint(
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        checkpoint_dir=checkpoint_dir,
+                        simulation_state=final_turn_state,
+                    )
+            # validate_save_load_checkpoint() already verifies checkpoint
+            # rehydration. Do not make the checkpoint reload the live baseline;
+            # the runner-owned authoritative_state remains canonical.
+            simulation_state = deepcopy(final_turn_state)
+        last_committed_state = deepcopy(final_turn_state)
+        simulation_state = deepcopy(final_turn_state)
+        checkpoint_every = int(getattr(args, "checkpoint_every", 0) or 0)
+        if checkpoint_every > 0 and turn_index % checkpoint_every == 0:
+            checkpoint_validation_rows.append(
+                {
+                    "ok": True,
+                    "mode": "write_only_fingerprint",
+                    "turn_index": turn_index,
+                    "progression_completed_node_count": int(
+                        _progression_node_count(final_turn_state)
+                    ),
+                    "progression_revision": int(
+                        _progression_revision(final_turn_state)
+                    ),
+                    "active_graph_id": _safe_str(
+                        final_turn_state.get("scenario_progression_active_graph_id")
+                    ),
+                    "completed_graph_ids": _safe_list(
+                        final_turn_state.get("scenario_progression_completed_graph_ids")
+                    ),
+                    "waiting_for_next_graph_pack": bool(
+                        final_turn_state.get("scenario_progression_waiting_for_next_graph_pack")
+                    ),
+                }
+            )
+        narration = _extract_narration(turn_result)
+        narration_status = "ready"
+        narration_job_id = ""
+        advisory_status = "disabled"
+        advisory_job_id = ""
+        combined_background_llm_job_id = ""
+        resolved_turn_contract = _resolve_turn_contract_for_report(
+            turn_result=turn_result,
+            base_response_payload=base_response_payload,
+        )
+
+        if args.narration_mode == "deferred":
+            narration_status = "pending"
+            advisory_status = "pending"
+            with timed_stage(turn_performance, "background_enqueue_ms"):
+                semantic_action_record = _extract_background_semantic_action_record(turn_result)
+                if args.background_llm_mode == "combined":
+                    background_runtime_state = _runtime_state_with_loaded_profiles_for_background(
+                        turn_result=turn_result,
+                        simulation_state=final_turn_state,
+                    )
+                    with _ProbeTimer(
+                        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        "submit_combined_background_llm",
+                        turn_index=turn_index,
+                    ):
+                        combined_background_llm_job_id = pipeline.submit_combined_background_llm(
+                            provider=provider,
+                            session_id=session_id,
+                            turn_index=turn_index,
+                            player_action=player_action,
+                            simulation_state=final_turn_state,
+                            runtime_state=background_runtime_state,
+                            turn_contract=resolved_turn_contract,
+                            semantic_action_record=semantic_action_record,
+                            prefer_provider=True,
+                        )
+                    _track_background_submit(
+                        background_result_timing_tracker,
+                        job_id=_safe_str(combined_background_llm_job_id),
+                        turn_index=turn_index,
+                        phase="turn_submit",
+                    )
+                    _register_background_job(
+                        background_job_registry,
+                        job_id=_safe_str(combined_background_llm_job_id),
+                        turn_index=turn_index,
+                        handle=combined_background_llm_job_id,
+                        pipeline=pipeline,
+                    )
+                    _probe_log(
+                        bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                        "submit_combined_background_llm.result",
+                        turn_index=turn_index,
+                        job_id=_safe_str(combined_background_llm_job_id),
+                    )
+                    narration_job_id = combined_background_llm_job_id
+                    advisory_job_id = combined_background_llm_job_id
+                else:
+                    narration_job_id = pipeline.submit_deferred_narration(
+                        provider=provider,
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        player_action=player_action,
+                        simulation_state=final_turn_state,
+                        turn_contract=turn_result.get("turn_contract") or {},
+                        prefer_provider=True,
+                    )
+                    advisory_job_id = pipeline.submit_deferred_advisory(
+                        provider=provider,
+                        session_id=session_id,
+                        turn_index=turn_index,
+                        player_action=player_action,
+                        simulation_state=final_turn_state,
+                        turn_contract=turn_result.get("turn_contract") or {},
+                        semantic_action_record=semantic_action_record,
+                        prefer_provider=True,
+                    )
+            if not narration:
+                narration = "Narration is being prepared..."
+
+        blocking_narration_payload = (
+            turn_result.get("narration_payload")
+            or turn_result.get("structured_narration")
+            or {}
+        )
+        blocking_narration_source = (
+            blocking_narration_payload.get("source")
+            if isinstance(blocking_narration_payload, dict)
+            else ""
+        )
+        deferred_blocking_provider_violation = (
+            args.narration_mode == "deferred"
+            and blocking_narration_source == "provider_runtime_narration"
+        )
+
+        record_build_start = now_perf()
+        if deferred_blocking_provider_violation:
+            pending_payload = _pending_deferred_narration_payload()
+            turn_result["narration_payload"] = pending_payload
+            turn_result["structured_narration"] = pending_payload
+            turn_result["narration"] = pending_payload["narration"]

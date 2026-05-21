@@ -1,0 +1,461 @@
+
+
+def _apply_bounded_response_variation_to_static_npc_line(
+    row: Dict[str, Any],
+    *,
+    current_focus: List[str] | None = None,
+    architecture: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Replace old deterministic fallback lines with bounded seeded variants.
+
+    N116.10 originally varied only when the repair fallback function generated a
+    new NPC line. If a previous pass had already inserted the old deterministic
+    safe line, later artifact rows could remain valid but static and carry no
+    variation metadata. This final-boundary hook treats those known safe
+    fallback strings as replaceable presentation text while preserving the
+    authoritative transaction/question/travel facts.
+    """
+    row = dict(_safe_dict(row))
+    if _safe_dict(row.get("npc_response_variation")):
+        return row
+
+    line = _safe_str(row.get("npc_line") or _safe_dict(row.get("npc")).get("line"))
+    if not line:
+        return row
+
+    normalized_line = _normalize_turn_action_text(line)
+    if normalized_line not in STATIC_BOUNDED_RESPONSE_FALLBACK_LINES:
+        return row
+
+    architecture = _safe_dict(architecture) or _safe_dict(row.get("npc_response_architecture"))
+    focus_terms = {
+        _safe_str(item)
+        for item in _safe_list(current_focus) + _safe_list(architecture.get("required_focus"))
+        if _safe_str(item)
+    }
+    if not focus_terms:
+        return row
+
+    replacement = _fallback_npc_line_from_architecture(row)
+    if not replacement:
+        return row
+
+    # _fallback_npc_line_from_architecture stores variation metadata on this
+    # same mutable row.  Keep the write explicit here so future refactors cannot
+    # reintroduce a valid-but-unmarked static fallback artifact.
+    if not _safe_dict(row.get("npc_response_variation")):
+        row["npc_response_variation"] = {
+            "format_version": "npc_response_variation_v1",
+            "bounded": True,
+            "facts_locked": True,
+            "variant_family": "static_fallback.boundary",
+            "variant_id": "static_fallback.boundary:metadata_recovered",
+            "metadata_recovered": True,
+            "facts": {"source": "static_safe_fallback"},
+        }
+        row["npc_response_variant_id"] = "static_fallback.boundary:metadata_recovered"
+
+    row["npc_line"] = replacement
+    npc_payload = dict(_safe_dict(row.get("npc")))
+    if npc_payload or row.get("npc_speaker"):
+        npc_payload["speaker"] = _safe_str(
+            npc_payload.get("speaker") or row.get("npc_speaker")
+        )
+        npc_payload["line"] = replacement
+        row["npc"] = npc_payload
+    row["npc_response_variation_applied_to_existing_static_fallback"] = True
+    row.setdefault("npc_line_before_response_variation", line)
+    return row
+
+def _fallback_npc_line_from_architecture(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    architecture = _build_npc_response_architecture_for_row(row)
+    target = _safe_dict(architecture.get("target_npc"))
+    speaker = _safe_str(
+        target.get("speaker")
+        or row.get("npc_speaker")
+        or _safe_dict(row.get("npc")).get("speaker")
+        or "Bran"
+    )
+    role = _safe_str(target.get("role")).lower()
+    action = _normalize_turn_action_text(
+        _safe_str(row.get("canonical_turn_action") or row.get("player_action"))
+    )
+    focus = set(_safe_list(architecture.get("required_focus")))
+
+    is_bran = "bran" in _normalize_turn_action_text(speaker) or "innkeeper" in role
+    if {"purchase_acknowledgement", "item_quantity_or_availability"}.intersection(focus):
+        if "ration" in action:
+            if is_bran:
+                templates = [
+                    "Two rations, wrapped and ready. Keep them dry, and they will do their job on the road.",
+                    "Two rations. Keep them dry, and they will do their job on the road.",
+                    "That is two rations. Plain road food, but it will carry you farther.",
+                    "Two wrapped rations. Not fancy, but better than walking hungry.",
+                    "Two rations, paid for and counted. Do not waste them before the road turns rough.",
+                ]
+            else:
+                templates = [
+                    "Two rations. Keep them dry, and they should carry you a little farther.",
+                    "That is two rations. They are yours now.",
+                    "Two bundled rations. They should serve for the next stretch of road.",
+                ]
+            line, meta = _select_bounded_response_variant(
+                row,
+                variant_family="economy.purchase.rations",
+                templates=templates,
+                facts={"item": "rations", "quantity": 2, "transaction": "purchase"},
+            )
+            return _store_npc_response_variant(row, line, meta)
+        if is_bran:
+            templates = [
+                "I can sell what is actually on hand, if your coin covers it.",
+                "If I have it and your coin is good, we can make the sale.",
+                "Stock and coin decide the matter, not wishful thinking.",
+            ]
+        else:
+            templates = [
+                "I can handle the sale if the stock and coin are there.",
+                "If the stock is here and the payment is real, the sale can happen.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="economy.purchase.generic",
+            templates=templates,
+            facts={"transaction": "purchase"},
+        )
+        return _store_npc_response_variant(row, line, meta)
+
+    if {"service_request_acknowledgement", "lodging_or_rest_terms"}.intersection(focus):
+        if is_bran:
+            templates = [
+                "A room can be arranged if the house has one free and your coin is good.",
+                "If there is a bed open and you can pay, we can talk lodging.",
+                "I can give you terms for a room, but only for what the house actually has.",
+            ]
+        else:
+            templates = [
+                "I can discuss the service, but only what is actually available.",
+                "We can talk terms, provided the service is truly available.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="service.lodging.generic",
+            templates=templates,
+            facts={"transaction": "service"},
+        )
+        return _store_npc_response_variant(row, line, meta)
+
+    if "answer_current_question" in focus:
+        if is_bran:
+            templates = [
+                "Ask the question plainly, and I'll answer what I actually know.",
+                "Put it plainly, and I will tell you what I know, no more.",
+                "Ask straight, and I will keep my answer to what I have seen or heard.",
+            ]
+        else:
+            templates = [
+                "Ask plainly, and I'll answer only what I know.",
+                "Put the question plainly, and I will not dress the answer up.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="dialogue.answer_current_question",
+            templates=templates,
+            facts={"dialogue": "answer_current_question"},
+        )
+        return _store_npc_response_variant(row, line, meta)
+
+    if "observed_evidence_or_limits" in focus:
+        templates = [
+            "Look closely at what is actually here; the useful detail is the one you can verify.",
+            "Trust the detail you can point to, not the one you wish were there.",
+            "The clue that matters is the one the scene actually gives you.",
+        ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="evidence.observed_limits",
+            templates=templates,
+            facts={"evidence": "observed_only"},
+        )
+        return _store_npc_response_variant(row, line, meta)
+
+    if "current_travel_or_route_action" in focus:
+        if is_bran:
+            templates = [
+                "If you are taking the road, keep your eyes open and trust what the trail shows you.",
+                "The road will tell you more than tavern talk if you watch it closely.",
+                "Take the road carefully. The signs out there matter more than guesses in here.",
+            ]
+        else:
+            templates = [
+                "The route is yours to choose, but follow what the signs actually show.",
+                "Move by the route you can verify, not by rumor alone.",
+            ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="travel.route.current_action",
+            templates=templates,
+            facts={"travel": "route_action"},
+        )
+        return _store_npc_response_variant(row, line, meta)
+
+    return ""
+
+def _fallback_npc_line_for_current_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+
+    architecture_line = _fallback_npc_line_from_architecture(row)
+    if architecture_line:
+        return architecture_line
+
+    category = _safe_str(row.get("validated_presentation_category")) or _safe_str(row.get("action_category"))
+    action = _normalize_turn_action_text(_safe_str(row.get("canonical_turn_action") or row.get("player_action")))
+    speaker = _safe_str(row.get("npc_speaker") or _safe_dict(row.get("npc")).get("speaker") or "Bran")
+    if category == "economy" or _action_is_commerce_request(action, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))):
+        if "ration" in action:
+            templates = [
+                "Two rations, wrapped and ready. Keep them dry, and they will do their job on the road.",
+                "Two rations. Keep them dry, and they will do their job on the road.",
+                "Two wrapped rations. Not fancy, but better than walking hungry.",
+            ]
+            line, meta = _select_bounded_response_variant(
+                row,
+                variant_family="economy.purchase.rations",
+                templates=templates,
+                facts={"item": "rations", "quantity": 2, "transaction": "purchase"},
+            )
+            return _store_npc_response_variant(row, line, meta)
+        templates = [
+            "I can sell what you need, if the stock and coin are there.",
+            "If the stock is here and the coin is real, we can make the sale.",
+        ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="economy.purchase.generic",
+            templates=templates,
+            facts={"transaction": "purchase"},
+        )
+        return _store_npc_response_variant(row, line, meta)
+    if category == "service" or _action_is_service_request(action, _safe_dict(_safe_dict(row.get("turn_contract")).get("service_result"))):
+        templates = [
+            "I can talk terms for the room, but only what the house can actually offer.",
+            "If there is a room free and you can pay, we can settle the terms.",
+        ]
+        line, meta = _select_bounded_response_variant(
+            row,
+            variant_family="service.lodging.generic",
+            templates=templates,
+            facts={"transaction": "service"},
+        )
+        return _store_npc_response_variant(row, line, meta)
+    if speaker:
+        return "Ask it plainly, and I'll answer what I can."
+    return ""
+
+def _apply_npc_line_current_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+
+    row = dict(_safe_dict(row))
+    row["current_action_response"] = _row_current_action_response_focus(row)
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
+    relevance = _npc_line_current_action_relevance_check(row)
+    row["npc_line_current_action_relevance"] = relevance
+    row["npc_line_addresses_current_action"] = bool(
+        _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
+    )
+    if not bool(relevance.get("npc_line_repair_required")):
+        row.setdefault("npc_line_repaired", False)
+        return row
+
+    original_npc = _safe_dict(row.get("npc"))
+    original_line = _safe_str(row.get("npc_line") or original_npc.get("line"))
+    repaired_line = _fallback_npc_line_for_current_action(row)
+    speaker = _safe_str(row.get("npc_speaker") or original_npc.get("speaker") or "Bran")
+    if repaired_line:
+        row["npc"] = {"speaker": speaker, "line": repaired_line}
+        row["npc_speaker"] = speaker
+        row["npc_line"] = repaired_line
+    else:
+        row = _clear_visible_npc_fields(row)
+    row["npc_line_repaired"] = True
+    row["npc_line_repair_reason"] = _safe_str(relevance.get("reason"))
+    row["npc_line_before_repair"] = original_line
+    row["presentation_status"] = _safe_str(row.get("presentation_status") or "attached_metadata_repaired")
+    if row["presentation_status"] == "attached":
+        row["presentation_status"] = "attached_metadata_repaired"
+    row["presentation_repair_tier"] = _safe_str(row.get("presentation_repair_tier") or "soft_classification")
+    row["presentation_repair_type"] = _safe_str(row.get("presentation_repair_type") or "npc_line_metadata_only")
+    row["visible_text_replaced"] = bool(row.get("visible_text_replaced", False))
+    row["soft_classification_repair"] = True
+    # Recompute after repair so artifacts reflect the final visible NPC line.
+    row["current_action_response"] = _row_current_action_response_focus(row)
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
+    row["npc_line_current_action_relevance"] = _npc_line_current_action_relevance_check(row)
+    row["npc_line_addresses_current_action"] = bool(
+        _safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action")
+    )
+    return row
+
+
+def _build_npc_response_architecture_persistence_summary(
+    transcript_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize whether N116.9 response architecture survived into artifacts."""
+    rows = [
+        _sync_current_action_response_from_npc_response_architecture(_safe_dict(row))
+        for row in _safe_list(transcript_rows)
+    ]
+    row_count = len(rows)
+    architecture_rows = [row for row in rows if _safe_dict(row.get("npc_response_architecture"))]
+    current_action_rows = [row for row in rows if _safe_dict(row.get("current_action_response"))]
+    focus_rows = [
+        row
+        for row in rows
+        if _safe_list(_safe_dict(row.get("current_action_response")).get("required_focus"))
+    ]
+    addressed_rows = [
+        row
+        for row in rows
+        if bool(_safe_dict(row.get("current_action_response")).get("npc_line_addresses_current_action"))
+    ]
+    transaction_focus_rows = []
+    transaction_addressed_rows = []
+    architecture_focus_rows = []
+    architecture_focus_missing_from_current_rows = []
+    architecture_sync_rows = []
+    transaction_focus = {
+        "purchase_acknowledgement",
+        "item_quantity_or_availability",
+        "price_or_payment",
+        "service_request_acknowledgement",
+        "lodging_or_rest_terms",
+    }
+    for row in rows:
+        current_response = _safe_dict(row.get("current_action_response"))
+        focus = {
+            _safe_str(item)
+            for item in _safe_list(current_response.get("required_focus"))
+            if _safe_str(item)
+        }
+        architecture_focus = {
+            _safe_str(item)
+            for item in _safe_list(_safe_dict(row.get("npc_response_architecture")).get("required_focus"))
+            if _safe_str(item)
+        }
+        if architecture_focus:
+            architecture_focus_rows.append(row)
+            if not architecture_focus.issubset(focus):
+                architecture_focus_missing_from_current_rows.append(row)
+        if bool(current_response.get("architecture_focus_sync_applied")):
+            architecture_sync_rows.append(row)
+        if focus.intersection(transaction_focus):
+            transaction_focus_rows.append(row)
+            if bool(current_response.get("npc_line_addresses_current_action")):
+                transaction_addressed_rows.append(row)
+
+    missing_architecture_turns = [
+        int(row.get("turn_index") or row.get("turn") or 0)
+        for row in rows
+        if not _safe_dict(row.get("npc_response_architecture"))
+    ][:20]
+    architecture_focus_missing_turns = [
+        int(row.get("turn_index") or row.get("turn") or 0)
+        for row in architecture_focus_missing_from_current_rows
+    ][:20]
+    ok = (
+        row_count == 0
+        or (
+            len(architecture_rows) == row_count
+            and not architecture_focus_missing_from_current_rows
+        )
+    )
+    return {
+        "format_version": "npc_response_architecture_persistence_v2",
+        "ok": ok,
+        "row_count": row_count,
+        "architecture_row_count": len(architecture_rows),
+        "missing_architecture_row_count": max(0, row_count - len(architecture_rows)),
+        "missing_architecture_turns": missing_architecture_turns,
+        "current_action_response_row_count": len(current_action_rows),
+        "required_focus_row_count": len(focus_rows),
+        "addresses_current_action_row_count": len(addressed_rows),
+        "transaction_focus_row_count": len(transaction_focus_rows),
+        "transaction_addressed_row_count": len(transaction_addressed_rows),
+        "architecture_required_focus_row_count": len(architecture_focus_rows),
+        "current_action_response_architecture_sync_count": len(architecture_sync_rows),
+        "architecture_focus_missing_from_current_action_response_count": len(
+            architecture_focus_missing_from_current_rows
+        ),
+        "architecture_focus_missing_from_current_action_response_turns": (
+            architecture_focus_missing_turns
+        ),
+    }
+
+
+def _assert_npc_response_architecture_persisted(summary: Dict[str, Any]) -> None:
+    diag = _safe_dict(_safe_dict(summary).get("npc_response_architecture_persistence_summary"))
+    if not diag:
+        raise RuntimeError("npc_response_architecture_persistence_summary_missing")
+    if int(diag.get("row_count") or 0) > 0 and int(diag.get("architecture_row_count") or 0) == 0:
+        raise RuntimeError("npc_response_architecture_not_persisted:any_rows=0")
+    if int(diag.get("missing_architecture_row_count") or 0) > 0:
+        raise RuntimeError(
+            "npc_response_architecture_missing_rows:"
+            f"count={diag.get('missing_architecture_row_count')}:"
+            f"turns={diag.get('missing_architecture_turns')}"
+        )
+    if int(diag.get("architecture_focus_missing_from_current_action_response_count") or 0) > 0:
+        raise RuntimeError(
+            "npc_response_architecture_focus_not_synced_to_current_action_response:"
+            f"count={diag.get('architecture_focus_missing_from_current_action_response_count')}:"
+            f"turns={diag.get('architecture_focus_missing_from_current_action_response_turns')}"
+        )
+
+
+def _background_presentation_expected_attachment_count(summary: Dict[str, Any]) -> int:
+    summary = _safe_dict(summary)
+
+    explicit_count = int(summary.get("background_presentation_completed_result_count") or 0)
+
+    timing = _safe_dict(summary.get("background_result_timing_summary"))
+    timing_attached = int(timing.get("jobs_attached_total") or 0)
+
+    background_jobs = _safe_dict(summary.get("background_jobs"))
+    combined_jobs = int(background_jobs.get("combined_background_llm_jobs") or 0)
+
+    deferred_trace = _safe_dict(summary.get("deferred_narration_trace_summary"))
+    ok_deferred_jobs = int(deferred_trace.get("ok_jobs") or 0)
+
+    return max(explicit_count, timing_attached, combined_jobs, ok_deferred_jobs)
+
+
+def _build_background_attachment_events_from_timing_summary(
+    summary: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    timing = _safe_dict(_safe_dict(summary).get("background_result_timing_summary"))
+    events = []
+
+    for event_any in _safe_list(timing.get("attachment_events")):
+        event = _safe_dict(event_any)
+        source_turn = int(event.get("source_turn") or 0)
+        attach_turn = int(event.get("attach_turn") or 0)
+
+        events.append(
+            {
+                "attached": True,
+                "reason": "legacy_background_timing_attachment_observed",
+                "phase": _safe_str(event.get("phase") or "unknown"),
+                "source_turn": source_turn,
+                "attach_turn": attach_turn,
+                "lag_turns": int(event.get("lag_turns") or max(0, attach_turn - source_turn)),
+                "job_id": _safe_str(event.get("job_id")),
+                "turn_bound_verified": False,
+                "legacy_observed_only": True,
+            }
+        )
+
+    return events

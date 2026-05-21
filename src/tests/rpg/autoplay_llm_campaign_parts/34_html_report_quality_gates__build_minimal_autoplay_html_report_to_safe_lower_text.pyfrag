@@ -1,0 +1,404 @@
+
+
+def _build_minimal_autoplay_html_report(final_summary: Dict[str, Any]) -> str:
+    final_summary = _safe_dict(final_summary)
+
+    faction_consequence = _safe_dict(final_summary.get("faction_consequence_summary"))
+    npc_reaction = _safe_dict(final_summary.get("npc_reaction_summary"))
+    dialogue_relevance = _safe_dict(final_summary.get("dialogue_action_relevance_summary"))
+    turn_action_consistency = _safe_dict(final_summary.get("turn_action_consistency_summary"))
+
+    # Simple HTML escaping
+    def esc(value: Any) -> str:
+        return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    transcript_rows = _safe_list(
+        final_summary.get("final_transcript_rows")
+        or final_summary.get("transcript")
+        or final_summary.get("autoplay_transcript_rows")
+    )
+
+    timeline_entries: List[str] = []
+    for row_any in transcript_rows:
+        row = _safe_dict(row_any)
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        if not turn_index:
+            continue
+        player_action = _safe_str(
+            row.get("display_player_action")
+            or row.get("visible_player_action")
+            or row.get("player_action")
+            or row.get("canonical_turn_action")
+        )
+        narration = _safe_str(
+            row.get("display_narration")
+            or row.get("visible_narration")
+            or row.get("selected_narration_text")
+            or row.get("narration")
+        )
+        npc_payload = _safe_dict(row.get("npc"))
+        npc_speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+        npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+        category = _safe_str(row.get("validated_presentation_category") or row.get("llm_presentation_category"))
+        status = _safe_str(row.get("presentation_status"))
+        npc_html = ""
+        if npc_speaker or npc_line:
+            npc_html = f"""
+              <p><strong>NPC:</strong> {esc(npc_speaker)} — {esc(npc_line)}</p>
+            """
+        timeline_entries.append(
+            f"""
+            <article class="turn-card" id="turn-{turn_index}">
+              <h3>Turn {turn_index}</h3>
+              <p><strong>Category:</strong> {esc(category)} <strong>Status:</strong> {esc(status)}</p>
+              <p><strong>Player:</strong> {esc(player_action)}</p>
+              <p><strong>Narration:</strong> {esc(narration)}</p>
+              {npc_html}
+            </article>
+            """
+        )
+
+    transcript_timeline_html = f"""
+    <section class="card" id="final-transcript-timeline">
+      <h2>Final Normalized Transcript</h2>
+      <p>This section is rendered from the same final transcript rows written to autoplay-transcript.json/slim-transcript.json.</p>
+      {''.join(timeline_entries)}
+    </section>
+    """
+
+    faction_consequence_html = f"""
+    <section class="card" id="faction-consequences">
+      <h2>Faction Consequences</h2>
+      <div class="grid">
+        <div class="metric"><strong>Events</strong><span>{esc(faction_consequence.get("event_count"))}</span></div>
+        <div class="metric"><strong>World Signals</strong><span>{esc(faction_consequence.get("world_signal_count"))}</span></div>
+      </div>
+      <h3>By Faction</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("by_faction", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>By Kind</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Events</h3>
+      <pre>{esc(json.dumps(faction_consequence.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    npc_reaction_html = f"""
+    <section class="card" id="npc-reactions">
+      <h2>NPC Reactions</h2>
+      <div class="grid">
+        <div class="metric"><strong>Events</strong><span>{esc(npc_reaction.get("event_count"))}</span></div>
+        <div class="metric"><strong>Memory Events</strong><span>{esc(npc_reaction.get("memory_event_count"))}</span></div>
+        <div class="metric"><strong>World Signals</strong><span>{esc(npc_reaction.get("world_signal_count"))}</span></div>
+      </div>
+      <h3>By NPC</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("by_npc", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>By Kind</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("by_kind", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Events</h3>
+      <pre>{esc(json.dumps(npc_reaction.get("events", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    dialogue_relevance_html = f"""
+    <section class="card" id="dialogue-relevance">
+      <h2>Dialogue Action-Relevance</h2>
+      <div class="grid">
+        <div class="metric"><strong>Checked</strong><span>{esc(dialogue_relevance.get("checked_count"))}</span></div>
+        <div class="metric"><strong>Mismatches</strong><span>{esc(dialogue_relevance.get("mismatch_count"))}</span></div>
+        <div class="metric"><strong>Mismatch Rate</strong><span>{esc(dialogue_relevance.get("mismatch_rate"))}</span></div>
+        <div class="metric"><strong>Repaired</strong><span>{esc(dialogue_relevance.get("repaired_count"))}</span></div>
+        <div class="metric"><strong>Unrepaired</strong><span>{esc(dialogue_relevance.get("unrepaired_count"))}</span></div>
+        <div class="metric"><strong>Source Blocks</strong><span>{esc(dialogue_relevance.get("source_gate_block_count"))}</span></div>
+      </div>
+      <h3>Reasons</h3>
+      <pre>{esc(json.dumps(dialogue_relevance.get("by_reason", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Examples</h3>
+      <pre>{esc(json.dumps(dialogue_relevance.get("examples", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    turn_action_consistency_html = f"""
+    <section class="card" id="turn-action-consistency">
+      <h2>Turn Action Consistency</h2>
+      <div class="grid">
+        <div class="metric"><strong>Checked</strong><span>{esc(turn_action_consistency.get("checked_count"))}</span></div>
+        <div class="metric"><strong>Mismatches</strong><span>{esc(turn_action_consistency.get("mismatch_count"))}</span></div>
+        <div class="metric"><strong>Mismatch Rate</strong><span>{esc(turn_action_consistency.get("mismatch_rate"))}</span></div>
+        <div class="metric"><strong>Repaired</strong><span>{esc(turn_action_consistency.get("repaired_count"))}</span></div>
+        <div class="metric"><strong>Unrepaired</strong><span>{esc(turn_action_consistency.get("unrepaired_count"))}</span></div>
+      </div>
+      <h3>Fields</h3>
+      <pre>{esc(json.dumps(turn_action_consistency.get("by_field", {}), ensure_ascii=False, indent=2, default=str))}</pre>
+      <h3>Examples</h3>
+      <pre>{esc(json.dumps(turn_action_consistency.get("examples", []), ensure_ascii=False, indent=2, default=str))}</pre>
+    </section>
+    """
+
+    # N116.13.3: keep the canonical report artifact-first, but restore the
+    # rich report presentation layer.  Earlier N116.12/N116.13 fixes made the
+    # HTML safe by rendering from final normalized transcript rows, but the
+    # report lost the styled Chronicle layout.  Keep this builder self-contained
+    # so both autoplay-campaign-report.html and autoplay-campaign-report-rich.html
+    # are visually rich while still using final_transcript_rows as the source of
+    # truth for the visible turn timeline.
+    turns_executed = esc(final_summary.get("turns_executed") or len(transcript_rows))
+    requested_turns = esc(final_summary.get("requested_turns") or final_summary.get("turns_requested") or "")
+    session_id = esc(final_summary.get("session_id") or "")
+    health = _safe_dict(final_summary.get("autoplay_health"))
+    health_ok = "OK" if bool(health.get("ok", final_summary.get("ok", True))) else "Needs Review"
+    quality = _safe_dict(final_summary.get("quality_gate_summary"))
+    quality_ok = "OK" if bool(quality.get("ok", True)) else "Needs Review"
+    performance = _safe_dict(
+        final_summary.get("performance_seconds_summary")
+        or final_summary.get("performance")
+        or final_summary.get("performance_budget_summary")
+    )
+
+    summary_cards_html = f"""
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Autoplay Campaign Report</p>
+        <h1>Campaign Chronicle</h1>
+        <p class="subtitle">Rich report rendered from final normalized transcript rows, with diagnostic sections preserved.</p>
+      </div>
+      <div class="hero-grid">
+        <div class="stat"><span>Turns</span><strong>{turns_executed}{"/" + requested_turns if requested_turns else ""}</strong></div>
+        <div class="stat"><span>Health</span><strong>{health_ok}</strong></div>
+        <div class="stat"><span>Quality</span><strong>{quality_ok}</strong></div>
+        <div class="stat"><span>Session</span><strong>{session_id}</strong></div>
+      </div>
+    </section>
+    <section class="card" id="summary">
+      <h2>Run Summary</h2>
+      <div class="grid metrics-grid">
+        <div class="metric"><strong>Turns Executed</strong><span>{turns_executed}</span></div>
+        <div class="metric"><strong>Requested Turns</strong><span>{requested_turns}</span></div>
+        <div class="metric"><strong>Health</strong><span>{health_ok}</span></div>
+        <div class="metric"><strong>Quality Gates</strong><span>{quality_ok}</span></div>
+      </div>
+      <details>
+        <summary>Performance / Health Details</summary>
+        <pre>{esc(json.dumps({"autoplay_health": health, "performance": performance, "quality_gate_summary": quality}, ensure_ascii=False, indent=2, default=str))}</pre>
+      </details>
+    </section>
+    """
+
+    css = """
+    <style>
+      :root {
+        --bg: #11100f;
+        --panel: #1b1815;
+        --panel-2: #241f1a;
+        --ink: #f2e8d5;
+        --muted: #b9aa91;
+        --line: rgba(242, 232, 213, 0.16);
+        --accent: #d8a64c;
+        --accent-2: #9ec6ad;
+        --danger: #e18b78;
+        --shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(216,166,76,0.16), transparent 34rem),
+          radial-gradient(circle at 85% 10%, rgba(158,198,173,0.12), transparent 28rem),
+          var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .layout { width: min(1320px, calc(100vw - 40px)); margin: 0 auto; padding: 28px 0 64px; }
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 12px 20px;
+        margin: 0 -20px 24px;
+        background: rgba(17, 16, 15, 0.86);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(12px);
+      }
+      nav a {
+        display: inline-flex;
+        padding: 8px 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.035);
+        color: var(--ink);
+        font-size: 0.9rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+        gap: 22px;
+        align-items: stretch;
+        margin-bottom: 24px;
+        padding: 30px;
+        border: 1px solid rgba(216,166,76,0.24);
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(36,31,26,0.96), rgba(27,24,21,0.92));
+        box-shadow: var(--shadow);
+      }
+      .eyebrow { margin: 0 0 8px; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.78rem; }
+      h1 { margin: 0; font-size: clamp(2.1rem, 4vw, 4rem); line-height: 1; }
+      h2 { margin: 0 0 14px; font-size: 1.45rem; }
+      h3 { margin: 0 0 8px; }
+      .subtitle { max-width: 760px; color: var(--muted); font-size: 1.05rem; }
+      .hero-grid, .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+      .stat, .metric {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.045);
+      }
+      .stat span, .metric strong { display: block; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; }
+      .stat strong, .metric span { display: block; margin-top: 4px; color: var(--ink); font-size: 1.15rem; font-weight: 760; overflow-wrap: anywhere; }
+      .card, .rpg-promoted-section {
+        margin: 22px 0;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(36,31,26,0.96), rgba(27,24,21,0.96));
+        box-shadow: var(--shadow);
+      }
+      .muted { color: var(--muted); }
+      .turn-card {
+        margin: 14px 0;
+        padding: 18px;
+        border: 1px solid rgba(242,232,213,0.13);
+        border-left: 4px solid var(--accent);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.035);
+      }
+      .turn-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+      .player-action, .narration, .npc-line {
+        margin: 10px 0;
+        padding: 11px 13px;
+        border-radius: 14px;
+        background: rgba(0,0,0,0.16);
+        border: 1px solid rgba(242,232,213,0.08);
+      }
+      .npc-line { border-left: 3px solid var(--accent-2); }
+      .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(242,232,213,0.16);
+        background: rgba(216,166,76,0.11);
+        color: var(--ink);
+        font-size: 0.78rem;
+      }
+      .quality { background: rgba(158,198,173,0.12); }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 620px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(242,232,213,0.12);
+        background: rgba(0,0,0,0.28);
+        color: #eadfc8;
+      }
+      details {
+        margin-top: 12px;
+        padding: 12px;
+        border: 1px solid rgba(242,232,213,0.12);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.025);
+      }
+      summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+      @media (max-width: 820px) {
+        .layout { width: min(100vw - 24px, 1320px); padding-top: 18px; }
+        .hero { grid-template-columns: 1fr; padding: 22px; }
+        nav { margin-left: -12px; margin-right: -12px; }
+      }
+    </style>
+    """
+
+    return f"""
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Autoplay Campaign Report</title>
+      {css}
+    </head>
+    <body>
+    <div class="layout">
+      <nav>
+        <a href="#summary">Summary</a>
+        <a href="#final-transcript-timeline">Final Transcript</a>
+        <a href="#faction-consequences">Faction Consequences</a>
+        <a href="#npc-reactions">NPC Reactions</a>
+        <a href="#dialogue-relevance">Dialogue Relevance</a>
+        <a href="#turn-action-consistency">Turn Action Consistency</a>
+      </nav>
+      {summary_cards_html}
+      {transcript_timeline_html}
+      {faction_consequence_html}
+      {npc_reaction_html}
+      {dialogue_relevance_html}
+      {turn_action_consistency_html}
+    </div>
+    </body>
+    </html>
+    """
+
+
+def _safe_lower_text(value: Any) -> str:
+    return _safe_str(value).lower()
+
+
+def _profile_reference_terms(profile: Dict[str, Any]) -> List[str]:
+    profile = _safe_dict(profile)
+    terms: List[str] = []
+    arc_stage = _safe_str(profile.get("arc_stage"))
+    if arc_stage and arc_stage != "stable":
+        terms.append(arc_stage.replace("_", " "))
+    axes = _safe_dict(profile.get("axes"))
+    for axis, value in axes.items():
+        try:
+            if abs(int(value or 0)) >= 2:
+                terms.append(str(axis).replace("_", " "))
+        except Exception:
+            continue
+    for key in ("memories", "future_hooks", "world_signals", "semantic_intents", "milestones"):
+        for item in _safe_list(profile.get(key))[-4:]:
+            item = _safe_dict(item)
+            summary = _safe_str(item.get("summary"))
+            if summary:
+                # Keep short keyword-ish fragments. This is only a diagnostic,
+                # not a hard correctness validator.
+                for token in summary.replace(".", " ").replace(",", " ").split():
+                    token = token.strip().lower()
+                    if len(token) >= 5 and token not in {"player", "about", "later", "would", "could"}:
+                        terms.append(token)
+                break
+    deduped: List[str] = []
+    seen = set()
+    for term in terms:
+        marker = term.lower()
+        if marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(term)
+    return deduped[:12]

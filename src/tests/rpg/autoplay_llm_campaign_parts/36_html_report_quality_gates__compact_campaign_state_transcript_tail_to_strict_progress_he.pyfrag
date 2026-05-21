@@ -1,0 +1,331 @@
+
+
+def _compact_campaign_state_transcript_tail(
+    transcript: List[Dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for row in _safe_list(transcript)[-max(1, int(limit or 12)):]:
+        row = _safe_dict(row)
+        rows.append(
+            {
+                "turn": row.get("turn") or row.get("turn_index"),
+                "turn_index": row.get("turn_index") or row.get("turn"),
+                "player_action": _safe_str(row.get("player_action") or row.get("action")),
+                "narration": _safe_str(row.get("narration")),
+                "objective_progression": _safe_dict(row.get("objective_progression")),
+            }
+        )
+    return rows
+
+
+def _strict_progress_health_summary_from_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+    behavioral_metrics = _safe_dict(behavioral.get("metrics"))
+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    progression_changed_count = int(behavioral_metrics.get("progression_changed_count") or 0)
+    unique_progression_node_count = int(behavioral_metrics.get("unique_progression_node_count") or 0)
+    arc_complete = bool(arc_summary.get("arc_complete"))
+
+    progress_quality = _safe_dict(_safe_dict(summary.get("health")).get("progress_quality"))
+    metrics = _safe_dict(progress_quality.get("metrics"))
+    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    violations = []
+    for quest in _safe_list(quest_progress_summary.get("quests")):
+        quest = _safe_dict(quest)
+        if _safe_str(quest.get("status")) != "active":
+            continue
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        if not objectives:
+            continue
+        has_completed = any(
+            bool(row.get("completed")) or _safe_str(row.get("status")) == "completed"
+            for row in objectives
+        )
+        has_next = any(
+            not bool(row.get("completed")) and _safe_str(row.get("status")) != "completed"
+            for row in objectives
+        )
+        if has_completed and not has_next:
+            violations.append(
+                {
+                    "quest_id": _safe_str(quest.get("quest_id")),
+                    "title": _safe_str(quest.get("title")),
+                }
+            )
+    graph_progress_ok = (
+        progression_changed_count >= 3
+        and unique_progression_node_count >= 3
+    ) or arc_complete
+    ok = bool(progress_quality.get("ok", True)) and (bool(objective_progression.get("ok")) or not summary.get("requested_turns"))
+    ok = ok and not violations
+    ok = bool(ok or graph_progress_ok)
+    return {
+        "ok": ok,
+        "graph_progress_ok": graph_progress_ok,
+        "progression_changed_count": progression_changed_count,
+        "unique_progression_node_count": unique_progression_node_count,
+        "scenario_arc_complete": arc_complete,
+        "metrics": metrics,
+        "objective_progression_present": bool(objective_progression.get("ok")),
+        "no_completed_without_next_objective_violations": violations[:20],
+        "quest_count": int(quest_progress_summary.get("quest_count") or 0),
+    }
+
+
+def _pre_turn_advisory_promotion_performance_summary(
+    background_drain_events: List[Dict[str, Any]],
+    *,
+    slow_events: List[Dict[str, Any]],
+    auto_disabled: bool,
+    disable_reason: str,
+) -> Dict[str, Any]:
+    promotion_results = []
+    for row in _safe_list(background_drain_events):
+        result = _safe_dict(_safe_dict(row).get("pre_turn_advisory_promotion_result"))
+        if result:
+            promotion_results.append(result)
+    elapsed_values = [float(_safe_dict(row).get("elapsed_ms") or 0.0) for row in promotion_results]
+    fast_count = sum(1 for row in promotion_results if bool(_safe_dict(row).get("fast_pre_turn")))
+    slow_guard_ms = 5000
+    for row in promotion_results:
+        if int(_safe_dict(row).get("slow_guard_ms") or 0) > 0:
+            slow_guard_ms = int(_safe_dict(row).get("slow_guard_ms") or 0)
+            break
+    max_elapsed_ms = max(elapsed_values) if elapsed_values else 0.0
+    slow_event_count = len(_safe_list(slow_events))
+    ok = slow_event_count == 0 and max_elapsed_ms <= slow_guard_ms
+    return {
+        "ok": ok,
+        "count": len(promotion_results),
+        "promotion_count": len(promotion_results),
+        "fast_count": fast_count,
+        "fast_path_count": fast_count,
+        "slow_guard_ms": slow_guard_ms,
+        "slow_event_count": slow_event_count,
+        "auto_disabled": bool(auto_disabled),
+        "disable_reason": _safe_str(disable_reason),
+        "max_elapsed_ms": max_elapsed_ms,
+        "avg_elapsed_ms": round(sum(elapsed_values) / len(elapsed_values), 3) if elapsed_values else 0.0,
+        "slow_events": _safe_list(slow_events)[-10:],
+    }
+
+
+def _merge_preserving_runtime_state(
+    previous_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    previous_state = _safe_dict(previous_state)
+    runtime_state = _safe_dict(runtime_state)
+    if not previous_state:
+        return deepcopy(runtime_state)
+    if not runtime_state:
+        return deepcopy(previous_state)
+
+    merged = deepcopy(previous_state)
+    for key, value in runtime_state.items():
+        if key == "campaign_calendar":
+            merged[key] = _merge_campaign_calendar(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        if key == "player_journal":
+            merged[key] = _merge_player_journal(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        existing_value = merged.get(key)
+        if value in (None, {}, []) and existing_value not in (None, {}, []):
+            continue
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _merge_preserving_runtime_state(_safe_dict(merged.get(key)), _safe_dict(value))
+            continue
+        merged[key] = deepcopy(value)
+    return merged
+
+
+def _merge_turn_result_authoritative_state(
+    runtime_state: Dict[str, Any],
+    turn_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    turn_result = _safe_dict(turn_result)
+    candidates = [
+        _safe_dict(turn_result.get("simulation_state")),
+        _safe_dict(turn_result.get("runtime_state")),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("simulation_state")),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("runtime_state")),
+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("simulation_state")),
+        _safe_dict(_safe_dict(turn_result.get("resolved_result")).get("runtime_state")),
+    ]
+    merged = dict(runtime_state)
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate = _authoritative_progression_state(
+            merged,
+            candidate,
+            reason="before_turn_result_merge",
+            turn_index=int(merged.get("turn_index") or 0),
+        )
+        merged = _merge_preserving_runtime_state(merged, candidate)
+        merged = _authoritative_progression_state(
+            runtime_state,
+            merged,
+            reason="after_turn_result_merge",
+            turn_index=int(merged.get("turn_index") or 0),
+        )
+    return _authoritative_progression_state(
+        runtime_state,
+        merged,
+        reason="turn_result_merge_final",
+        turn_index=int(merged.get("turn_index") or 0),
+    )
+
+
+def _reconcile_and_apply_handoff(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    state = deepcopy(_safe_dict(runtime_state))
+    try:
+        from app.rpg.objectives.reconciliation import (
+            reconcile_objective_progression_into_quests,
+        )
+
+        reconciled = _safe_dict(reconcile_objective_progression_into_quests(state))
+        state = _safe_dict(reconciled.get("state")) or state
+    except Exception:
+        pass
+    try:
+        from app.rpg.objectives.handoff import apply_generic_quest_handoff
+
+        handoff = _safe_dict(apply_generic_quest_handoff(state))
+        state = _safe_dict(handoff.get("state")) or state
+    except Exception:
+        pass
+    return state
+
+
+def _commit_campaign_state_authority(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_record: Dict[str, Any] | None = None,
+    transcript_tail: List[Dict[str, Any]] | None = None,
+    transcript: List[Dict[str, Any]] | None = None,
+    phase: str = "turn",
+) -> Dict[str, Any]:
+    try:
+        from app.rpg.campaign_state.authority_commit import commit_campaign_state
+
+        result = commit_campaign_state(
+            runtime_state,
+            turn_record=turn_record,
+            transcript_tail=transcript_tail,
+            transcript=transcript,
+            phase=phase,
+            performance_budget_ms=25,
+        )
+        committed = _safe_dict(result.get("state")) or runtime_state
+        return _authoritative_progression_state(
+            runtime_state,
+            committed,
+            reason="after_campaign_state_commit",
+            turn_index=int(committed.get("turn_index") or 0),
+        )
+    except Exception as exc:
+        errors = runtime_state.setdefault("campaign_state_commit_errors", [])
+        if isinstance(errors, list):
+            errors.append(f"{type(exc).__name__}: {exc}")
+            del errors[:-20]
+        return runtime_state
+
+
+def _runtime_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        row_turn_result = _safe_dict(row.get("turn_result"))
+        manual_summary = _safe_dict(row_turn_result.get("manual_turn_summary"))
+        row_runtime_state = (
+            _safe_dict(row.get("final_authoritative_state"))
+            or _safe_dict(row.get("authoritative_state"))
+            or _safe_dict(row.get("after_state"))
+            or _safe_dict(row.get("runtime_state"))
+            or _safe_dict(row_turn_result.get("runtime_state"))
+            or _safe_dict(manual_summary.get("runtime_state"))
+            or _safe_dict(manual_summary.get("simulation_state"))
+            or _safe_dict(row_turn_result.get("simulation_state"))
+        )
+        if row_runtime_state:
+            merged = _merge_preserving_runtime_state(merged, row_runtime_state)
+    return merged
+
+
+def _guard_quest_summary_source(summary: Dict[str, Any], runtime_state: Dict[str, Any]) -> None:
+    quest_summary = _safe_dict(summary.get("quest_progress_summary"))
+    runtime_state = _safe_dict(runtime_state)
+    derived_source = _safe_str(_quest_progress_summary_from_state(runtime_state).get("source"))
+    current_source = _safe_str(quest_summary.get("source"))
+    if not current_source or current_source == "latest_state.quest_progress":
+        quest_summary["source"] = derived_source or "latest_state"
+    summary["quest_progress_summary"] = quest_summary
+
+
+def _sync_hundred_turn_validation_classification(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    readiness_classification = _safe_str(readiness.get("classification"))
+    summary["hundred_turn_validation_classification"] = (
+        readiness_classification
+        if readiness_classification
+        else "content_exhausted_waiting_for_next_graph_pack"
+        if _content_exhausted_waiting_for_next_graph_pack(summary)
+        else "active_or_incomplete"
+    )
+
+
+def _background_result_timing_all_jobs_safely_attached(summary: Dict[str, Any]) -> bool:
+    """Return true when background lag is only a provider-throughput issue.
+
+    A late attach should still be visible in diagnostics, but it should not fail
+    product correctness when every submitted job attached, no jobs failed or
+    orphaned, and selected output grounding stayed safe.
+    """
+    summary = _safe_dict(summary)
+    timing = _safe_dict(summary.get("background_result_timing_summary"))
+    if not timing:
+        return False
+
+    submitted = int(timing.get("jobs_submitted") or 0)
+    attached_total = int(timing.get("jobs_attached_total") or 0)
+    failed = int(timing.get("jobs_failed") or timing.get("failed_count") or 0)
+    orphaned = int(timing.get("orphaned_result_count") or timing.get("orphaned_results") or 0)
+    pending = int(timing.get("pending_result_count") or timing.get("pending_results") or 0)
+    attached_final = int(timing.get("jobs_attached_final") or 0)
+    selected_grounding = _safe_dict(summary.get("selected_output_grounding_health"))
+
+    all_attached = submitted <= 0 or attached_total >= submitted
+    grounding_safe = not selected_grounding or bool(selected_grounding.get("ok", True))
+    return bool(
+        all_attached
+        and attached_total > 0
+        and failed == 0
+        and orphaned == 0
+        and pending == 0
+        and grounding_safe
+        and attached_final < attached_total
+    )
+
+
+def _annotate_background_result_timing_perf_warning(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    timing = _safe_dict(summary.get("background_result_timing_summary"))
+    if not timing:
+        return
+    if not _background_result_timing_all_jobs_safely_attached(summary):
+        return
+    max_lag = int(timing.get("max_attach_lag_turns") or 0)
+    limit = int(summary.get("background_result_max_turn_lag") or 5)
+    timing["provider_backlog_perf_warning"] = bool(max_lag > limit or not bool(timing.get("ok", True)))
+    timing["provider_backlog_perf_warning_reason"] = (
+        "all_background_jobs_attached_safely_but_provider_queue_lag_exceeded_strict_turn_lag_budget"
+    )
+    timing["correctness_ok_despite_lag"] = True
+    summary["background_result_timing_summary"] = timing

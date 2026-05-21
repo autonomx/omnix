@@ -1,0 +1,448 @@
+
+
+def _bounded_transcript_row(
+    row: Dict[str, Any],
+    *,
+    max_row_bytes: int = 50000,
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    slim = _slim_transcript_row(row, max_row_bytes=max_row_bytes)
+
+    if _json_size_bytes(slim) <= max_row_bytes:
+        return slim
+
+    # Last-resort bounded fallback. Keep identity/action/debug pointers only.
+    bounded = {
+        "turn_index": row.get("turn_index") or row.get("turn"),
+        "turn_id": row.get("turn_id"),
+        "player_action": row.get("player_action"),
+        "canonical_turn_action": row.get("canonical_turn_action"),
+        "actual_sent_action": row.get("actual_sent_action"),
+        "action_category": row.get("action_category"),
+        "presentation_status": row.get("presentation_status"),
+        "narration": _safe_str(
+            row.get("selected_narration")
+            or row.get("display_narration")
+            or row.get("narration")
+        )[:2000],
+        "npc": _safe_dict(row.get("npc")),
+        "dialogue_presentation_compatibility": row.get("dialogue_presentation_compatibility"),
+        "dialogue_action_relevance": row.get("dialogue_action_relevance"),
+        "direct_graph_action_completion": row.get("direct_graph_action_completion"),
+        "mechanics_covered_this_turn": row.get("mechanics_covered_this_turn"),
+        "background_presentation_result": row.get("background_presentation_result"),
+        "turn_presentation_identity": row.get("turn_presentation_identity"),
+        "row_truncated": True,
+        "original_row_bytes_estimate": _json_size_bytes(row),
+    }
+
+    if _json_size_bytes(bounded) <= max_row_bytes:
+        return bounded
+
+    # Extreme fallback.
+    return {
+        "turn_index": row.get("turn_index") or row.get("turn"),
+        "turn_id": row.get("turn_id"),
+        "player_action": _safe_str(row.get("player_action"))[:1000],
+        "canonical_turn_action": _safe_str(row.get("canonical_turn_action"))[:1000],
+        "action_category": row.get("action_category"),
+        "presentation_status": row.get("presentation_status"),
+        "row_truncated": True,
+        "row_extreme_truncated": True,
+        "original_row_bytes_estimate": _json_size_bytes(row),
+    }
+
+
+def _build_bounded_transcript_rows(
+    transcript_rows: List[Dict[str, Any]],
+    *,
+    max_row_bytes: int = 50000,
+) -> List[Dict[str, Any]]:
+    return [
+        _bounded_transcript_row(_safe_dict(row), max_row_bytes=max_row_bytes)
+        for row in _safe_list(transcript_rows)
+    ]
+
+
+def _normalize_transcript_rows(transcript: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+
+    for idx, row_any in enumerate(_safe_list(transcript)):
+        row = _safe_dict(row_any)
+
+        if not row:
+            row = {
+                "turn_index": idx + 1,
+                "empty_transcript_row_repaired": True,
+                "presentation_status": "missing_row",
+            }
+
+        if not row.get("turn_index"):
+            row["turn_index"] = idx + 1
+
+        rows.append(row)
+
+    return rows
+
+
+def _transcript_rows_are_all_null(transcript: Any) -> bool:
+    rows = _safe_list(transcript)
+    return bool(rows) and all(row is None for row in rows)
+
+
+def _build_final_transcript_artifact_rows(
+    *,
+    transcript: Any,
+    transcript_artifacts: Any,
+    summary: Dict[str, Any],
+    session_id: str,
+) -> List[Dict[str, Any]]:
+    transcript_rows = _safe_list(transcript)
+    if transcript_rows and not _transcript_rows_are_all_null(transcript_rows):
+        rows = transcript_rows
+        source = "in_memory_transcript"
+    else:
+        artifact_rows = _safe_list(_safe_dict(transcript_artifacts).get("transcript"))
+        if artifact_rows and not _transcript_rows_are_all_null(artifact_rows):
+            rows = artifact_rows
+            source = "transcript_artifacts"
+        else:
+            rows = [
+                {
+                    "turn_index": turn_index,
+                    "empty_transcript_row_repaired": True,
+                    "transcript_source": "reconstructed_minimal_from_summary",
+                    "presentation_status": "unknown_legacy_transcript_missing",
+                }
+                for turn_index in range(1, int(summary.get("turns_executed") or 0) + 1)
+            ]
+            source = "reconstructed_minimal_from_summary"
+
+    rows = _normalize_transcript_rows(rows)
+
+    final_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        row_d = _ensure_turn_presentation_identity_on_row(
+            row,
+            session_id=_safe_str(session_id),
+        )
+        row_d["transcript_artifact_source"] = _safe_str(
+            row_d.get("transcript_artifact_source") or source
+        )
+        row_d["validated_presentation_intent"] = _validate_presentation_intent_for_row(
+            row_d,
+            action_text=_safe_str(row_d.get("canonical_turn_action") or row_d.get("player_action")),
+        )
+        row_d["validated_presentation_category"] = _safe_str(
+            _safe_dict(row_d.get("validated_presentation_intent")).get("primary_category")
+        )
+        row_d = _sync_public_presentation_intent_from_validated(row_d)
+        row_d = _sync_dialogue_action_relevance_with_validated_presentation(row_d)
+        row_d = _apply_validated_presentation_category_to_relevance(row_d)
+        row_d["current_action_response"] = _row_current_action_response_focus(row_d)
+        row_d["npc_response_architecture"] = _build_npc_response_architecture_for_row(row_d)
+        row_d["npc_response_architecture_persisted"] = True
+        row_d = _sync_current_action_response_from_npc_response_architecture(row_d)
+        row_d["npc_line_addresses_current_action"] = bool(
+            _safe_dict(row_d.get("current_action_response")).get("npc_line_addresses_current_action")
+        )
+        row_d = _apply_npc_line_current_action_relevance_gate(row_d)
+        row_d = _apply_presentation_meta_leakage_gate(row_d)
+        # N116.9.3: the meta-leakage gate can rebuild the architecture packet
+        # without re-syncing current_action_response.  Final transcript rows are
+        # the artifact truth source, so force the sync as the last row-level
+        # diagnostic step before persistence.
+        row_d = _sync_current_action_response_from_npc_response_architecture(row_d)
+        final_rows.append(row_d)
+
+    _assert_transcript_artifact_rows_not_null(final_rows)
+    return final_rows
+
+
+def _ensure_turn_presentation_identity_on_row(
+    row: Dict[str, Any], *, session_id: str
+) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    if not row.get("turn_presentation_identity"):
+        row["turn_presentation_identity"] = _build_turn_presentation_identity(
+            session_id=session_id,
+            turn_index=int(row.get("turn_index") or 0),
+            canonical_turn_action=_safe_str(
+                row.get("canonical_turn_action") or row.get("player_action")
+            ),
+        )
+    return row
+
+
+
+def _assert_transcript_artifact_consistency(
+    *,
+    final_transcript_rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+) -> None:
+    quality = _safe_dict(summary.get("transcript_artifact_quality_summary"))
+
+    if not final_transcript_rows:
+        raise RuntimeError("transcript_artifact_consistency_failed:no_final_rows")
+
+    if int(quality.get("row_count") or 0) != len(final_transcript_rows):
+        raise RuntimeError(
+            "transcript_artifact_consistency_failed:"
+            f"quality_row_count={quality.get('row_count')}:"
+            f"actual={len(final_transcript_rows)}"
+        )
+
+    if int(quality.get("null_row_count") or 0) != 0:
+        raise RuntimeError("transcript_artifact_consistency_failed:null_rows")
+
+    if int(quality.get("empty_row_count") or 0) != 0:
+        raise RuntimeError("transcript_artifact_consistency_failed:empty_rows")
+
+
+def _build_transcript_artifact_quality_summary(
+    transcript_rows: Any,
+) -> Dict[str, Any]:
+    rows = _safe_list(transcript_rows)
+
+    null_row_count = sum(1 for row in rows if row is None)
+    empty_row_count = sum(1 for row in rows if not _safe_dict(row))
+    reconstructed_minimal_count = sum(
+        1
+        for row in rows
+        if _safe_dict(row).get("transcript_source")
+        == "reconstructed_minimal_from_summary"
+    )
+
+    by_source: Dict[str, int] = {}
+    for row in rows:
+        source = _safe_str(_safe_dict(row).get("transcript_artifact_source")) or "unknown"
+        by_source[source] = by_source.get(source, 0) + 1
+
+    return {
+        "format_version": "transcript_artifact_quality_v2",
+        "row_count": len(rows),
+        "null_row_count": null_row_count,
+        "empty_row_count": empty_row_count,
+        "reconstructed_minimal_count": reconstructed_minimal_count,
+        "has_full_rows": any(
+            bool(_safe_dict(row).get("player_action"))
+            for row in rows
+        ),
+        "rows_with_turn_identity": sum(
+            1
+            for row in rows
+            if _safe_dict(row).get("turn_presentation_identity")
+        ),
+        "by_source": by_source,
+        "ok": null_row_count == 0 and empty_row_count == 0,
+    }
+
+
+def _build_transcript_size_summary(
+    *,
+    final_transcript_rows: List[Dict[str, Any]],
+    bounded_transcript_rows: List[Dict[str, Any]],
+    slim_transcript_rows: List[Dict[str, Any]],
+    wrote_full_transcript: bool,
+) -> Dict[str, Any]:
+    full_bytes = _json_size_bytes(final_transcript_rows)
+    bounded_bytes = _json_size_bytes(bounded_transcript_rows)
+    slim_bytes = _json_size_bytes(slim_transcript_rows)
+
+    row_sizes = [_json_size_bytes(row) for row in _safe_list(bounded_transcript_rows)]
+    slim_null_count = sum(1 for row in _safe_list(slim_transcript_rows) if row is None)
+    bounded_null_count = sum(1 for row in _safe_list(bounded_transcript_rows) if row is None)
+
+    return {
+        "format_version": "transcript_size_summary_v1",
+        "ok": slim_null_count == 0 and bounded_null_count == 0,
+        "row_count": len(_safe_list(final_transcript_rows)),
+        "full_transcript_json_bytes_estimate": full_bytes,
+        "bounded_transcript_json_bytes_estimate": bounded_bytes,
+        "slim_transcript_json_bytes_estimate": slim_bytes,
+        "wrote_full_transcript": bool(wrote_full_transcript),
+        "max_bounded_row_bytes": max(row_sizes) if row_sizes else 0,
+        "avg_bounded_row_bytes": (
+            sum(row_sizes) / len(row_sizes)
+            if row_sizes
+            else 0.0
+        ),
+        "slim_transcript_null_count": slim_null_count,
+        "bounded_transcript_null_count": bounded_null_count,
+        "bounded_rows_truncated_count": sum(
+            1 for row in _safe_list(bounded_transcript_rows)
+            if _safe_dict(row).get("row_truncated")
+        ),
+        "bounded_rows_extreme_truncated_count": sum(
+            1 for row in _safe_list(bounded_transcript_rows)
+            if _safe_dict(row).get("row_extreme_truncated")
+        ),
+    }
+
+
+def _assert_bounded_transcript_artifacts_valid(
+    *,
+    bounded_transcript_rows: List[Dict[str, Any]],
+    slim_transcript_rows: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+) -> None:
+    bounded_null_indexes = [
+        idx for idx, row in enumerate(_safe_list(bounded_transcript_rows))
+        if row is None or not _safe_dict(row)
+    ]
+    slim_null_indexes = [
+        idx for idx, row in enumerate(_safe_list(slim_transcript_rows))
+        if row is None or not _safe_dict(row)
+    ]
+
+    if bounded_null_indexes:
+        raise RuntimeError(
+            "bounded_transcript_artifact_rows_null:"
+            f"count={len(bounded_null_indexes)}:"
+            f"indexes={bounded_null_indexes[:20]}"
+        )
+
+    if slim_null_indexes:
+        raise RuntimeError(
+            "slim_transcript_artifact_rows_null:"
+            f"count={len(slim_null_indexes)}:"
+            f"indexes={slim_null_indexes[:20]}"
+        )
+
+    size_summary = _safe_dict(summary.get("transcript_size_summary"))
+    if int(size_summary.get("slim_transcript_null_count") or 0) != 0:
+        raise RuntimeError("slim_transcript_size_summary_reports_null_rows")
+
+    if int(size_summary.get("bounded_transcript_null_count") or 0) != 0:
+        raise RuntimeError("bounded_transcript_size_summary_reports_null_rows")
+
+
+def _assert_transcript_artifact_rows_not_null(transcript: Any) -> None:
+    rows = _safe_list(transcript)
+    null_indexes = [
+        idx
+        for idx, row in enumerate(rows)
+        if row is None
+    ]
+
+    if null_indexes:
+        raise RuntimeError(
+            "transcript_artifact_rows_null:"
+            f"count={len(null_indexes)}:"
+            f"indexes={null_indexes[:20]}"
+        )
+
+    empty_indexes = [
+        idx
+        for idx, row in enumerate(rows)
+        if not _safe_dict(row)
+    ]
+
+    if empty_indexes:
+        raise RuntimeError(
+            "transcript_artifact_rows_empty:"
+            f"count={len(empty_indexes)}:"
+            f"indexes={empty_indexes[:20]}"
+        )
+
+
+def _plain_text_from_html_report(html_text: Any) -> str:
+    import html as _html
+    import re as _re
+
+    text = _safe_str(html_text)
+    text = _re.sub(r"<script.*?</script>", " ", text, flags=_re.IGNORECASE | _re.DOTALL)
+    text = _re.sub(r"<style.*?</style>", " ", text, flags=_re.IGNORECASE | _re.DOTALL)
+    text = _re.sub(r"<[^>]+>", " ", text)
+    return _re.sub(r"\s+", " ", _html.unescape(text)).strip()
+
+
+def _html_escape(value: Any) -> str:
+    import html as _html
+    return _html.escape(_safe_str(value), quote=True)
+
+
+def _final_row_visible_narration(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    return (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+
+
+def _final_row_npc_speaker_and_line(row: Dict[str, Any]) -> Tuple[str, str]:
+    row = _safe_dict(row)
+    npc_payload = _safe_dict(row.get("npc"))
+    speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+    line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+    return speaker, line
+
+
+
+def _llm_prompt_debug_details_html(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    payload = {
+        "llm_prompt_contract": _safe_dict(row.get("llm_prompt_contract")),
+        "prompt_contract_ack": _safe_dict(row.get("prompt_contract_ack")),
+        "llm_prompt_debug": _safe_dict(row.get("llm_prompt_debug")),
+        "llm_fallback_diagnostics": _safe_dict(row.get("llm_fallback_diagnostics")),
+        "npc_line_source": _safe_str(row.get("npc_line_source")),
+        "npc_line_validation_passed": row.get("npc_line_validation_passed"),
+        "npc_line_rejection_reason": _safe_str(row.get("npc_line_rejection_reason")),
+    }
+    if not any(value not in ({}, [], "", None) for value in payload.values()):
+        return ""
+    return (
+        '<details class="llm-prompt-diagnostics">'
+        '<summary>LLM prompt + fallback diagnostics</summary>'
+        '<pre>'
+        + _html_escape(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        + '</pre>'
+        '</details>'
+    )
+
+
+def _infer_llm_fallback_source(result: Dict[str, Any]) -> str:
+    result = _safe_dict(result)
+    source = _safe_str(result.get("source"))
+    if source == "provider_combined_background_llm":
+        return "llm_valid"
+    if source in {"combined_background_llm_fallback", "combined_background_llm_error"}:
+        return "deterministic_fallback"
+    if not result:
+        return "no_background_provider_result"
+    return "provider_unavailable_or_invalid"
+
+
+def _build_llm_fallback_diagnostics_from_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    existing = _safe_dict(result.get("llm_fallback_diagnostics"))
+    if existing:
+        return existing
+    diagnostics = _safe_dict(result.get("diagnostics"))
+    fallback_source = _infer_llm_fallback_source(result)
+    reason = (
+        _safe_str(diagnostics.get("fallback_reason"))
+        or _safe_str(diagnostics.get("provider_payload_error"))
+        or _safe_str(result.get("error"))
+        or fallback_source
+    )
+    known_valid_reasons = {
+        "llm_valid",
+        "provider_missing_or_not_preferred",
+        "provider_missing_or_unsupported",
+        "provider_empty_combined_response",
+        "provider_combined_json_missing_useful_content",
+        "provider_combined_unavailable",
+        "no_background_provider_result",
+    }
+    return {
+        "format_version": "llm_fallback_diagnostics_v1",
+        "source": _safe_str(result.get("source")),
+        "fallback_source": fallback_source,
+        "reason": reason,
+        "valid_known_reason": fallback_source == "llm_valid" or reason in known_valid_reasons,
+        "provider_payload_error": _safe_str(diagnostics.get("provider_payload_error")),
+    }

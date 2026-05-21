@@ -1,0 +1,451 @@
+
+
+def _behavioral_autoplay_eval_summary(
+    transcript: List[Dict[str, Any]],
+    latest_state: Dict[str, Any],
+    *,
+    requested_turns: int,
+) -> Dict[str, Any]:
+    try:
+        from tests.rpg.autoplay.behavioral_eval import evaluate_behavioral_autoplay
+
+        return evaluate_behavioral_autoplay(
+            transcript,
+            latest_state,
+            requested_turns=requested_turns,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "gates": {},
+            "failed_gates": ["behavioral_eval_exception"],
+        }
+
+
+def _build_strict_progress_quality_certification(
+    *,
+    transcript: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    min_meaningful_progress_rate: float,
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    transcript = _safe_list(transcript)
+
+    # Initialize metrics
+    meaningful_turns = 0
+    no_change_turns = 0
+    churn_only_turns = 0
+    current_no_change_streak = 0
+    current_churn_only_streak = 0
+    max_no_change_streak = 0
+    max_churn_only_streak = 0
+    total_turns = len(transcript)
+
+    # Process each row in transcript
+    for row in transcript:
+        row = _safe_dict(row)
+        scenario_progress_changed = _row_has_scenario_progress(row)
+
+        if scenario_progress_changed:
+            meaningful_turns += 1
+            current_no_change_streak = 0
+            current_churn_only_streak = 0
+            max_no_change_streak = max(max_no_change_streak, current_no_change_streak)
+            max_churn_only_streak = max(max_churn_only_streak, current_churn_only_streak)
+            continue
+
+        # TODO: Add logic for no-change and churn-only detection here
+        # For now, assume all non-scenario-progress rows are no-change
+        no_change_turns += 1
+        current_no_change_streak += 1
+        max_no_change_streak = max(max_no_change_streak, current_no_change_streak)
+
+    # Add aggregate fallback from behavioral eval metrics
+    behavioral = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+    behavioral_metrics = _safe_dict(behavioral.get("metrics"))
+    progression_changed_count = int(behavioral_metrics.get("progression_changed_count") or 0)
+    unique_progression_node_count = int(behavioral_metrics.get("unique_progression_node_count") or 0)
+    requested_turns = int(
+        summary.get("requested_turns")
+        or summary.get("effective_turns")
+        or len(transcript)
+        or 0
+    )
+
+    if progression_changed_count > meaningful_turns:
+        meaningful_turns = progression_changed_count
+    if unique_progression_node_count > meaningful_turns:
+        meaningful_turns = unique_progression_node_count
+
+    meaningful_progress_rate = meaningful_turns / max(1, total_turns)
+    scenario_progress_satisfies_requested = bool(
+        requested_turns > 0
+        and (
+            progression_changed_count >= requested_turns
+            or unique_progression_node_count >= requested_turns
+            or meaningful_turns >= requested_turns
+        )
+    )
+
+    # Determine gates and ok status
+    failed_gates = []
+    if meaningful_progress_rate < min_meaningful_progress_rate:
+        failed_gates.append("meaningful_progress_rate_below_threshold")
+    if no_change_turns > total_turns * 0.5:  # Example threshold
+        failed_gates.append("no_change_turns_above_threshold")
+    if churn_only_turns > total_turns * 0.5:  # Example threshold
+        failed_gates.append("churn_only_turns_above_threshold")
+    if max_no_change_streak > 10:  # Example threshold
+        failed_gates.append("no_change_streak_above_threshold")
+    if max_churn_only_streak > 10:  # Example threshold
+        failed_gates.append("churn_only_streak_above_threshold")
+
+    # Patch gates if scenario progress satisfies requested
+    if scenario_progress_satisfies_requested:
+        failed_gates = [
+            gate
+            for gate in failed_gates
+            if gate not in {
+                "meaningful_progress_rate_below_threshold",
+                "no_change_turns_above_threshold",
+                "churn_only_turns_above_threshold",
+                "no_change_streak_above_threshold",
+                "churn_only_streak_above_threshold",
+            }
+        ]
+
+    ok = bool(
+        scenario_progress_satisfies_requested
+        or (meaningful_progress_rate >= min_meaningful_progress_rate and not failed_gates)
+    )
+
+    return {
+        "ok": ok,
+        "failed_gates": failed_gates,
+        "meaningful_turns": meaningful_turns,
+        "no_change_turns": no_change_turns,
+        "churn_only_turns": churn_only_turns,
+        "meaningful_progress_rate": meaningful_progress_rate,
+        "max_no_change_streak": max_no_change_streak,
+        "max_churn_only_streak": max_churn_only_streak,
+        "scenario_progress_satisfies_requested": scenario_progress_satisfies_requested,
+        "progression_changed_count": progression_changed_count,
+        "unique_progression_node_count": unique_progression_node_count,
+        "requested_turns": requested_turns,
+    }
+
+
+def _autoplay_report_action_type(player_action: str) -> str:
+    text = " ".join(str(player_action or "").lower().strip().split())
+    if any(word in text for word in ["ask", "talk", "tell", "speak", "question", "report", "explain", "share", "approach"]):
+        return "social"
+    return "other"
+
+
+def _digest_counts(value: Dict[str, Any]) -> Dict[str, int]:
+    return _safe_dict(state_digest(_safe_dict(value)).get("counts"))
+
+
+def _baseline_mismatch_warning(
+    *,
+    expected_state: Dict[str, Any],
+    actual_before_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    expected_counts = _digest_counts(expected_state)
+    actual_counts = _digest_counts(actual_before_state)
+    mismatch_keys = sorted(
+        key
+        for key in set(expected_counts) | set(actual_counts)
+        if expected_counts.get(key) != actual_counts.get(key)
+    )
+    return {
+        "ok": not mismatch_keys,
+        "mismatch_keys": mismatch_keys,
+        "expected_counts": expected_counts,
+        "actual_counts": actual_counts,
+    }
+
+
+def _safe_str(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _merge_artifact_paths(*path_maps: Any) -> Dict[str, str]:
+    merged: Dict[str, str] = {}
+
+    for raw in path_maps:
+        for key, value in _safe_dict(raw).items():
+            key_s = str(key) if key is not None else ""
+            value_s = str(value) if value is not None else ""
+            if key_s and value_s:
+                merged[key_s] = value_s
+
+    return merged
+
+
+def _normalize_turn_action_text(value: Any) -> str:
+    text = _safe_str(value).strip().lower()
+    text = " ".join(text.split())
+    if text.endswith("."):
+        text = text[:-1].strip()
+    return text
+
+
+def _action_texts_consistent(left: Any, right: Any) -> bool:
+    left_n = _normalize_turn_action_text(left)
+    right_n = _normalize_turn_action_text(right)
+
+    if not left_n and not right_n:
+        return True
+
+    if not left_n or not right_n:
+        return False
+
+    if left_n == right_n:
+        return True
+
+    # Allow minor wrapping, but not unrelated actions.
+    if left_n in right_n and len(left_n) >= 16:
+        return True
+    if right_n in left_n and len(right_n) >= 16:
+        return True
+
+    return False
+
+
+def _action_text_contains_terms(action_text: Any, terms: Any) -> bool:
+    text = _normalize_turn_action_text(action_text)
+    if not text:
+        return False
+
+    for term in _safe_list(terms):
+        term_n = _normalize_turn_action_text(term)
+        if term_n and term_n in text:
+            return True
+
+    return False
+
+
+def _graph_action_terms(action: Any) -> List[str]:
+    action = _safe_dict(action)
+    terms: List[str] = []
+
+    for key in ("action_terms", "match_terms", "terms", "aliases"):
+        for value in _safe_list(action.get(key)):
+            value_s = _safe_str(value)
+            if value_s:
+                terms.append(value_s)
+
+    for key in ("command", "suggested_action", "summary", "title", "id", "action_id"):
+        value = _safe_str(action.get(key))
+        if value:
+            terms.append(value)
+
+    return terms
+
+
+def _selected_command_matches_graph_action(command: Any, action: Any) -> bool:
+    command_s = _safe_str(command)
+    action = _safe_dict(action)
+
+    if not command_s or not action:
+        return False
+
+    action_id = _graph_action_id(action)
+    if action_id and _normalize_turn_action_text(action_id).replace("_", " ") in _normalize_turn_action_text(command_s):
+        return True
+
+    command_value = _safe_str(
+        action.get("command")
+        or action.get("suggested_action")
+        or action.get("player_action")
+    )
+    if command_value and _action_texts_consistent(command_s, command_value):
+        return True
+
+    terms = _graph_action_terms(action)
+    return _action_text_contains_terms(command_s, terms)
+
+
+def _assert_no_mechanics_forced_action_override(
+    *,
+    row: Dict[str, Any],
+    selected_action_before_coverage: str,
+    selected_action_after_coverage: str,
+) -> None:
+    before = _safe_str(selected_action_before_coverage)
+    after = _safe_str(selected_action_after_coverage)
+    forced = _safe_dict(row.get("mechanics_forced_action"))
+
+    if forced.get("forced") is True:
+        raise RuntimeError(
+            "mechanics_forced_action_override_forbidden:"
+            f"mechanic={forced.get('mechanic')};"
+            f"before={before!r};after={after!r};"
+            f"forced_action={forced.get('action')!r}"
+        )
+
+    if before and after and not _action_texts_consistent(before, after):
+        raise RuntimeError(
+            "player_action_mutated_by_coverage:"
+            f"before={before!r};after={after!r}"
+        )
+
+
+def _detect_canonical_source_inversion(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+
+    original = _safe_str(row.get("original_player_action") or row.get("visible_player_action"))
+    current = _safe_str(row.get("player_action"))
+    canonical = _safe_str(row.get("canonical_turn_action"))
+
+    if original and canonical and not _action_texts_consistent(original, canonical):
+        return {
+            "ok": False,
+            "reason": "canonical_action_source_inversion",
+            "original_player_action": original,
+            "canonical_turn_action": canonical,
+            "current_player_action": current,
+        }
+
+    return {
+        "ok": True,
+        "reason": "",
+        "original_player_action": original,
+        "canonical_turn_action": canonical,
+        "current_player_action": current,
+    }
+
+
+def _choose_authoritative_turn_action(
+    row: Dict[str, Any],
+    *,
+    proposed_canonical_turn_action: str = "",
+) -> str:
+    row = _safe_dict(row)
+
+    forced = _safe_dict(row.get("mechanics_forced_action"))
+    if forced.get("forced") is True:
+        # This should no longer happen. Keep source-of-truth stable and let the
+        # final guard fail the run rather than accepting a post-hoc forced action.
+        row["mechanics_forced_action_override_error"] = {
+            "forced_action": forced.get("action"),
+            "mechanic": forced.get("mechanic"),
+        }
+
+    # Highest priority: the action that was actually selected/sent this turn.
+    # These fields should be populated at command selection / resolver input time.
+    for key in (
+        "actual_sent_action",
+        "resolver_input_action",
+        "selected_player_action",
+        "selected_command",
+        "original_player_action",
+        "visible_player_action",
+        "player_action",
+    ):
+        value = _safe_str(row.get(key))
+        if value:
+            return value
+
+    result = _safe_dict(row.get("result"))
+    for key in (
+        "actual_sent_action",
+        "resolver_input_action",
+        "selected_player_action",
+        "player_action",
+        "input",
+    ):
+        value = _safe_str(result.get(key))
+        if value:
+            return value
+
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    for key in (
+        "actual_sent_action",
+        "resolver_input_action",
+        "selected_player_action",
+        "player_action",
+        "input",
+    ):
+        value = _safe_str(turn_contract.get(key))
+        if value:
+            return value
+
+    # Last resort only. Do not prefer this over visible/player/resolver fields.
+    return _safe_str(proposed_canonical_turn_action or row.get("canonical_turn_action"))
+
+
+def _extract_turn_action_candidates(row: Dict[str, Any]) -> Dict[str, str]:
+    row = _safe_dict(row)
+
+    candidates: Dict[str, str] = {}
+
+    for key in (
+        "canonical_turn_action",
+        "player_action",
+        "command",
+        "raw_command",
+        "resolver_action",
+        "action_input",
+        "input",
+    ):
+        value = _safe_str(row.get(key))
+        if value:
+            candidates[key] = value
+
+    progress_quality = _safe_dict(row.get("progress_quality"))
+    progress_action = _safe_str(progress_quality.get("player_action"))
+    if progress_action:
+        candidates["progress_quality.player_action"] = progress_action
+
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    contract_action = _safe_str(
+        turn_contract.get("player_action")
+        or turn_contract.get("action")
+        or turn_contract.get("input")
+    )
+    if contract_action:
+        candidates["turn_contract.action"] = contract_action
+
+    result = _safe_dict(row.get("result"))
+    result_action = _safe_str(
+        result.get("player_action")
+        or result.get("action")
+        or result.get("input")
+    )
+    if result_action:
+        candidates["result.action"] = result_action
+
+    return candidates
+
+
+def _build_turn_action_consistency(
+    *,
+    row: Dict[str, Any],
+    canonical_turn_action: str,
+) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    canonical = _safe_str(canonical_turn_action or row.get("canonical_turn_action") or row.get("player_action"))
+    candidates = _extract_turn_action_candidates(row)
+
+    mismatches: Dict[str, Dict[str, str]] = {}
+
+    for key, value in candidates.items():
+        if key == "canonical_turn_action":
+            continue
+        if not _action_texts_consistent(canonical, value):
+            mismatches[key] = {
+                "expected": canonical,
+                "actual": value,
+            }
+
+    return {
+        "ok": not mismatches,
+        "canonical_turn_action": canonical,
+        "candidate_count": len(candidates),
+        "mismatch_count": len(mismatches),
+        "mismatches": mismatches,
+        "candidates": candidates,
+    }
