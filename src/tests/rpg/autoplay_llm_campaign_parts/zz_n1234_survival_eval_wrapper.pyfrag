@@ -1,0 +1,19 @@
+# N123.4 late eval wrapper.
+#
+# Filename intentionally sorts after numeric compatibility fragments like
+# 99_n1223_*.pyfrag.  The main N123.4 metrics helper may load earlier because
+# lexical sorting puts 100_* before 99_*, so this fragment re-wraps the final
+# evaluation helper after every compatibility wrapper is in place.
+
+_N1234_LATE_EVAL_PREV = globals().get("_build_100_turn_evaluation_summary")
+
+
+if callable(_N1234_LATE_EVAL_PREV) and callable(globals().get("_attach_survival_report_metrics")):
+    def _build_100_turn_evaluation_summary(*args, **kwargs):
+        result = _N1234_LATE_EVAL_PREV(*args, **kwargs)
+        if isinstance(result, dict) and "survival_pressure_relief_summary" in result:
+            return result
+        transcript = kwargs.get("transcript")
+        if transcript is None and len(args) >= 5:
+            transcript = args[4]
+        return _attach_survival_report_metrics(result, _n1234_list(transcript))
