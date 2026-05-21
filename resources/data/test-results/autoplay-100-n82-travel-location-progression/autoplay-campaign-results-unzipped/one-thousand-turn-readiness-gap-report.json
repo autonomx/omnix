@@ -8,8 +8,8 @@
   "one_thousand_turn_blocked_reasons": [
     "memory_aging_real",
     "arc_faction_compaction_real",
-    "economy_long_term_sinks_real",
-    "combat_rounds_real"
+    "npc_goal_agency_real",
+    "economy_long_term_sinks_real"
   ],
   "one_thousand_turn_hard_blockers": [],
   "gates": {
@@ -103,16 +103,23 @@
       "source_artifact": "npc-agency-summary.json"
     },
     "npc_goal_agency_real": {
-      "ok": true,
+      "ok": false,
       "severity": "advisory",
       "value": {
-        "fully_agentic_npc_count": 24,
+        "explicit_agency_event_count": 0,
+        "real_agency_event_count": 0,
+        "fully_agentic_npc_count": 0,
         "partial_agentic_npc_count": 0,
-        "candidate_event_count": 100,
-        "missing_real_agency_parts": []
+        "schedule_event_count": 32,
+        "missing_real_agency_parts": [
+          "explicit_npc_agency_events",
+          "goal_or_intent",
+          "autonomous_npc_action",
+          "consequence_or_state_change"
+        ]
       },
       "expected": "NPCs pursue autonomous goals, not only schedule/memory events",
-      "message": "Real NPC goal agency evidence is present.",
+      "message": "Real NPC goal agency requires explicit autonomous NPC agency events with goal, action, and consequence evidence.",
       "source": "npc-goal-agency-summary.json",
       "source_artifact": "npc-goal-agency-summary.json"
     },
@@ -156,21 +163,19 @@
       "source_artifact": "combat-lifecycle-summary.json"
     },
     "combat_rounds_real": {
-      "ok": false,
+      "ok": true,
       "severity": "advisory",
       "value": {
-        "real_round_event_count": 0,
-        "real_attack_event_count": 578,
-        "real_damage_event_count": 170,
-        "real_resolution_event_count": 48,
+        "real_round_event_count": 1,
+        "real_attack_event_count": 805,
+        "real_damage_event_count": 302,
+        "real_resolution_event_count": 45,
         "direct_graph_combat_count": 4,
-        "direct_graph_only": true,
-        "missing_real_lifecycle_parts": [
-          "round_or_initiative_events"
-        ]
+        "direct_graph_only": false,
+        "missing_real_lifecycle_parts": []
       },
       "expected": "initiative/rounds plus injury/resolution lifecycle are exercised",
-      "message": "Real combat lifecycle evidence requires round/initiative, damage/HP, and resolution events.",
+      "message": "Real combat lifecycle evidence is present.",
       "source": "real-combat-lifecycle-summary.json",
       "source_artifact": "real-combat-lifecycle-summary.json"
     },
@@ -206,11 +211,11 @@
         "ok": true,
         "budget_1000_turn_bytes": 786432000,
         "turns_sampled": 100,
-        "operational_bytes_sampled": 3033226,
-        "operational_bytes_per_turn": 30332.26,
-        "operational_projected_1000_turn_bytes": 30332260,
-        "full_debug_bytes_sampled": 334137723,
-        "full_debug_projected_1000_turn_bytes": 3341377230,
+        "operational_bytes_sampled": 3024458,
+        "operational_bytes_per_turn": 30244.58,
+        "operational_projected_1000_turn_bytes": 30244580,
+        "full_debug_bytes_sampled": 346442152,
+        "full_debug_projected_1000_turn_bytes": 3464421520,
         "monolithic_full_transcript_written": false,
         "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
       },
@@ -228,8 +233,8 @@
     "economy_pressure_foundation": true,
     "economy_long_term_sinks_real": false,
     "combat_coverage_present": true,
-    "combat_rounds_real": false,
-    "transcript_growth_budget_ok": false
+    "combat_rounds_real": true,
+    "transcript_growth_budget_ok": true
   },
   "notes": [
     "This report is advisory for 100-turn runs and does not flip hundred_turn_readiness_summary.ok.",
@@ -242,14 +247,14 @@
     "memory_aging_real": "world-state-compression-summary.json",
     "arc_faction_compaction_real": "world-state-compression-summary.json + faction-consequence-summary.json",
     "npc_schedule_present": "npc-agency-summary.json",
-    "npc_goal_agency_real": "npc-agency-summary.json",
+    "npc_goal_agency_real": "npc-goal-agency-summary.json",
     "economy_pressure_foundation": "economy-pressure-summary.json",
     "economy_long_term_sinks_real": "economy-pressure-summary.json",
     "combat_coverage_present": "combat-lifecycle-summary.json",
-    "combat_rounds_real": "combat-lifecycle-summary.json",
+    "combat_rounds_real": "real-combat-lifecycle-summary.json",
     "faction_consequence_present": "faction-consequence-summary.json",
     "dialogue_repair_pressure_bounded": "dialogue-action-relevance-summary.json",
-    "transcript_growth_budget_projected_1000": "transcript-size-summary.json + final transcript rows"
+    "transcript_growth_budget_projected_1000": "transcript-size-summary.json + review-artifacts/index.json"
   },
   "source_consistency": {
     "format_version": "n11721_readiness_gap_source_consistency_v1",
@@ -267,5 +272,5 @@
   },
   "refreshed_before_artifact_write": true,
   "n118_real_combat_lifecycle_applied": true,
-  "n119_npc_goal_agency_applied": true
+  "n1193_strict_npc_goal_agency_applied": true
 }
