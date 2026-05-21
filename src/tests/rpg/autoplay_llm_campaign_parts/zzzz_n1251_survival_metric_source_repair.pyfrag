@@ -54,6 +54,22 @@ def _n1251_render_source_section(source_summary, gate):
 """.strip()
 
 
+def _n1251_insert_source_section(sections, source_section):
+    """Insert N125.1 before N123.4 so legacy tests keep N123.4 as the final section."""
+
+    clean_sections = [
+        section for section in _n1251_list(sections)
+        if _n1251_dict(section).get("id") != "n1251-survival-source"
+    ]
+    insert_at = len(clean_sections)
+    for index, section in enumerate(clean_sections):
+        if _n1251_dict(section).get("id") == "n1234-survival-pressure":
+            insert_at = index
+            break
+    clean_sections.insert(insert_at, source_section)
+    return clean_sections
+
+
 def _n1251_attach_source_repair(summary, transcript):
     base = dict(_n1251_dict(summary))
     transcript = _n1251_list(transcript)
@@ -76,15 +92,13 @@ def _n1251_attach_source_repair(summary, transcript):
     artifacts["survival-metric-source-summary.json"] = source_summary
     artifacts["survival-metric-source-gate.json"] = gate
     base["artifact_level_summaries"] = artifacts
-    sections = list(_n1251_list(base.get("report_sections")))
-    sections = [section for section in sections if _n1251_dict(section).get("id") != "n1251-survival-source"]
-    sections.append({
+    source_section = {
         "id": "n1251-survival-source",
         "title": "N125.1 Real Survival Metric Source Evidence",
         "html": _n1251_render_source_section(source_summary, gate),
         "source": "survival-metric-source-summary.json",
-    })
-    base["report_sections"] = sections
+    }
+    base["report_sections"] = _n1251_insert_source_section(base.get("report_sections"), source_section)
     return base
 
 
