@@ -1047,5 +1047,74 @@
     "world_signal_count": 5,
     "faction_count": 2,
     "npc_memory_event_count": 0
-  }
+  },
+  "n120_memory_arc_faction_compaction": {
+    "format_version": "n120_memory_arc_faction_compaction_summary_v1",
+    "ok": false,
+    "compression_tick_count": 100,
+    "memory_aging_ok": false,
+    "arc_faction_compaction_ok": false,
+    "memory_aging_count": 0,
+    "arc_compaction_count": 0,
+    "faction_compaction_count": 0,
+    "world_signal_expiry_count": 7,
+    "counts": {
+      "npc_memory_dropped_count": 0,
+      "npc_memory_summarized_count": 0,
+      "npc_memory_archived_count": 0,
+      "compacted_arc_count": 0,
+      "summarized_arc_count": 0,
+      "archived_arc_count": 0,
+      "compacted_faction_count": 0,
+      "summarized_faction_count": 0,
+      "pressure_event_summarized_count": 0,
+      "expired_world_signal_count": 7
+    },
+    "memory_events": [],
+    "arc_events": [],
+    "faction_events": [],
+    "world_signal_expiry_events": [
+      {
+        "turn": 58,
+        "expired_world_signal_count": 1
+      },
+      {
+        "turn": 64,
+        "expired_world_signal_count": 1
+      },
+      {
+        "turn": 70,
+        "expired_world_signal_count": 1
+      },
+      {
+        "turn": 76,
+        "expired_world_signal_count": 1
+      },
+      {
+        "turn": 88,
+        "expired_world_signal_count": 1
+      },
+      {
+        "turn": 94,
+        "expired_world_signal_count": 1
+      },
+      {
+        "turn": 100,
+        "expired_world_signal_count": 1
+      }
+    ],
+    "missing_real_memory_aging_parts": [
+      "npc_memory_dropped_count_or_summarized_count_or_archived_count"
+    ],
+    "missing_real_arc_faction_compaction_parts": [
+      "compacted_or_summarized_story_arc_history",
+      "compacted_or_summarized_faction_pressure_history"
+    ],
+    "policy": "Compression ticks and world-signal expiry alone do not satisfy 1000-turn memory/arc/faction compaction readiness. Gates require deterministic aging or summarization of old NPC memories and old arc/faction pressure history."
+  },
+  "memory_aging_ok": false,
+  "arc_faction_compaction_ok": false,
+  "memory_aging_count": 0,
+  "arc_compaction_count": 0,
+  "faction_compaction_count": 0
 }

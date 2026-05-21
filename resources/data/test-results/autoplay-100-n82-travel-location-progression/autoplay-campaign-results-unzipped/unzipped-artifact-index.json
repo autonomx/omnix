@@ -58,7 +58,7 @@
   "note": "Essential Git-review mirror with stable non-empty path metadata.",
   "ok": true,
   "recommended_git_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results-unzipped",
-  "skipped_member_count": 17878,
+  "skipped_member_count": 17860,
   "skipped_members_preview": [
     "review-artifacts/summary.json/keys/action_diversity_summary.json",
     "review-artifacts/summary.json/keys/action_diversity_thresholds.json",
@@ -129,6 +129,7 @@
     "review-artifacts/summary.json/keys/long_run_warning_summary.json",
     "review-artifacts/summary.json/keys/manual_turn_error_summary.json",
     "review-artifacts/summary.json/keys/mechanics_coverage_summary.json",
+    "review-artifacts/summary.json/keys/memory_arc_faction_compaction_summary.json",
     "review-artifacts/summary.json/keys/n11721_readiness_gap_source_consistency.json",
     "review-artifacts/summary.json/keys/n79_n81_status.json",
     "review-artifacts/summary.json/keys/narration_grounding_summary.json",
@@ -258,8 +259,7 @@
     "review-artifacts/real-combat-lifecycle-summary.json/keys/examples.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/format_version.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/missing_real_lifecycle_parts.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/ok.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/policy.json"
+    "review-artifacts/real-combat-lifecycle-summary.json/keys/ok.json"
   ],
   "stale_files_deleted_before_write": true,
   "zip_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results.zip"

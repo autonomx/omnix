@@ -67,27 +67,36 @@
       "severity": "advisory",
       "value": {
         "memory_aging_count": 0,
-        "npc_memory_dropped_count": null,
-        "npc_memory_summarized_count": null
+        "npc_memory_dropped_count": 0,
+        "npc_memory_summarized_count": 0,
+        "npc_memory_archived_count": 0,
+        "missing_real_memory_aging_parts": [
+          "npc_memory_dropped_count_or_summarized_count_or_archived_count"
+        ]
       },
       "expected": "old NPC memories are dropped or summarized by deterministic budget policy",
-      "message": "Memory aging is not yet proven; 1000-turn state may grow without bound.",
-      "source": "world-state-compression-summary.json",
-      "source_artifact": "world-state-compression-summary.json"
+      "message": "Memory aging is not yet proven; no NPC memories were dropped, archived, or summarized by deterministic policy.",
+      "source": "memory-arc-faction-compaction-summary.json",
+      "source_artifact": "memory-arc-faction-compaction-summary.json"
     },
     "arc_faction_compaction_real": {
       "ok": false,
       "severity": "advisory",
       "value": {
-        "compaction_count": 0,
-        "compacted_arc_count": null,
-        "compacted_faction_count": null,
-        "pressure_event_summarized_count": null
+        "arc_compaction_count": 0,
+        "faction_compaction_count": 0,
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "pressure_event_summarized_count": 0,
+        "missing_real_arc_faction_compaction_parts": [
+          "compacted_or_summarized_story_arc_history",
+          "compacted_or_summarized_faction_pressure_history"
+        ]
       },
       "expected": "old arc/faction/pressure history is compacted or summarized",
-      "message": "Arc/faction compaction is not yet proven for endurance runs.",
-      "source": "world-state-compression-summary.json + faction-consequence-summary.json",
-      "source_artifact": "world-state-compression-summary.json + faction-consequence-summary.json"
+      "message": "Arc/faction compaction is not yet proven; old arc/faction pressure history was not compacted or summarized.",
+      "source": "memory-arc-faction-compaction-summary.json",
+      "source_artifact": "memory-arc-faction-compaction-summary.json"
     },
     "npc_schedule_present": {
       "ok": true,
@@ -166,10 +175,10 @@
       "ok": true,
       "severity": "advisory",
       "value": {
-        "real_round_event_count": 20,
-        "real_attack_event_count": 576,
-        "real_damage_event_count": 2522,
-        "real_resolution_event_count": 47,
+        "real_round_event_count": 30,
+        "real_attack_event_count": 580,
+        "real_damage_event_count": 233,
+        "real_resolution_event_count": 45,
         "direct_graph_combat_count": 4,
         "direct_graph_only": false,
         "missing_real_lifecycle_parts": []
@@ -211,11 +220,11 @@
         "ok": true,
         "budget_1000_turn_bytes": 786432000,
         "turns_sampled": 100,
-        "operational_bytes_sampled": 3029906,
-        "operational_bytes_per_turn": 30299.06,
-        "operational_projected_1000_turn_bytes": 30299060,
-        "full_debug_bytes_sampled": 282262838,
-        "full_debug_projected_1000_turn_bytes": 2822628380,
+        "operational_bytes_sampled": 2993173,
+        "operational_bytes_per_turn": 29931.73,
+        "operational_projected_1000_turn_bytes": 29931730,
+        "full_debug_bytes_sampled": 280322808,
+        "full_debug_projected_1000_turn_bytes": 2803228080,
         "monolithic_full_transcript_written": false,
         "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
       },
@@ -234,7 +243,9 @@
     "economy_long_term_sinks_real": false,
     "combat_coverage_present": true,
     "combat_rounds_real": true,
-    "transcript_growth_budget_ok": true
+    "transcript_growth_budget_ok": true,
+    "memory_aging_real": false,
+    "arc_faction_compaction_real": false
   },
   "notes": [
     "This report is advisory for 100-turn runs and does not flip hundred_turn_readiness_summary.ok.",
@@ -244,8 +255,8 @@
   "source_fields_added": true,
   "source_map": {
     "compression_loop_present": "world-state-compression-summary.json",
-    "memory_aging_real": "world-state-compression-summary.json",
-    "arc_faction_compaction_real": "world-state-compression-summary.json + faction-consequence-summary.json",
+    "memory_aging_real": "memory-arc-faction-compaction-summary.json",
+    "arc_faction_compaction_real": "memory-arc-faction-compaction-summary.json",
     "npc_schedule_present": "npc-agency-summary.json",
     "npc_goal_agency_real": "npc-goal-agency-summary.json",
     "economy_pressure_foundation": "economy-pressure-summary.json",
@@ -272,5 +283,6 @@
   },
   "refreshed_before_artifact_write": true,
   "n118_real_combat_lifecycle_applied": true,
-  "n1193_strict_npc_goal_agency_applied": true
+  "n1193_strict_npc_goal_agency_applied": true,
+  "n120_memory_arc_faction_compaction_applied": true
 }
