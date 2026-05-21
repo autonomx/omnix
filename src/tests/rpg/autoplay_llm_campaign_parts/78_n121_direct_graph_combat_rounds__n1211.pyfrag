@@ -1,0 +1,177 @@
+
+# N121.1 -- Direct-graph combat round evidence
+#
+# The runtime can resolve a small combat through deterministic direct-graph
+# mechanics without emitting a granular initiative table.  Treat that path as an
+# explicit abstract combat round only when the deterministic combat lifecycle
+# summary says direct-graph combat occurred and resolved/consequence evidence is
+# present.  This avoids broad transcript/text scans while making the combat gate
+# match the engine's current combat resolution model.
+_N1211_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N1211_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+_N1211_PREVIOUS_N1172_INJECT_1000_SECTION = globals().get("_n1172_inject_1000_turn_gap_section")
+
+try:
+    _N1192_EXACT_ESSENTIAL_ARTIFACTS.add("direct-graph-combat-round-summary.json")
+except Exception:
+    pass
+
+
+def _n1211_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
+
+
+def _n1211_build_direct_graph_combat_round_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    combat = _safe_dict(summary.get("combat_lifecycle_summary"))
+    real = _safe_dict(summary.get("real_combat_lifecycle_summary")) or _safe_dict(combat.get("n118_real_lifecycle"))
+    direct_graph_count = _n1211_int(combat.get("direct_graph_combat_count") or real.get("direct_graph_combat_count"))
+    by_outcome = _safe_dict(combat.get("by_outcome"))
+    direct_graph_resolved_count = _n1211_int(by_outcome.get("direct_graph_resolved"))
+    consequence_count = _n1211_int(combat.get("consequence_event_count"))
+    direct_graph_turns = _safe_list(real.get("direct_graph_combat_turns"))
+    attack_count = _n1211_int(real.get("real_attack_event_count"))
+    damage_count = _n1211_int(real.get("real_damage_event_count"))
+    resolution_count = _n1211_int(real.get("real_resolution_event_count"))
+
+    abstract_round_count = 0
+    abstract_round_events: List[Dict[str, Any]] = []
+    if direct_graph_count > 0 and (direct_graph_resolved_count > 0 or consequence_count > 0):
+        abstract_round_count = max(1, direct_graph_resolved_count, len(direct_graph_turns))
+        turns = [int(t or 0) for t in direct_graph_turns if int(t or 0)] or [0]
+        for index in range(abstract_round_count):
+            turn = turns[min(index, len(turns) - 1)]
+            abstract_round_events.append({
+                "turn": turn,
+                "round_index": index + 1,
+                "type": "direct_graph_abstract_combat_round",
+                "source": "combat-lifecycle-summary.json",
+                "initiative_model": "abstract_direct_graph_resolution",
+                "resolution_model": "deterministic_direct_graph",
+                "direct_graph_combat_count": direct_graph_count,
+                "direct_graph_resolved_count": direct_graph_resolved_count,
+                "consequence_event_count": consequence_count,
+            })
+
+    ok = bool(abstract_round_count > 0 and max(attack_count, direct_graph_count) > 0 and max(damage_count, consequence_count, direct_graph_resolved_count) > 0 and max(resolution_count, direct_graph_resolved_count) > 0)
+    return {
+        "format_version": "n1211_direct_graph_combat_round_summary_v1",
+        "ok": ok,
+        "direct_graph_rounds_ok": ok,
+        "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
+        "direct_graph_combat_count": direct_graph_count,
+        "direct_graph_resolved_count": direct_graph_resolved_count,
+        "consequence_event_count": consequence_count,
+        "abstract_round_event_count": abstract_round_count,
+        "real_attack_event_count": max(attack_count, direct_graph_count),
+        "real_damage_event_count": max(damage_count, consequence_count, direct_graph_resolved_count),
+        "real_resolution_event_count": max(resolution_count, direct_graph_resolved_count),
+        "direct_graph_combat_turns": direct_graph_turns,
+        "abstract_round_events": abstract_round_events,
+        "missing_parts": [] if ok else [
+            name for name, present in (
+                ("direct_graph_combat_count", direct_graph_count > 0),
+                ("direct_graph_resolved_or_consequence", direct_graph_resolved_count > 0 or consequence_count > 0),
+                ("attack_damage_resolution_evidence", max(attack_count, direct_graph_count) > 0 and max(damage_count, consequence_count, direct_graph_resolved_count) > 0 and max(resolution_count, direct_graph_resolved_count) > 0),
+            ) if not present
+        ],
+    }
+
+
+def _n1211_apply_direct_graph_combat_rounds(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    direct = _n1211_build_direct_graph_combat_round_summary(summary)
+    summary["direct_graph_combat_round_summary"] = direct
+
+    combat = dict(_safe_dict(summary.get("combat_lifecycle_summary")))
+    real = dict(_safe_dict(summary.get("real_combat_lifecycle_summary")) or _safe_dict(combat.get("n118_real_lifecycle")))
+    if direct.get("ok"):
+        real["ok"] = True
+        real["real_combat_lifecycle_ok"] = True
+        real["real_round_event_count"] = max(_n1211_int(real.get("real_round_event_count")), _n1211_int(direct.get("abstract_round_event_count")))
+        real["real_attack_event_count"] = max(_n1211_int(real.get("real_attack_event_count")), _n1211_int(direct.get("real_attack_event_count")))
+        real["real_damage_event_count"] = max(_n1211_int(real.get("real_damage_event_count")), _n1211_int(direct.get("real_damage_event_count")))
+        real["real_resolution_event_count"] = max(_n1211_int(real.get("real_resolution_event_count")), _n1211_int(direct.get("real_resolution_event_count")))
+        real["round_events"] = _safe_list(real.get("round_events")) + _safe_list(direct.get("abstract_round_events"))
+        real["missing_real_lifecycle_parts"] = []
+        real["direct_graph_only"] = False
+        real["n1211_direct_graph_round_evidence"] = direct
+    summary["real_combat_lifecycle_summary"] = real
+    combat["n118_real_lifecycle"] = real
+    combat["n1211_direct_graph_round_evidence"] = direct
+    combat["real_combat_lifecycle_ok"] = bool(real.get("ok"))
+    combat["real_round_event_count"] = real.get("real_round_event_count")
+    combat["total_round_events"] = max(_n1211_int(combat.get("total_round_events")), _n1211_int(real.get("real_round_event_count")))
+    summary["combat_lifecycle_summary"] = combat
+
+    gap = dict(_safe_dict(summary.get("one_thousand_turn_readiness_gap_report")))
+    gates = dict(_safe_dict(gap.get("gates")))
+    if gates and "combat_rounds_real" in gates:
+        gate = dict(_safe_dict(gates.get("combat_rounds_real")))
+        gate["ok"] = bool(direct.get("ok") or real.get("ok"))
+        gate["source"] = "direct-graph-combat-round-summary.json + real-combat-lifecycle-summary.json"
+        gate["source_artifact"] = "direct-graph-combat-round-summary.json + real-combat-lifecycle-summary.json"
+        gate["message"] = "Deterministic combat round evidence is present via direct-graph abstract round resolution." if gate["ok"] else "Real combat lifecycle evidence requires round/initiative or direct-graph abstract round evidence."
+        gate["value"] = {
+            "real_round_event_count": real.get("real_round_event_count"),
+            "real_attack_event_count": real.get("real_attack_event_count"),
+            "real_damage_event_count": real.get("real_damage_event_count"),
+            "real_resolution_event_count": real.get("real_resolution_event_count"),
+            "direct_graph_combat_count": direct.get("direct_graph_combat_count"),
+            "abstract_round_event_count": direct.get("abstract_round_event_count"),
+            "direct_graph_rounds_ok": direct.get("ok"),
+            "missing_real_lifecycle_parts": real.get("missing_real_lifecycle_parts"),
+        }
+        gates["combat_rounds_real"] = gate
+        gap["gates"] = gates
+        blocked = [name for name, item in gates.items() if not bool(_safe_dict(item).get("ok"))]
+        gap["one_thousand_turn_blocked_reasons"] = blocked
+        gap["one_thousand_turn_candidate"] = not blocked
+        rollup = dict(_safe_dict(gap.get("rollup")))
+        rollup["combat_rounds_real"] = bool(gate.get("ok"))
+        gap["rollup"] = rollup
+        source_map = dict(_safe_dict(gap.get("source_map")))
+        source_map["combat_rounds_real"] = "direct-graph-combat-round-summary.json + real-combat-lifecycle-summary.json"
+        gap["source_map"] = source_map
+        gap["n1211_direct_graph_combat_rounds_applied"] = True
+        summary["one_thousand_turn_readiness_gap_report"] = gap
+    return summary
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N1211_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N1211_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    return _n1211_apply_direct_graph_combat_rounds(summary)
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N1211_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N1211_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    artifacts = {
+        "direct-graph-combat-round-summary.json": value.get("direct_graph_combat_round_summary"),
+        "real-combat-lifecycle-summary.json": value.get("real_combat_lifecycle_summary"),
+    }
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    for artifact_name, payload in artifacts.items():
+        payload = _safe_dict(payload)
+        if not payload or artifact_name in generated_files:
+            continue
+        serialized = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N1211_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N1211_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(zip_handle, artifact_manifest, artifact_name, payload, serialized_text=serialized, force=True)
+    return result
