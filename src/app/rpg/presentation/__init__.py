@@ -42,7 +42,7 @@ from .personality_state import (
 from .player_inspector import (
     build_player_inspector_overlay_payload,
 )
-from .runtime_bridge import (
+from .runtime_bridge_n1222 import (
     build_runtime_presentation_payload,
 )
 from .save_load_ux import (
