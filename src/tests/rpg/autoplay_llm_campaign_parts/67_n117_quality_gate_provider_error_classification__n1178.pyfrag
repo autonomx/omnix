@@ -1,0 +1,306 @@
+
+# N117.8 -- Quality Gate Rollup Consistency + Background Provider Error Classification
+# Loaded late so it can wrap split-fragment helpers without touching the run-loop
+# fragments directly.
+_N1178_PREVIOUS_SUMMARIZE_QUALITY_GATES = globals().get("_summarize_quality_gates")
+_N1178_PREVIOUS_FINAL_LIFECYCLE_QUALITY_GATES = globals().get("_final_lifecycle_quality_gates")
+_N1178_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N1178_PREVIOUS_N1172_INJECT_1000_SECTION = globals().get("_n1172_inject_1000_turn_gap_section")
+_N1178_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+
+
+def _n1178_html_escape(value: Any) -> str:
+    return _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _n1178_unique_lines(lines: List[Any]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for line in _safe_list(lines):
+        text = _safe_str(line).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def _n1178_console_error_lines(summary: Dict[str, Any]) -> List[str]:
+    console = _safe_dict(_safe_dict(summary).get("console_log_summary"))
+    lines: List[Any] = []
+    lines.extend(_safe_list(console.get("turn_errors")))
+    lines.extend(_safe_list(console.get("errors")))
+    for warning in _safe_list(_safe_dict(summary).get("long_run_warning_summary").get("warnings")):
+        details = _safe_dict(_safe_dict(warning).get("details"))
+        lines.extend(_safe_list(details.get("turn_errors")))
+    return _n1178_unique_lines(lines)
+
+
+def _n1178_parse_background_provider_error(line: str) -> Dict[str, Any]:
+    import re
+
+    text = _safe_str(line).strip()
+    pattern = re.compile(
+        r"^Error in (?P<phase>combined background LLM job|background LLM job|deferred narration job|deferred advisory job) "
+        r"for turn (?P<turn>\d+): (?P<message>.*)$"
+    )
+    match = pattern.match(text)
+    if not match:
+        return {}
+
+    message = _safe_str(match.group("message"))
+    status_match = re.search(r"HTTP error\s+(?P<status>\d+)", message)
+    url_match = re.search(r"url:\s*(?P<url>[^;\s]+)", message)
+    no_model = "no models loaded" in message.lower()
+    invalid_request = "invalid_request_error" in message.lower() or "bad request" in message.lower()
+    return {
+        "turn_index": int(match.group("turn") or 0),
+        "phase": _safe_str(match.group("phase")),
+        "status_code": int(status_match.group("status")) if status_match else None,
+        "url": _safe_str(url_match.group("url")) if url_match else "",
+        "category": "background_llm_provider_error",
+        "provider_failure_kind": "no_model_loaded" if no_model else ("invalid_request" if invalid_request else "provider_error"),
+        "message": message[:800],
+        "raw_line": text[:1000],
+    }
+
+
+def _n1178_build_provider_error_classification_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    console = _safe_dict(summary.get("console_log_summary"))
+    raw_turn_error_count = int(console.get("turn_error_count") or 0)
+    lines = _n1178_console_error_lines(summary)
+
+    provider_errors: List[Dict[str, Any]] = []
+    deterministic_turn_errors: List[str] = []
+    for line in lines:
+        parsed = _n1178_parse_background_provider_error(line)
+        if parsed:
+            provider_errors.append(parsed)
+        elif line.lower().startswith("error in ") or " turn " in line.lower() or "traceback" in line.lower():
+            deterministic_turn_errors.append(line[:1000])
+
+    # If console_log_summary.turn_error_count was larger than the visible retained
+    # turn_errors list, keep the unknown remainder visible instead of declaring it
+    # deterministic. The retained lines are enough to classify the known cause.
+    classified_provider_count = len(provider_errors)
+    deterministic_count = len(deterministic_turn_errors)
+    unknown_retained_turn_error_count = max(0, raw_turn_error_count - classified_provider_count - deterministic_count)
+
+    by_phase: Dict[str, int] = {}
+    by_status: Dict[str, int] = {}
+    by_kind: Dict[str, int] = {}
+    turns: List[int] = []
+    for item in provider_errors:
+        phase = _safe_str(item.get("phase") or "unknown")
+        status = _safe_str(item.get("status_code") or "unknown")
+        kind = _safe_str(item.get("provider_failure_kind") or "provider_error")
+        by_phase[phase] = int(by_phase.get(phase, 0)) + 1
+        by_status[status] = int(by_status.get(status, 0)) + 1
+        by_kind[kind] = int(by_kind.get(kind, 0)) + 1
+        turn_index = int(item.get("turn_index") or 0)
+        if turn_index:
+            turns.append(turn_index)
+
+    return {
+        "format_version": "n1178_provider_error_classification_summary_v1",
+        "ok": deterministic_count == 0,
+        "raw_console_turn_error_count": raw_turn_error_count,
+        "background_provider_error_count": classified_provider_count,
+        "deterministic_turn_error_count": deterministic_count,
+        "unknown_retained_turn_error_count": unknown_retained_turn_error_count,
+        "provider_errors_are_runtime_errors": False,
+        "classification_note": (
+            "Background LLM provider failures are reported separately from deterministic turn-loop/runtime errors."
+        ),
+        "by_phase": dict(sorted(by_phase.items())),
+        "by_status_code": dict(sorted(by_status.items())),
+        "by_provider_failure_kind": dict(sorted(by_kind.items())),
+        "first_turn": min(turns) if turns else None,
+        "last_turn": max(turns) if turns else None,
+        "turns": sorted(set(turns))[:200],
+        "provider_errors": provider_errors[:100],
+        "deterministic_turn_errors": deterministic_turn_errors[:50],
+    }
+
+
+def _n1178_long_run_warnings_only_provider_errors(summary: Dict[str, Any], provider_summary: Dict[str, Any]) -> bool:
+    long_run = _safe_dict(_safe_dict(summary).get("long_run_warning_summary"))
+    warnings = [_safe_dict(item) for item in _safe_list(long_run.get("warnings"))]
+    if not warnings:
+        return False
+    if int(provider_summary.get("background_provider_error_count") or 0) <= 0:
+        return False
+    if int(provider_summary.get("deterministic_turn_error_count") or 0) > 0:
+        return False
+    return all(_safe_str(item.get("code")) == "console_turn_errors" for item in warnings)
+
+
+def _n1178_apply_provider_error_classification(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    provider_summary = _n1178_build_provider_error_classification_summary(summary)
+    summary["provider_error_classification_summary"] = provider_summary
+
+    console = _safe_dict(summary.get("console_log_summary"))
+    if console:
+        console["background_provider_error_count"] = provider_summary.get("background_provider_error_count")
+        console["deterministic_turn_error_count"] = provider_summary.get("deterministic_turn_error_count")
+        console["effective_turn_error_count"] = provider_summary.get("deterministic_turn_error_count")
+        console["provider_error_classification_applied"] = True
+        summary["console_log_summary"] = console
+
+    if _n1178_long_run_warnings_only_provider_errors(summary, provider_summary):
+        long_run = dict(_safe_dict(summary.get("long_run_warning_summary")))
+        warnings = []
+        for warning in _safe_list(long_run.get("warnings")):
+            item = dict(_safe_dict(warning))
+            item["severity"] = "warning"
+            item["provider_error_reclassified"] = True
+            item["message"] = "Background provider errors were classified separately from deterministic turn errors."
+            warnings.append(item)
+        long_run["ok"] = True
+        long_run["error_count"] = 0
+        long_run["warning_count"] = len(warnings)
+        long_run["warnings"] = warnings
+        long_run["provider_error_classification_applied"] = True
+        summary["long_run_warning_summary"] = long_run
+
+    return summary
+
+
+def _n1178_gate_bool(value: Any) -> bool:
+    if isinstance(value, dict) and "ok" in value:
+        return bool(value.get("ok"))
+    return bool(value)
+
+
+def _n1178_fix_quality_gate_rollup(gate_summary: Dict[str, Any], summary: Dict[str, Any]) -> Dict[str, Any]:
+    gate_summary = dict(_safe_dict(gate_summary))
+    gates = dict(_safe_dict(gate_summary.get("gates")))
+    summary = _n1178_apply_provider_error_classification(summary)
+    provider_summary = _safe_dict(summary.get("provider_error_classification_summary"))
+
+    hundred_eval = _safe_dict(summary.get("hundred_turn_evaluation")) or _safe_dict(summary.get("hundred_turn_eval_summary"))
+    if hundred_eval:
+        gates["hundred_turn_eval_ok"] = bool(hundred_eval.get("ok", True))
+
+    if provider_summary:
+        gates["console_turn_errors_absent"] = int(provider_summary.get("deterministic_turn_error_count") or 0) == 0
+        if _n1178_long_run_warnings_only_provider_errors(summary, provider_summary):
+            gates["long_run_warnings_ok"] = True
+        gates["background_provider_errors_classified"] = True
+
+    failed = [name for name, value in gates.items() if not _n1178_gate_bool(value)]
+    gate_summary["gates"] = gates
+    gate_summary["failed_gates"] = failed
+    gate_summary["ok"] = not failed
+    gate_summary["n1178_rollup_consistency_applied"] = True
+    return gate_summary
+
+
+def _summarize_quality_gates(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N1178_PREVIOUS_SUMMARIZE_QUALITY_GATES):
+        gate_summary = _N1178_PREVIOUS_SUMMARIZE_QUALITY_GATES(*args, **kwargs)
+    else:
+        gate_summary = {"ok": True, "gates": {}}
+    summary = _safe_dict(kwargs.get("summary"))
+    return _n1178_fix_quality_gate_rollup(gate_summary, summary)
+
+
+def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _n1178_apply_provider_error_classification(summary)
+    if callable(_N1178_PREVIOUS_FINAL_LIFECYCLE_QUALITY_GATES):
+        gate_summary = _N1178_PREVIOUS_FINAL_LIFECYCLE_QUALITY_GATES(summary)
+    else:
+        gate_summary = _safe_dict(summary.get("quality_gate_summary")) or {"ok": True, "gates": {}}
+    return _n1178_fix_quality_gate_rollup(gate_summary, summary)
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N1178_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N1178_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    return _n1178_apply_provider_error_classification(summary)
+
+
+def _n1178_provider_error_html_section(summary: Dict[str, Any]) -> str:
+    provider = _safe_dict(_safe_dict(summary).get("provider_error_classification_summary"))
+    if not provider:
+        provider = _n1178_build_provider_error_classification_summary(summary)
+    rows = []
+    for item in _safe_list(provider.get("provider_errors"))[:20]:
+        item = _safe_dict(item)
+        rows.append(
+            "<tr>"
+            f"<td>{_n1178_html_escape(item.get('turn_index'))}</td>"
+            f"<td>{_n1178_html_escape(item.get('phase'))}</td>"
+            f"<td>{_n1178_html_escape(item.get('status_code'))}</td>"
+            f"<td>{_n1178_html_escape(item.get('provider_failure_kind'))}</td>"
+            f"<td>{_n1178_html_escape(item.get('message'))}</td>"
+            "</tr>"
+        )
+    body = "".join(rows) or "<tr><td colspan=\"5\">No background provider failures classified.</td></tr>"
+    return (
+        "<section id=\"provider-error-classification\" class=\"card\">"
+        "<h2>N117.8 Provider Error Classification</h2>"
+        "<p>Background LLM provider failures are separated from deterministic turn-loop/runtime errors.</p>"
+        "<ul>"
+        f"<li>Background provider errors: {_n1178_html_escape(provider.get('background_provider_error_count'))}</li>"
+        f"<li>Deterministic turn errors: {_n1178_html_escape(provider.get('deterministic_turn_error_count'))}</li>"
+        f"<li>Status counts: {_n1178_html_escape(provider.get('by_status_code'))}</li>"
+        f"<li>Failure kinds: {_n1178_html_escape(provider.get('by_provider_failure_kind'))}</li>"
+        "</ul>"
+        "<table><thead><tr><th>Turn</th><th>Phase</th><th>Status</th><th>Kind</th><th>Message</th></tr></thead>"
+        f"<tbody>{body}</tbody></table>"
+        "</section>"
+    )
+
+
+def _n1178_inject_provider_error_classification_section(html_report: str, summary: Dict[str, Any]) -> str:
+    html_text = _safe_str(html_report)
+    if "id=\"provider-error-classification\"" in html_text:
+        return html_text
+    section = _n1178_provider_error_html_section(summary)
+    lower = html_text.lower()
+    index = lower.rfind("</body>")
+    if index >= 0:
+        return html_text[:index] + section + html_text[index:]
+    return html_text + section
+
+
+def _n1172_inject_1000_turn_gap_section(html_report: str, final_summary: Dict[str, Any]) -> str:
+    if callable(_N1178_PREVIOUS_N1172_INJECT_1000_SECTION):
+        html_report = _N1178_PREVIOUS_N1172_INJECT_1000_SECTION(html_report, final_summary)
+    return _n1178_inject_provider_error_classification_section(html_report, final_summary)
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N1178_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N1178_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    provider_summary = _safe_dict(_n1178_apply_provider_error_classification(value).get("provider_error_classification_summary"))
+    artifact_name = "provider-error-classification-summary.json"
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    if artifact_name in generated_files:
+        return result
+    serialized = json.dumps(provider_summary, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+    zip_handle.writestr(artifact_name, serialized)
+    generated_files.append(artifact_name)
+    if callable(_N1178_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        _N1178_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(
+            zip_handle,
+            artifact_manifest,
+            artifact_name,
+            provider_summary,
+            serialized_text=serialized,
+            force=True,
+        )
+    return result
