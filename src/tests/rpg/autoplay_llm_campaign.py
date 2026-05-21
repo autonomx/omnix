@@ -10,6 +10,7 @@ semantics stay stable while future patches can target small logical files.
 from __future__ import annotations
 
 import linecache
+import sys
 from pathlib import Path
 from typing import Dict, List
 
@@ -49,16 +50,33 @@ def _load_autoplay_campaign_runtime() -> None:
         combined_filename,
     )
     chunk_globals: Dict[str, object] = globals()
+    original_name = chunk_globals.get("__name__", __name__)
+    # N118.3: fragment 66 historically contains an ``if __name__ == "__main__"``
+    # block.  After late fragments were added, that block exited before fragments
+    # 67+ loaded, so N117.8/N118/N118.1/N118.2 hooks never ran.  Execute the
+    # combined fragment source under an internal name, then call main() once from
+    # this wrapper after every fragment has loaded.
+    chunk_globals["__name__"] = "_autoplay_campaign_runtime"
     _RUNTIME_LOADED = True
-    exec(
-        compile(
-            combined_source,
-            combined_filename,
-            "exec",
-        ),
-        chunk_globals,
-        chunk_globals,
-    )
+    try:
+        exec(
+            compile(
+                combined_source,
+                combined_filename,
+                "exec",
+            ),
+            chunk_globals,
+            chunk_globals,
+        )
+    finally:
+        chunk_globals["__name__"] = original_name
 
 
 _load_autoplay_campaign_runtime()
+
+
+if __name__ == "__main__":
+    main_fn = globals().get("main")
+    if not callable(main_fn):
+        raise RuntimeError("autoplay_campaign_main_missing_after_fragment_load")
+    raise SystemExit(main_fn(sys.argv[1:]))
