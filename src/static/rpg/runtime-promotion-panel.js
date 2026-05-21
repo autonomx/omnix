@@ -55,31 +55,67 @@
 
     function normalizePayload(payload) {
         payload = safeObj(payload);
-        var presentation = safeObj(payload.presentation);
+        var result = safeObj(payload.result);
+        var presentation = safeObj(payload.presentation || result.presentation);
         var panel = safeObj(
             payload.runtime_promotion_panel
             || presentation.runtime_promotion_panel
-            || safeObj(payload.result).runtime_promotion_panel
+            || result.runtime_promotion_panel
         );
         var climate = safeObj(
             payload.climate_survival
             || payload.climate_survival_runtime_payload
             || presentation.climate_survival
+            || result.climate_survival
             || panel.climate_survival
         );
         var audit = safeObj(
             payload.runtime_promotion_summary
             || safeObj(payload.runtime_state).runtime_promotion_summary
+            || result.runtime_promotion_summary
             || panel.runtime_promotion
         );
+        var suggestions = safeArray(
+            payload.survival_suggested_actions
+            || presentation.survival_suggested_actions
+            || result.survival_suggested_actions
+            || safeObj(payload.turn_contract).survival_suggested_actions
+        );
+        if (!suggestions.length) {
+            suggestions = safeArray(safeObj(payload.turn_contract).suggested_actions)
+                .filter(function (item) { return safeObj(item).type === 'survival_relief'; });
+        }
         return {
             panel: panel,
             climate: climate,
             audit: audit,
+            suggestions: suggestions,
         };
     }
 
-    function buildClimateHtml(climate) {
+    function buildSuggestionsHtml(suggestions) {
+        suggestions = safeArray(suggestions);
+        if (!suggestions.length) return '';
+        var rows = suggestions.map(function (item) {
+            item = safeObj(item);
+            var label = safeStr(item.label || item.command || item.action_kind || 'Survival action');
+            var command = safeStr(item.command || '');
+            var reason = safeStr(item.reason || item.price_label || '');
+            return '' +
+                '<li class="rpg-runtime-suggestion-item">' +
+                    '<strong>' + escapeHtml(label) + '</strong>' +
+                    (command ? '<code>' + escapeHtml(command) + '</code>' : '') +
+                    (reason ? '<span>' + escapeHtml(reason) + '</span>' : '') +
+                '</li>';
+        }).join('');
+        return '' +
+            '<div class="rpg-runtime-suggestions">' +
+                '<div class="rpg-runtime-subtitle">Suggested relief</div>' +
+                '<ul>' + rows + '</ul>' +
+            '</div>';
+    }
+
+    function buildClimateHtml(climate, suggestions) {
         climate = safeObj(climate);
         var display = safeObj(climate.display);
         if (!climate.ok && !Object.keys(display).length) return '';
@@ -93,6 +129,7 @@
                     '<dt>Needs</dt><dd>' + escapeHtml(display.needs_label || safeObj(climate.survival).label || '') + '</dd>' +
                     '<dt>Warnings</dt><dd>' + escapeHtml(display.warnings_label || 'Stable') + '</dd>' +
                 '</dl>' +
+                buildSuggestionsHtml(suggestions) +
             '</div>';
     }
 
@@ -113,7 +150,7 @@
 
     function render(payload) {
         var normalized = normalizePayload(payload);
-        var html = buildClimateHtml(normalized.climate) + buildAuditHtml(normalized.audit);
+        var html = buildClimateHtml(normalized.climate, normalized.suggestions) + buildAuditHtml(normalized.audit);
         if (!html) return;
         var panel = ensurePanelRoot();
         panel.innerHTML = html;
@@ -127,9 +164,14 @@
             '.rpg-runtime-promotion-panel{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0;padding:0;}' +
             '.rpg-runtime-card{border:1px solid rgba(255,255,255,.14);background:rgba(10,16,28,.74);border-radius:12px;padding:10px 12px;color:inherit;min-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.18);}' +
             '.rpg-runtime-card-title{font-weight:700;margin-bottom:6px;}' +
+            '.rpg-runtime-subtitle{font-weight:700;margin:10px 0 4px;font-size:12px;opacity:.9;}' +
             '.rpg-runtime-card-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:0;font-size:12px;}' +
             '.rpg-runtime-card-grid dt{opacity:.72;}' +
             '.rpg-runtime-card-grid dd{margin:0;}' +
+            '.rpg-runtime-suggestions ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;}' +
+            '.rpg-runtime-suggestion-item{display:grid;gap:2px;border-top:1px solid rgba(255,255,255,.08);padding-top:6px;font-size:12px;}' +
+            '.rpg-runtime-suggestion-item code{white-space:normal;background:rgba(255,255,255,.08);border-radius:6px;padding:2px 5px;font-family:inherit;}' +
+            '.rpg-runtime-suggestion-item span{opacity:.72;}' +
             '.rpg-runtime-card--audit summary{cursor:pointer;font-weight:700;}' +
             '.rpg-runtime-audit-list{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px;font-size:12px;}' +
             '.rpg-runtime-audit-list li{display:flex;justify-content:space-between;gap:10px;border-top:1px solid rgba(255,255,255,.08);padding-top:4px;}' +
