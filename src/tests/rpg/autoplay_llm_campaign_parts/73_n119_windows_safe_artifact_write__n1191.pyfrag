@@ -1,0 +1,87 @@
+
+# N119.1 -- Windows-safe artifact writes
+#
+# Some Windows runs can complete the 100-turn loop and then fail while rewriting
+# autoplay-campaign-report.html with OSError(22).  The report path is valid, so
+# treat this as a stale/locked/odd filesystem edge and use an atomic-ish temp
+# replacement fallback for generated text artifacts.
+_N1191_ORIGINAL_PATH_WRITE_TEXT = Path.write_text
+
+
+def _n1191_extended_windows_path(path: Path) -> str:
+    text = _safe_str(path)
+    if os.name != "nt":
+        return text
+    try:
+        absolute = str(path.resolve())
+    except Exception:
+        absolute = str(path.absolute())
+    if absolute.startswith("\\\\?\\"):
+        return absolute
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute.lstrip("\\")
+    return "\\\\?\\" + absolute
+
+
+def _n1191_write_text_fallback(path: Path, data: Any, *, encoding: str = "utf-8", errors: Any = None, newline: Any = None) -> int:
+    path = Path(path)
+    text = _safe_str(data)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}-{int(time.time() * 1000)}")
+    open_kwargs: Dict[str, Any] = {"mode": "w", "encoding": encoding or "utf-8"}
+    if errors is not None:
+        open_kwargs["errors"] = errors
+    if newline is not None:
+        open_kwargs["newline"] = newline
+
+    temp_written = False
+    try:
+        with open(_n1191_extended_windows_path(temp_path), **open_kwargs) as handle:
+            written = handle.write(text)
+        temp_written = True
+        try:
+            os.replace(_n1191_extended_windows_path(temp_path), _n1191_extended_windows_path(path))
+        except OSError:
+            try:
+                if path.exists() and path.is_file():
+                    path.unlink()
+            except Exception:
+                pass
+            os.replace(_n1191_extended_windows_path(temp_path), _n1191_extended_windows_path(path))
+        return written
+    finally:
+        if temp_written and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+
+
+def _n1191_safe_path_write_text(self: Path, data: Any, encoding: Any = None, errors: Any = None, newline: Any = None) -> int:
+    try:
+        return _N1191_ORIGINAL_PATH_WRITE_TEXT(self, data, encoding=encoding, errors=errors, newline=newline)
+    except OSError as exc:
+        suffix = _safe_str(getattr(self, "suffix", "")).lower()
+        name = _safe_str(getattr(self, "name", ""))
+        generated_artifact = (
+            suffix in {".html", ".json", ".txt", ".log"}
+            or name.startswith("autoplay-")
+            or "test-results" in _safe_str(self).replace("\\", "/")
+        )
+        if not generated_artifact:
+            raise
+        _timestamped_print(
+            "Warning: Path.write_text failed for generated artifact; using temp-file fallback: "
+            f"path={self} error={type(exc).__name__}:{exc}"
+        )
+        return _n1191_write_text_fallback(
+            Path(self),
+            data,
+            encoding=encoding or "utf-8",
+            errors=errors,
+            newline=newline,
+        )
+
+
+if getattr(Path.write_text, "__name__", "") != "_n1191_safe_path_write_text":
+    Path.write_text = _n1191_safe_path_write_text
