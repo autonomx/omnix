@@ -303,7 +303,8 @@
       "memory_aging_real",
       "arc_faction_compaction_real",
       "npc_goal_agency_real",
-      "economy_long_term_sinks_real"
+      "economy_long_term_sinks_real",
+      "combat_rounds_real"
     ],
     "one_thousand_turn_hard_blockers": [],
     "gates": {
@@ -466,19 +467,21 @@
         "source_artifact": "combat-lifecycle-summary.json"
       },
       "combat_rounds_real": {
-        "ok": true,
+        "ok": false,
         "severity": "advisory",
         "value": {
-          "real_round_event_count": 30,
-          "real_attack_event_count": 580,
-          "real_damage_event_count": 233,
+          "real_round_event_count": 0,
+          "real_attack_event_count": 74,
+          "real_damage_event_count": 2707,
           "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
-          "direct_graph_only": false,
-          "missing_real_lifecycle_parts": []
+          "direct_graph_only": true,
+          "missing_real_lifecycle_parts": [
+            "round_or_initiative_events"
+          ]
         },
         "expected": "initiative/rounds plus injury/resolution lifecycle are exercised",
-        "message": "Real combat lifecycle evidence is present.",
+        "message": "Real combat lifecycle evidence requires round/initiative, damage/HP, and resolution events.",
         "source": "real-combat-lifecycle-summary.json",
         "source_artifact": "real-combat-lifecycle-summary.json"
       },
@@ -514,11 +517,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 2993173,
-          "operational_bytes_per_turn": 29931.73,
-          "operational_projected_1000_turn_bytes": 29931730,
-          "full_debug_bytes_sampled": 280322808,
-          "full_debug_projected_1000_turn_bytes": 2803228080,
+          "operational_bytes_sampled": 3025327,
+          "operational_bytes_per_turn": 30253.27,
+          "operational_projected_1000_turn_bytes": 30253270,
+          "full_debug_bytes_sampled": 292158593,
+          "full_debug_projected_1000_turn_bytes": 2921585930,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -536,7 +539,7 @@
       "economy_pressure_foundation": true,
       "economy_long_term_sinks_real": false,
       "combat_coverage_present": true,
-      "combat_rounds_real": true,
+      "combat_rounds_real": false,
       "transcript_growth_budget_ok": true,
       "memory_aging_real": false,
       "arc_faction_compaction_real": false
@@ -585,7 +588,8 @@
     "memory_aging_real",
     "arc_faction_compaction_real",
     "npc_goal_agency_real",
-    "economy_long_term_sinks_real"
+    "economy_long_term_sinks_real",
+    "combat_rounds_real"
   ],
   "readiness_grades": {
     "hundred_turn_ready": true,
@@ -594,7 +598,8 @@
       "memory_aging_real",
       "arc_faction_compaction_real",
       "npc_goal_agency_real",
-      "economy_long_term_sinks_real"
+      "economy_long_term_sinks_real",
+      "combat_rounds_real"
     ]
   }
 }
