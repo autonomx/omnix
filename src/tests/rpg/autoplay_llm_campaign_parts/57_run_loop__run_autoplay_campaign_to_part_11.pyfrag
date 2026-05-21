@@ -51,12 +51,27 @@
             )
 
             if _should_write_full_transcript(args):
-                _zip_writestr_json(
+                # Always provide review-sized full transcript chunks for full/debug
+                # runs, but avoid writing a multi-hundred-MB monolithic
+                # full-transcript.json by default.  Local deep-debug runs can opt
+                # back into the monolith with
+                # RPG_AUTOPLAY_WRITE_MONOLITHIC_FULL_TRANSCRIPT=1.
+                _n1176_write_review_json_artifact(
                     zip_handle,
                     artifact_manifest,
                     "full-transcript.json",
                     final_transcript_rows,
+                    omitted_monolithic=not _n1176_should_write_monolithic_full_transcript(args),
+                    force=True,
+                    note="Split full debug transcript for review; monolithic full-transcript.json is opt-in for long runs.",
                 )
+                if _n1176_should_write_monolithic_full_transcript(args):
+                    _zip_writestr_json(
+                        zip_handle,
+                        artifact_manifest,
+                        "full-transcript.json",
+                        final_transcript_rows,
+                    )
 
             _zip_writestr_json(
                 zip_handle,
@@ -299,15 +314,45 @@
 
                 if campaign_report_json.exists():
                     zip_handle.write(campaign_report_json, campaign_report_json.name)
+                    try:
+                        _n1176_write_review_text_artifact(
+                            zip_handle,
+                            artifact_manifest,
+                            campaign_report_json.name,
+                            campaign_report_json.read_text(encoding="utf-8"),
+                        )
+                    except Exception:
+                        pass
 
                 # Write other files
                 code_diff_path = output_dir_path / "code-diff.txt"
                 if code_diff_path.exists():
-                    zip_handle.write(code_diff_path, code_diff_path.name)
+                    if _n1177_should_write_monolithic_text_artifact("code-diff.txt", code_diff_path):
+                        zip_handle.write(code_diff_path, code_diff_path.name)
+                    try:
+                        _n1176_write_review_text_artifact(
+                            zip_handle,
+                            artifact_manifest,
+                            "code-diff.txt",
+                            code_diff_path.read_text(encoding="utf-8", errors="replace"),
+                            omitted_monolithic=not _n1177_should_write_monolithic_text_artifact("code-diff.txt", code_diff_path),
+                            note="Monolithic code-diff.txt is omitted from the ZIP when oversized unless RPG_AUTOPLAY_WRITE_MONOLITHIC_CODE_DIFF=1.",
+                        )
+                    except Exception:
+                        pass
 
                 console_log_path = output_dir_path / "console-log.txt"
                 if console_log_path.exists():
                     zip_handle.write(console_log_path, arcname="console-log.txt")
+                    try:
+                        _n1176_write_review_text_artifact(
+                            zip_handle,
+                            artifact_manifest,
+                            "console-log.txt",
+                            console_log_path.read_text(encoding="utf-8", errors="replace"),
+                        )
+                    except Exception:
+                        pass
 
                 # Write checkpoints
                 checkpoint_dir = output_dir_path / "checkpoints"
@@ -316,6 +361,8 @@
                     pattern = f"{session_id}_turn_*.json" if session_id else "*.json"
                     for checkpoint_path in sorted(checkpoint_dir.glob(pattern)):
                         zip_handle.write(checkpoint_path, f"checkpoints/{checkpoint_path.name}")
+
+            _n1176_finalize_review_artifact_index(zip_handle, artifact_manifest)
 
             # Write manifest last
             zip_handle.writestr(

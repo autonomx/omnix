@@ -55,7 +55,7 @@
         artifact_name="slim-transcript.json",
     )
 
-    wrote_full_transcript = _should_write_full_transcript(args)
+    wrote_full_transcript = _n1176_should_write_monolithic_full_transcript(args)
 
     summary["transcript_size_summary"] = _build_transcript_size_summary(
         final_transcript_rows=final_transcript_rows,
@@ -212,11 +212,16 @@
             generated_files = artifact_manifest.setdefault("generated_files", [])
             if name in generated_files:
                 return
-            zip_handle.writestr(
-                name,
-                json.dumps(value, ensure_ascii=False, indent=2, default=str),
-            )
+            serialized = json.dumps(value, ensure_ascii=False, indent=2, default=str)
+            zip_handle.writestr(name, serialized)
             generated_files.append(name)
+            _n1176_write_review_json_artifact(
+                zip_handle,
+                artifact_manifest,
+                name,
+                value,
+                serialized_text=serialized,
+            )
 
         def _zip_writestr_once(
             zip_handle: Any,
@@ -227,8 +232,15 @@
             generated_files = artifact_manifest.setdefault("generated_files", [])
             if name in generated_files:
                 return
-            zip_handle.writestr(name, payload if isinstance(payload, str) else str(payload))
+            text_payload = payload if isinstance(payload, str) else str(payload)
+            zip_handle.writestr(name, text_payload)
             generated_files.append(name)
+            _n1176_write_review_text_artifact(
+                zip_handle,
+                artifact_manifest,
+                name,
+                text_payload,
+            )
 
     summary = _apply_direct_graph_lifecycle_bridges(summary)
 
@@ -412,11 +424,14 @@
                 final_transcript_rows,
                 requested_turns=int(getattr(args, "turns", 0) or summary.get("requested_turns") or summary.get("turns_executed") or 0),
             )
+            summary = _n1177_apply_review_artifact_budget_to_summary(summary)
             if not _safe_dict(summary.get("one_thousand_turn_readiness_gap_report")):
                 summary["one_thousand_turn_readiness_gap_report"] = _safe_dict(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("one_thousand_turn_readiness_gap_report"))
-            summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+            summary_text = json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True)
+            summary_path.write_text(summary_text, encoding="utf-8")
             zip_handle.write(summary_path, "summary.json")
             artifact_manifest["generated_files"].append("summary.json")
+            _n1176_write_review_json_artifact(zip_handle, artifact_manifest, "summary.json", summary, serialized_text=summary_text)
 
             # Write N79/N81 split artifacts
             _zip_writestr_json(
