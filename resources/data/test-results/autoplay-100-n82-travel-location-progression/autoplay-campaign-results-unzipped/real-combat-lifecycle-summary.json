@@ -1,0 +1,1252 @@
+{
+  "attack_events": [
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 11,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 14,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 14,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 14,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 14,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 15,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 15,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 15,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 15,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 16,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 16,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 16,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 16,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 17,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 17,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 17,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 17,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 18,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 18,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 18,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 18,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 19,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 19,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 19,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 20,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 20,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 20,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 20,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 21,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 21,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 21,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 21,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 22,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 22,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 22,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 22,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 23,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 23,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 23,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 23,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 24,
+      "type": null
+    }
+  ],
+  "combat_text_turns": [
+    8,
+    11,
+    16,
+    18,
+    19,
+    20,
+    21,
+    22,
+    38,
+    63
+  ],
+  "damage_events": [
+    {
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 38,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 38,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 38,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 63,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 63,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 63,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 71,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 71,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 71,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}",
+      "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"Reached the old north watchpost following the courier trail.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The core action is movement ('I travel'), and the reason for traveling (to follow a courier trail) implies investigation.\", \"required_focus\": []}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"You successfully navigate the rough, upward trail leading toward the ancient stonework of the North Watchpost. The courier's faint tracks are clearly visible in the packed earth, winding away from the main road and angling towards a dilapidated structure at the crest. A sense of purpose settles upon you as these footsteps lead you directly into Veska's suspected path.\", \"npc\": {\"line\": \"(No direct NPC interaction, but if one were present, they might say: 'The courier passed this way; she was heading toward the ridge!')\", \"speaker\": \"\"}, \"presentation_intent\": {\"confid",
+      "summary": "",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"travel_to_old_north_watchpost\", \"changed_parts\": [\"travel\"], \"effects\": {\"flags\": {\"mechanic:travel\": true}}, \"graph_action_id\": \"travel_to_old_north_watchpost\", \"hook_id\": \"hook:graph_direct:travel_to_old_north_watchpost\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"travel\", \"mechanics\": [\"travel\"], \"summary\": \"Graph action completed: travel_to_old_north_watchpost\"}",
+      "summary": "Graph action completed: travel_to_old_north_watchpost",
+      "turn": 89,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
+      "summary": "Reach the old north watchpost.",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"changed\": false, \"original_action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\"}",
+      "summary": "",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"investigate\", \"activity_label\": \"investigate\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_c257dcd6718c3173\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"tags\": [\"investigate\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\"}",
+      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"Signs found indicating courier passage and Veska's recent traversal at the watchpost.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The primary action is a detailed inspection of an area for specific signs (courier, Sable Chain, Veska's trail).\", \"required_focus\": []}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The decaying timbers of the old north watchpost creak under your scrutiny, yielding faint traces of recent activity. You find a faded, but undeniable, Sable Chain sigil pressed into the mud near the main gate. Furthermore, you trace a distinct boot print leading away from the post toward the deeper woods, strongly suggesting Veska's trail passed through here recently.\", \"npc\": {\"line\": \"(No NPC present to speak; result is observed.)\", \"speaker\": \"\"}, \"presentation_intent\": {\"confidence\": 0.45, \"format_version\": \"presentation_intent_v1\", \"primary_catego",
+      "summary": "",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"npc\": {\"line\": \"That gives us a direction. Now we need the next solid piece of proof.\", \"speaker\": \"Handler Veska\"}}",
+      "summary": "",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"inspect_watchpost_courier_signs\", \"changed_parts\": [\"inspect\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"inspect_watchpost_courier_signs\", \"hook_id\": \"hook:graph_direct:inspect_watchpost_courier_signs\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"inspect\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: inspect_watchpost_courier_signs\"}",
+      "summary": "Graph action completed: inspect_watchpost_courier_signs",
+      "turn": 90,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}",
+      "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
+      "summary": "Reach the old north watchpost.",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}",
+      "summary": "Inspect the watchpost for courier signs.",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"changed\": false, \"original_action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\"}",
+      "summary": "",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_5936090ed879c548\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\"}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}",
+      "summary": "Inspect the watchpost for courier signs.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
+      "summary": "Reach the old north watchpost.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1b7dd39aa5ab9cc3\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}",
+      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 91, \"created_at\": \"2026-05-21T09:00:23.327117+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.45, \"deterministic_fallback\": true, \"grounded_target\": \"Bran\", \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:90:semantic_intent:4949694d5b42d77a\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1b7dd39aa5ab9cc3\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 91}",
+      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 91,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"grounded_target\": \"Bran\", \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target\": \"Bran\"}",
+      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\"}",
+      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}",
+      "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"investigate\", \"activity_label\": \"investigate\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_c257dcd6718c3173\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"tags\": [\"investigate\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"changed\": false, \"original_action\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"reason\": \"\"}",
+      "summary": "",
+      "turn": 91,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1b7dd39aa5ab9cc3\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}",
+      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 92,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}",
+      "summary": "Inspect the watchpost for courier signs.",
+      "turn": 92,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
+      "summary": "Reach the old north watchpost.",
+      "turn": 92,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1d4a5c78dcb711c9\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 92}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 92,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 92, \"created_at\": \"2026-05-21T09:00:23.525502+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.45, \"deterministic_fallback\": true, \"grounded_target\": \"Bran\", \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:91:semantic_intent:dc884f9447710fa2\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1d4a5c78dcb711c9\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 92}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 92,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"grounded_target\": \"Bran\", \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"target\": \"Bran\"}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 92,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 91, \"created_at\": \"2026-05-21T09:00:23.327117+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.45, \"deterministic_fallback\": true, \"grounded_target\": \"Bran\", \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:90:semantic_intent:4949694d5b42d77a\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1b7dd39aa5ab9cc3\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 91}",
+      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 92,
+      "type": "semantic_intent"
+    }
+  ],
+  "direct_graph_combat_count": 4,
+  "direct_graph_combat_turns": [
+    19
+  ],
+  "direct_graph_only": true,
+  "examples": [
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 7, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i approach the local patron and quietly ask what he knows about the mill bridge.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 7, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 2, \"actual_sent_action\": \"I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0",
+      "summary": "",
+      "turn": 8,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": true,
+        "round": false
+      },
+      "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 8,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"That is useful because it can be tested. Tell me the next verifiable step.\", \"speaker\": \"Bran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+      "summary": "",
+      "turn": 8,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": true,
+        "round": false
+      },
+      "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:report\": true}}, \"graph_action_id\": \"report_findings_to_bran\", \"hook_id\": \"hook:graph_direct:report_findings_to_bran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"summary\": \"Graph action completed: report_findings_to_bran\"}",
+      "summary": "Graph action completed: report_findings_to_bran",
+      "turn": 8,
+      "type": "graph_direct_completion"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 10, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave the tavern and travel toward garran's wagon yard.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 10, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 0, \"actual_sent_action\": \"I tell Garran the mill bridge may be an ambush and show him the evidence.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"available_m",
+      "summary": "",
+      "turn": 11,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 11,
+      "type": "semantic_intent"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": true,
+        "round": false
+      },
+      "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"completed\": true, \"completed_parts\": [\"action:warn_garran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:warn\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 11,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"Good. Proof narrows the road; show me which direction it leaves open.\", \"speaker\": \"Garran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+      "summary": "",
+      "turn": 11,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+      "turn": 11,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+      "summary": "",
+      "turn": 11,
+      "type": "mechanic"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": true,
+        "round": false
+      },
+      "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:warn\": true}}, \"graph_action_id\": \"warn_garran\", \"hook_id\": \"hook:graph_direct:warn_garran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"summary\": \"Graph action completed: warn_garran\"}",
+      "summary": "Graph action completed: warn_garran",
+      "turn": 11,
+      "type": "graph_direct_completion"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+      "turn": 12,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+      "summary": "",
+      "turn": 12,
+      "type": "mechanic"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+      "turn": 13,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+      "summary": "",
+      "turn": 13,
+      "type": "mechanic"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 12, \"created_at\": \"2026-05-21T09:00:10.634110+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:11:semantic_intent:c934c1e089b51536\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"confidence\": 0.92, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"target\": \"Bran\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"confidence\": 0.92, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\"}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c43515ddf443688d\", \"summary\": \"Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.\", \"turn_index\": 12}",
+      "summary": "Identifying the threat: determining if the mill bridge is under surveillance or prepared for an attack by hostile parties.",
+      "turn": 14,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+      "turn": 14,
+      "type": null
+    }
+  ],
+  "format_version": "n118_real_combat_lifecycle_summary_v1",
+  "missing_real_lifecycle_parts": [
+    "round_or_initiative_events"
+  ],
+  "ok": false,
+  "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
+  "real_attack_event_count": 578,
+  "real_combat_lifecycle_ok": false,
+  "real_damage_event_count": 170,
+  "real_resolution_event_count": 48,
+  "real_round_event_count": 0,
+  "resolution_events": [
+    {
+      "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 8,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:report\": true}}, \"graph_action_id\": \"report_findings_to_bran\", \"hook_id\": \"hook:graph_direct:report_findings_to_bran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"summary\": \"Graph action completed: report_findings_to_bran\"}",
+      "summary": "Graph action completed: report_findings_to_bran",
+      "turn": 8,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"completed\": true, \"completed_parts\": [\"action:warn_garran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:warn\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 11,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:warn\": true}}, \"graph_action_id\": \"warn_garran\", \"hook_id\": \"hook:graph_direct:warn_garran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"summary\": \"Graph action completed: warn_garran\"}",
+      "summary": "Graph action completed: warn_garran",
+      "turn": 11,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:scout_quarry_road\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 16,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"scout_quarry_road\", \"hook_id\": \"hook:graph_direct:scout_quarry_road\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: scout_quarry_road\"}",
+      "summary": "Graph action completed: scout_quarry_road",
+      "turn": 16,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"spot_bridge_watchers\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:spot_bridge_watchers\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 17,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"spot_bridge_watchers\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"spot_bridge_watchers\", \"hook_id\": \"hook:graph_direct:spot_bridge_watchers\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: spot_bridge_watchers\"}",
+      "summary": "Graph action completed: spot_bridge_watchers",
+      "turn": 17,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"choose_ambush_response\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"tell\"], \"completed\": true, \"completed_parts\": [\"action:choose_ambush_response\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:tell\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"tell\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 18,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"choose_ambush_response\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"tell\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:tell\": true}}, \"graph_action_id\": \"choose_ambush_response\", \"hook_id\": \"hook:graph_direct:choose_ambush_response\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"tell\"], \"summary\": \"Graph action completed: choose_ambush_response\"}",
+      "summary": "Graph action completed: choose_ambush_response",
+      "turn": 18,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}",
+      "summary": "",
+      "turn": 18,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"Resolved the combat beat.\", \"action_diversity_before_turn\": {\"action_count\": 12, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i choose how to respond to the ambush signs.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 12, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 0, \"actual_sent_action\": \"I check in with Garran and focus on the active wagon-road objective.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"available_mechanics\": [{\"command\": \"I confront the bandit scou",
+      "summary": "",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"changed_parts\": [\"combat_resolved\", \"combat_started\", \"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"completed\": true, \"completed_parts\": [\"action:protect_wagon_or_lure_bandits\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:prepare\", \"mechanic:xp_gain\"], \"execution_applied\": true, \"execution_kind\": \"protect_wagon_or_lure_bandits\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"combat_resolved\", \"combat_started\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"xp_delta\": 5, \"xp_execution_applied\": true}",
+      "summary": "",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"Resolved the combat beat.\", \"combat_result\": {\"ok\": true, \"outcome\": \"direct_graph_resolved\", \"summary\": \"The combat beat resolves through the scenario graph.\", \"xp_delta\": 5}, \"dialogue\": \"\", \"dialogue_source\": \"direct_graph_execution\", \"display_narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"display_source\": \"direct_graph_execution\", \"meaningful_progress\": true, \"mechanic\": \"combat_resolved\", \"narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"npc\": {}, \"npc_line\": \"\", \"npc_speaker\": \"\", \"progress_category\": \"direct_graph_execution\", \"selected_narration\": {\"action\": \"Resolved the combat beat.\", \"dialogue_source\": \"direct_graph_execution\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"npc\": {}, \"",
+      "summary": "",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"Resolved the combat beat.\", \"dialogue_source\": \"direct_graph_execution\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"npc\": {}, \"reward\": {\"xp_delta\": 5}, \"source\": \"direct_graph_explicit_combat_xp_execution\"}",
+      "summary": "",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"ok\": true, \"outcome\": \"direct_graph_resolved\", \"summary\": \"The combat beat resolves through the scenario graph.\", \"xp_delta\": 5}",
+      "summary": "The combat beat resolves through the scenario graph.",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"changed_parts\": [\"combat_resolved\", \"combat_started\", \"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:prepare\": true, \"mechanic:xp_gain\": true}}, \"graph_action_id\": \"protect_wagon_or_lure_bandits\", \"hook_id\": \"hook:graph_direct:protect_wagon_or_lure_bandits\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"combat_resolved\", \"combat_started\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"summary\": \"Graph action completed: protect_wagon_or_lure_bandits\"}",
+      "summary": "Graph action completed: protect_wagon_or_lure_bandits",
+      "turn": 19,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}",
+      "summary": "",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": {\"action_type\": \"observe\", \"canonical_text\": \"I protect the wagon and fight the bandits.\", \"display_text\": \"I protect the wagon and fight the bandits.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I check in with Garran and focus on the active wagon-road objective.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3f795334d0511212\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I check in with Garran and focus on the active wagon-road objective.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 1, \"source\": \"direct_graph_execution\", \"target_id\": \"\", \"text\": \"I protect the wagon and fight the bandits.\"}, \"contract_source\": \"runtime_fallback_bridge\", \"mechanic\": \"co",
+      "summary": "",
+      "turn": 19,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"search_bandit_satchel\", \"changed_parts\": [\"faction_consequence\", \"inspect\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:search_bandit_satchel\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:inspect\", \"mechanic:npc_reaction\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"inspect\", \"npc_reaction\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 21,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"search_bandit_satchel\", \"changed_parts\": [\"faction_consequence\", \"inspect\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:inspect\": true, \"mechanic:npc_reaction\": true}}, \"graph_action_id\": \"search_bandit_satchel\", \"hook_id\": \"hook:graph_direct:search_bandit_satchel\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"inspect\", \"npc_reaction\"], \"summary\": \"Graph action completed: search_bandit_satchel\"}",
+      "summary": "Graph action completed: search_bandit_satchel",
+      "turn": 21,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"return_to_bran_with_proof\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"travel\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:return_to_bran_with_proof\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:travel\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"travel\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 22,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"return_to_bran_with_proof\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"travel\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:travel\": true}}, \"graph_action_id\": \"return_to_bran_with_proof\", \"hook_id\": \"hook:graph_direct:return_to_bran_with_proof\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"travel\"], \"summary\": \"Graph action completed: return_to_bran_with_proof\"}",
+      "summary": "Graph action completed: return_to_bran_with_proof",
+      "turn": 22,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"return_to_allies_with_voss_proof\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:return_to_allies_with_voss_proof\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:travel\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 38,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"return_to_allies_with_voss_proof\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:travel\": true}}, \"graph_action_id\": \"return_to_allies_with_voss_proof\", \"hook_id\": \"hook:graph_direct:return_to_allies_with_voss_proof\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\"], \"summary\": \"Graph action completed: return_to_allies_with_voss_proof\"}",
+      "summary": "Graph action completed: return_to_allies_with_voss_proof",
+      "turn": 38,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 38,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 38,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"counter_voss_intimidation\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:counter_voss_intimidation\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:protect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 44,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"counter_voss_intimidation\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:protect\": true}}, \"graph_action_id\": \"counter_voss_intimidation\", \"hook_id\": \"hook:graph_direct:counter_voss_intimidation\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\"], \"summary\": \"Graph action completed: counter_voss_intimidation\"}",
+      "summary": "Graph action completed: counter_voss_intimidation",
+      "turn": 44,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 63,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 63,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"detect_safehouse_watchers\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"completed\": true, \"completed_parts\": [\"action:detect_safehouse_watchers\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:scout\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 65,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"detect_safehouse_watchers\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"effects\": {\"flags\": {\"mechanic:scout\": true}}, \"graph_action_id\": \"detect_safehouse_watchers\", \"hook_id\": \"hook:graph_direct:detect_safehouse_watchers\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"summary\": \"Graph action completed: detect_safehouse_watchers\"}",
+      "summary": "Graph action completed: detect_safehouse_watchers",
+      "turn": 65,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"prepare_safehouse_defense\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\"], \"completed\": true, \"completed_parts\": [\"action:prepare_safehouse_defense\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:prepare\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"prepare\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 71,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"prepare_safehouse_defense\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:prepare\": true}}, \"graph_action_id\": \"prepare_safehouse_defense\", \"hook_id\": \"hook:graph_direct:prepare_safehouse_defense\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"prepare\"], \"summary\": \"Graph action completed: prepare_safehouse_defense\"}",
+      "summary": "Graph action completed: prepare_safehouse_defense",
+      "turn": 71,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 71,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 71,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"scout_east_road_pressure_points\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"completed\": true, \"completed_parts\": [\"action:scout_east_road_pressure_points\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:scout\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 78,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"scout_east_road_pressure_points\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"effects\": {\"flags\": {\"mechanic:scout\": true}}, \"graph_action_id\": \"scout_east_road_pressure_points\", \"hook_id\": \"hook:graph_direct:scout_east_road_pressure_points\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"summary\": \"Graph action completed: scout_east_road_pressure_points\"}",
+      "summary": "Graph action completed: scout_east_road_pressure_points",
+      "turn": 78,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.95, \"format_version\": \"presentation_intent_v1\", \"parse_source\": \"missing\", \"primary_category\": \"general\", \"reason\": \"The player's confrontation is an observation/social interaction that hasn't resolved into a clear combat or dialogue exchange yet.\", \"secondary_categories\": []}",
+      "summary": "The player's confrontation is an observation/social interaction that hasn't resolved into a clear combat or dialogue exchange yet.",
+      "turn": 83,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.95, \"format_version\": \"presentation_intent_v1\", \"primary_category\": \"general\", \"reason\": \"The player's confrontation is an observation/social interaction that hasn't resolved into a clear combat or dialogue exchange yet.\", \"secondary_categories\": []}",
+      "summary": "The player's confrontation is an observation/social interaction that hasn't resolved into a clear combat or dialogue exchange yet.",
+      "turn": 83,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"scout_ridge_hideout\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"completed\": true, \"completed_parts\": [\"action:scout_ridge_hideout\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:scout\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+      "summary": "",
+      "turn": 95,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"scout_ridge_hideout\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"effects\": {\"flags\": {\"mechanic:scout\": true}}, \"graph_action_id\": \"scout_ridge_hideout\", \"hook_id\": \"hook:graph_direct:scout_ridge_hideout\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"summary\": \"Graph action completed: scout_ridge_hideout\"}",
+      "summary": "Graph action completed: scout_ridge_hideout",
+      "turn": 95,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"answered_current_action_first\": true, \"ignored_forbidden_stale_topics\": true, \"reason\": \"All contract rules were followed; the action was observed and mapped, not resolved into a discrete outcome like damage or reward.\", \"used_current_turn_prompt_contract\": true}",
+      "summary": "All contract rules were followed; the action was observed and mapped, not resolved into a discrete outcome like damage or reward.",
+      "turn": 99,
+      "type": null
+    }
+  ],
+  "round_events": []
+}

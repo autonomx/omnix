@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "source": "progress_timeline_summary",
+  "turn_count": 100,
+  "meaningful_progress_count": 100,
+  "meaningful_progress_rate": 1.0,
+  "fallback_player_action_rate": 0.0,
+  "no_change_turns": 0,
+  "quality_counts": {
+    "meaningful_progress": 100,
+    "no_change": 0
+  },
+  "meaningful_category_counts": {
+    "story_beat": 100,
+    "npc_signal": 94,
+    "quest_progress": 12,
+    "journal_progress": 12,
+    "location_progression": 13
+  },
+  "churn_category_counts": {},
+  "legacy_progress_quality": {},
+  "strict_progress_quality": {},
+  "notes": [
+    "Canonical progress uses runtime progress classifications when available.",
+    "Row-level keyword scanning is intentionally avoided for event counts because debug payloads are noisy."
+  ]
+}

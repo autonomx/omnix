@@ -1,0 +1,271 @@
+{
+  "format_version": "n11721_1000_turn_readiness_gap_report_v2",
+  "ok": true,
+  "requested_turns": 100,
+  "profile": "1000_turn_gap_hardening",
+  "hundred_turn_ready": true,
+  "one_thousand_turn_candidate": false,
+  "one_thousand_turn_blocked_reasons": [
+    "memory_aging_real",
+    "arc_faction_compaction_real",
+    "economy_long_term_sinks_real",
+    "combat_rounds_real"
+  ],
+  "one_thousand_turn_hard_blockers": [],
+  "gates": {
+    "compression_loop_present": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "compression_event_count": 100,
+        "latest_state_budget": {
+          "format_version": "state_budget_summary_v1",
+          "ok": true,
+          "sections": {
+            "summary": {
+              "bytes": 3021,
+              "budget_bytes": 2000000,
+              "ok": true
+            },
+            "story_arcs": {
+              "bytes": 1529,
+              "budget_bytes": 250000,
+              "ok": true
+            },
+            "world_signals": {
+              "bytes": 1166,
+              "budget_bytes": 200000,
+              "ok": true
+            },
+            "faction_state": {
+              "bytes": 242,
+              "budget_bytes": 100000,
+              "ok": true
+            },
+            "npc_memory_events": {
+              "bytes": 2,
+              "budget_bytes": 150000,
+              "ok": true
+            }
+          },
+          "budgets": {
+            "summary_bytes": 2000000,
+            "story_arcs_bytes": 250000,
+            "world_signals_bytes": 200000,
+            "faction_state_bytes": 100000,
+            "npc_memory_events_bytes": 150000
+          }
+        }
+      },
+      "expected": "compression events occur and state budget remains OK",
+      "message": "The long-run compression loop must be active before 1000-turn runs.",
+      "source": "world-state-compression-summary.json",
+      "source_artifact": "world-state-compression-summary.json"
+    },
+    "memory_aging_real": {
+      "ok": false,
+      "severity": "advisory",
+      "value": {
+        "memory_aging_count": 0,
+        "npc_memory_dropped_count": null,
+        "npc_memory_summarized_count": null
+      },
+      "expected": "old NPC memories are dropped or summarized by deterministic budget policy",
+      "message": "Memory aging is not yet proven; 1000-turn state may grow without bound.",
+      "source": "world-state-compression-summary.json",
+      "source_artifact": "world-state-compression-summary.json"
+    },
+    "arc_faction_compaction_real": {
+      "ok": false,
+      "severity": "advisory",
+      "value": {
+        "compaction_count": 0,
+        "compacted_arc_count": null,
+        "compacted_faction_count": null,
+        "pressure_event_summarized_count": null
+      },
+      "expected": "old arc/faction/pressure history is compacted or summarized",
+      "message": "Arc/faction compaction is not yet proven for endurance runs.",
+      "source": "world-state-compression-summary.json + faction-consequence-summary.json",
+      "source_artifact": "world-state-compression-summary.json + faction-consequence-summary.json"
+    },
+    "npc_schedule_present": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "schedule_event_count": 32,
+        "movement_count": 32,
+        "npc_count": 3
+      },
+      "expected": "NPC schedules/movement exist",
+      "message": "Schedule-driven NPC presence should be visible before endurance runs.",
+      "source": "npc-agency-summary.json",
+      "source_artifact": "npc-agency-summary.json"
+    },
+    "npc_goal_agency_real": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "fully_agentic_npc_count": 24,
+        "partial_agentic_npc_count": 0,
+        "candidate_event_count": 100,
+        "missing_real_agency_parts": []
+      },
+      "expected": "NPCs pursue autonomous goals, not only schedule/memory events",
+      "message": "Real NPC goal agency evidence is present.",
+      "source": "npc-goal-agency-summary.json",
+      "source_artifact": "npc-goal-agency-summary.json"
+    },
+    "economy_pressure_foundation": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "event_count": 12,
+        "recurring_expense_count": 12,
+        "paid_count": 12,
+        "warning_count": 3
+      },
+      "expected": "recurring upkeep/resource pressure exists",
+      "message": "Economy pressure should include recurring costs before endurance tests.",
+      "source": "economy-pressure-summary.json",
+      "source_artifact": "economy-pressure-summary.json"
+    },
+    "economy_long_term_sinks_real": {
+      "ok": false,
+      "severity": "advisory",
+      "value": {
+        "stock_refresh_count": 0,
+        "scarcity_or_price_variation_count": 0
+      },
+      "expected": "merchant stock refresh and scarcity/price variation are exercised",
+      "message": "Long-term economy is missing stock refresh/scarcity pressure.",
+      "source": "economy-pressure-summary.json",
+      "source_artifact": "economy-pressure-summary.json"
+    },
+    "combat_coverage_present": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "encounter_count": 1,
+        "event_count": 4,
+        "direct_graph_combat_count": 4
+      },
+      "expected": "some deterministic combat/consequence coverage exists",
+      "message": "Combat must at least appear in the deterministic run.",
+      "source": "combat-lifecycle-summary.json",
+      "source_artifact": "combat-lifecycle-summary.json"
+    },
+    "combat_rounds_real": {
+      "ok": false,
+      "severity": "advisory",
+      "value": {
+        "real_round_event_count": 0,
+        "real_attack_event_count": 578,
+        "real_damage_event_count": 170,
+        "real_resolution_event_count": 48,
+        "direct_graph_combat_count": 4,
+        "direct_graph_only": true,
+        "missing_real_lifecycle_parts": [
+          "round_or_initiative_events"
+        ]
+      },
+      "expected": "initiative/rounds plus injury/resolution lifecycle are exercised",
+      "message": "Real combat lifecycle evidence requires round/initiative, damage/HP, and resolution events.",
+      "source": "real-combat-lifecycle-summary.json",
+      "source_artifact": "real-combat-lifecycle-summary.json"
+    },
+    "faction_consequence_present": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "event_count": 52,
+        "world_signal_count": 52,
+        "faction_compaction_count": 0
+      },
+      "expected": "faction consequences exist",
+      "message": "Faction consequences should remain visible in endurance reports.",
+      "source": "faction-consequence-summary.json",
+      "source_artifact": "faction-consequence-summary.json"
+    },
+    "dialogue_repair_pressure_bounded": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "repaired_count": 36,
+        "repair_or_mismatch_rate": 0.0
+      },
+      "expected": "dialogue/action relevance repairs stay below 35%",
+      "message": "High repair pressure can hide provider drift in long runs.",
+      "source": "dialogue-action-relevance-summary.json",
+      "source_artifact": "dialogue-action-relevance-summary.json"
+    },
+    "transcript_growth_budget_projected_1000": {
+      "ok": true,
+      "severity": "advisory",
+      "value": {
+        "ok": true,
+        "budget_1000_turn_bytes": 786432000,
+        "turns_sampled": 100,
+        "operational_bytes_sampled": 3033226,
+        "operational_bytes_per_turn": 30332.26,
+        "operational_projected_1000_turn_bytes": 30332260,
+        "full_debug_bytes_sampled": 334137723,
+        "full_debug_projected_1000_turn_bytes": 3341377230,
+        "monolithic_full_transcript_written": false,
+        "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
+      },
+      "expected": "projected 1000-turn transcript artifact stays below budget",
+      "message": "Operational review transcript artifacts are within the 1000-turn budget.",
+      "source": "transcript-size-summary.json + review-artifacts/index.json",
+      "source_artifact": "transcript-size-summary.json + review-artifacts/index.json"
+    }
+  },
+  "rollup": {
+    "compression_loop_present": true,
+    "memory_compaction_real": false,
+    "npc_schedule_present": true,
+    "npc_goal_agency_real": false,
+    "economy_pressure_foundation": true,
+    "economy_long_term_sinks_real": false,
+    "combat_coverage_present": true,
+    "combat_rounds_real": false,
+    "transcript_growth_budget_ok": false
+  },
+  "notes": [
+    "This report is advisory for 100-turn runs and does not flip hundred_turn_readiness_summary.ok.",
+    "It separates scaffold/direct-graph coverage from real endurance lifecycle readiness.",
+    "Run 1000-turn tests only after one_thousand_turn_candidate is true or after accepting listed risks."
+  ],
+  "source_fields_added": true,
+  "source_map": {
+    "compression_loop_present": "world-state-compression-summary.json",
+    "memory_aging_real": "world-state-compression-summary.json",
+    "arc_faction_compaction_real": "world-state-compression-summary.json + faction-consequence-summary.json",
+    "npc_schedule_present": "npc-agency-summary.json",
+    "npc_goal_agency_real": "npc-agency-summary.json",
+    "economy_pressure_foundation": "economy-pressure-summary.json",
+    "economy_long_term_sinks_real": "economy-pressure-summary.json",
+    "combat_coverage_present": "combat-lifecycle-summary.json",
+    "combat_rounds_real": "combat-lifecycle-summary.json",
+    "faction_consequence_present": "faction-consequence-summary.json",
+    "dialogue_repair_pressure_bounded": "dialogue-action-relevance-summary.json",
+    "transcript_growth_budget_projected_1000": "transcript-size-summary.json + final transcript rows"
+  },
+  "source_consistency": {
+    "format_version": "n11721_readiness_gap_source_consistency_v1",
+    "ok": true,
+    "advisory_only": true,
+    "dialogue_repair_count_source": "dialogue-action-relevance-summary.json",
+    "previous_gap_dialogue_repaired_count": 36,
+    "refreshed_gap_dialogue_repaired_count": 36,
+    "artifact_dialogue_repaired_count": 36,
+    "previous_gap_repair_or_mismatch_rate": 0.0,
+    "refreshed_gap_repair_or_mismatch_rate": 0.0,
+    "artifact_repair_or_mismatch_rate": 0.0,
+    "changed_by_refresh": false,
+    "message": "1000-turn readiness gap report was refreshed from final artifact summaries before persistence."
+  },
+  "refreshed_before_artifact_write": true,
+  "n118_real_combat_lifecycle_applied": true,
+  "n119_npc_goal_agency_applied": true
+}

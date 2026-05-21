@@ -1,0 +1,2679 @@
+{
+  "format_version": "npc_agency_summary_v1",
+  "ok": true,
+  "npc_count": 3,
+  "schedule_event_count": 32,
+  "agency_event_count": 0,
+  "world_signal_count": 182,
+  "memory_event_count": 182,
+  "npc_presence": {
+    "npc:bran": {
+      "npc_id": "npc:bran",
+      "location_id": "scene:rusty_flagon",
+      "activity": "tending the Rusty Flagon",
+      "availability": "available",
+      "hour": 11
+    },
+    "npc:garran": {
+      "npc_id": "npc:garran",
+      "location_id": "region:mill_road",
+      "activity": "patrolling the mill road",
+      "availability": "available",
+      "hour": 11
+    },
+    "npc:sera": {
+      "npc_id": "npc:sera",
+      "location_id": "market:lane",
+      "activity": "trading and listening for rumors",
+      "availability": "available",
+      "hour": 11
+    }
+  },
+  "by_npc": [
+    {
+      "npc_id": "npc:bran",
+      "current_presence": {
+        "npc_id": "npc:bran",
+        "location_id": "scene:rusty_flagon",
+        "activity": "tending the Rusty Flagon",
+        "availability": "available",
+        "hour": 11
+      },
+      "schedule_event_count": 8,
+      "agency_event_count": 0,
+      "memory_event_count": 0
+    },
+    {
+      "npc_id": "npc:garran",
+      "current_presence": {
+        "npc_id": "npc:garran",
+        "location_id": "region:mill_road",
+        "activity": "patrolling the mill road",
+        "availability": "available",
+        "hour": 11
+      },
+      "schedule_event_count": 12,
+      "agency_event_count": 0,
+      "memory_event_count": 0
+    },
+    {
+      "npc_id": "npc:sera",
+      "current_presence": {
+        "npc_id": "npc:sera",
+        "location_id": "market:lane",
+        "activity": "trading and listening for rumors",
+        "availability": "available",
+        "hour": 11
+      },
+      "schedule_event_count": 12,
+      "agency_event_count": 0,
+      "memory_event_count": 0
+    }
+  ],
+  "agency_events": [],
+  "schedule_events": [
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "region:mill_road",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "watching for trouble at the tavern",
+      "turn": 7,
+      "hour": 14,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "market:lane",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "sharing rumors at the tavern",
+      "turn": 8,
+      "hour": 15,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:sera_lodging",
+      "activity": "keeping out of sight",
+      "turn": 14,
+      "hour": 21,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:garran_bunk",
+      "activity": "resting between patrols",
+      "turn": 15,
+      "hour": 22,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:bran_private_room",
+      "activity": "resting after closing",
+      "turn": 16,
+      "hour": 23,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "room:bran_private_room",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "tending the Rusty Flagon",
+      "turn": 23,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "room:garran_bunk",
+      "to_location_id": "region:mill_road",
+      "activity": "patrolling the mill road",
+      "turn": 23,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "room:sera_lodging",
+      "to_location_id": "market:lane",
+      "activity": "trading and listening for rumors",
+      "turn": 24,
+      "hour": 7,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "region:mill_road",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "watching for trouble at the tavern",
+      "turn": 31,
+      "hour": 14,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "market:lane",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "sharing rumors at the tavern",
+      "turn": 32,
+      "hour": 15,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:sera_lodging",
+      "activity": "keeping out of sight",
+      "turn": 38,
+      "hour": 21,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:garran_bunk",
+      "activity": "resting between patrols",
+      "turn": 39,
+      "hour": 22,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:bran_private_room",
+      "activity": "resting after closing",
+      "turn": 40,
+      "hour": 23,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "room:bran_private_room",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "tending the Rusty Flagon",
+      "turn": 47,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "room:garran_bunk",
+      "to_location_id": "region:mill_road",
+      "activity": "patrolling the mill road",
+      "turn": 47,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "room:sera_lodging",
+      "to_location_id": "market:lane",
+      "activity": "trading and listening for rumors",
+      "turn": 48,
+      "hour": 7,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "region:mill_road",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "watching for trouble at the tavern",
+      "turn": 55,
+      "hour": 14,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "market:lane",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "sharing rumors at the tavern",
+      "turn": 56,
+      "hour": 15,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:sera_lodging",
+      "activity": "keeping out of sight",
+      "turn": 62,
+      "hour": 21,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:garran_bunk",
+      "activity": "resting between patrols",
+      "turn": 63,
+      "hour": 22,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:bran_private_room",
+      "activity": "resting after closing",
+      "turn": 64,
+      "hour": 23,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "room:bran_private_room",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "tending the Rusty Flagon",
+      "turn": 71,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "room:garran_bunk",
+      "to_location_id": "region:mill_road",
+      "activity": "patrolling the mill road",
+      "turn": 71,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "room:sera_lodging",
+      "to_location_id": "market:lane",
+      "activity": "trading and listening for rumors",
+      "turn": 72,
+      "hour": 7,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "region:mill_road",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "watching for trouble at the tavern",
+      "turn": 79,
+      "hour": 14,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "market:lane",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "sharing rumors at the tavern",
+      "turn": 80,
+      "hour": 15,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:sera_lodging",
+      "activity": "keeping out of sight",
+      "turn": 86,
+      "hour": 21,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:garran_bunk",
+      "activity": "resting between patrols",
+      "turn": 87,
+      "hour": 22,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "scene:rusty_flagon",
+      "to_location_id": "room:bran_private_room",
+      "activity": "resting after closing",
+      "turn": 88,
+      "hour": 23,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:bran",
+      "from_location_id": "room:bran_private_room",
+      "to_location_id": "scene:rusty_flagon",
+      "activity": "tending the Rusty Flagon",
+      "turn": 95,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:garran",
+      "from_location_id": "room:garran_bunk",
+      "to_location_id": "region:mill_road",
+      "activity": "patrolling the mill road",
+      "turn": 95,
+      "hour": 6,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    },
+    {
+      "type": "npc_schedule",
+      "subtype": "npc_moved",
+      "npc_id": "npc:sera",
+      "from_location_id": "room:sera_lodging",
+      "to_location_id": "market:lane",
+      "activity": "trading and listening for rumors",
+      "turn": 96,
+      "hour": 7,
+      "meaningful_progress": false,
+      "progress_category": "npc_schedule"
+    }
+  ],
+  "world_signals": [],
+  "memory_events": [],
+  "direct_graph_agency_count": 182,
+  "event_count": 182,
+  "n119_goal_agency": {
+    "format_version": "n119_npc_goal_agency_summary_v1",
+    "ok": true,
+    "real_npc_goal_agency_ok": true,
+    "policy": "NPC goal agency requires goal/intent, action, scheduled/autonomous marker, and consequence evidence. Passive dialogue/presence alone is not enough.",
+    "known_npc_count": 8,
+    "known_npcs": [
+      "Agent Marlowe",
+      "Bran",
+      "Captain Voss",
+      "Captured Bandit",
+      "Garran",
+      "Handler Veska",
+      "Mira",
+      "Route Agent"
+    ],
+    "existing_agency_event_count": 182,
+    "candidate_event_count": 100,
+    "npc_with_any_agency_signal_count": 24,
+    "fully_agentic_npc_count": 24,
+    "partial_agentic_npc_count": 0,
+    "fully_agentic_npcs": [
+      "(Implied Presence)",
+      "(Internal/To Bran)",
+      "(Self-Observation)",
+      "(Unseen Watcher)",
+      "Agent Marlowe",
+      "Bran",
+      "Bran (Clerk/Official)",
+      "Bran (Whispering)",
+      "Bran (implied context)",
+      "Bran (to the teamsters)",
+      "Captain Voss",
+      "Captured Bandit",
+      "Garran",
+      "Handler (Dead Drop)",
+      "Handler Veska",
+      "Local Patron",
+      "Magistrate Lyra",
+      "Mira",
+      "N/A (Environmental Report)",
+      "N/A (Self-Scout)",
+      "N/A (Solo Action)",
+      "Old Teamster",
+      "Route Agent",
+      "The Magistrate"
+    ],
+    "partial_agentic_npcs": [],
+    "missing_real_agency_parts": [],
+    "npcs": [
+      {
+        "npc": "(Implied Presence)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          29
+        ],
+        "action_turns": [
+          29
+        ],
+        "schedule_turns": [
+          29
+        ],
+        "consequence_turns": [
+          29
+        ],
+        "autonomous_turns": [
+          29
+        ]
+      },
+      {
+        "npc": "(Internal/To Bran)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          93
+        ],
+        "action_turns": [
+          93
+        ],
+        "schedule_turns": [
+          93
+        ],
+        "consequence_turns": [
+          93
+        ],
+        "autonomous_turns": [
+          93
+        ]
+      },
+      {
+        "npc": "(Self-Observation)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          85
+        ],
+        "action_turns": [
+          85
+        ],
+        "schedule_turns": [
+          85
+        ],
+        "consequence_turns": [
+          85
+        ],
+        "autonomous_turns": [
+          85
+        ]
+      },
+      {
+        "npc": "(Unseen Watcher)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          66
+        ],
+        "action_turns": [
+          66
+        ],
+        "schedule_turns": [
+          66
+        ],
+        "consequence_turns": [
+          66
+        ],
+        "autonomous_turns": [
+          66
+        ]
+      },
+      {
+        "npc": "Agent Marlowe",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 10,
+        "goal_turns": [
+          61,
+          63,
+          64,
+          71,
+          72,
+          73,
+          76,
+          79,
+          88,
+          89
+        ],
+        "action_turns": [
+          61,
+          63,
+          64,
+          71,
+          72,
+          73,
+          76,
+          79,
+          88,
+          89
+        ],
+        "schedule_turns": [
+          61,
+          63,
+          64,
+          71,
+          72,
+          73,
+          76,
+          79,
+          88,
+          89
+        ],
+        "consequence_turns": [
+          61,
+          63,
+          64,
+          71,
+          72,
+          73,
+          76,
+          79,
+          88,
+          89
+        ],
+        "autonomous_turns": [
+          61,
+          63,
+          64,
+          71,
+          72,
+          73,
+          76,
+          79,
+          88,
+          89
+        ]
+      },
+      {
+        "npc": "Bran",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 55,
+        "goal_turns": [
+          1,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          13,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          33,
+          34,
+          36,
+          39,
+          40,
+          43,
+          44,
+          45,
+          49,
+          50,
+          51,
+          52,
+          53,
+          55,
+          56,
+          57,
+          58,
+          60,
+          62,
+          65,
+          67,
+          68,
+          69,
+          70,
+          74,
+          75,
+          80,
+          82,
+          84,
+          87,
+          91
+        ],
+        "action_turns": [
+          1,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          13,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          33,
+          34,
+          36,
+          39,
+          40,
+          43,
+          44,
+          45,
+          49,
+          50,
+          51,
+          52,
+          53,
+          55,
+          56,
+          57,
+          58,
+          60,
+          62,
+          65,
+          67,
+          68,
+          69,
+          70,
+          74,
+          75,
+          80,
+          82,
+          84,
+          87,
+          91
+        ],
+        "schedule_turns": [
+          1,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          13,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          33,
+          34,
+          36,
+          39,
+          40,
+          43,
+          44,
+          45,
+          49,
+          50,
+          51,
+          52,
+          53,
+          55,
+          56,
+          57,
+          58,
+          60,
+          62,
+          65,
+          67,
+          68,
+          69,
+          70,
+          74,
+          75,
+          80,
+          82,
+          84,
+          87,
+          91
+        ],
+        "consequence_turns": [
+          1,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          13,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          33,
+          34,
+          36,
+          39,
+          40,
+          43,
+          44,
+          45,
+          49,
+          50,
+          51,
+          52,
+          53,
+          55,
+          56,
+          57,
+          58,
+          60,
+          62,
+          65,
+          67,
+          68,
+          69,
+          70,
+          74,
+          75,
+          80,
+          82,
+          84,
+          87,
+          91
+        ],
+        "autonomous_turns": [
+          1,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          13,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          33,
+          34,
+          36,
+          39,
+          40,
+          43,
+          44,
+          45,
+          49,
+          50,
+          51,
+          52,
+          53,
+          55,
+          56,
+          57,
+          58,
+          60,
+          62,
+          65,
+          67,
+          68,
+          69,
+          70,
+          74,
+          75,
+          80,
+          82,
+          84,
+          87,
+          91
+        ]
+      },
+      {
+        "npc": "Bran (Clerk/Official)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          41
+        ],
+        "action_turns": [
+          41
+        ],
+        "schedule_turns": [
+          41
+        ],
+        "consequence_turns": [
+          41
+        ],
+        "autonomous_turns": [
+          41
+        ]
+      },
+      {
+        "npc": "Bran (Whispering)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          35
+        ],
+        "action_turns": [
+          35
+        ],
+        "schedule_turns": [
+          35
+        ],
+        "consequence_turns": [
+          35
+        ],
+        "autonomous_turns": [
+          35
+        ]
+      },
+      {
+        "npc": "Bran (implied context)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          32
+        ],
+        "action_turns": [
+          32
+        ],
+        "schedule_turns": [
+          32
+        ],
+        "consequence_turns": [
+          32
+        ],
+        "autonomous_turns": [
+          32
+        ]
+      },
+      {
+        "npc": "Bran (to the teamsters)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          77
+        ],
+        "action_turns": [
+          77
+        ],
+        "schedule_turns": [
+          77
+        ],
+        "consequence_turns": [
+          77
+        ],
+        "autonomous_turns": [
+          77
+        ]
+      },
+      {
+        "npc": "Captain Voss",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 4,
+        "goal_turns": [
+          37,
+          38,
+          46,
+          47
+        ],
+        "action_turns": [
+          37,
+          38,
+          46,
+          47
+        ],
+        "schedule_turns": [
+          37,
+          38,
+          46,
+          47
+        ],
+        "consequence_turns": [
+          37,
+          38,
+          46,
+          47
+        ],
+        "autonomous_turns": [
+          37,
+          38,
+          46,
+          47
+        ]
+      },
+      {
+        "npc": "Captured Bandit",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          21
+        ],
+        "action_turns": [
+          21
+        ],
+        "schedule_turns": [
+          21
+        ],
+        "consequence_turns": [
+          21
+        ],
+        "autonomous_turns": [
+          21
+        ]
+      },
+      {
+        "npc": "Garran",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 6,
+        "goal_turns": [
+          11,
+          14,
+          15,
+          18,
+          19,
+          20
+        ],
+        "action_turns": [
+          11,
+          14,
+          15,
+          18,
+          19,
+          20
+        ],
+        "schedule_turns": [
+          11,
+          14,
+          15,
+          18,
+          19,
+          20
+        ],
+        "consequence_turns": [
+          11,
+          14,
+          15,
+          18,
+          19,
+          20
+        ],
+        "autonomous_turns": [
+          11,
+          14,
+          15,
+          18,
+          19,
+          20
+        ]
+      },
+      {
+        "npc": "Handler (Dead Drop)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          81
+        ],
+        "action_turns": [
+          81
+        ],
+        "schedule_turns": [
+          81
+        ],
+        "consequence_turns": [
+          81
+        ],
+        "autonomous_turns": [
+          81
+        ]
+      },
+      {
+        "npc": "Handler Veska",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 5,
+        "goal_turns": [
+          86,
+          90,
+          92,
+          96,
+          97
+        ],
+        "action_turns": [
+          86,
+          90,
+          92,
+          96,
+          97
+        ],
+        "schedule_turns": [
+          86,
+          90,
+          92,
+          96,
+          97
+        ],
+        "consequence_turns": [
+          86,
+          90,
+          92,
+          96,
+          97
+        ],
+        "autonomous_turns": [
+          86,
+          90,
+          92,
+          96,
+          97
+        ]
+      },
+      {
+        "npc": "Local Patron",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          7
+        ],
+        "action_turns": [
+          7
+        ],
+        "schedule_turns": [
+          7
+        ],
+        "consequence_turns": [
+          7
+        ],
+        "autonomous_turns": [
+          7
+        ]
+      },
+      {
+        "npc": "Magistrate Lyra",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          42
+        ],
+        "action_turns": [
+          42
+        ],
+        "schedule_turns": [
+          42
+        ],
+        "consequence_turns": [
+          42
+        ],
+        "autonomous_turns": [
+          42
+        ]
+      },
+      {
+        "npc": "Mira",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          4
+        ],
+        "action_turns": [
+          4
+        ],
+        "schedule_turns": [
+          4
+        ],
+        "consequence_turns": [
+          4
+        ],
+        "autonomous_turns": [
+          4
+        ]
+      },
+      {
+        "npc": "N/A (Environmental Report)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          17
+        ],
+        "action_turns": [
+          17
+        ],
+        "schedule_turns": [
+          17
+        ],
+        "consequence_turns": [
+          17
+        ],
+        "autonomous_turns": [
+          17
+        ]
+      },
+      {
+        "npc": "N/A (Self-Scout)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          16
+        ],
+        "action_turns": [
+          16
+        ],
+        "schedule_turns": [
+          16
+        ],
+        "consequence_turns": [
+          16
+        ],
+        "autonomous_turns": [
+          16
+        ]
+      },
+      {
+        "npc": "N/A (Solo Action)",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          78
+        ],
+        "action_turns": [
+          78
+        ],
+        "schedule_turns": [
+          78
+        ],
+        "consequence_turns": [
+          78
+        ],
+        "autonomous_turns": [
+          78
+        ]
+      },
+      {
+        "npc": "Old Teamster",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          54
+        ],
+        "action_turns": [
+          54
+        ],
+        "schedule_turns": [
+          54
+        ],
+        "consequence_turns": [
+          54
+        ],
+        "autonomous_turns": [
+          54
+        ]
+      },
+      {
+        "npc": "Route Agent",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 2,
+        "goal_turns": [
+          59,
+          83
+        ],
+        "action_turns": [
+          59,
+          83
+        ],
+        "schedule_turns": [
+          59,
+          83
+        ],
+        "consequence_turns": [
+          59,
+          83
+        ],
+        "autonomous_turns": [
+          59,
+          83
+        ]
+      },
+      {
+        "npc": "The Magistrate",
+        "real_goal_agency": true,
+        "partial_goal_agency": true,
+        "turn_count": 1,
+        "goal_turns": [
+          48
+        ],
+        "action_turns": [
+          48
+        ],
+        "schedule_turns": [
+          48
+        ],
+        "consequence_turns": [
+          48
+        ],
+        "autonomous_turns": [
+          48
+        ]
+      }
+    ],
+    "events": [
+      {
+        "turn": 1,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "canonical_turn_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight."
+      },
+      {
+        "turn": 2,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran who left through the side door and why they were afraid.",
+        "canonical_turn_action": "I ask Bran who left through the side door and why they were afraid."
+      },
+      {
+        "turn": 3,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran what direction the cloaked traveler went after leaving.",
+        "canonical_turn_action": "I ask Bran what direction the cloaked traveler went after leaving."
+      },
+      {
+        "turn": 4,
+        "npc": "Mira",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I turn to Mira and ask what she saw near the side door.",
+        "canonical_turn_action": "I turn to Mira and ask what she saw near the side door."
+      },
+      {
+        "turn": 5,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+        "canonical_turn_action": "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth."
+      },
+      {
+        "turn": 6,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran if the old east road leads to a bridge.",
+        "canonical_turn_action": "I ask Bran if the old east road leads to a bridge."
+      },
+      {
+        "turn": 7,
+        "npc": "Local Patron",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I approach the local patron and quietly ask what he knows about the mill bridge.",
+        "canonical_turn_action": "I approach the local patron and quietly ask what he knows about the mill bridge."
+      },
+      {
+        "turn": 8,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+        "canonical_turn_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush."
+      },
+      {
+        "turn": 9,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran who is most likely to travel the road before dawn.",
+        "canonical_turn_action": "I ask Bran who is most likely to travel the road before dawn."
+      },
+      {
+        "turn": 10,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+        "canonical_turn_action": "I leave the tavern and travel toward Garran's wagon yard."
+      },
+      {
+        "turn": 11,
+        "npc": "Garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+        "canonical_turn_action": "I tell Garran the mill bridge may be an ambush and show him the evidence."
+      },
+      {
+        "turn": 12,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Garran if there is another route around the bridge.",
+        "canonical_turn_action": "I ask Garran if there is another route around the bridge."
+      },
+      {
+        "turn": 13,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I buy two rations from Bran.",
+        "canonical_turn_action": "I buy two rations from Bran."
+      },
+      {
+        "turn": 14,
+        "npc": "Garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I help Garran prepare the wagon for the safer route and get ready to leave.",
+        "canonical_turn_action": "I help Garran prepare the wagon for the safer route and get ready to leave."
+      },
+      {
+        "turn": 15,
+        "npc": "Garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
+        "canonical_turn_action": "I leave Garran's wagon yard with the wagon and take the quarry road."
+      },
+      {
+        "turn": 16,
+        "npc": "N/A (Self-Scout)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+        "canonical_turn_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs."
+      },
+      {
+        "turn": 17,
+        "npc": "N/A (Environmental Report)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I scan the rock shelf for watchers or scouts watching the quarry road.",
+        "canonical_turn_action": "I scan the rock shelf for watchers or scouts watching the quarry road."
+      },
+      {
+        "turn": 18,
+        "npc": "Garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+        "canonical_turn_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush."
+      },
+      {
+        "turn": 19,
+        "npc": "Garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I check in with Garran and focus on the active wagon-road objective.",
+        "canonical_turn_action": "I check in with Garran and focus on the active wagon-road objective."
+      },
+      {
+        "turn": 20,
+        "npc": "Garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I question the captured bandit.",
+        "canonical_turn_action": "I question the captured bandit."
+      },
+      {
+        "turn": 21,
+        "npc": "Captured Bandit",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+        "canonical_turn_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill."
+      },
+      {
+        "turn": 22,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+        "canonical_turn_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill."
+      },
+      {
+        "turn": 23,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+        "canonical_turn_action": "I ask Bran what he knows about the old mill and who might be using it now."
+      },
+      {
+        "turn": 24,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I travel to the old mill ruins to follow the marked coin lead.",
+        "canonical_turn_action": "I travel to the old mill ruins to follow the marked coin lead."
+      },
+      {
+        "turn": 25,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use.",
+        "canonical_turn_action": "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use."
+      },
+      {
+        "turn": 26,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I search behind the loose cellar stones for the smuggler cache.",
+        "canonical_turn_action": "I search behind the loose cellar stones for the smuggler cache."
+      },
+      {
+        "turn": 27,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I read the wax-sealed order from the hidden smuggler cache.",
+        "canonical_turn_action": "I read the wax-sealed order from the hidden smuggler cache."
+      },
+      {
+        "turn": 28,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
+        "canonical_turn_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears."
+      },
+      {
+        "turn": 29,
+        "npc": "(Implied Presence)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I travel to the north road shrine to follow the Black Briar contact lead.",
+        "canonical_turn_action": "I travel to the north road shrine to follow the Black Briar contact lead."
+      },
+      {
+        "turn": 30,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I inspect the shrine grounds for fresh tracks, ash, hidden marks, or signs of the Black Briar contact.",
+        "canonical_turn_action": "I inspect the shrine grounds for fresh tracks, ash, hidden marks, or signs of the Black Briar contact."
+      },
+      {
+        "turn": 31,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I search the shrine stones and offering bowl for the hidden Black Briar contact token.",
+        "canonical_turn_action": "I search the shrine stones and offering bowl for the hidden Black Briar contact token."
+      },
+      {
+        "turn": 32,
+        "npc": "Bran (implied context)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I hide near the north road shrine and watch for the Black Briar contact signal.",
+        "canonical_turn_action": "I hide near the north road shrine and watch for the Black Briar contact signal."
+      },
+      {
+        "turn": 33,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I shadow the hooded Black Briar contact from the shrine without revealing myself.",
+        "canonical_turn_action": "I shadow the hooded Black Briar contact from the shrine without revealing myself."
+      },
+      {
+        "turn": 34,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I follow the Black Briar contact to the ruined tollhouse.",
+        "canonical_turn_action": "I follow the Black Briar contact to the ruined tollhouse."
+      },
+      {
+        "turn": 35,
+        "npc": "Bran (Whispering)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I eavesdrop on the meeting at the ruined tollhouse to learn who the contact serves.",
+        "canonical_turn_action": "I eavesdrop on the meeting at the ruined tollhouse to learn who the contact serves."
+      },
+      {
+        "turn": 36,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I recover the tollhouse manifest before the Black Briar contact can remove it.",
+        "canonical_turn_action": "I recover the tollhouse manifest before the Black Briar contact can remove it."
+      },
+      {
+        "turn": 37,
+        "npc": "Captain Voss",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss.",
+        "canonical_turn_action": "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss."
+      },
+      {
+        "turn": 38,
+        "npc": "Captain Voss",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+        "canonical_turn_action": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks."
+      },
+      {
+        "turn": 39,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I gather Bran and Garran to plan how to use the proof against Captain Voss.",
+        "canonical_turn_action": "I gather Bran and Garran to plan how to use the proof against Captain Voss."
+      },
+      {
+        "turn": 40,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran and Garran who in town still supports Captain Voss.",
+        "canonical_turn_action": "I ask Bran and Garran who in town still supports Captain Voss."
+      },
+      {
+        "turn": 41,
+        "npc": "Bran (Clerk/Official)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I go to the magistrate hall and request a public hearing against Captain Voss.",
+        "canonical_turn_action": "I go to the magistrate hall and request a public hearing against Captain Voss."
+      },
+      {
+        "turn": 42,
+        "npc": "Magistrate Lyra",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I present the tollhouse manifest and marked evidence to the magistrate.",
+        "canonical_turn_action": "I present the tollhouse manifest and marked evidence to the magistrate."
+      },
+      {
+        "turn": 43,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran and Garran to stand as public witnesses at the hearing against Captain Voss.",
+        "canonical_turn_action": "I ask Bran and Garran to stand as public witnesses at the hearing against Captain Voss."
+      },
+      {
+        "turn": 44,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I protect Bran and Garran from Voss's watchmen and warn the guards that the magistrate has accepted the evidence.",
+        "canonical_turn_action": "I protect Bran and Garran from Voss's watchmen and warn the guards that the magistrate has accepted the evidence."
+      },
+      {
+        "turn": 45,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I attend the public hearing and stand with Bran and Garran as the evidence against Captain Voss is heard.",
+        "canonical_turn_action": "I attend the public hearing and stand with Bran and Garran as the evidence against Captain Voss is heard."
+      },
+      {
+        "turn": 46,
+        "npc": "Captain Voss",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I answer Captain Voss's accusation by tying the manifest, the marked coin, and the witnesses together.",
+        "canonical_turn_action": "I answer Captain Voss's accusation by tying the manifest, the marked coin, and the witnesses together."
+      },
+      {
+        "turn": 47,
+        "npc": "Captain Voss",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I press Captain Voss to explain why his initials appear on the tollhouse manifest.",
+        "canonical_turn_action": "I press Captain Voss to explain why his initials appear on the tollhouse manifest."
+      },
+      {
+        "turn": 48,
+        "npc": "The Magistrate",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction.",
+        "canonical_turn_action": "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction."
+      },
+      {
+        "turn": 49,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I help Bran and Garran stabilize the town and reopen the wagon routes after Voss is exposed.",
+        "canonical_turn_action": "I help Bran and Garran stabilize the town and reopen the wagon routes after Voss is exposed."
+      },
+      {
+        "turn": 50,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I report back to Bran and Garran that Voss is exposed, then plan to investigate which faction backed him.",
+        "canonical_turn_action": "I report back to Bran and Garran that Voss is exposed, then plan to investigate which faction backed him."
+      },
+      {
+        "turn": 51,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I review the evidence with Bran and Garran to decide how to identify the faction that backed Captain Voss.",
+        "canonical_turn_action": "I review the evidence with Bran and Garran to decide how to identify the faction that backed Captain Voss."
+      },
+      {
+        "turn": 52,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I study the manifest payment marks to trace who funded Captain Voss.",
+        "canonical_turn_action": "I study the manifest payment marks to trace who funded Captain Voss."
+      },
+      {
+        "turn": 53,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I ask Bran what he knows about the Silver Crow cipher on Voss's payment marks.",
+        "canonical_turn_action": "I ask Bran what he knows about the Silver Crow cipher on Voss's payment marks."
+      },
+      {
+        "turn": 54,
+        "npc": "Old Teamster",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I question the old teamster at the wagon yard about the Silver Crow cargo routes.",
+        "canonical_turn_action": "I question the old teamster at the wagon yard about the Silver Crow cargo routes."
+      },
+      {
+        "turn": 55,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I travel to the abandoned cooperage to search for the Silver Crow cache.",
+        "canonical_turn_action": "I travel to the abandoned cooperage to search for the Silver Crow cache."
+      },
+      {
+        "turn": 56,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I inspect the cooperage cellar for hidden doors, cargo marks, or the Silver Crow cache.",
+        "canonical_turn_action": "I inspect the cooperage cellar for hidden doors, cargo marks, or the Silver Crow cache."
+      },
+      {
+        "turn": 57,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I open the hidden Silver Crow cache beneath the cooperage cellar.",
+        "canonical_turn_action": "I open the hidden Silver Crow cache beneath the cooperage cellar."
+      },
+      {
+        "turn": 58,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I read and decipher the coded Silver Crow ledger from the hidden cache.",
+        "canonical_turn_action": "I read and decipher the coded Silver Crow ledger from the hidden cache."
+      },
+      {
+        "turn": 59,
+        "npc": "Route Agent",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I compare the ledger names and seals to identify the Sable Chain agent funding the Silver Crow.",
+        "canonical_turn_action": "I compare the ledger names and seals to identify the Sable Chain agent funding the Silver Crow."
+      },
+      {
+        "turn": 60,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence.",
+        "canonical_turn_action": "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence."
+      },
+      {
+        "turn": 61,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain.",
+        "canonical_turn_action": "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain."
+      },
+      {
+        "turn": 62,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I return to Bran and Garran with proof that the Sable Chain backed Captain Voss through the Silver Crow.",
+        "canonical_turn_action": "I return to Bran and Garran with proof that the Sable Chain backed Captain Voss through the Silver Crow."
+      },
+      {
+        "turn": 63,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
+        "canonical_turn_action": "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back."
+      },
+      {
+        "turn": 64,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I secure the Silver Crow ledger, the manifest, and Marlowe's proof before the Sable Chain can steal them.",
+        "canonical_turn_action": "I secure the Silver Crow ledger, the manifest, and Marlowe's proof before the Sable Chain can steal them."
+      },
+      {
+        "turn": 65,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I scout the streets around the River Gate safehouse for Sable Chain watchers.",
+        "canonical_turn_action": "I scout the streets around the River Gate safehouse for Sable Chain watchers."
+      },
+      {
+        "turn": 66,
+        "npc": "(Unseen Watcher)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I shadow the Sable Chain watchers from the safehouse to learn where they report.",
+        "canonical_turn_action": "I shadow the Sable Chain watchers from the safehouse to learn where they report."
+      },
+      {
+        "turn": 67,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I follow the watchers to the River Gate warehouses.",
+        "canonical_turn_action": "I follow the watchers to the River Gate warehouses."
+      },
+      {
+        "turn": 68,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes.",
+        "canonical_turn_action": "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes."
+      },
+      {
+        "turn": 69,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I search the warehouse office for Sable Chain countermove orders.",
+        "canonical_turn_action": "I search the warehouse office for Sable Chain countermove orders."
+      },
+      {
+        "turn": 70,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I rush back to warn Bran and Garran that the Sable Chain plans to burn the evidence and silence witnesses.",
+        "canonical_turn_action": "I rush back to warn Bran and Garran that the Sable Chain plans to burn the evidence and silence witnesses."
+      },
+      {
+        "turn": 71,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
+        "canonical_turn_action": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike."
+      },
+      {
+        "turn": 72,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
+        "canonical_turn_action": "I intercept the Sable Chain strike team before they can burn the safehouse evidence."
+      },
+      {
+        "turn": 73,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I capture the strike team's sealed orders before they can destroy them.",
+        "canonical_turn_action": "I capture the strike team's sealed orders before they can destroy them."
+      },
+      {
+        "turn": 74,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I report to Bran and Garran that the Sable Chain countermove failed and the sealed orders point to a higher handler.",
+        "canonical_turn_action": "I report to Bran and Garran that the Sable Chain countermove failed and the sealed orders point to a higher handler."
+      },
+      {
+        "turn": 75,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler.",
+        "canonical_turn_action": "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler."
+      },
+      {
+        "turn": 76,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I decode the handler's route cipher from the sealed orders.",
+        "canonical_turn_action": "I decode the handler's route cipher from the sealed orders."
+      },
+      {
+        "turn": 77,
+        "npc": "Bran (to the teamsters)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+        "canonical_turn_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route."
+      },
+      {
+        "turn": 78,
+        "npc": "N/A (Solo Action)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I scout the east road for roadblocks, chokepoints, and Sable Chain pressure points.",
+        "canonical_turn_action": "I scout the east road for roadblocks, chokepoints, and Sable Chain pressure points."
+      },
+      {
+        "turn": 79,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I disable the false toll markers the Sable Chain placed along the east road.",
+        "canonical_turn_action": "I disable the false toll markers the Sable Chain placed along the east road."
+      },
+      {
+        "turn": 80,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I search the old milepost for the Sable Chain handler's dead drop.",
+        "canonical_turn_action": "I search the old milepost for the Sable Chain handler's dead drop."
+      },
+      {
+        "turn": 81,
+        "npc": "Handler (Dead Drop)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I read the route pressure instructions from the handler's dead drop.",
+        "canonical_turn_action": "I read the route pressure instructions from the handler's dead drop."
+      },
+      {
+        "turn": 82,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
+        "canonical_turn_action": "I travel to Black Ford before the Sable Chain handler's people can seize the crossing."
+      },
+      {
+        "turn": 83,
+        "npc": "Route Agent",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I confront the Sable Chain route pressure agents at Black Ford and order them to stand down.",
+        "canonical_turn_action": "I confront the Sable Chain route pressure agents at Black Ford and order them to stand down."
+      },
+      {
+        "turn": 84,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I secure the Black Ford crossing so the teamsters can keep the east road open.",
+        "canonical_turn_action": "I secure the Black Ford crossing so the teamsters can keep the east road open."
+      },
+      {
+        "turn": 85,
+        "npc": "(Self-Observation)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I study the captured route papers to identify the Sable Chain handler's signature.",
+        "canonical_turn_action": "I study the captured route papers to identify the Sable Chain handler's signature."
+      },
+      {
+        "turn": 86,
+        "npc": "Handler Veska",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I return to Bran and Garran with the name of the Sable Chain handler: Veska.",
+        "canonical_turn_action": "I return to Bran and Garran with the name of the Sable Chain handler: Veska."
+      },
+      {
+        "turn": 87,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I meet with Bran and Garran to plan how to pursue Handler Veska before the Sable Chain relocates.",
+        "canonical_turn_action": "I meet with Bran and Garran to plan how to pursue Handler Veska before the Sable Chain relocates."
+      },
+      {
+        "turn": 88,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I trace Veska's courier route from the captured route papers and sealed orders.",
+        "canonical_turn_action": "I trace Veska's courier route from the captured route papers and sealed orders."
+      },
+      {
+        "turn": 89,
+        "npc": "Agent Marlowe",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I travel to the old north watchpost to follow Veska's courier trail.",
+        "canonical_turn_action": "I travel to the old north watchpost to follow Veska's courier trail."
+      },
+      {
+        "turn": 90,
+        "npc": "Handler Veska",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "canonical_turn_action": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail."
+      },
+      {
+        "turn": 91,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I intercept Veska's courier before the message can leave the old north watchpost.",
+        "canonical_turn_action": "I intercept Veska's courier before the message can leave the old north watchpost."
+      },
+      {
+        "turn": 92,
+        "npc": "Handler Veska",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I recover Veska's coded message from the intercepted courier.",
+        "canonical_turn_action": "I recover Veska's coded message from the intercepted courier."
+      },
+      {
+        "turn": 93,
+        "npc": "(Internal/To Bran)",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I decode Veska's coded message to learn where the Sable Chain leadership is moving.",
+        "canonical_turn_action": "I decode Veska's coded message to learn where the Sable Chain leadership is moving."
+      },
+      {
+        "turn": 94,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I travel to the ridge hideout before Veska's leadership cell can relocate.",
+        "canonical_turn_action": "I travel to the ridge hideout before Veska's leadership cell can relocate."
+      },
+      {
+        "turn": 95,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I scout the ridge hideout for guards, exits, and signs of Handler Veska.",
+        "canonical_turn_action": "I scout the ridge hideout for guards, exits, and signs of Handler Veska."
+      },
+      {
+        "turn": 96,
+        "npc": "Handler Veska",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I confront Handler Veska at the ridge hideout with the proof linking her to the Sable Chain route pressure.",
+        "canonical_turn_action": "I confront Handler Veska at the ridge hideout with the proof linking her to the Sable Chain route pressure."
+      },
+      {
+        "turn": 97,
+        "npc": "Handler Veska",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I secure Veska's leadership ledgers before the Sable Chain can destroy or move them.",
+        "canonical_turn_action": "I secure Veska's leadership ledgers before the Sable Chain can destroy or move them."
+      },
+      {
+        "turn": 98,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I return to Bran and Garran with Veska's leadership ledgers and proof of the Sable Chain command structure.",
+        "canonical_turn_action": "I return to Bran and Garran with Veska's leadership ledgers and proof of the Sable Chain command structure."
+      },
+      {
+        "turn": 99,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I review Veska's ledgers with Bran and Garran to map the Sable Chain command structure.",
+        "canonical_turn_action": "I review Veska's ledgers with Bran and Garran to map the Sable Chain command structure."
+      },
+      {
+        "turn": 100,
+        "npc": "Bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_schedule": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "player_action": "I study the ledger entries to identify the hidden Sable Chain paymaster.",
+        "canonical_turn_action": "I study the ledger entries to identify the hidden Sable Chain paymaster."
+      }
+    ]
+  },
+  "real_npc_goal_agency_ok": true,
+  "fully_agentic_npc_count": 24
+}
