@@ -1,0 +1,480 @@
+
+
+def _build_100_turn_evaluation_summary(
+    *,
+    turns_executed: int,
+    requested_turns: int,
+    runtime_errors: List[Any],
+    warnings: List[str],
+    transcript: List[Dict[str, Any]],
+    performance_summary: Dict[str, Any],
+    narration_grounding_summary: Dict[str, Any],
+    progress_quality_summary: Dict[str, Any],
+    checkpoint_summary: Dict[str, Any],
+    loop_detection_summary: Dict[str, Any],
+    mechanics_coverage_summary: Optional[Dict[str, Any]] = None,
+    turn_action_consistency_summary: Optional[Dict[str, Any]] = None,
+    scenario_progression_action_repeat_summary: Optional[Dict[str, Any]] = None,
+    story_arc_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    story_arc_aftermath_summary: Optional[Dict[str, Any]] = None,
+    faction_reputation_summary: Optional[Dict[str, Any]] = None,
+    followup_arc_progression_summary: Optional[Dict[str, Any]] = None,
+    faction_pressure_summary: Optional[Dict[str, Any]] = None,
+    followup_arc_resolution_summary: Optional[Dict[str, Any]] = None,
+    pressure_pacing_summary: Optional[Dict[str, Any]] = None,
+    escalation_branch_summary: Optional[Dict[str, Any]] = None,
+    world_signal_summary: Optional[Dict[str, Any]] = None,
+    escalation_arc_progression_summary: Optional[Dict[str, Any]] = None,
+    world_state_compression_summary: Optional[Dict[str, Any]] = None,
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
+    economy_pressure_summary: Optional[Dict[str, Any]] = None,
+    combat_lifecycle_summary: Optional[Dict[str, Any]] = None,
+    faction_consequence_summary: Optional[Dict[str, Any]] = None,
+    npc_reaction_summary: Optional[Dict[str, Any]] = None,
+    dialogue_action_relevance_summary: Optional[Dict[str, Any]] = None,
+    suppressed_selection_guard_summary: Optional[Dict[str, Any]] = None,
+    direct_graph_lifecycle_evidence: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    grounding = _safe_dict(narration_grounding_summary)
+    progress = _safe_dict(progress_quality_summary)
+    checkpoints = _safe_dict(checkpoint_summary)
+    loops = _safe_dict(loop_detection_summary)
+    perf = _safe_dict(performance_summary)
+    mechanics = _safe_dict(mechanics_coverage_summary)
+    mechanics_real_required_ok = bool(
+        mechanics.get("real_required_ok", mechanics.get("required_ok", True))
+    )
+    story_arcs = _safe_dict(story_arc_lifecycle_summary)
+    aftermath = _safe_dict(story_arc_aftermath_summary)
+    factions = _safe_dict(faction_reputation_summary)
+    followup_progression = _safe_dict(followup_arc_progression_summary)
+    faction_pressure = _safe_dict(faction_pressure_summary)
+    followup_resolution = _safe_dict(followup_arc_resolution_summary)
+    pressure_pacing = _safe_dict(pressure_pacing_summary)
+    escalation_branch = _safe_dict(escalation_branch_summary)
+    world_signals = _safe_dict(world_signal_summary)
+    escalation_progression = _safe_dict(escalation_arc_progression_summary)
+    world_compression = _safe_dict(world_state_compression_summary)
+    npc_agency = _safe_dict(npc_agency_summary)
+    economy_pressure = _safe_dict(economy_pressure_summary)
+    combat_lifecycle = _safe_dict(combat_lifecycle_summary)
+    faction_consequence = _safe_dict(faction_consequence_summary)
+    npc_reaction = _safe_dict(npc_reaction_summary)
+    dialogue_relevance = _safe_dict(dialogue_action_relevance_summary)
+    turn_action_consistency = _safe_dict(turn_action_consistency_summary)
+    scenario_repeats = _safe_dict(scenario_progression_action_repeat_summary)
+    suppressed_selection = _safe_dict(suppressed_selection_guard_summary)
+
+    # Confirm these gates use fallback values:
+    story_aftermath = aftermath
+    aftermath_event_count = (
+        story_aftermath.get("aftermath_event_count")
+        or story_aftermath.get("event_count")
+        or story_aftermath.get("direct_graph_aftermath_count")
+    )
+
+    faction_history_count = (
+        factions.get("history_count")
+        or factions.get("event_count")
+        or factions.get("direct_graph_reputation_event_count")
+    )
+
+    pressure_event_count = (
+        faction_pressure.get("pressure_event_count")
+        or faction_pressure.get("event_count")
+        or faction_pressure.get("direct_graph_pressure_count")
+    )
+
+    accepted_pressure_count = (
+        pressure_pacing.get("accepted_pressure_count")
+        or pressure_pacing.get("accepted_pressure_event_count")
+        or pressure_pacing.get("pressure_event_count")
+        or pressure_pacing.get("direct_graph_pressure_count")
+    )
+
+    followup_progression_count = (
+        followup_progression.get("progression_event_count")
+        or followup_progression.get("event_count")
+        or followup_progression.get("direct_graph_progression_count")
+    )
+
+    followup_resolution_count = (
+        followup_resolution.get("resolved_or_escalated_count")
+        or followup_resolution.get("resolution_event_count")
+        or followup_resolution.get("direct_graph_resolution_count")
+    )
+
+    escalation_branch = _safe_dict(escalation_branch_summary)
+    branch_seeded_count = (
+        escalation_branch.get("seeded_count")
+        or escalation_branch.get("branch_count")
+        or escalation_branch.get("direct_graph_branch_seed_count")
+    )
+
+    escalation_progression_count = (
+        escalation_progression.get("progression_event_count")
+        or escalation_progression.get("event_count")
+        or escalation_progression.get("direct_graph_escalation_count")
+    )
+
+    npc_agency_event_count = (
+        npc_agency.get("event_count")
+        or npc_agency.get("memory_event_count")
+        or npc_agency.get("direct_graph_agency_count")
+    )
+
+    selected_grounding_health = _build_selected_output_grounding_health(
+        grounding,
+        requested_turns=requested_turns,
+    )
+    checked_grounding = int(grounding.get("checked_count") or 0)
+    grounding_invalid = int(selected_grounding_health.get("selected_output_invalid_count") or 0)
+    grounding_parse_failures = int(selected_grounding_health.get("provider_json_parse_failed_count") or 0)
+    grounding_provider_invalid = int(selected_grounding_health.get("provider_invalid_count") or 0)
+    deterministic_fallback_rate = float(selected_grounding_health.get("deterministic_fallback_rate") or 0.0)
+
+    fallback_player_action_rate = float(progress.get("fallback_player_action_rate") or 0.0)
+    meaningful_progress_rate = float(progress.get("meaningful_progress_rate") or 0.0)
+    no_change_turns = int(progress.get("no_change_turns") or 0)
+
+    checkpoint_failures = int(checkpoints.get("failure_count") or checkpoints.get("checkpoint_failure_count") or 0)
+    repeated_action_windows = int(loops.get("repeated_action_window_count") or 0)
+    loop_warning_count = int(loops.get("loop_warning_count") or 0)
+
+    avg_turn_seconds = float(
+        perf.get("avg_turn_seconds")
+        or perf.get("average_turn_seconds")
+        or perf.get("mean_turn_seconds")
+        or 0.0
+    )
+    p95_turn_seconds = float(
+        perf.get("p95_turn_seconds")
+        or perf.get("turn_p95_seconds")
+        or 0.0
+    )
+
+    completed_or_failed_arc_count = int(story_arcs.get("completed_count") or 0) + int(story_arcs.get("failed_count") or 0)
+
+    gates: Dict[str, Dict[str, Any]] = {
+        "turn_count_reached": {
+            "ok": turns_executed >= requested_turns,
+            "value": turns_executed,
+            "expected": requested_turns,
+            "message": f"Executed {turns_executed}/{requested_turns} requested turns.",
+        },
+        "runtime_errors_absent": {
+            "ok": len(runtime_errors) == 0,
+            "value": len(runtime_errors),
+            "expected": 0,
+            "message": f"Runtime errors: {len(runtime_errors)}.",
+        },
+        "narration_grounding_checked": {
+            "ok": checked_grounding > 0,
+            "value": checked_grounding,
+            "expected": "> 0",
+            "message": f"Grounding validations checked: {checked_grounding}.",
+        },
+        "narration_grounding_valid": {
+            "ok": bool(selected_grounding_health.get("ok")),
+            "value": selected_grounding_health,
+            "expected": {
+                "selected_output_invalid_count": 0,
+                "provider_json_parse_failed": 0,
+                "provider_invalid": 0,
+                "deterministic_fallback_rate": "<= 0.10",
+            },
+            "message": (
+                "Selected narration outputs should be safe. Rejected-primary violations are allowed "
+                "when a valid safe_fallback or deterministic fallback is selected."
+            ),
+        },
+        "player_agent_fallback_rate": {
+            "ok": fallback_player_action_rate <= 0.25,
+            "value": fallback_player_action_rate,
+            "expected": "<= 0.25",
+            "message": f"Player-agent fallback action rate: {fallback_player_action_rate:.2%}.",
+        },
+        "scenario_progression_repeats_bounded": {
+            "ok": int(scenario_repeats.get("repeat_warning_count") or 0) <= 5,
+            "value": {
+                "repeat_warning_count": scenario_repeats.get("repeat_warning_count"),
+                "suppressed_action_count": scenario_repeats.get("suppressed_action_count"),
+                "by_action_id": scenario_repeats.get("by_action_id"),
+            },
+            "expected": "repeated no-progress graph actions are suppressed and remain bounded",
+            "message": "Scenario graph actions should not loop or crash autoplay.",
+        },
+        "meaningful_progress_rate": {
+            "ok": meaningful_progress_rate >= 0.10,
+            "value": meaningful_progress_rate,
+            "expected": ">= 0.10",
+            "message": f"Meaningful progress rate: {meaningful_progress_rate:.2%}.",
+        },
+        "no_change_turns_bounded": {
+            "ok": no_change_turns <= max(15, int(requested_turns * 0.35)),
+            "value": no_change_turns,
+            "expected": f"<= {max(15, int(requested_turns * 0.35))}",
+            "message": f"No-change turns: {no_change_turns}.",
+        },
+        "checkpoint_validation": {
+            "ok": checkpoint_failures == 0,
+            "value": checkpoint_failures,
+            "expected": 0,
+            "message": f"Checkpoint validation failures: {checkpoint_failures}.",
+        },
+        "loop_detection": {
+            "ok": repeated_action_windows == 0 and loop_warning_count == 0,
+            "value": {
+                "repeated_action_window_count": repeated_action_windows,
+                "loop_warning_count": loop_warning_count,
+            },
+            "expected": {
+                "repeated_action_window_count": 0,
+                "loop_warning_count": 0,
+            },
+            "message": "No repeated-action loop windows should be detected.",
+        },
+        "performance_turn_latency": {
+            "ok": p95_turn_seconds <= 30.0 if p95_turn_seconds else True,
+            "value": {
+                "avg_turn_seconds": avg_turn_seconds,
+                "p95_turn_seconds": p95_turn_seconds,
+            },
+            "expected": {
+                "p95_turn_seconds": "<= 30.0",
+            },
+            "message": f"Average turn latency {avg_turn_seconds:.2f}s, p95 {p95_turn_seconds:.2f}s.",
+        },
+        "mechanics_coverage_required": {
+            "ok": mechanics_real_required_ok,
+            "value": {
+                "coverage_rate": mechanics.get("coverage_rate"),
+                "real_coverage_rate": mechanics.get("real_coverage_rate"),
+                "covered_required_count": mechanics.get("covered_required_count"),
+                "real_covered_required_count": mechanics.get("real_covered_required_count"),
+                "required_count": mechanics.get("required_count"),
+                "missing_required": mechanics.get("missing_required"),
+                "missing_real_required": mechanics.get("missing_real_required"),
+            },
+            "expected": {
+                "missing_real_required": [],
+                "real_coverage_rate": "1.0",
+            },
+            "message": "Required RPG mechanics should be exercised by real runtime/story-graph evidence.",
+        },
+        "story_arc_resolution_present": {
+            "ok": completed_or_failed_arc_count >= 1,
+            "value": {
+                "completed_count": story_arcs.get("completed_count"),
+                "failed_count": story_arcs.get("failed_count"),
+                "active_count": story_arcs.get("active_count"),
+                "status_counts": story_arcs.get("status_counts"),
+            },
+            "expected": "at least one completed or failed story arc in 100-turn run",
+            "message": "The 100-turn campaign should demonstrate deterministic story arc closure.",
+        },
+        "story_arc_aftermath_present": {
+            "ok": int(aftermath_event_count or 0) >= 1,
+            "value": {
+                "aftermath_event_count": aftermath_event_count,
+                "direct_graph_aftermath_count": story_aftermath.get("direct_graph_aftermath_count"),
+                "world_signal_count": aftermath.get("world_signal_count"),
+                "npc_memory_event_count": aftermath.get("npc_memory_event_count"),
+                "followup_hook_count": aftermath.get("followup_hook_count"),
+                "seeded_followup_arc_count": aftermath.get("seeded_followup_arc_count"),
+            },
+            "expected": "at least one bounded aftermath event from completed or failed arcs",
+            "message": "Completed arcs should create deterministic aftermath.",
+        },
+        "faction_reputation_changed": {
+            "ok": int(faction_history_count or 0) >= 1,
+            "value": {
+                "faction_count": factions.get("faction_count"),
+                "direct_graph_reputation_event_count": factions.get("direct_graph_reputation_event_count"),
+                "factions": factions.get("factions"),
+            },
+            "expected": "at least one faction reputation delta",
+            "message": "Arc aftermath should produce bounded faction reputation consequences.",
+        },
+        "followup_arc_progression_present": {
+            "ok": int(followup_progression_count or 0) >= 1,
+            "value": {
+                "progression_event_count": followup_progression_count,
+                "direct_graph_progression_count": followup_progression.get("direct_graph_progression_count"),
+                "progressed_count": followup_progression.get("progressed_count"),
+                "progressed_arc_ids": followup_progression.get("progressed_arc_ids"),
+                "world_signal_count": followup_progression.get("world_signal_count"),
+            },
+            "expected": "at least one seeded follow-up arc progresses",
+            "message": "Seeded follow-up arcs should advance deterministically after their prerequisites are met.",
+        },
+        "faction_pressure_present": {
+            "ok": int(pressure_event_count or 0) >= 1,
+            "value": {
+                "pressure_event_count": pressure_event_count,
+                "direct_graph_pressure_count": faction_pressure.get("direct_graph_pressure_count"),
+                "world_signal_count": faction_pressure.get("world_signal_count"),
+                "by_faction": faction_pressure.get("by_faction"),
+            },
+            "expected": "at least one faction pressure event",
+            "message": "Faction reputation changes should produce bounded pressure or support events.",
+        },
+        "followup_arc_resolution_present": {
+            "ok": int(followup_resolution_count or 0) >= 1,
+            "value": {
+                "resolved_or_escalated_count": followup_resolution_count,
+                "direct_graph_resolution_count": followup_resolution.get("direct_graph_resolution_count"),
+                "resolved_count": followup_resolution.get("resolved_count"),
+                "resolved_arc_ids": followup_resolution.get("resolved_arc_ids"),
+                "escalation_seed_count": followup_resolution.get("escalation_seed_count"),
+            },
+            "expected": "at least one progressed follow-up arc resolves or escalates",
+            "message": "Follow-up arcs should not remain only progressed; at least one should resolve or branch.",
+        },
+        "escalation_branch_seeded": {
+            "ok": int(branch_seeded_count or 0) >= 1,
+            "value": {
+                "seeded_count": branch_seeded_count,
+                "direct_graph_branch_seed_count": escalation_branch.get("direct_graph_branch_seed_count"),
+                "escalation_seed_count": followup_resolution.get("escalation_seed_count"),
+                "escalation_arcs": followup_resolution.get("escalation_arcs"),
+            },
+            "expected": "at least one escalation branch seeded from follow-up resolution",
+            "message": "Resolved follow-up arcs should create bounded escalation branches.",
+        },
+        "pressure_pacing_active": {
+            "ok": (
+                int(accepted_pressure_count or 0) >= 1
+                and (
+                    int(pressure_pacing.get("rejected_pressure_event_count") or 0) >= 1
+                    or int(pressure_pacing.get("direct_graph_pressure_count") or 0) >= 1
+                    or bool(pressure_pacing.get("direct_graph_pacing_bridge_active"))
+                )
+            ),
+            "value": {
+                "accepted_pressure_count": accepted_pressure_count,
+                "accepted_pressure_event_count": pressure_pacing.get("accepted_pressure_event_count"),
+                "direct_graph_pressure_count": pressure_pacing.get("direct_graph_pressure_count"),
+                "direct_graph_pacing_bridge_active": pressure_pacing.get("direct_graph_pacing_bridge_active"),
+                "rejected_pressure_event_count": pressure_pacing.get("rejected_pressure_event_count"),
+                "rejected_by_reason": pressure_pacing.get("rejected_by_reason"),
+            },
+            "expected": "pressure events accepted and either old pacing rejected spam or direct graph pressure bridge is active",
+            "message": "Faction pressure should be paced or represented by direct graph lifecycle pressure evidence.",
+        },
+        "world_signal_summary_present": {
+            "ok": int(world_signals.get("world_signal_count") or 0) >= 1,
+            "value": {
+                "world_signal_count": world_signals.get("world_signal_count"),
+                "by_kind": world_signals.get("by_kind"),
+                "by_faction": world_signals.get("by_faction"),
+            },
+            "expected": "global world signal summary exists",
+            "message": "Report should separate pure aftermath signals from global world signals.",
+        },
+        "escalation_arc_progression_present": {
+            "ok": int(escalation_progression_count or 0) >= 1,
+            "value": {
+                "progression_event_count": escalation_progression_count,
+                "direct_graph_escalation_count": escalation_progression.get("direct_graph_escalation_count"),
+                "progressed_count": escalation_progression.get("progressed_count"),
+                "progressed_arc_ids": escalation_progression.get("progressed_arc_ids"),
+                "pressure_event_count": escalation_progression.get("pressure_event_count"),
+                "world_signal_count": escalation_progression.get("world_signal_count"),
+            },
+            "expected": "at least one escalation arc progresses",
+            "message": "Seeded escalation arcs should advance deterministically.",
+        },
+        "world_state_compression_active": {
+            "ok": int(world_compression.get("compression_event_count") or 0) >= 1
+            and bool(_safe_dict(world_compression.get("latest_state_budget")).get("ok", True)),
+            "value": {
+                "compression_event_count": world_compression.get("compression_event_count"),
+                "compressed_state_preview": world_compression.get("compressed_state_preview"),
+                "latest_state_budget": world_compression.get("latest_state_budget"),
+            },
+            "expected": "compression events occur and state budget is respected",
+            "message": "Long-run campaigns need bounded world state and memory compression.",
+        },
+        "npc_agency_present": {
+            "ok": int(npc_agency_event_count or 0) >= 1,
+            "value": {
+                "event_count": npc_agency_event_count,
+                "direct_graph_agency_count": npc_agency.get("direct_graph_agency_count"),
+                "npc_count": npc_agency.get("npc_count"),
+                "schedule_event_count": npc_agency.get("schedule_event_count"),
+                "agency_event_count": npc_agency.get("agency_event_count"),
+                "memory_event_count": npc_agency.get("memory_event_count"),
+            },
+            "expected": "at least one deterministic NPC agency event",
+            "message": "100-turn readiness should demonstrate schedule-driven NPC agency.",
+        },
+        "economy_pressure_present": {
+            "ok": int(economy_pressure.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": economy_pressure.get("event_count"),
+                "paid_count": economy_pressure.get("paid_count"),
+                "unpaid_count": economy_pressure.get("unpaid_count"),
+                "warning_count": economy_pressure.get("warning_count"),
+                "ending_currency": economy_pressure.get("ending_currency"),
+                "total_spent": economy_pressure.get("total_spent"),
+            },
+            "expected": "at least one deterministic economy pressure/resource sink event",
+            "message": "Long-run campaigns should include recurring resource pressure and sinks.",
+        },
+        "combat_lifecycle_present": {
+            "ok": int(combat_lifecycle.get("encounter_count") or 0) >= 1
+            and int(combat_lifecycle.get("event_count") or 0) >= 1,
+            "value": {
+                "encounter_count": combat_lifecycle.get("encounter_count"),
+                "event_count": combat_lifecycle.get("event_count"),
+                "injury_count": combat_lifecycle.get("injury_count"),
+                "consequence_event_count": combat_lifecycle.get("consequence_event_count"),
+                "economy_hint_count": combat_lifecycle.get("economy_hint_count"),
+                "by_outcome": combat_lifecycle.get("by_outcome"),
+            },
+            "expected": "at least one deterministic combat encounter with lifecycle events",
+            "message": "Long-run campaigns should include combat lifecycle/consequence pressure.",
+        },
+        "faction_consequence_present": {
+            "ok": int(faction_consequence.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": faction_consequence.get("event_count"),
+                "world_signal_count": faction_consequence.get("world_signal_count"),
+                "by_faction": faction_consequence.get("by_faction"),
+                "by_kind": faction_consequence.get("by_kind"),
+            },
+            "expected": "at least one deterministic long-term faction consequence",
+            "message": "Faction reputation should produce long-term consequences.",
+        },
+        "npc_reaction_present": {
+            "ok": int(npc_reaction.get("event_count") or 0) >= 1,
+            "value": {
+                "event_count": npc_reaction.get("event_count"),
+                "memory_event_count": npc_reaction.get("memory_event_count"),
+                "world_signal_count": npc_reaction.get("world_signal_count"),
+                "by_npc": npc_reaction.get("by_npc"),
+                "by_kind": npc_reaction.get("by_kind"),
+            },
+            "expected": "at least one deterministic NPC reaction to faction/consequence state",
+            "message": "NPCs should react to long-term faction consequences.",
+        },
+        "dialogue_action_relevance_ok": {
+            "ok": int(dialogue_relevance.get("checked_count") or 0) >= 1
+            and int(dialogue_relevance.get("unrepaired_count") or 0) == 0
+            and float(dialogue_relevance.get("mismatch_rate") or 0.0) <= 0.35,
+            "value": {
+                "checked_count": dialogue_relevance.get("checked_count"),
+                "mismatch_count": dialogue_relevance.get("mismatch_count"),
+                "mismatch_rate": dialogue_relevance.get("mismatch_rate"),
+                "repaired_count": dialogue_relevance.get("repaired_count"),
+                "unrepaired_count": dialogue_relevance.get("unrepaired_count"),
+                "source_gate_block_count": dialogue_relevance.get("source_gate_block_count"),
+                "by_reason": dialogue_relevance.get("by_reason"),
+            },
+            "expected": "dialogue selected for each turn is action-relevant or deterministically repaired",
+            "message": "Player-facing narration/NPC dialogue must match the current action type.",
+        },
+        "turn_action_consistency_ok": {
+            "ok": int(turn_action_consistency.get("checked_count") or 0) >= 1
+            and int(turn_action_consistency.get("unrepaired_count") or 0) == 0,

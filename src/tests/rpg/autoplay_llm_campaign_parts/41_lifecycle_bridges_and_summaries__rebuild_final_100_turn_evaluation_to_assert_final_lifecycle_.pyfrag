@@ -1,0 +1,408 @@
+
+
+def _rebuild_final_100_turn_evaluation(
+    *,
+    args: argparse.Namespace,
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    npc_agency_summary: Optional[Dict[str, Any]] = None,
+    dialogue_action_relevance_summary: Optional[Dict[str, Any]] = None,
+    turn_action_consistency_summary: Optional[Dict[str, Any]] = None,
+    scenario_progression_action_repeat_summary: Optional[Dict[str, Any]] = None,
+    suppressed_selection_guard_summary: Optional[Dict[str, Any]] = None,
+    escalation_branch_summary: Optional[Dict[str, Any]] = None,
+    direct_graph_lifecycle_evidence: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    full_transcript_for_eval = [
+        dict(_safe_dict(row))
+        for row in _safe_list(transcript)
+    ]
+
+    if direct_graph_lifecycle_evidence:
+        summary["direct_graph_lifecycle_evidence"] = _safe_dict(
+            direct_graph_lifecycle_evidence
+        )
+
+    summary = _apply_direct_graph_lifecycle_bridges(summary)
+
+    summary["hundred_turn_evaluation"] = _build_100_turn_evaluation_summary(
+        turns_executed=int(summary.get("turns_executed") or len(full_transcript_for_eval)),
+        requested_turns=int(
+            summary.get("requested_turns")
+            or getattr(args, "turns", 0)
+            or len(full_transcript_for_eval)
+        ),
+        runtime_errors=_safe_list(summary.get("runtime_errors")),
+        warnings=_safe_list(summary.get("warnings")),
+        transcript=full_transcript_for_eval,
+        performance_summary=_safe_dict(summary.get("performance_seconds_summary")),
+        narration_grounding_summary=_safe_dict(summary.get("narration_grounding_summary")),
+        progress_quality_summary=_safe_dict(summary.get("canonical_progress_quality")),
+        checkpoint_summary=_safe_dict(summary.get("checkpoint_summary") or summary.get("checkpoint_validation")),
+        loop_detection_summary=_safe_dict(summary.get("loop_detection_summary") or summary.get("loop_detection")),
+        mechanics_coverage_summary=_safe_dict(summary.get("mechanics_coverage_summary")),
+        story_arc_lifecycle_summary=_safe_dict(summary.get("story_arc_lifecycle_summary")),
+        story_arc_aftermath_summary=_safe_dict(summary.get("story_arc_aftermath_summary")),
+        faction_reputation_summary=_safe_dict(summary.get("faction_reputation_summary")),
+        followup_arc_progression_summary=_safe_dict(summary.get("followup_arc_progression_summary")),
+        faction_pressure_summary=_safe_dict(summary.get("faction_pressure_summary")),
+        followup_arc_resolution_summary=_safe_dict(summary.get("followup_arc_resolution_summary")),
+        pressure_pacing_summary=_safe_dict(summary.get("pressure_pacing_summary")),
+        world_signal_summary=_safe_dict(summary.get("world_signal_summary")),
+        escalation_arc_progression_summary=_safe_dict(summary.get("escalation_arc_progression_summary")),
+        world_state_compression_summary=_safe_dict(summary.get("world_state_compression_summary")),
+        npc_agency_summary=_safe_dict(summary.get("npc_agency_summary")),
+        economy_pressure_summary=_safe_dict(summary.get("economy_pressure_summary")),
+        combat_lifecycle_summary=_safe_dict(summary.get("combat_lifecycle_summary")),
+        faction_consequence_summary=_safe_dict(summary.get("faction_consequence_summary")),
+        npc_reaction_summary=_safe_dict(summary.get("npc_reaction_summary")),
+        dialogue_action_relevance_summary=_safe_dict(
+            dialogue_action_relevance_summary
+            or summary.get("dialogue_action_relevance_summary")
+        ),
+        turn_action_consistency_summary=_safe_dict(
+            turn_action_consistency_summary
+            or summary.get("turn_action_consistency_summary")
+        ),
+        scenario_progression_action_repeat_summary=_safe_dict(
+            scenario_progression_action_repeat_summary
+            or summary.get("scenario_progression_action_repeat_summary")
+        ),
+        suppressed_selection_guard_summary=_safe_dict(
+            suppressed_selection_guard_summary
+            or summary.get("suppressed_selection_guard_summary")
+        ),
+        escalation_branch_summary=_safe_dict(
+            escalation_branch_summary
+            or summary.get("escalation_branch_summary")
+        ),
+        direct_graph_lifecycle_evidence=_safe_dict(
+            direct_graph_lifecycle_evidence
+            or summary.get("direct_graph_lifecycle_evidence")
+        ),
+    )
+
+    summary["ok"] = (
+        bool(_safe_dict(summary.get("hundred_turn_evaluation")).get("ok"))
+        and bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok", True))
+        and not _safe_list(summary.get("runtime_errors"))
+    )
+
+    gates = _safe_dict(_safe_dict(summary.get("hundred_turn_evaluation")).get("gates"))
+
+    for gate_name, summary_key, expected_key in (
+        ("followup_arc_resolution_present", "followup_arc_resolution_summary", "resolved_count"),
+        ("pressure_pacing_active", "pressure_pacing_summary", "accepted_pressure_event_count"),
+        ("world_signal_summary_present", "world_signal_summary", "world_signal_count"),
+        ("escalation_arc_progression_present", "escalation_arc_progression_summary", "progressed_count"),
+        ("world_state_compression_active", "world_state_compression_summary", "compression_event_count"),
+        ("npc_agency_present", "npc_agency_summary", "agency_event_count"),
+        ("economy_pressure_present", "economy_pressure_summary", "event_count"),
+        ("combat_lifecycle_present", "combat_lifecycle_summary", "encounter_count"),
+        ("faction_consequence_present", "faction_consequence_summary", "event_count"),
+        ("npc_reaction_present", "npc_reaction_summary", "event_count"),
+        ("dialogue_action_relevance_ok", "dialogue_action_relevance_summary", "checked_count"),
+        ("turn_action_consistency_ok", "turn_action_consistency_summary", "checked_count"),
+        ("scenario_progression_repeats_bounded", "scenario_progression_action_repeat_summary", "repeat_warning_count"),
+    ):
+        gate = _safe_dict(gates.get(gate_name))
+        source = _safe_dict(summary.get(summary_key))
+        value = _safe_dict(gate.get("value"))
+
+        gate_ok = bool(gate.get("ok"))
+        source_value = source.get(expected_key)
+        gate_value = value.get(expected_key)
+
+        if source and not gate_ok and gate_value is None and source_value is not None:
+            summary.setdefault("warnings", []).append(
+                f"final_evaluation_gate_missing_source_value:{gate_name}:{summary_key}.{expected_key}"
+            )
+
+    return summary
+
+
+def _assert_final_lifecycle_summary_authority(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+    field_presence = _final_lifecycle_field_presence_summary(summary)
+    if not field_presence.get("ok"):
+        raise RuntimeError(
+            "final_lifecycle_summary_missing_fields:"
+            f"missing={field_presence.get('missing')}:"
+            f"empty={field_presence.get('empty')}"
+        )
+
+    qgs = _safe_dict(summary.get("quality_gate_summary"))
+    gates = _safe_dict(qgs.get("gates"))
+    missing_gates = [gate for gate in REQUIRED_FINAL_LIFECYCLE_GATES if gate not in gates]
+    if missing_gates:
+        raise RuntimeError(
+            "final_lifecycle_quality_gates_missing:"
+            f"missing_gates={missing_gates}"
+        )
+
+    if bool(summary.get("ok")) != bool(qgs.get("ok")):
+        _timestamped_print(
+            "Warning: summary_ok_mismatch:"
+            f"summary_ok={summary.get('ok')}:"
+            f"quality_gate_ok={qgs.get('ok')}"
+        )
+
+
+def _quest_progress_summary_from_quest_mapping(quests: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+    quests = _safe_dict(quests)
+    rows: List[Dict[str, Any]] = []
+    completed_count = 0
+    active_count = 0
+    for quest_id, quest_raw in sorted(quests.items()):
+        quest = _safe_dict(quest_raw)
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        objective_count = len(objectives)
+        completed_objective_count = sum(
+            1
+            for objective in objectives
+            if bool(objective.get("completed")) or _safe_str(objective.get("status")) == "completed"
+        )
+        status = _safe_str(quest.get("status") or ("completed" if objective_count and completed_objective_count >= objective_count else "active"))
+        if status == "completed":
+            completed_count += 1
+        elif status == "active":
+            active_count += 1
+        rows.append(
+            {
+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+                "title": _safe_str(quest.get("title") or quest_id),
+                "status": status,
+                "completed": bool(quest.get("completed")) or status == "completed",
+                "objective_count": objective_count,
+                "completed_objective_count": completed_objective_count,
+                "objectives": objectives,
+            }
+        )
+    return {
+        "quest_count": len(rows),
+        "active_count": active_count,
+        "completed_count": completed_count,
+        "quests": rows,
+        "source": source,
+    }
+
+
+def _synthesize_quest_progress_summary_from_story_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    facts = _safe_dict(state.get("witness_search_facts"))
+    arcs = _safe_dict(_safe_dict(state.get("story_arc_milestone_state")).get("arcs"))
+    witness_arc = _safe_dict(arcs.get("arc:witness_search") or arcs.get("witness_search"))
+    milestones = [_safe_dict(row) for row in _safe_list(witness_arc.get("milestones"))]
+    completed_ids = {
+        _safe_str(row.get("milestone_id"))
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+    completed_titles = {
+        _safe_str(row.get("title")).lower()
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+
+    find_done = (
+        bool(facts.get("inspected_side_door"))
+        or bool(facts.get("followed_road"))
+        or "milestone:find_witness" in completed_ids
+        or "find the witness" in completed_titles
+    )
+    report_done = (
+        bool(facts.get("reported_to_bran"))
+        or "milestone:report_findings_to_bran" in completed_ids
+        or "report findings to bran" in completed_titles
+        or "milestone:pursue_bandit_trail" in completed_ids
+    )
+    witness_completed = find_done and report_done
+
+    quests = [
+        {
+            "quest_id": "quest:witness_search",
+            "title": "Witness Search",
+            "status": "completed" if witness_completed else "active",
+            "completed": witness_completed,
+            "objective_count": 2,
+            "completed_objective_count": int(find_done) + int(report_done),
+            "objectives": [
+                {
+                    "objective_id": "objective:find_witness",
+                    "summary": "Find the witness.",
+                    "status": "completed" if find_done else "active",
+                    "completed": find_done,
+                },
+                {
+                    "objective_id": "objective:report_findings_to_bran",
+                    "summary": "Report findings to Bran.",
+                    "status": "completed" if report_done else "active",
+                    "completed": report_done,
+                },
+            ],
+        }
+    ]
+
+    bandit_active = (
+        bool(facts.get("followed_road"))
+        or "milestone:pursue_bandit_trail" in completed_ids
+        or "pursue bandit trail" in completed_titles
+    )
+    if bandit_active:
+        quests.append(
+            {
+                "quest_id": "quest:bandit_road",
+                "title": "Bandit Road",
+                "status": "active",
+                "completed": False,
+                "objective_count": 2,
+                "completed_objective_count": 0,
+                "objectives": [
+                    {
+                        "objective_id": "objective:inspect_road_tracks",
+                        "summary": "Inspect the road for tracks or ambush signs.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                    {
+                        "objective_id": "objective:follow_bandit_road",
+                        "summary": "Follow the bandit road trail.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                ],
+            }
+        )
+
+    return {
+        "quest_count": len(quests),
+        "active_count": sum(1 for row in quests if row["status"] == "active"),
+        "completed_count": sum(1 for row in quests if row["status"] == "completed"),
+        "quests": quests,
+        "source": "latest_state.story_arc_milestone_state+witness_search_facts",
+    }
+
+
+def _extract_npc_payload_from_turn_result(turn_result: Dict[str, Any], record: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Best-effort NPC extraction from the current turn result/record.
+
+    This avoids referencing an out-of-scope variable named `result`.
+    """
+    turn_result = _safe_dict(turn_result)
+    record = _safe_dict(record)
+    candidates = [
+        turn_result.get("npc"),
+        turn_result.get("npc_reply"),
+        _safe_dict(turn_result.get("narration")).get("npc"),
+        _safe_dict(turn_result.get("structured_narration")).get("npc"),
+        _safe_dict(turn_result.get("turn_contract")).get("npc"),
+        _safe_dict(turn_result.get("result")).get("npc"),
+        _safe_dict(_safe_dict(turn_result.get("result")).get("narration")).get("npc"),
+        record.get("npc"),
+        _safe_dict(record.get("narration")).get("npc"),
+    ]
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        speaker = _safe_str(candidate.get("speaker"))
+        line = _safe_str(candidate.get("line"))
+        if speaker and line:
+            return {"speaker": speaker, "line": line}
+    return {}
+
+
+def _directly_update_dialogue_state_from_turn(
+    *,
+    runtime_state: Dict[str, Any],
+    player_action: str,
+    turn_result: Dict[str, Any],
+    record: Dict[str, Any] | None,
+    turn_index: int,
+    debug_autoplay_stage_timing: bool = False,
+) -> None:
+    try:
+        from app.rpg.dialogue_state import update_dialogue_state
+
+        npc_payload = _extract_npc_payload_from_turn_result(turn_result, record)
+        npc_speaker = _safe_str(npc_payload.get("speaker"))
+        npc_line = _safe_str(npc_payload.get("line"))
+        if not npc_speaker or not npc_line:
+            return
+        update_dialogue_state(
+            runtime_state,
+            npc_id=npc_speaker,
+            player_action=_safe_str(player_action),
+            npc_line=npc_line,
+            facts_revealed=[],
+        )
+    except Exception as exc:
+        _probe_log(
+            bool(debug_autoplay_stage_timing),
+            "dialogue_state_direct_update.failed",
+            turn_index=turn_index,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def _journal_contains_internal_code_token(text: str, token: str) -> bool:
+    lower = _safe_str(text).lower()
+    token = _safe_str(token).lower()
+    if not token:
+        return False
+    if token in {"{", "}"}:
+        # Only flag likely raw JSON blobs, not ordinary punctuation.
+        return ("{" in lower and "}" in lower and (":" in lower or '"' in lower))
+    return token in lower
+
+
+def _sanitize_player_journal_text(text: Any) -> str:
+    """Remove JSON/code-shaped residue from player-facing journal prose."""
+    import re as _re
+
+    value = _safe_str(text)
+    if not value:
+        return ""
+    value = _re.sub(
+        r'\bNPC\s*\{[^{}]*"speaker"\s*:\s*"([^"]+)"[^{}]*"line"\s*:\s*"([^"]*)"[^{}]*\}\s*,?',
+        r'NPC \1 says: "\2"',
+        value,
+        flags=_re.IGNORECASE | _re.DOTALL,
+    )
+    value = _re.sub(r"\{[^{}]*\}", " ", value)
+    value = value.replace("{", "").replace("}", "")
+    value = _re.sub(r"\b(?:raw_ai_payload|provider_payload|provider_raw|traceback|runtime_error|canonical_semantic_pair)\b:?", "", value, flags=_re.IGNORECASE)
+    value = _re.sub(r"\n{3,}", "\n\n", value)
+    value = _re.sub(r"[ \t]{2,}", " ", value)
+    value = _re.sub(r" *, *$", "", value, flags=_re.MULTILINE)
+    return value.strip()
+
+
+def _sanitize_player_journal_summary(journal: Dict[str, Any]) -> Dict[str, Any]:
+    journal = dict(_safe_dict(journal))
+    entries = []
+    repaired_count = 0
+    for entry_any in _safe_list(journal.get("entries")):
+        entry = dict(_safe_dict(entry_any))
+        original = _safe_str(entry.get("text"))
+        cleaned = _sanitize_player_journal_text(original)
+        if cleaned != original:
+            entry["text"] = cleaned
+            entry["journal_text_sanitized"] = True
+            repaired_count += 1
+        entries.append(entry)
+    journal["entries"] = entries
+    if repaired_count:
+        journal["journal_text_sanitized_count"] = repaired_count
+    return journal
+
+
+PLAYER_JOURNAL_ALLOWED_PROSE_TERMS = (
+    "i ",
+    "you ",
+    "your ",
+    "turn",
+    "quest",
+    "what i did",
+    "what i learned",
+    "what changed",
+    "next",
+)

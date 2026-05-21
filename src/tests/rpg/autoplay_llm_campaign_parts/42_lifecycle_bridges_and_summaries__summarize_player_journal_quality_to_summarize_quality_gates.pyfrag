@@ -1,0 +1,476 @@
+
+
+def _summarize_player_journal_quality(summary: Dict[str, Any]) -> Dict[str, Any]:
+    PLAYER_JOURNAL_INTERNAL_CODE_TOKENS = (
+        "raw_ai_payload",
+        "dialogue:raw_ai_payload",
+        "provider_payload",
+        "provider_raw",
+        "traceback",
+        "runtime_error",
+        "exception:",
+        "semantic_family:",
+        "action_type:",
+        "target_not_found",
+        "contract_source:",
+        "runtime_fallback_bridge",
+        "canonical_semantic_pair",
+        "debug:",
+        "turn debug",
+        "json:",
+        "{",
+        "}",
+    )
+    journal = _safe_dict(summary.get("player_journal_summary"))
+    entries = _safe_list(journal.get("entries"))
+    violations: List[Dict[str, Any]] = []
+    punctuation_violations: List[Dict[str, Any]] = []
+    missing_section_entries: List[Dict[str, Any]] = []
+    for entry in entries:
+        entry = _safe_dict(entry)
+        text = _safe_str(entry.get("text"))
+        lower = text.lower()
+        found = []
+        for token in PLAYER_JOURNAL_INTERNAL_CODE_TOKENS:
+            if _journal_contains_internal_code_token(text, token):
+                found.append(token)
+        # Do not treat allowed normal prose as violations
+        filtered_found = []
+        for token in found:
+            is_allowed = any(allowed in lower for allowed in PLAYER_JOURNAL_ALLOWED_PROSE_TERMS)
+            if not is_allowed or token not in ("i ", "you ", "your ", "turn", "quest"):
+                filtered_found.append(token)
+        if filtered_found:
+            violations.append(
+                {
+                    "entry_id": entry.get("entry_id"),
+                    "tokens": filtered_found,
+                    "text": text[:500],
+                }
+            )
+        if (
+            ".." in text
+            or ";." in text
+            or ".;" in text
+            or "\n." in text
+            or text.strip().startswith((".", ";", ",", "?", "!"))
+            or ".gold?" in lower
+            or "gold? or trouble" in lower
+        ):
+            punctuation_violations.append(
+                {
+                    "entry_id": entry.get("entry_id"),
+                    "text": text[:500],
+                }
+            )
+        if text and "What I did:" not in text:
+            missing_section_entries.append(
+                {
+                    "entry_id": entry.get("entry_id"),
+                    "missing": "What I did",
+
+                    "text": text[:500],
+                }
+            )
+    return {
+        "ok": not violations and not punctuation_violations and not missing_section_entries,
+        "entry_count": len(entries),
+        "violation_count": len(violations),
+        "punctuation_violation_count": len(punctuation_violations),
+        "missing_section_count": len(missing_section_entries),
+        "violations": violations[:20],
+        "punctuation_violations": punctuation_violations[:20],
+        "missing_section_entries": missing_section_entries[:20],
+    }
+
+
+def _summarize_quality_gates(
+    *,
+    args: Any,
+    metrics: Dict[str, Any],
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    campaign_complete_waiting = bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
+    performance_budget = _safe_dict(summary.get("performance_budget_summary"))
+    live = _safe_dict(performance_budget.get("live_blocking"))
+    background_jobs = _safe_dict(summary.get("background_jobs"))
+    if not background_jobs:
+        background_jobs = _safe_dict(_safe_dict(performance_budget.get("background_llm")))
+    background_result_timing_summary = _safe_dict(summary.get("background_result_timing_summary"))
+    player_agent_summary = _safe_dict(summary.get("player_agent_trace_summary"))
+    advisory_promotion_summary = _safe_dict(summary.get("deferred_advisory_promotion_summary"))
+    profile_persist_summary = _safe_dict(summary.get("npc_evolution_profile_persistence_summary"))
+    profile_load_summary = _safe_dict(summary.get("npc_profile_load_summary"))
+    profile_grounded_summary = _safe_dict(summary.get("profile_grounded_output_summary"))
+    arc_progression_summary = _safe_dict(summary.get("npc_arc_progression_summary"))
+    calendar_summary = _safe_dict(summary.get("campaign_calendar_summary"))
+    journal_summary = _safe_dict(summary.get("player_journal_summary"))
+    journal_quality_summary = _safe_dict(summary.get("player_journal_quality_summary"))
+    story_beat_summary = _safe_dict(summary.get("story_beat_summary"))
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    scenario_seed = _safe_str(getattr(args, "scenario_seed", ""))
+    manual_turn_error_summary = _safe_dict(summary.get("manual_turn_error_summary"))
+    console_log_summary = _safe_dict(summary.get("console_log_summary"))
+    action_diversity_summary = _safe_dict(summary.get("action_diversity_summary"))
+    progress_timeline_summary = _safe_dict(summary.get("progress_timeline_summary"))
+    long_run_warning_summary = _safe_dict(summary.get("long_run_warning_summary"))
+    hundred_turn_eval_summary = _safe_dict(summary.get("hundred_turn_eval_summary"))
+    background_result_timing_summary = _safe_dict(summary.get("background_result_timing_summary"))
+    strict_eval_turns = int(getattr(args, "strict_eval_turns", 100) or 100)
+    strict_100_turn_mode = len(transcript if isinstance(transcript, list) else []) >= strict_eval_turns
+    evolution_mutated_authoritative_state = False
+    for row in transcript:
+        evo_result = _safe_dict(_safe_dict(row).get("npc_evolution_consumption_result"))
+        if evo_result.get("mutated_authoritative_state"):
+            evolution_mutated_authoritative_state = True
+
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    readiness_classification = _safe_str(readiness.get("classification"))
+    content_sufficient_for_requested_turns = bool(
+        readiness.get("ok")
+        and readiness_classification == "content_sufficient_for_requested_turns"
+    )
+
+    mechanics = _safe_dict(summary.get("mechanics_coverage_summary"))
+    mechanics_real_required_ok = bool(
+        mechanics.get("real_required_ok", mechanics.get("required_ok", True))
+    )
+
+    gates = {
+        "avg_human_playable_blocking_under_500ms": float(live.get("avg_human_playable_blocking_ms") or 0.0) < 500.0,
+        "max_human_playable_blocking_under_1000ms": float(live.get("max_human_playable_blocking_ms") or 0.0) < 1000.0,
+        "real_turn_runtime_used": int(metrics.get("real_turn_runtime_count") or 0) == len(transcript),
+        "combined_background_mode_when_requested": (
+            args.background_llm_mode != "combined"
+            or int(background_result_timing_summary.get("jobs_submitted") or 0) >= len(transcript)
+            or int(background_jobs.get("combined_background_llm_jobs") or 0) >= len(transcript)
+        ),
+        "no_split_jobs_when_combined_requested": (
+            args.background_llm_mode != "combined"
+            or (
+                int(background_jobs.get("narration_jobs") or 0) == 0
+                and int(background_jobs.get("advisory_jobs") or 0) == 0
+            )
+        ),
+        "player_agent_fallback_rate_within_limit": True,
+        "deferred_advisory_promotion_did_not_mutate_authoritative_state": (
+            not bool(advisory_promotion_summary.get("mutated_authoritative_state"))
+        ),
+        "npc_evolution_consumption_did_not_mutate_authoritative_state": (
+            not evolution_mutated_authoritative_state
+        ),
+        "npc_evolution_profile_persistence_ok": (
+            not profile_persist_summary
+            or bool(profile_persist_summary.get("ok"))
+        ),
+        "npc_profile_load_ok": (
+            not profile_load_summary
+            or bool(profile_load_summary.get("ok"))
+        ),
+        "profile_grounding_context_available_when_profiles_loaded": (
+            not profile_load_summary
+            or int(profile_load_summary.get("turns_with_profiles") or 0) == 0
+            or int(profile_grounded_summary.get("available_turns") or 0) > 0
+            if not getattr(args, "n101_stabilization_gate", False)
+            else True
+        ),
+        "npc_arc_progression_health_ok": (
+            not arc_progression_summary
+            or bool(arc_progression_summary.get("ok", True))
+        ),
+        "campaign_calendar_present": (
+            not transcript
+            or int(calendar_summary.get("turns_tracked") or 0) == len(transcript)
+        ),
+        "player_journal_present": (
+            not transcript
+            or int(journal_summary.get("entry_count") or 0) >= 1
+        ),
+        "player_journal_has_no_internal_codes": (
+            "player_journal_quality_summary" not in summary
+            or bool(journal_quality_summary.get("ok", True))
+        ),
+        "story_beats_or_fallback_present": (
+            not transcript
+            or int(story_beat_summary.get("beat_count") or 0) > 0
+        ),
+        "quest_progress_section_present": (
+            quest_progress_summary is not None
+        ),
+        "tavern_story_seed_has_quest_progress": True,
+        "manual_turn_runtime_errors_absent": (
+            not manual_turn_error_summary
+            or bool(manual_turn_error_summary.get("ok", True))
+        ),
+        "console_turn_errors_absent": (
+            not console_log_summary
+            or int(console_log_summary.get("turn_error_count") or 0) == 0
+        ),
+        "console_log_captured_when_enabled": (
+            not getattr(args, "capture_console_log", True)
+            or int(console_log_summary.get("line_count") or 0) > 0
+        ),
+        "long_run_warnings_ok": (
+            not long_run_warning_summary
+            or bool(long_run_warning_summary.get("ok", True))
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
+        ),
+        "hundred_turn_eval_ok": (
+            not hundred_turn_eval_summary
+            or bool(hundred_turn_eval_summary.get("ok", True))
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
+        ),
+        "strict_100turn_meaningful_progress_rate_ok": (
+            not strict_100_turn_mode
+            or float(progress_timeline_summary.get("meaningful_progress_rate") or 0.0) >= 0.15
+        ),
+        "strict_100turn_strict_progress_quality_ok": (
+            not strict_100_turn_mode
+            or bool(_safe_dict(_safe_dict(summary.get("health")).get("progress_quality")).get("ok", True))
+            or content_sufficient_for_requested_turns
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
+        ),
+        "strict_100turn_npc_line_repetition_ok": (
+            not strict_100_turn_mode
+            or bool(_safe_dict(summary.get("npc_line_repetition_summary")).get("ok", True))
+        ),
+        "strict_100turn_no_forbidden_player_actions_ok": (
+            not strict_100_turn_mode
+            or bool(_safe_dict(summary.get("forbidden_player_action_summary")).get("ok", True))
+        ),
+        "strict_100turn_repeat_semantic_target_streak_ok": (
+            not strict_100_turn_mode
+            or int(_safe_dict(action_diversity_summary.get("max_same_semantic_target_streak")).get("streak") or 0)
+            <= int(getattr(args, "max_100turn_repeat_semantic_target_streak", 8) or 8)
+            or _content_exhausted_waiting_for_next_graph_pack(summary)
+        ),
+        "strict_100turn_semantic_action_extraction_ok": (
+            not strict_100_turn_mode
+            or float(action_diversity_summary.get("unknown_semantic_rate") or 0.0) <= 0.25
+        ),
+        "strict_100turn_no_progress_streak_ok": (
+            not strict_100_turn_mode
+            or int(progress_timeline_summary.get("max_no_progress_streak") or 0)
+            <= int(getattr(args, "max_100turn_no_progress_streak", 10) or 10)
+        ),
+        "background_result_timing_ok": (
+            not background_result_timing_summary
+            or bool(background_result_timing_summary.get("ok", True))
+            or _background_result_timing_all_jobs_safely_attached(summary)
+        ),
+        "strict_100turn_background_pre_turn_attach_rate_ok": (
+            not strict_100_turn_mode
+            or float(background_result_timing_summary.get("pre_turn_attach_rate") or 0.0) >= 0.50
+        ),
+        "strict_100turn_background_attach_lag_ok": (
+            not strict_100_turn_mode
+            or int(background_result_timing_summary.get("max_attach_lag_turns") or 0)
+            <= int(getattr(args, "background_result_max_turn_lag", 5) or 5)
+            or _background_result_timing_all_jobs_safely_attached(summary)
+        ),
+        "background_results_not_only_finalized": (
+            not getattr(args, "fail_if_background_results_only_finalized", False)
+            or int(background_result_timing_summary.get("only_finalized_count") or 0)
+            < int(background_result_timing_summary.get("jobs_submitted") or 0)
+        ),
+        "mechanics_coverage_required": {
+            "ok": mechanics_real_required_ok,
+            "value": {
+                "coverage_rate": mechanics.get("coverage_rate"),
+                "real_coverage_rate": mechanics.get("real_coverage_rate"),
+                "covered_required_count": mechanics.get("covered_required_count"),
+                "real_covered_required_count": mechanics.get("real_covered_required_count"),
+                "required_count": mechanics.get("required_count"),
+                "missing_required": mechanics.get("missing_required"),
+                "missing_real_required": mechanics.get("missing_real_required"),
+            },
+            "expected": {
+                "missing_real_required": [],
+                "real_coverage_rate": "1.0",
+            },
+            "message": "Required RPG mechanics should be exercised by real runtime/story-graph evidence.",
+        },
+    }
+
+    fallback_turns = int(player_agent_summary.get("fallback_turns") or 0)
+    turns = int(player_agent_summary.get("turns") or 0)
+    if turns:
+        fallback_rate = fallback_turns / turns
+        gates["player_agent_fallback_rate_within_limit"] = fallback_rate <= float(args.max_player_agent_fallback_rate)
+
+    if _safe_str(getattr(args, "scenario_seed", "")) == "tavern_story_seed":
+        gates["tavern_story_seed_has_quest_progress"] = int(quest_progress_summary.get("quest_count") or 0) > 0
+
+    return {
+        "ok": all(bool(value) for value in gates.values()),
+        "gates": gates,
+    }
+
+
+def _commit_authoritative_state(
+    *,
+    session_id: str,
+    authoritative_state: Dict[str, Any],
+    runtime_narration: str = "blocking",
+) -> Dict[str, Any]:
+    """Persist and return the runner-owned authoritative autoplay state.
+
+    Manual/app turn paths may write partial session roots. The runner state is
+    canonical for autoplay progress comparison, so commits must never reload
+    and replace it from the manual session.
+    """
+    committed = deepcopy(_safe_dict(authoritative_state))
+    prepare_autoplay_manual_session(
+        session_id=session_id,
+        simulation_state=committed,
+        reset_session_state=False,
+        runtime_narration=runtime_narration,
+    )
+    return committed
+
+
+def _default_output_dir() -> Path:
+    return Path("resources") / "data" / "test-results" / "autoplay"
+
+
+
+
+
+def _load_provider():
+    from app.shared import get_provider
+
+    return get_provider()
+
+
+def _call_turn_runtime(
+    *,
+    session_id: str,
+    player_action: str,
+    turn_index: int,
+    runtime_narration: str = "blocking",
+    debug_narration_trace: bool = False,
+) -> Dict[str, Any]:
+    return run_autoplay_manual_turn(
+        session_id=session_id,
+        player_input=player_action,
+        turn_index=turn_index,
+        target_channel="autoplay_runtime",
+        console_llm=False,
+        console_llm_raw=False,
+        runtime_narration=runtime_narration,
+        debug_narration_trace=debug_narration_trace,
+    )
+
+
+def _extract_narration(turn_result: Dict[str, Any]) -> str:
+    candidates = [
+        turn_result.get("narration"),
+        _safe_dict(turn_result.get("raw_result")).get("narration"),
+        _safe_dict(turn_result.get("result")).get("narration"),
+        _safe_dict(turn_result.get("turn_contract")).get("narration"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return ""
+
+
+def _turn_result_narration_source(turn_result: Dict[str, Any]) -> str:
+    """Return the source from the exact turn_result shape written to transcript."""
+    if not isinstance(turn_result, dict):
+        return ""
+    candidate_containers = [
+        turn_result,
+        turn_result.get("raw_result") if isinstance(turn_result.get("raw_result"), dict) else {},
+        turn_result.get("result") if isinstance(turn_result.get("result"), dict) else {},
+        turn_result.get("turn_result") if isinstance(turn_result.get("turn_result"), dict) else {},
+    ]
+    for container in candidate_containers:
+        if not isinstance(container, dict):
+            continue
+        payload = (
+            container.get("narration_payload")
+            or container.get("structured_narration")
+            or {}
+        )
+        if not isinstance(payload, dict):
+            continue
+        source = payload.get("source")
+        if isinstance(source, str) and source:
+            return source
+    return ""
+
+
+def _replace_turn_result_narration_with_pending(turn_result: Dict[str, Any]) -> None:
+    """Replace visible blocking narration with a deferred placeholder.
+
+    This does not undo time already spent in the provider call. It makes the
+    transcript/report truthful and prevents a blocking provider narration from
+    being presented as the final turn narration in deferred mode.
+    """
+    if not isinstance(turn_result, dict):
+        return
+    pending_payload = _pending_deferred_narration_payload()
+    turn_result["narration_payload"] = pending_payload
+    turn_result["structured_narration"] = pending_payload
+    turn_result["narration"] = pending_payload["narration"]
+
+    raw_result = turn_result.get("raw_result") if isinstance(turn_result.get("raw_result"), dict) else {}
+    if raw_result:
+        raw_result["narration_payload"] = pending_payload
+        raw_result["structured_narration"] = pending_payload
+        raw_result["narration"] = pending_payload["narration"]
+
+    nested_result = turn_result.get("result") if isinstance(turn_result.get("result"), dict) else {}
+    if nested_result:
+        nested_result["narration_payload"] = pending_payload
+        nested_result["structured_narration"] = pending_payload
+        nested_result["narration"] = pending_payload["narration"]
+
+    nested_turn_result = (
+        turn_result.get("turn_result")
+        if isinstance(turn_result.get("turn_result"), dict)
+        else {}
+    )
+    if nested_turn_result:
+        nested_turn_result["narration_payload"] = pending_payload
+        nested_turn_result["structured_narration"] = pending_payload
+        nested_turn_result["narration"] = pending_payload["narration"]
+
+
+def _apply_deferred_narration_violation_detection(
+    *,
+    record: Dict[str, Any],
+    narration_mode: str,
+) -> None:
+    """Inspect the final transcript record and mark deferred-mode violations.
+
+    Latest artifacts proved the real source is here:
+        record["turn_result"]["narration_payload"]["source"]
+
+    So detection must run after the transcript record is built and before it is
+    appended/written.
+    """
+    if not isinstance(record, dict):
+        return
+    turn_result = _dict_or_empty(record.get("turn_result"))
+    source = _turn_result_narration_source(turn_result)
+    record["blocking_narration_source"] = source
+    violation = (
+        narration_mode == "deferred"
+        and source == "provider_runtime_narration"
+    )
+    record["deferred_blocking_provider_violation"] = bool(violation)
+    record["blocking_provider_call_suppressed_after_the_fact"] = bool(violation)
+    if violation:
+        _replace_turn_result_narration_with_pending(turn_result)
+        record["narration"] = "Narration is being prepared..."
+
+
+def _dict_or_empty(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}

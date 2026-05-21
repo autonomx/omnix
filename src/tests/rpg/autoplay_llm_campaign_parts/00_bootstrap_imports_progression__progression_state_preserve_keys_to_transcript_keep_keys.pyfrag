@@ -1,0 +1,457 @@
+
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any, Dict, List, Tuple
+
+from app.rpg.mechanics.mechanics_opportunities import (
+    describe_mechanic_opportunity_state,
+    list_available_mechanic_opportunities,
+)
+from app.rpg.mechanics.mechanics_resolver import resolve_mechanic_opportunity
+
+PROGRESSION_STATE_PRESERVE_KEYS = (
+    "progression_state_revision",
+    "progression_completed_node_count",
+    "progression_fact_count",
+    "progression_lead_count",
+    "progression_authority_summary",
+    "progression_completed_nodes",
+    "progression_facts",
+    "progression_leads",
+    "progression_unlocked_npcs",
+    "progression_unlocked_locations",
+    "scenario_progression_log",
+    "scenario_progression_summary",
+    "scenario_progression_actions",
+    "scenario_progression_current_turn_summary",
+    "scenario_progression_last_no_match",
+    "scenario_progression_action_debug",
+    "scenario_progression_quest_state",
+    "scenario_progression_quest_ids",
+    "scenario_progression_active_graph_id",
+    "scenario_progression_active_graph_title",
+    "scenario_progression_completed_graph_ids",
+    "scenario_progression_last_completed_graph_id",
+    "scenario_progression_waiting_for_next_graph_pack",
+)
+
+TRANSCRIPT_KEEP_KEYS = (
+    "turn",
+    "turn_index",
+    "turn_start_timestamp",
+    "turn_end_timestamp",
+    "player_action",
+    "player_agent_selection_source",
+    "player_agent_selection_reason",
+    "scenario_progression_summary",
+    "scenario_progression_actions",
+    "scenario_progression_action_debug",
+    "player_action_source",
+    "player_action_timing",
+    "player_action_quality",
+    "player_agent_trace",
+    "deferred_narration_trace",
+    "deferred_advisory_trace",
+    "background_prompt_budget",
+    "combined_quality_shape",
+    "promotion_target_grounding",
+    "profile_grounded_output",
+    "npc_arc_progression",
+    "manual_turn_errors",
+    "campaign_state_summary",
+    "repeated_affordance_loop",
+    "scenario_progression_waiting_for_next_graph_pack",
+    "graph_action_state_has_actions",
+    "top_scenario_progression_action_id",
+    "top_scenario_progression_command",
+    "scenario_arc_complete",
+    "current_action_response",
+    "npc_response_architecture",
+    "npc_line_current_action_relevance",
+    "npc_line_addresses_current_action",
+    "npc_response_variant_id",
+    "npc_response_variation",
+    "llm_prompt_debug",
+    "llm_prompt_contract",
+    "prompt_contract_ack",
+    "llm_fallback_diagnostics",
+    "npc_line_source",
+    "npc_line_validation_passed",
+    "npc_line_rejection_reason",
+)
+
+
+def _effective_transcript_detail(args: Any) -> str:
+    turns = int(getattr(args, "turns", 0) or 0)
+    profile = _safe_str(getattr(args, "autoplay_profile", "") or "")
+    if turns >= 30 or profile == "smoke_100":
+        return "slim"
+    return "full"
+
+
+def _should_write_full_transcript(args: argparse.Namespace) -> bool:
+    artifact_detail = _safe_str(getattr(args, "artifact_detail", ""))
+    return artifact_detail.lower() in {"full", "debug", "maximum", "max"}
+
+
+def _slim_transcript_row(row: Dict[str, Any], max_row_bytes: int = 50000) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    slim_row: Dict[str, Any] = {}
+    if not row:
+        return {
+            "empty_transcript_row_repaired": True,
+            "presentation_status": "missing_row",
+        }
+
+    for key in (
+        "turn_index",
+        "turn",
+        "turn_id",
+        "player_action",
+        "canonical_turn_action",
+        "actual_sent_action",
+        "player_agent_selection_source",
+        "player_agent_selection_reason",
+         "action_category",
+         "presentation_intent",
+         "llm_presentation_category",
+          "validated_presentation_intent",
+            "validated_presentation_category",
+            "current_action_response",
+            "npc_response_architecture",
+            "npc_response_architecture_ack",
+            "npc_response_architecture_persisted",
+            "npc_line_current_action_relevance",
+            "npc_line_addresses_current_action",
+            "npc_response_variant_id",
+            "npc_response_variation",
+            "llm_prompt_debug",
+            "llm_prompt_contract",
+            "prompt_contract_ack",
+            "llm_fallback_diagnostics",
+            "npc_line_source",
+            "npc_line_validation_passed",
+            "npc_line_rejection_reason",
+             "npc_line_repaired",
+             "npc_line_repair_reason",
+             "npc_line_before_repair",
+             "presentation_meta_leakage_repaired",
+             "presentation_meta_leakage_repair",
+             "narration_before_meta_repair",
+             "npc_line_before_meta_repair",
+             "presentation_meta_leakage",
+             "narration_meta_repaired",
+             "narration_before_meta_repair",
+             "meta_language_repair",
+             "presentation_status",
+        "narration",
+        "display_narration",
+        "selected_narration",
+        "npc",
+        "npc_speaker",
+        "npc_line",
+        "turn_presentation_identity",
+        "background_presentation_result",
+        "dialogue_presentation_compatibility",
+        "dialogue_action_relevance",
+        "dialogue_action_relevance_repaired",
+        "presentation_repair_tier",
+        "presentation_repair_type",
+        "visible_text_replaced",
+        "hard_grounding_repair",
+        "soft_classification_repair",
+        "presentation_hard_grounding",
+        "presentation_soft_classification",
+        "background_semantic_reviewer",
+        "unsupported_combat_claim_suppressed",
+        "direct_graph_action_completion",
+        "mechanics_covered_this_turn",
+        "direct_graph_changed_parts",
+        "progress_quality",
+        "turn_action_consistency",
+        "graph_action_selection_diagnostic",
+        "suppressed_selected_action_guard",
+    ):
+        if row.get(key) not in (None, "", {}, []):
+            slim_row[key] = row.get(key)
+
+    visible_player_action = (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("player_action"))
+    )
+    if visible_player_action:
+        slim_row["player_action"] = visible_player_action
+        slim_row["display_player_action"] = visible_player_action
+        slim_row["visible_player_action"] = visible_player_action
+
+    for key in (
+        "mechanic",
+        "mechanics_evidence_source",
+        "mechanics_forced_action",
+        "mechanic_resolution_input",
+        "player_action_original",
+        "mechanic_resolution_failed_opportunity_id",
+        "mechanic_resolution_failed_reason",
+    ):
+        if row.get(key) not in (None, "", {}, []):
+            slim_row[key] = row.get(key)
+
+    for key in (
+        "dialogue_presentation_compatibility",
+        "unsupported_combat_claim_suppressed",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    return slim_row
+
+
+def _preferred_visible_player_action(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    return (
+        _safe_str(row.get("display_player_action"))
+        or _safe_str(row.get("visible_player_action"))
+        or _safe_str(row.get("canonical_turn_action"))
+        or _safe_str(row.get("player_action"))
+    )
+
+    if row.get("story_arc_events"):
+        slim_row["story_arc_events"] = row.get("story_arc_events")
+
+    if row.get("story_arc_lifecycle"):
+        slim_row["story_arc_lifecycle"] = {
+            "ok": _safe_dict(row.get("story_arc_lifecycle")).get("ok"),
+            "resolved_count": _safe_dict(row.get("story_arc_lifecycle")).get("resolved_count"),
+            "failed_count": _safe_dict(row.get("story_arc_lifecycle")).get("failed_count"),
+            "story_arc_events": _safe_dict(row.get("story_arc_lifecycle")).get("story_arc_events"),
+        }
+
+    for key in (
+        "story_arc_aftermath_events",
+        "world_signals",
+        "npc_memory_events",
+        "followup_hooks",
+    ):
+        if row.get(key):
+            slim_row[key] = row.get(key)
+
+    if row.get("npc_presence"):
+        slim_row["npc_presence"] = row.get("npc_presence")
+
+    if row.get("npc_schedule_events"):
+        slim_row["npc_schedule_events"] = row.get("npc_schedule_events")
+
+    if row.get("npc_agency_events"):
+        slim_row["npc_agency_events"] = row.get("npc_agency_events")
+
+    if row.get("story_arc_aftermath"):
+        aftermath = _safe_dict(row.get("story_arc_aftermath"))
+        slim_row["story_arc_aftermath"] = {
+            "ok": aftermath.get("ok"),
+            "newly_applied_keys": aftermath.get("newly_applied_keys"),
+            "aftermath_events": aftermath.get("aftermath_events"),
+            "world_signals": aftermath.get("world_signals"),
+            "faction_deltas": aftermath.get("faction_deltas"),
+            "followup_hooks": aftermath.get("followup_hooks"),
+        }
+
+    if row.get("faction_reputation_events"):
+        slim_row["faction_reputation_events"] = row.get("faction_reputation_events")
+
+    if row.get("followup_arc_seed_events"):
+        slim_row["followup_arc_seed_events"] = row.get("followup_arc_seed_events")
+
+    if row.get("followup_arc_progression_events"):
+        slim_row["followup_arc_progression_events"] = row.get("followup_arc_progression_events")
+
+    if row.get("followup_arc_progression"):
+        progression = _safe_dict(row.get("followup_arc_progression"))
+        slim_row["followup_arc_progression"] = {
+            "ok": progression.get("ok"),
+            "progressed_count": progression.get("progressed_count"),
+            "newly_applied_keys": progression.get("newly_applied_keys"),
+            "events": progression.get("events"),
+            "world_signals": progression.get("world_signals"),
+        }
+
+    if row.get("followup_arc_resolution_events"):
+        slim_row["followup_arc_resolution_events"] = row.get("followup_arc_resolution_events")
+
+    if row.get("followup_arc_resolution"):
+        resolution = _safe_dict(row.get("followup_arc_resolution"))
+        slim_row["followup_arc_resolution"] = {
+            "ok": resolution.get("ok"),
+            "resolved_count": resolution.get("resolved_count"),
+            "newly_applied_keys": resolution.get("newly_applied_keys"),
+            "events": resolution.get("events"),
+            "world_signals": resolution.get("world_signals"),
+            "escalation_hooks": resolution.get("escalation_hooks"),
+        }
+
+    if row.get("escalation_arc_seed_events"):
+        slim_row["escalation_arc_seed_events"] = row.get("escalation_arc_seed_events")
+
+    if row.get("faction_pressure_events"):
+        slim_row["faction_pressure_events"] = row.get("faction_pressure_events")
+
+    if row.get("faction_pressure_pacing"):
+        pacing = _safe_dict(row.get("faction_pressure_pacing"))
+        slim_row["faction_pressure_pacing"] = {
+            "accepted_count": pacing.get("accepted_count"),
+            "rejected_count": pacing.get("rejected_count"),
+            "rejected_events": pacing.get("rejected_events"),
+        }
+
+    if row.get("followup_progression_probe"):
+        slim_row["followup_progression_probe"] = row.get("followup_progression_probe")
+
+    if row.get("economy_pressure_events"):
+        slim_row["economy_pressure_events"] = row.get("economy_pressure_events")
+
+    if row.get("economy_pressure_warnings"):
+        slim_row["economy_pressure_warnings"] = row.get("economy_pressure_warnings")
+
+    if row.get("economy_pressure_currency_deltas"):
+        slim_row["economy_pressure_currency_deltas"] = row.get("economy_pressure_currency_deltas")
+
+    if row.get("combat_lifecycle_events"):
+        slim_row["combat_lifecycle_events"] = row.get("combat_lifecycle_events")
+
+    if row.get("combat_lifecycle_encounters"):
+        slim_row["combat_lifecycle_encounters"] = row.get("combat_lifecycle_encounters")
+
+    if row.get("combat_lifecycle_injuries"):
+        slim_row["combat_lifecycle_injuries"] = row.get("combat_lifecycle_injuries")
+
+    if row.get("combat_consequence_events"):
+        slim_row["combat_consequence_events"] = row.get("combat_consequence_events")
+
+    if row.get("faction_consequence_events"):
+        slim_row["faction_consequence_events"] = row.get("faction_consequence_events")
+
+    if row.get("npc_reaction_events"):
+        slim_row["npc_reaction_events"] = row.get("npc_reaction_events")
+
+    if row.get("dialogue_action_relevance"):
+        slim_row["dialogue_action_relevance"] = row.get("dialogue_action_relevance")
+
+    if row.get("dialogue_display_source_gate"):
+        slim_row["dialogue_display_source_gate"] = row.get("dialogue_display_source_gate")
+
+    if row.get("dialogue_action_relevance_repaired"):
+        slim_row["dialogue_action_relevance_repaired"] = row.get("dialogue_action_relevance_repaired")
+        slim_row["dialogue_action_relevance_repair_reason"] = row.get(
+            "dialogue_action_relevance_repair_reason"
+        )
+
+    if row.get("dialogue_action_relevance_after_repair"):
+        slim_row["dialogue_action_relevance_after_repair"] = row.get(
+            "dialogue_action_relevance_after_repair"
+        )
+
+    if row.get("selected_narration"):
+        slim_row["selected_narration"] = row.get("selected_narration")
+
+    if row.get("selected_output"):
+        slim_row["selected_output"] = row.get("selected_output")
+
+    visible_narration = (
+        _safe_str(row.get("display_narration"))
+        or _safe_str(row.get("visible_narration"))
+        or _safe_str(row.get("selected_narration_text"))
+        or _safe_str(row.get("narration"))
+    )
+    if visible_narration:
+        slim_row["narration"] = visible_narration
+        slim_row["display_narration"] = visible_narration
+        slim_row["visible_narration"] = visible_narration
+
+    if row.get("display_narration"):
+        slim_row["display_narration"] = row.get("display_narration")
+
+    if row.get("selected_narration_text"):
+        slim_row["selected_narration_text"] = row.get("selected_narration_text")
+
+    if row.get("dialogue_source"):
+        slim_row["dialogue_source"] = row.get("dialogue_source")
+
+    if row.get("display_source"):
+        slim_row["display_source"] = row.get("display_source")
+
+    if row.get("npc") is not None:
+        slim_row["npc"] = row.get("npc")
+
+    if row.get("npc_line") is not None:
+        slim_row["npc_line"] = row.get("npc_line")
+
+    if row.get("npc_speaker") is not None:
+        slim_row["npc_speaker"] = row.get("npc_speaker")
+
+    if row.get("canonical_turn_action"):
+        slim_row["canonical_turn_action"] = row.get("canonical_turn_action")
+
+    if row.get("turn_action_consistency"):
+        slim_row["turn_action_consistency"] = row.get("turn_action_consistency")
+
+    if row.get("turn_action_consistency_repaired"):
+        slim_row["turn_action_consistency_repaired"] = row.get("turn_action_consistency_repaired")
+        slim_row["turn_action_consistency_before_repair"] = row.get(
+            "turn_action_consistency_before_repair"
+        )
+
+    if row.get("story_hook_action_consistency"):
+        slim_row["story_hook_action_consistency"] = row.get("story_hook_action_consistency")
+
+    if row.get("blocked_story_hook_displays"):
+        slim_row["blocked_story_hook_displays"] = row.get("blocked_story_hook_displays")
+
+    for key in (
+        "actual_sent_action",
+        "resolver_input_action",
+        "selected_player_action",
+        "original_player_action",
+        "visible_player_action",
+        "canonical_turn_action",
+    ):
+        if row.get(key):
+            slim_row[key] = row.get(key)
+
+    if row.get("turn_action_source_check"):
+        slim_row["turn_action_source_check"] = row.get("turn_action_source_check")
+
+    for key in (
+        "state_delta",
+        "result",
+        "turn_contract",
+        "direct_graph_execution_applied",
+        "direct_graph_execution_kind",
+        "direct_graph_display_override",
+        "reward",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    npc_payload = _safe_dict(row.get("npc"))
+    npc_speaker = _safe_str(row.get("npc_speaker") or npc_payload.get("speaker"))
+    npc_line = _safe_str(row.get("npc_line") or npc_payload.get("line"))
+
+    if npc_speaker or npc_line:
+        slim_row["npc"] = {
+            "speaker": npc_speaker,
+            "line": npc_line,
+        }
+        slim_row["npc_speaker"] = npc_speaker
+        slim_row["npc_line"] = npc_line
+
+    for key in (
+        "top_level_npc_sync_applied",
+        "top_level_npc_sync_source",
+    ):
+        if row.get(key) is not None:
+            slim_row[key] = row.get(key)
+
+    slim_row["_artifact_slimmed"] = True
+    return slim_row

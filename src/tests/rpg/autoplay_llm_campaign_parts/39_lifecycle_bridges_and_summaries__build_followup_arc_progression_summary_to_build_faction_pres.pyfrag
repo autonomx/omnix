@@ -1,0 +1,332 @@
+
+
+def _build_followup_arc_progression_summary(
+    *,
+    progression_events: List[Dict[str, Any]],
+    progression_world_signals: List[Dict[str, Any]],
+    story_arcs: Dict[str, Any],
+) -> Dict[str, Any]:
+    events = [_safe_dict(event) for event in _safe_list(progression_events)]
+    arcs = _safe_dict(story_arcs)
+
+    progressed_arc_ids = sorted(
+        {
+            _safe_str(event.get("arc_id"))
+            for event in events
+            if _safe_str(event.get("arc_id"))
+        }
+    )
+
+    active_followups = [
+        {
+            "arc_id": _safe_dict(arc).get("arc_id"),
+            "title": _safe_dict(arc).get("title"),
+            "status": _safe_dict(arc).get("status"),
+            "current_stage": _safe_dict(arc).get("current_stage"),
+            "progress_count": _safe_dict(arc).get("progress_count"),
+            "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+        }
+        for arc in arcs.values()
+        if _safe_dict(arc).get("source_hook_id")
+        or _safe_dict(arc).get("current_stage") == "seeded_followup"
+        or str(_safe_dict(arc).get("arc_id", "")).startswith("arc:sable_chain")
+        or str(_safe_dict(arc).get("arc_id", "")).startswith("arc:marked_coin_backer")
+    ]
+
+    return {
+        "format_version": "followup_arc_progression_summary_v1",
+        "ok": bool(events),
+        "progressed_count": len(events),
+        "progressed_arc_ids": progressed_arc_ids,
+        "events": events,
+        "world_signal_count": len(_safe_list(progression_world_signals)),
+        "world_signals": _safe_list(progression_world_signals),
+        "followup_threads": active_followups,
+        "active_followups": [
+            row
+            for row in active_followups
+            if _safe_dict(row).get("status") not in {"completed", "failed", "abandoned"}
+        ],
+    }
+
+
+def _build_faction_pressure_summary(
+    *,
+    pressure_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    events = [_safe_dict(event) for event in _safe_list(pressure_events)]
+
+    by_faction: Dict[str, int] = {}
+    for event in events:
+        faction_id = _safe_str(event.get("faction_id"))
+        if faction_id:
+            by_faction[faction_id] = int(by_faction.get(faction_id, 0)) + 1
+
+    return {
+        "format_version": "faction_pressure_summary_v1",
+        "ok": bool(events),
+        "pressure_event_count": len(events),
+        "world_signal_count": len(_safe_list(world_signals)),
+        "by_faction": dict(sorted(by_faction.items())),
+        "events": events,
+        "world_signals": _safe_list(world_signals),
+    }
+
+
+def _build_npc_agency_summary(
+    *,
+    npc_presence: Dict[str, Any],
+    schedule_events: List[Dict[str, Any]],
+    agency_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    memory_events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    schedule_rows = [_safe_dict(event) for event in _safe_list(schedule_events)]
+    agency_rows = [_safe_dict(event) for event in _safe_list(agency_events)]
+    signal_rows = [_safe_dict(signal) for signal in _safe_list(world_signals)]
+    memory_rows = [_safe_dict(memory) for memory in _safe_list(memory_events)]
+
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for npc_id, presence in _safe_dict(npc_presence).items():
+        by_npc.setdefault(
+            str(npc_id),
+            {
+                "npc_id": str(npc_id),
+                "current_presence": _safe_dict(presence),
+                "schedule_event_count": 0,
+                "agency_event_count": 0,
+                "memory_event_count": 0,
+            },
+        )
+
+    for event in schedule_rows:
+        npc_id = _safe_str(event.get("npc_id"))
+        if npc_id:
+            by_npc.setdefault(npc_id, {"npc_id": npc_id})
+            by_npc[npc_id]["schedule_event_count"] = int(
+                by_npc[npc_id].get("schedule_event_count") or 0
+            ) + 1
+
+    for event in agency_rows:
+        npc_id = _safe_str(event.get("npc_id"))
+        if npc_id:
+            by_npc.setdefault(npc_id, {"npc_id": npc_id})
+            by_npc[npc_id]["agency_event_count"] = int(
+                by_npc[npc_id].get("agency_event_count") or 0
+            ) + 1
+
+    for memory in memory_rows:
+        npc_id = _safe_str(memory.get("npc_id"))
+        if npc_id:
+            by_npc.setdefault(npc_id, {"npc_id": npc_id})
+            by_npc[npc_id]["memory_event_count"] = int(
+                by_npc[npc_id].get("memory_event_count") or 0
+            ) + 1
+
+    return {
+        "format_version": "npc_agency_summary_v1",
+        "ok": bool(agency_rows),
+        "npc_count": len(_safe_dict(npc_presence)),
+        "schedule_event_count": len(schedule_rows),
+        "agency_event_count": len(agency_rows),
+        "world_signal_count": len(signal_rows),
+        "memory_event_count": len(memory_rows),
+        "npc_presence": _safe_dict(npc_presence),
+        "by_npc": sorted(by_npc.values(), key=lambda row: _safe_str(row.get("npc_id"))),
+        "agency_events": agency_rows,
+        "schedule_events": schedule_rows,
+        "world_signals": signal_rows,
+        "memory_events": memory_rows,
+    }
+
+
+def _build_followup_arc_resolution_summary(
+    *,
+    resolution_events: List[Dict[str, Any]],
+    resolution_world_signals: List[Dict[str, Any]],
+    escalation_hooks: List[Dict[str, Any]],
+    escalation_seed_events: List[Dict[str, Any]],
+    story_arcs: Dict[str, Any],
+) -> Dict[str, Any]:
+    events = [_safe_dict(event) for event in _safe_list(resolution_events)]
+    arcs = _safe_dict(story_arcs)
+
+    resolved_arc_ids = sorted(
+        {
+            _safe_str(event.get("arc_id"))
+            for event in events
+            if _safe_str(event.get("arc_id"))
+        }
+    )
+
+    escalation_arcs = [
+        {
+            "arc_id": _safe_dict(arc).get("arc_id"),
+            "title": _safe_dict(arc).get("title"),
+            "status": _safe_dict(arc).get("status"),
+            "current_stage": _safe_dict(arc).get("current_stage"),
+            "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+        }
+        for arc in arcs.values()
+        if _safe_dict(arc).get("escalation_arc")
+    ]
+
+    return {
+        "format_version": "followup_arc_resolution_summary_v1",
+        "ok": bool(events),
+        "resolved_count": len(events),
+        "resolved_arc_ids": resolved_arc_ids,
+        "events": events,
+        "world_signal_count": len(_safe_list(resolution_world_signals)),
+        "world_signals": _safe_list(resolution_world_signals),
+        "escalation_hook_count": len(_safe_list(escalation_hooks)),
+        "escalation_hooks": _safe_list(escalation_hooks),
+        "escalation_seed_count": len(_safe_list(escalation_seed_events)),
+        "escalation_seed_events": _safe_list(escalation_seed_events),
+        "escalation_arcs": escalation_arcs,
+    }
+
+
+def _apply_successful_arc_completion_bridge(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = dict(_safe_dict(summary))
+    evidence = _safe_dict(summary.get("successful_arc_completion_evidence"))
+
+    completed_arc_ids = [
+        _safe_str(v)
+        for v in _safe_list(evidence.get("completed_arc_ids"))
+        if _safe_str(v)
+    ]
+
+    if not completed_arc_ids:
+        return summary
+
+    completed_count = len(set(completed_arc_ids))
+
+    lifecycle = dict(_safe_dict(summary.get("story_arc_lifecycle_summary")))
+    prior_completed = int(lifecycle.get("completed_count") or 0)
+    prior_failed = int(lifecycle.get("failed_count") or 0)
+
+    lifecycle["direct_graph_successful_completion_count"] = completed_count
+    lifecycle["completed_count"] = max(prior_completed, completed_count)
+
+    # Do not erase real failures blindly, but prevent success-qualified arcs from
+    # being reported as only failed.
+    if prior_failed > 0:
+        lifecycle["failed_count"] = max(0, prior_failed - completed_count)
+
+    lifecycle["resolved_count"] = max(
+        int(lifecycle.get("resolved_count") or 0),
+        int(lifecycle.get("completed_count") or 0) + int(lifecycle.get("failed_count") or 0),
+    )
+    lifecycle["completed_arc_ids"] = sorted(
+        set(_safe_list(lifecycle.get("completed_arc_ids"))) | set(completed_arc_ids)
+    )
+    lifecycle["ok"] = True
+    summary["story_arc_lifecycle_summary"] = lifecycle
+
+    arc_quality = _build_arc_completion_quality_summary(summary)
+    summary["arc_completion_quality_summary"] = arc_quality
+
+    return summary
+
+
+def _build_arc_completion_quality_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    lifecycle = _safe_dict(summary.get("story_arc_lifecycle_summary"))
+    aftermath = _safe_dict(summary.get("story_arc_aftermath_summary"))
+    followup_resolution = _safe_dict(summary.get("followup_arc_resolution_summary"))
+
+    completed_count = int(lifecycle.get("completed_count") or 0)
+    failed_count = int(lifecycle.get("failed_count") or 0)
+    resolved_count = int(
+        lifecycle.get("resolved_count")
+        or lifecycle.get("resolved_or_failed_count")
+        or completed_count + failed_count
+        or 0
+    )
+
+    aftermath_count = int(
+        aftermath.get("aftermath_event_count")
+        or aftermath.get("direct_graph_aftermath_count")
+        or 0
+    )
+
+    followup_resolved_count = int(
+        followup_resolution.get("resolved_or_escalated_count")
+        or followup_resolution.get("resolution_event_count")
+        or followup_resolution.get("direct_graph_resolution_count")
+        or 0
+    )
+
+    warnings: List[str] = []
+
+    if resolved_count > 0 and completed_count == 0:
+        warnings.append("story_arcs_resolved_only_by_failure")
+
+    if failed_count > 0 and completed_count == 0:
+        warnings.append("no_successful_story_arc_completion")
+
+    if aftermath_count > 0 and completed_count == 0:
+        warnings.append("aftermath_present_without_successful_arc_completion")
+
+    product_quality_ok = completed_count >= 1
+
+    return {
+        "format_version": "arc_completion_quality_v1",
+        "ok": True,
+        "product_quality_ok": product_quality_ok,
+        "completed_count": completed_count,
+        "failed_count": failed_count,
+        "resolved_count": resolved_count,
+        "aftermath_event_count": aftermath_count,
+        "followup_resolved_count": followup_resolved_count,
+        "warnings": warnings,
+        "message": (
+            "At least one story arc completed successfully."
+            if product_quality_ok
+            else "100-turn gates passed via resolved/failed arcs, but no story arc completed successfully."
+        ),
+    }
+
+
+def _build_pressure_pacing_summary(
+    *,
+    accepted_events: List[Dict[str, Any]],
+
+    rejected_events: List[Dict[str, Any]],
+    rejected_world_signals: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    rejected = [_safe_dict(event) for event in _safe_list(rejected_events)]
+
+    rejected_by_reason: Dict[str, int] = {}
+    for event in rejected:
+        reason = _safe_str(event.get("pacing_reject_reason") or "unknown")
+        rejected_by_reason[reason] = int(rejected_by_reason.get(reason, 0)) + 1
+
+    accepted = [_safe_dict(event) for event in _safe_list(accepted_events)]
+    accepted_turns = [
+        int(event.get("turn") or 0)
+        for event in accepted
+        if int(event.get("turn") or 0)
+    ]
+    rejected_turns = [
+        int(event.get("turn") or 0)
+        for event in rejected
+        if int(event.get("turn") or 0)
+    ]
+
+    return {
+        "format_version": "pressure_pacing_summary_v1",
+        "ok": True,
+        "accepted_pressure_event_count": len(_safe_list(accepted_events)),
+        "rejected_pressure_event_count": len(rejected),
+        "rejected_world_signal_count": len(_safe_list(rejected_world_signals)),
+        "rejected_by_reason": dict(sorted(rejected_by_reason.items())),
+        "accepted_turns": accepted_turns[:20],
+        "rejected_turns": rejected_turns[:20],
+        "rejected_events": rejected,
+        "rejected_world_signals": _safe_list(rejected_world_signals),
+    }

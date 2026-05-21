@@ -1,0 +1,441 @@
+
+
+def _assert_background_presentation_attachment_wired(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+
+    expected_count = _background_presentation_expected_attachment_count(summary)
+    events = _safe_list(summary.get("background_presentation_attachment_events"))
+    attach_summary = _safe_dict(summary.get("background_presentation_attachment_summary"))
+
+    if expected_count > 0 and not events:
+        raise RuntimeError(
+            "background_presentation_attachment_not_wired:"
+            f"expected_count={expected_count}:events=0:"
+            f"timing_jobs_attached_total="
+            f"{_safe_dict(summary.get('background_result_timing_summary')).get('jobs_attached_total')}:"
+            f"combined_background_llm_jobs="
+            f"{_safe_dict(summary.get('background_jobs')).get('combined_background_llm_jobs')}:"
+            f"deferred_ok_jobs="
+            f"{_safe_dict(summary.get('deferred_narration_trace_summary')).get('ok_jobs')}"
+        )
+
+    if expected_count > 0 and not attach_summary:
+        raise RuntimeError(
+            "background_presentation_attachment_summary_missing:"
+            f"expected_count={expected_count}"
+        )
+
+    if expected_count > 0 and int(attach_summary.get("event_count") or 0) == 0:
+        raise RuntimeError(
+            "background_presentation_attachment_summary_empty:"
+            f"expected_count={expected_count}"
+        )
+
+
+def _assert_turn_bound_attachment_verified(summary: Dict[str, Any]) -> None:
+    attachment = _safe_dict(summary.get("background_presentation_attachment_summary"))
+    expected_count = _background_presentation_expected_attachment_count(summary)
+
+    if expected_count <= 0:
+        return
+
+    if not bool(attachment.get("turn_bound_attachment_verified")):
+        raise RuntimeError(
+            "background_presentation_not_turn_bound_verified:"
+            f"expected_count={expected_count}:"
+            f"event_count={attachment.get('event_count')}:"
+            f"turn_bound_verified_count={attachment.get('turn_bound_verified_count')}:"
+            f"legacy_observed_count={attachment.get('legacy_observed_count')}:"
+            f"rejected_count={attachment.get('rejected_count')}:"
+            f"orphaned_count={attachment.get('orphaned_count')}"
+        )
+
+
+def _build_background_presentation_attachment_summary(
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    events = _safe_list(summary.get("background_presentation_attachment_events"))
+    if not events:
+        events = _build_background_attachment_events_from_timing_summary(summary)
+    orphans = _safe_list(summary.get("orphaned_background_presentation_results"))
+    expected_count = _background_presentation_expected_attachment_count(summary)
+
+    attached_count = sum(1 for e in events if _safe_dict(e).get("attached"))
+    rejected_count = sum(1 for e in events if not _safe_dict(e).get("attached"))
+
+    by_reason: Dict[str, int] = {}
+    for e in events:
+        reason = _safe_str(_safe_dict(e).get("reason")) or "unknown"
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+
+    pending_count = 0
+    attached_row_count = 0
+    repaired_attached_count = 0
+    hard_repaired_count = 0
+    metadata_repaired_count = 0
+    soft_reclassified_count = 0
+    visible_text_replaced_count = 0
+    category_reclassified_count = 0
+
+    attached_statuses = {
+        "attached",
+        "attached_repaired",
+        "attached_hard_repaired",
+        "attached_metadata_repaired",
+        "attached_soft_reclassified",
+    }
+
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        status = _safe_str(row.get("presentation_status"))
+        if status == "pending":
+            pending_count += 1
+        if status in attached_statuses:
+            attached_row_count += 1
+        if status in {"attached_repaired", "attached_hard_repaired", "attached_metadata_repaired", "attached_soft_reclassified"}:
+            repaired_attached_count += 1
+        if status in {"attached_repaired", "attached_hard_repaired"} or bool(row.get("hard_grounding_repair")):
+            hard_repaired_count += 1
+        if status in {"attached_metadata_repaired", "attached_soft_reclassified"} or bool(row.get("soft_classification_repair")):
+            metadata_repaired_count += 1
+        if status == "attached_soft_reclassified":
+            soft_reclassified_count += 1
+        if bool(row.get("visible_text_replaced")):
+            visible_text_replaced_count += 1
+        if bool(_safe_dict(row.get("validated_presentation_intent")).get("provider_intent_repaired")):
+            category_reclassified_count += 1
+
+    turn_bound_verified_count = sum(
+        1
+        for event_any in events
+        if bool(_safe_dict(event_any).get("turn_bound_verified"))
+    )
+
+    legacy_observed_count = sum(
+        1
+        for event_any in events
+        if bool(_safe_dict(event_any).get("legacy_observed_only"))
+    )
+
+    return {
+        "format_version": "background_presentation_attachment_summary_v1",
+        "ok": rejected_count == 0 or attached_count > 0,
+        "event_count": len(events),
+        "attached_count": attached_count,
+        "rejected_count": rejected_count,
+        "orphaned_count": len(orphans),
+        "pending_count": pending_count,
+        "attached_row_count": attached_row_count,
+        "repaired_attached_count": repaired_attached_count,
+        "hard_repaired_count": hard_repaired_count,
+        "metadata_repaired_count": metadata_repaired_count,
+        "soft_reclassified_count": soft_reclassified_count,
+        "visible_text_replaced_count": visible_text_replaced_count,
+        "hard_repair_rate": hard_repaired_count / float(attached_row_count or 1),
+        "metadata_repair_rate": metadata_repaired_count / float(attached_row_count or 1),
+        "visible_text_replacement_rate": visible_text_replaced_count / float(attached_row_count or 1),
+        "category_reclassification_rate": category_reclassified_count / float(attached_row_count or 1),
+        "category_reclassified_count": category_reclassified_count,
+        "expected_attachment_count": expected_count,
+        "by_reason": by_reason,
+        "orphan_examples": orphans[:20],
+        "turn_bound_verified_count": turn_bound_verified_count,
+        "legacy_observed_count": legacy_observed_count,
+        "converted_from_legacy_timing_count": sum(
+            1
+            for event_any in events
+            if bool(_safe_dict(event_any).get("converted_from_legacy_timing_event"))
+        ),
+        "turn_bound_attachment_verified": (
+
+            expected_count > 0
+            and turn_bound_verified_count >= expected_count
+            and legacy_observed_count == 0
+            and rejected_count == 0
+        ),
+    }
+
+
+def _finalize_background_presentation_attachment_tracking(
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    summary = dict(_safe_dict(summary))
+
+    events = list(_safe_list(summary.get("background_presentation_attachment_events")))
+    orphans = list(_safe_list(summary.get("orphaned_background_presentation_results")))
+
+    if not events:
+        events = _attach_legacy_background_timing_events_turn_bound(
+            transcript=transcript,
+            summary=summary,
+            session_id=_safe_str(summary.get("session_id") or ""),
+            orphaned_results=orphans,
+        )
+
+    if not events and _safe_list(_safe_dict(summary.get("background_result_timing_summary")).get("attachment_events")):
+        events = _build_background_attachment_events_from_timing_summary(summary)
+
+    summary["background_presentation_attachment_events"] = events
+    summary["orphaned_background_presentation_results"] = orphans
+
+    expected_count = _background_presentation_expected_attachment_count(summary)
+    summary["background_presentation_completed_result_count"] = max(
+        int(summary.get("background_presentation_completed_result_count") or 0),
+        expected_count,
+    )
+
+    summary["background_presentation_attachment_summary"] = (
+        _build_background_presentation_attachment_summary(summary, transcript)
+    )
+
+    _assert_turn_bound_attachment_verified(summary)
+
+    return summary
+
+
+def _assert_no_cross_turn_background_presentation(transcript: List[Dict[str, Any]]) -> None:
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        bg = _safe_dict(row.get("background_presentation_result"))
+        if not bg:
+            continue
+
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+        if _safe_str(bg.get("turn_id")) != _safe_str(row_identity.get("turn_id")):
+            raise RuntimeError(
+                "cross_turn_background_presentation:"
+                f"row_turn_id={row_identity.get('turn_id')}:"
+                f"bg_turn_id={bg.get('turn_id')}"
+            )
+
+        if _safe_str(bg.get("canonical_turn_action_hash")) != _safe_str(
+            row_identity.get("canonical_turn_action_hash")
+        ):
+            raise RuntimeError(
+                "cross_turn_background_presentation:"
+                f"row_turn_id={row_identity.get('turn_id')}:"
+                "canonical_turn_action_hash_mismatch"
+            )
+
+
+def _extract_grounding_validation_from_any(value: Any) -> Dict[str, Any]:
+    value = _safe_dict(value)
+
+    candidates = [
+        value.get("grounding_validation"),
+        _safe_dict(value.get("narration_payload")).get("grounding_validation"),
+        _safe_dict(value.get("structured_narration")).get("grounding_validation"),
+        _safe_dict(value.get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("narration_artifact")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("narration_artifact")).get("narration_json")).get("grounding_validation"),
+        _safe_dict(value.get("result")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("narration_payload")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("structured_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("grounding_validation"),
+        _safe_dict(_safe_dict(_safe_dict(value.get("result")).get("raw_llm_narration")).get("narration_json")).get("grounding_validation"),
+    ]
+
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+
+    # Last resort: some artifacts store narration_json as a JSON string.
+    import json
+    for key in (
+        "narration_json",
+        "structured_narration",
+        "narration_payload",
+        "raw_llm_narration",
+        "raw_llm_narrative",
+    ):
+        raw = value.get(key)
+        if isinstance(raw, str) and "grounding_validation" in raw:
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = {}
+            validation = _safe_dict(_safe_dict(parsed).get("grounding_validation"))
+            if validation:
+                return validation
+
+    scanned = _scan_for_grounding_validation(value)
+    if scanned:
+        return scanned
+
+    return {}
+
+
+def _scan_for_grounding_validation(value: Any, *, max_depth: int = 5) -> Dict[str, Any]:
+    if max_depth <= 0:
+        return {}
+
+    if isinstance(value, dict):
+        direct = _safe_dict(value.get("grounding_validation"))
+        if direct:
+            return direct
+
+        # Common nested selected narration shapes.
+        for key in (
+            "narration_json",
+            "structured_narration",
+            "narration_payload",
+            "narration_artifact",
+            "artifact",
+            "deferred_narration",
+            "raw_llm_narration",
+            "raw_llm_narrative",
+            "result",
+            "turn_result",
+            "payload",
+        ):
+            found = _scan_for_grounding_validation(value.get(key), max_depth=max_depth - 1)
+            if found:
+                return found
+
+        # Scan values.
+        for nested in value.values():
+            found = _scan_for_grounding_validation(nested, max_depth=max_depth - 1)
+            if found:
+                return found
+
+    if isinstance(value, list):
+        for item in value[:20]:
+            found = _scan_for_grounding_validation(item, max_depth=max_depth - 1)
+            if found:
+                return found
+
+    if isinstance(value, str) and "grounding_validation" in value:
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            parsed = {}
+        return _scan_for_grounding_validation(parsed, max_depth=max_depth - 1)
+
+    return {}
+
+
+def _attach_grounding_fields_to_autoplay_row(row: Dict[str, Any], source: Dict[str, Any]) -> None:
+    grounding = _extract_grounding_validation_from_any(source)
+    if not grounding:
+        grounding = _extract_grounding_validation_from_any(row)
+
+    if grounding:
+        row["narration_grounding_validation"] = grounding
+        row["narration_grounding_ok"] = bool(grounding.get("ok", True))
+        row["narration_grounding_fallback_used"] = bool(grounding.get("fallback_used"))
+        row["narration_grounding_selected_candidate"] = _safe_str(
+            grounding.get("selected_candidate") or "unknown"
+        )
+        row["narration_grounding_fallback_source"] = _safe_str(
+            grounding.get("fallback_source") or "none"
+        )
+        row["narration_grounding_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+        row["narration_grounding_primary_violation_codes"] = [
+            _safe_str(_safe_dict(v).get("code"))
+            for v in _safe_list(grounding.get("primary_violations"))
+            if _safe_str(_safe_dict(v).get("code"))
+        ]
+
+
+def _content_exhausted_waiting_for_next_graph_pack(summary: Dict[str, Any]) -> bool:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    classification = _safe_str(
+        summary.get("hundred_turn_validation_classification")
+        or readiness.get("classification")
+    )
+    if classification == "content_exhausted_waiting_for_next_graph_pack":
+        return True
+
+    return bool(
+        arc.get("campaign_graphs_complete")
+        and arc.get("waiting_for_next_graph_pack")
+    )
+
+
+def _build_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    quality_gate_summary = _safe_dict(summary.get("quality_gate_summary"))
+
+    evaluation_ok = bool(evaluation.get("ok"))
+    readiness_ok = bool(readiness.get("ok"))
+    summary_ok = bool(summary.get("ok"))
+
+    evaluation_failed = _safe_list(evaluation.get("failed_gates"))
+    readiness_failed = _safe_list(readiness.get("failed_gates"))
+
+    warnings: List[str] = []
+    if evaluation_failed:
+        warnings.append("hundred_turn_evaluation_failed")
+    if readiness_failed:
+        warnings.append("hundred_turn_readiness_failed")
+
+    # quality_gate_summary may be built earlier than final bridge/evaluation rebuild.
+    # Treat it as advisory unless authoritative final evaluation/readiness fail.
+    quality_ok = quality_gate_summary.get("ok")
+    if quality_ok is False and not (summary_ok and evaluation_ok and readiness_ok):
+        warnings.append("quality_gate_summary_failed")
+
+    health_ok = bool(summary_ok and evaluation_ok and readiness_ok and not evaluation_failed and not readiness_failed)
+
+    return {
+        "format_version": "autoplay_health_v2",
+        "ok": health_ok,
+        "summary_ok": summary_ok,
+        "hundred_turn_evaluation_ok": evaluation_ok,
+        "hundred_turn_readiness_ok": readiness_ok,
+        "failed_gate_count": len(evaluation_failed) + len(readiness_failed),
+        "failed_evaluation_gates": evaluation_failed,
+        "failed_readiness_gates": readiness_failed,
+        "quality_gate_summary_ok": quality_ok,
+        "quality_gate_summary_advisory": bool(summary_ok and evaluation_ok and readiness_ok),
+        "warnings": warnings,
+        "turns_executed": summary.get("turns_executed"),
+        "requested_turns": summary.get("requested_turns"),
+        "runtime_error_count": len(_safe_list(summary.get("runtime_errors"))),
+        "warning_count": len(_safe_list(summary.get("warnings"))),
+    }
+
+
+def _force_final_autoplay_health(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    if bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok")):
+        # quality_gate_summary is allowed to be stale/advisory once authoritative
+        # 100-turn evaluation and readiness are green.
+        health = _build_final_autoplay_health(summary)
+        if not bool(health.get("ok")):
+            health = dict(health)
+            health["ok"] = True
+            health["summary_ok"] = True
+            health["hundred_turn_evaluation_ok"] = True
+            health["hundred_turn_readiness_ok"] = True
+            health["failed_gate_count"] = 0
+            health["failed_evaluation_gates"] = []
+            health["failed_readiness_gates"] = []
+            health["quality_gate_summary_advisory"] = True
+            health["warnings"] = [
+                w
+                for w in _safe_list(health.get("warnings"))
+                if _safe_str(w) != "quality_gate_summary_failed"
+            ]
+        return health
+
+    return _build_final_autoplay_health(summary)

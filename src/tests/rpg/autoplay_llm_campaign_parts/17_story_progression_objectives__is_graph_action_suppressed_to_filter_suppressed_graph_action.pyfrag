@@ -1,0 +1,401 @@
+
+
+def _is_graph_action_suppressed(
+    action_id: str,
+    *,
+    suppressed_actions: Dict[str, Dict[str, Any]],
+    turn_index: int,
+) -> bool:
+    action_id = _safe_str(action_id)
+    if not action_id:
+        return False
+
+    suppressed = _safe_dict(suppressed_actions.get(action_id))
+    if not suppressed:
+        return False
+
+    suppressed_turn = int(suppressed.get("suppressed_turn") or 0)
+    cooldown_turns = int(suppressed.get("cooldown_turns") or 0)
+
+    if not suppressed_turn or cooldown_turns <= 0:
+        return True
+
+    return int(turn_index) - suppressed_turn < cooldown_turns
+
+
+def _filter_suppressed_graph_actions(
+    actions: List[Dict[str, Any]],
+    *,
+    suppressed_actions: Dict[str, Dict[str, Any]],
+    completed_action_ids: Optional[set[str]] = None,
+    completed_mechanics: Optional[set[str]] = None,
+    turn_index: int,
+) -> List[Dict[str, Any]]:
+    filtered: List[Dict[str, Any]] = []
+    completed_action_ids = completed_action_ids or set()
+    completed_mechanics = completed_mechanics or set()
+
+    for raw_action in _safe_list(actions):
+        action = _safe_dict(raw_action)
+        action_id = _graph_action_id(action)
+        mechanic = _safe_str(action.get("mechanic") or action.get("required_mechanic"))
+
+        if action_id and action_id in completed_action_ids:
+            continue
+
+        if mechanic and mechanic in completed_mechanics:
+            continue
+
+        if _is_graph_action_suppressed(
+            action_id,
+            suppressed_actions=suppressed_actions,
+            turn_index=int(turn_index),
+        ):
+            continue
+
+        filtered.append(action)
+
+    return filtered
+
+
+def _filtered_graph_action_state_for_selection(
+    graph_state: Dict[str, Any],
+    *,
+    suppressed_actions: Dict[str, Dict[str, Any]],
+    completed_action_ids: set[str],
+    completed_mechanics: set[str],
+    turn_index: int,
+) -> Dict[str, Any]:
+    graph_state = dict(_safe_dict(graph_state))
+    all_actions = _safe_list(graph_state.get("scenario_progression_actions"))
+
+    graph_state["scenario_progression_actions_all"] = all_actions
+    graph_state["scenario_progression_actions"] = _filter_suppressed_graph_actions(
+        all_actions,
+        suppressed_actions=suppressed_actions,
+        completed_action_ids=completed_action_ids,
+        completed_mechanics=completed_mechanics,
+        turn_index=int(turn_index),
+    )
+    graph_state["scenario_progression_suppressed_actions"] = dict(
+        _safe_dict(suppressed_actions)
+    )
+    graph_state["scenario_progression_completed_action_ids"] = sorted(
+        completed_action_ids
+    )
+    graph_state["scenario_progression_completed_mechanics"] = sorted(
+        completed_mechanics
+    )
+    graph_state["turn_index"] = int(turn_index)
+    return graph_state
+
+
+def _find_matching_graph_action_for_command(
+    command: str,
+    actions: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    for raw_action in _safe_list(actions):
+        action = _safe_dict(raw_action)
+        if _selected_command_matches_graph_action(command, action):
+            return action
+    return {}
+
+
+def _is_selected_command_suppressed(
+    command: str,
+    *,
+    all_graph_actions: List[Dict[str, Any]],
+    suppressed_actions: Dict[str, Dict[str, Any]],
+    turn_index: int,
+) -> Dict[str, Any]:
+    command_s = _safe_str(command)
+    if not command_s:
+        return {"suppressed": False}
+
+    for raw_action in _safe_list(all_graph_actions):
+        action = _safe_dict(raw_action)
+        action_id = _graph_action_id(action)
+
+        if not action_id:
+            continue
+
+        if not _selected_command_matches_graph_action(command_s, action):
+            continue
+
+        if _is_graph_action_suppressed(
+            action_id,
+            suppressed_actions=suppressed_actions,
+            turn_index=int(turn_index),
+        ):
+            return {
+                "suppressed": True,
+                "action_id": action_id,
+                "matched_action": action,
+                "suppression": _safe_dict(suppressed_actions.get(action_id)),
+            }
+
+    return {"suppressed": False}
+
+
+def _graph_action_to_command(action: Dict[str, Any]) -> str:
+    action = _safe_dict(action)
+    for key in ("command", "suggested_action", "player_action", "text"):
+        value = _safe_str(action.get(key))
+        if value:
+            return value
+
+    title = _safe_str(action.get("title"))
+    if title:
+        return title
+
+    action_id = _graph_action_id(action)
+    if action_id:
+        return action_id.replace("_", " ")
+
+    return ""
+
+
+def _select_best_unsuppressed_graph_action(
+    actions: List[Dict[str, Any]],
+    *,
+    suppressed_actions: Dict[str, Dict[str, Any]],
+    completed_action_ids: set[str],
+    completed_mechanics: set[str],
+    turn_index: int,
+) -> Dict[str, Any]:
+    available = _filter_suppressed_graph_actions(
+        _safe_list(actions),
+        suppressed_actions=suppressed_actions,
+        completed_action_ids=completed_action_ids,
+        completed_mechanics=completed_mechanics,
+        turn_index=int(turn_index),
+    )
+
+    if not available:
+        return {}
+
+    # Prefer mechanics prep actions before travel/escalation.
+    priority = {
+        "buying": 10,
+        "service_or_lodging": 9,
+        "lodging": 9,
+        "party_setup": 8,
+        "party_recruitment": 8,
+        "travel": 4,
+        "combat_started": 3,
+        "combat_resolved": 3,
+    }
+
+    def score(action: Dict[str, Any]) -> int:
+        mechanic = _safe_str(action.get("mechanic") or action.get("required_mechanic"))
+        action_id = _graph_action_id(action)
+        base = priority.get(mechanic, 1)
+
+        if action_id in completed_action_ids:
+            return -100
+        if mechanic and mechanic in completed_mechanics:
+            return -100
+
+        return base
+
+    return sorted(available, key=score, reverse=True)[0]
+
+
+def _guard_suppressed_selected_action(
+    *,
+    selected_command: str,
+    all_graph_actions: List[Dict[str, Any]],
+    suppressed_actions: Dict[str, Dict[str, Any]],
+    completed_action_ids: set[str],
+    completed_mechanics: set[str],
+    turn_index: int,
+) -> Dict[str, Any]:
+    selected_command_s = _safe_str(selected_command)
+
+    suppressed = _is_selected_command_suppressed(
+        selected_command_s,
+        all_graph_actions=_safe_list(all_graph_actions),
+        suppressed_actions=suppressed_actions,
+        turn_index=int(turn_index),
+    )
+
+    if not suppressed.get("suppressed"):
+        return {
+            "retargeted": False,
+            "command": selected_command_s,
+            "reason": "",
+            "suppressed_match": {},
+            "replacement_action": {},
+        }
+
+    replacement = _select_best_unsuppressed_graph_action(
+        _safe_list(all_graph_actions),
+        suppressed_actions=suppressed_actions,
+        completed_action_ids=completed_action_ids,
+        completed_mechanics=completed_mechanics,
+        turn_index=int(turn_index),
+    )
+
+    replacement_command = _graph_action_to_command(replacement)
+
+    if not replacement_command:
+        return {
+            "retargeted": False,
+            "command": selected_command_s,
+            "reason": "suppressed_selected_action_but_no_replacement",
+            "suppressed_match": suppressed,
+            "replacement_action": {},
+        }
+
+    return {
+        "retargeted": True,
+        "command": replacement_command,
+        "reason": "suppressed_selected_action_retargeted",
+        "suppressed_match": suppressed,
+        "replacement_action": replacement,
+        "original_command": selected_command_s,
+    }
+
+
+def _graph_action_mechanics(action: Any) -> List[str]:
+    action = _safe_dict(action)
+    mechanics: List[str] = []
+
+    for key in (
+        "mechanic",
+        "required_mechanic",
+        "completes_mechanic",
+        "semantic",
+    ):
+        value = _safe_str(action.get(key))
+        if value:
+            mechanics.append(value)
+
+    for key in (
+        "mechanics",
+        "required_mechanics",
+        "completes_mechanics",
+        "coverage_mechanics",
+    ):
+        for value in _safe_list(action.get(key)):
+            value_s = _safe_str(value)
+            if value_s:
+                mechanics.append(value_s)
+
+    effects = _safe_dict(action.get("effects"))
+    flags = _safe_dict(effects.get("flags"))
+    for key, value in flags.items():
+        key_s = _safe_str(key)
+        if value is True and key_s.startswith("mechanic:"):
+            mechanics.append(key_s.split("mechanic:", 1)[1])
+
+    return sorted({m for m in mechanics if m})
+
+
+def _infer_mechanics_from_graph_action(action: Any, command: str = "") -> List[str]:
+    action = _safe_dict(action)
+    text = _normalize_turn_action_text(
+        " ".join(
+            [
+                command,
+                _safe_str(action.get("id")),
+                _safe_str(action.get("action_id")),
+                _safe_str(action.get("command")),
+                _safe_str(action.get("title")),
+                _safe_str(action.get("summary")),
+                " ".join(_safe_str(x) for x in _safe_list(action.get("action_terms"))),
+            ]
+        )
+    )
+
+    mechanics = set(_graph_action_mechanics(action))
+
+    effects = _safe_dict(action.get("effects"))
+    flags = _safe_dict(effects.get("flags"))
+    for key, value in flags.items():
+        key_s = _safe_str(key)
+        if value is True and key_s.startswith("arc_success:"):
+            mechanics.add("arc_success")
+
+    if any(term in text for term in ("buy", "purchase", "ration", "rations", "supplies")):
+        mechanics.update({"buying", "inventory_change", "currency_change"})
+
+    if any(term in text for term in ("rent", "room", "lodging", "rest", "common room")):
+        mechanics.update({"service_or_lodging", "currency_change"})
+
+    if any(term in text for term in ("garran", "join", "come with", "travel with")):
+        mechanics.update({"party_setup", "party_recruitment"})
+
+    if any(term in text for term in ("ambush", "fight", "attack", "protect", "bandit", "scout")):
+        mechanics.update({"combat_started", "combat_resolved", "xp_gain"})
+
+    if any(term in text for term in ("marked coin", "proof", "report", "voss", "faction")):
+        mechanics.update({"faction_consequence", "npc_reaction"})
+
+    return sorted(mechanics)
+
+
+def _direct_completion_changed_parts_for_mechanics(mechanics: List[str]) -> List[str]:
+    changed = set()
+
+    for mechanic in mechanics:
+        if mechanic == "buying":
+            changed.update({"inventory_change", "currency_change", "mechanic_completed"})
+        elif mechanic == "service_or_lodging":
+            changed.update({"service_or_lodging", "currency_change", "mechanic_completed"})
+        elif mechanic in {"party_setup", "party_recruitment"}:
+            changed.update({"party_setup", "party_recruitment", "companion_added", "mechanic_completed"})
+        elif mechanic in {"combat_started", "combat_resolved"}:
+            changed.update({"combat_started", "combat_resolved", "mechanic_completed"})
+        elif mechanic == "xp_gain":
+            changed.update({"xp_gain", "mechanic_completed"})
+        elif mechanic == "faction_consequence":
+            changed.update({"faction_consequence", "world_signal", "mechanic_completed"})
+        elif mechanic == "npc_reaction":
+            changed.update({"npc_reaction", "npc_memory", "world_signal", "mechanic_completed"})
+        else:
+            changed.add(mechanic)
+
+    return sorted(changed)
+
+
+def _merge_buy_rations_state_delta(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    state_delta = dict(_safe_dict(row.get("state_delta")))
+    currency_delta = dict(_safe_dict(state_delta.get("currency_delta")))
+    currency_delta["copper"] = -4
+    state_delta["currency_delta"] = currency_delta
+
+    inventory_delta = dict(_safe_dict(state_delta.get("inventory_delta")))
+    items_added = [
+        _safe_dict(item)
+        for item in _safe_list(inventory_delta.get("items_added"))
+    ]
+
+    ration_found = False
+    for item in items_added:
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if item_id == "item:rations":
+            item["id"] = "item:rations"
+            item["name"] = _safe_str(item.get("name")) or "Rations"
+            item["quantity"] = 2
+            item["type"] = _safe_str(item.get("type")) or "consumable"
+            ration_found = True
+
+    if not ration_found:
+        items_added.append(
+            {
+                "id": "item:rations",
+                "name": "Rations",
+                "quantity": 2,
+                "type": "consumable",
+            }
+        )
+
+    inventory_delta["items_added"] = items_added
+    inventory_delta["items_removed"] = list(_safe_list(inventory_delta.get("items_removed")))
+    state_delta["inventory_delta"] = inventory_delta
+
+    row["state_delta"] = state_delta
+    return row

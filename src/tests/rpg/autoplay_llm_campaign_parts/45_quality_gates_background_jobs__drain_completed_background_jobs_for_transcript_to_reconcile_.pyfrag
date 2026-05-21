@@ -1,0 +1,400 @@
+
+
+def _drain_completed_background_jobs_for_transcript(
+    *,
+    pipeline: Any,
+    job_registry: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    current_turn: int,
+    phase: str,
+    wait_ms: int,
+    timing_tracker: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Attach completed background results for prior rows.
+
+    This never changes authoritative turn contracts. It only attaches completed
+    presentation/advisory payloads to previous transcript rows so deterministic
+    promotion/evolution/report logic can consume them before future actions.
+    """
+    attached = 0
+    checked = 0
+    ready = 0
+    not_ready = 0
+    completed_results_by_job_id: Dict[str, Dict[str, Any]] = {}
+    drain_completed = getattr(pipeline, "drain_completed", None)
+    if callable(drain_completed):
+        for completed in drain_completed():
+            completed = _safe_dict(completed)
+            completed_job_id = _safe_str(completed.get("job_id"))
+            if completed_job_id:
+                _store_background_result(
+                    job_registry,
+                    job_id=completed_job_id,
+                    result=completed,
+                )
+                completed_results_by_job_id[completed_job_id] = completed
+
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        source_turn = int(row.get("turn_index") or 0)
+        if phase == "pre_turn" and source_turn >= int(current_turn or 0):
+            continue
+        if _safe_dict(row.get("combined_background_llm_result")):
+            continue
+        job_id = _safe_str(
+            row.get("combined_background_llm_job_id")
+            or row.get("background_llm_job_id")
+            or row.get("combined_background_job_id")
+        )
+        if not job_id:
+            continue
+        checked += 1
+        result = (
+            _safe_dict(completed_results_by_job_id.get(job_id))
+            or _try_get_combined_background_result(
+                pipeline=pipeline,
+                job_registry=job_registry,
+                job_id=job_id,
+                wait_ms=wait_ms if attached == 0 else 0,
+            )
+        )
+        if result:
+            ready += 1
+            _store_background_result(
+                job_registry,
+                job_id=job_id,
+                result=result,
+            )
+        else:
+            not_ready += 1
+        if _attach_completed_background_job_to_record(
+            record=row,
+            job_id=job_id,
+            result=result,
+            attach_turn=current_turn,
+            phase=phase,
+            timing_tracker=timing_tracker,
+        ):
+            attached += 1
+            _timestamped_print(f"Attaching combined background LLM result for turn {source_turn} phase={phase} lag={max(0, int(current_turn or 0) - source_turn)}")
+    return {
+        "phase": phase,
+        "current_turn": current_turn,
+        "checked": checked,
+        "pipeline_completed_drained": len(completed_results_by_job_id),
+        "ready": ready,
+        "not_ready": not_ready,
+        "attached": attached,
+    }
+
+
+def _reconcile_existing_background_attachments(
+    *,
+    transcript: List[Dict[str, Any]],
+    timing_tracker: Dict[str, Any],
+    attach_turn: int,
+    phase: str = "final",
+) -> Dict[str, Any]:
+    reconciled = 0
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        if not _safe_dict(row.get("combined_background_llm_result")):
+            continue
+        if _safe_dict(row.get("combined_background_llm_attach")):
+            continue
+        job_id = _safe_str(
+            row.get("combined_background_llm_job_id")
+            or row.get("background_llm_job_id")
+            or row.get("combined_background_job_id")
+        )
+        if not job_id:
+            continue
+        if _attach_completed_background_job_to_record(
+            record=row,
+            job_id=job_id,
+            result=_safe_dict(row.get("combined_background_llm_result")),
+            attach_turn=attach_turn,
+            phase=phase,
+            timing_tracker=timing_tracker,
+        ):
+            reconciled += 1
+    return {
+        "phase": phase,
+        "attach_turn": attach_turn,
+        "reconciled": reconciled,
+    }
+
+
+def _find_narration_payload(container: Dict[str, Any]) -> Dict[str, Any]:
+    """Find the actual narration payload regardless of wrapper shape.
+
+    Autoplay/manual turn results have changed shape several times:
+    - result.narration_payload
+    - result.structured_narration
+    - result.turn_result.narration_payload
+    - result.result.narration_payload
+
+    Deferred-mode violation detection must inspect all of these or the report
+    can falsely show blocking_narration_source=None while the nested turn result
+    still contains provider_runtime_narration.
+    """
+    if not isinstance(container, dict):
+        return {}
+
+    direct = (
+        container.get("narration_payload")
+        or container.get("structured_narration")
+    )
+    if isinstance(direct, dict):
+        return direct
+
+    nested_turn = _dict_or_empty(container.get("turn_result"))
+    nested_payload = (
+        nested_turn.get("narration_payload")
+        or nested_turn.get("structured_narration")
+    )
+    if isinstance(nested_payload, dict):
+        return nested_payload
+
+    nested_result = _dict_or_empty(container.get("result"))
+    result_payload = (
+        nested_result.get("narration_payload")
+        or nested_result.get("structured_narration")
+    )
+    if isinstance(result_payload, dict):
+        return result_payload
+
+    return {}
+
+
+def _narration_source(container: Dict[str, Any]) -> str:
+    payload = _find_narration_payload(container)
+    source = payload.get("source") if isinstance(payload, dict) else ""
+    return source if isinstance(source, str) else ""
+
+
+def _pending_deferred_narration_payload() -> Dict[str, Any]:
+    return {
+        "format_version": "rpg_narration_v2",
+        "source": "deferred_runtime_narration_pending",
+        "deferred": True,
+        "narration_status": "pending",
+        "narration": "Narration is being prepared...",
+        "action": "The action has been resolved.",
+        "npc": {"speaker": "", "line": ""},
+        "reward": "",
+        "followup_hooks": [],
+    }
+
+
+def _replace_blocking_narration_with_pending(turn_result: Dict[str, Any]) -> None:
+    """Replace blocking narration artifacts with a deferred placeholder.
+
+    This does not undo time already spent in a provider call. It makes the
+    transcript/report truthful and prevents blocking provider narration from
+    being presented as the canonical turn narration in deferred mode.
+    """
+    if not isinstance(turn_result, dict):
+        return
+    pending_payload = _pending_deferred_narration_payload()
+
+    turn_result["narration_payload"] = pending_payload
+    turn_result["structured_narration"] = pending_payload
+    turn_result["narration"] = pending_payload["narration"]
+
+    nested_turn = _dict_or_empty(turn_result.get("turn_result"))
+    if nested_turn:
+        nested_turn["narration_payload"] = pending_payload
+        nested_turn["structured_narration"] = pending_payload
+        nested_turn["narration"] = pending_payload["narration"]
+
+    nested_result = _dict_or_empty(turn_result.get("result"))
+    if nested_result:
+        nested_result["narration_payload"] = pending_payload
+        nested_result["structured_narration"] = pending_payload
+        nested_result["narration"] = pending_payload["narration"]
+
+
+def _select_compact_llm_player_action(
+    *,
+    provider: Any,
+    session: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    latest_context: Dict[str, Any],
+    player_action_context: Dict[str, Any],
+    strategy: str,
+    action_diversity_window: int,
+    max_context_chars: int,
+    cache: PlayerAgentDecisionCache,
+    cache_enabled: bool,
+    turn_index: int,
+    debug_autoplay_stage_timing: bool,
+    scenario_progression_suppressed_actions: Dict[str, Dict[str, Any]],
+    anti_loop_context: Optional[Dict[str, Any]] = None,
+    goal_pressure_context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    context_packet = build_player_agent_context_packet(
+        session=session,
+        transcript_tail=transcript,
+        latest_context=latest_context,
+        strategy=strategy,
+        action_diversity_window=action_diversity_window,
+    )
+
+    # Add available routes for travel bias
+    context_packet["available_routes"] = _safe_list(
+        latest_context.get("available_routes")
+        or _safe_dict(latest_context.get("turn_contract")).get("available_routes")
+        or _safe_dict(_safe_dict(latest_context.get("result")).get("travel_result")).get("available_routes")
+    )
+    if not context_packet["available_routes"]:
+        # Pull from latest session state
+        from app.rpg.world.travel_graph import list_available_routes
+        context_packet["available_routes"] = list_available_routes(state=session.get("simulation_state", {}))
+
+    # Add suppressed actions context
+    context_suppressed_actions = [
+        {
+            "action_id": row.get("action_id"),
+            "reason": row.get("reason"),
+            "cooldown_turns": row.get("cooldown_turns"),
+        }
+        for row in _safe_dict(scenario_progression_suppressed_actions).values()
+    ]
+    context_packet["context_suppressed_actions"] = context_suppressed_actions
+
+    messages, prompt_metrics = build_player_agent_messages(
+        context_packet=context_packet,
+        max_context_chars=max_context_chars,
+    )
+    # Append anti-loop prompt to the last message (typically the user instruction)
+    if messages and anti_loop_context:
+        anti_loop_text = _format_player_agent_anti_loop_prompt(_safe_dict(anti_loop_context))
+        if anti_loop_text.strip():
+            messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + anti_loop_text
+    if messages and goal_pressure_context:
+        goal_pressure_text = format_goal_pressure_prompt(_safe_dict(goal_pressure_context))
+        if goal_pressure_text.strip():
+            messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + goal_pressure_text
+
+    # Add mechanics opportunities instruction
+    mechanics_opportunities = _safe_list(context_packet.get("objectives", {}).get("context_mechanics_opportunities"))
+    if messages and mechanics_opportunities:
+        mechanics_text = (
+            "\n\nMechanics opportunities available:\n"
+            "When an active objective includes mechanics opportunities, choose one of those actions when it makes story sense. "
+            "Do not ignore preparation steps before dangerous travel/combat."
+        )
+        messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + mechanics_text
+
+    # Add suppressed actions instruction
+    suppressed_actions = _safe_list(context_packet.get("context_suppressed_actions"))
+    if messages and suppressed_actions:
+        suppressed_text = (
+            "\n\nAvoid suppressed actions for now. Choose a different active objective or a different preparation step."
+        )
+        messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + suppressed_text
+
+    # Add location progression bias
+    available_routes = context_packet.get("available_routes", [])
+    if messages and available_routes:
+        # Check if last few turns had no meaningful progress
+        recent_rows = transcript[-3:] if len(transcript) >= 3 else transcript
+        recent_meaningful = any(
+            _row_has_location_progression(row) or bool(row.get("meaningful_progress"))
+            for row in recent_rows
+        )
+        if not recent_meaningful:
+            location_rule = (
+                "\n\nLocation progression rule:\n"
+                "- If available_routes are present and the last few turns had no meaningful progress, choose a travel action from available_routes.\n"
+                "- Prefer commands exactly like: \"go to <location name>\".\n"
+                "- Do not repeatedly observe/listen/wait in the same location when routes are available."
+            )
+            messages[-1]["content"] = _safe_str(messages[-1].get("content", "")) + location_rule
+    key = player_agent_cache_key(context_packet=context_packet, strategy=strategy)
+
+    cached = cache.get(key) if cache_enabled else None
+    if cached:
+        # Validate cached action against current context
+        validation = validate_player_action_against_context(
+            player_action=cached,
+            player_action_context=player_action_context,
+        )
+        if not validation.get("ok"):
+            cached["cache_rejected_by_validation"] = True
+            # Fall back to non-cached path
+            cached = None
+        else:
+            cached["cache_hit"] = True
+            cached["prompt_metrics"] = prompt_metrics
+            cached["cache_key"] = key
+            return cached
+
+    if provider is None or not callable(getattr(provider, "chat_completion", None)):
+        return {
+            "ok": False,
+            "source": "llm_player_agent_error",
+            "error": "provider_missing_or_unsupported",
+            "prompt_metrics": prompt_metrics,
+            "cache_hit": False,
+            "cache_key": key,
+        }
+
+    try:
+        provider_messages = _provider_messages(messages)
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.start",
+            turn_index=turn_index,
+            provider_type=type(provider).__name__,
+            message_count=len(provider_messages),
+            prompt_chars=sum(len(getattr(message, "content", "") or "") for message in provider_messages),
+        )
+        provider_call_start_ms = _now_ms()
+        try:
+            response = provider.chat_completion(messages=provider_messages, stream=False)
+        except TypeError:
+            response = provider.chat_completion(provider_messages, stream=False)
+        _probe_log(
+            debug_autoplay_stage_timing,
+            "player_agent_provider_call.end",
+            turn_index=turn_index,
+            elapsed_ms=_now_ms() - provider_call_start_ms,
+            response_type=type(response).__name__,
+        )
+        text = _provider_text_from_response(response)
+        parsed = _extract_json_object_from_text(text)
+        normalized = normalize_player_agent_payload(parsed)
+        # Validate the LLM result
+        validation = validate_player_action_against_context(
+            player_action=normalized,
+            player_action_context=player_action_context,
+        )
+        if not validation.get("ok"):
+            fallback = choose_fallback_player_action(
+                player_action_context=player_action_context,
+                recent_transcript=transcript,
+            )
+            fallback["player_agent_validation"] = validation
+            fallback["raw_player_agent_action"] = normalized
+            return fallback
+        result = {
+            **normalized,
+            "source": "llm_player_agent",
+            "prompt_metrics": prompt_metrics,
+            "cache_hit": False,
+            "cache_key": key,
+        }
+        if result.get("ok") and cache_enabled:
+            cache.put(key, result)
+        return result
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source": "llm_player_agent_error",
+            "error": f"{type(exc).__name__}: {exc}",
+            "prompt_metrics": prompt_metrics,
+            "cache_hit": False,
+            "cache_key": key,
+        }

@@ -1,0 +1,370 @@
+
+
+def _extract_legacy_background_result_from_event(event: Any) -> Dict[str, Any]:
+    event = _safe_dict(event)
+
+    for key in (
+        "result",
+        "background_result",
+        "combined_background_result",
+        "presentation_result",
+        "payload",
+        "job_result",
+    ):
+        value = _safe_dict(event.get(key))
+        if value:
+            return dict(value)
+
+    result: Dict[str, Any] = {}
+
+    for key in (
+        "session_id",
+        "turn_id",
+        "turn_index",
+        "source_turn",
+        "canonical_turn_action",
+        "canonical_turn_action_hash",
+        "action_category",
+        "turn_contract_hash",
+        "narration",
+        "display_narration",
+        "selected_narration",
+        "npc",
+        "npc_line",
+        "npc_speaker",
+        "presentation_intent",
+        "narration_payload",
+        "phase",
+        "job_id",
+    ):
+        if event.get(key) not in (None, "", {}, []):
+            result[key] = event.get(key)
+
+    if not result.get("turn_index") and event.get("source_turn"):
+        result["turn_index"] = event.get("source_turn")
+
+    return result
+
+
+def _build_background_result_identity_from_matching_row(
+    *,
+    transcript: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    fallback_session_id: str,
+) -> Dict[str, Any]:
+    result = dict(_safe_dict(result))
+
+    identity = _safe_dict(result.get("turn_presentation_identity"))
+    if identity:
+        result["turn_presentation_identity"] = identity
+        return result
+
+    turn_index = int(
+        result.get("turn_index")
+        or result.get("source_turn")
+        or result.get("turn")
+        or result.get("job_turn_index")
+        or 0
+    )
+
+    turn_id = _safe_str(result.get("turn_id"))
+    matching_row: Dict[str, Any] = {}
+
+    for row_any in _safe_list(transcript):
+        row = _safe_dict(row_any)
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+        if turn_id and _safe_str(row_identity.get("turn_id") or row.get("turn_id")) == turn_id:
+            matching_row = row
+            break
+
+        if turn_index and int(row.get("turn_index") or row.get("turn") or 0) == turn_index:
+            matching_row = row
+            break
+
+    if matching_row:
+        row_identity = _safe_dict(matching_row.get("turn_presentation_identity"))
+        if row_identity:
+            result["turn_presentation_identity"] = dict(row_identity)
+            result["session_id"] = _safe_str(result.get("session_id") or row_identity.get("session_id"))
+            result["turn_id"] = _safe_str(result.get("turn_id") or row_identity.get("turn_id"))
+            result["turn_index"] = int(result.get("turn_index") or row_identity.get("turn_index") or turn_index)
+            result["canonical_turn_action"] = _safe_str(
+                result.get("canonical_turn_action")
+                or row_identity.get("canonical_turn_action")
+            )
+            result["canonical_turn_action_hash"] = _safe_str(
+                result.get("canonical_turn_action_hash")
+                or row_identity.get("canonical_turn_action_hash")
+            )
+            result["action_category"] = _safe_str(
+                result.get("action_category")
+                or row_identity.get("action_category")
+            )
+            result["turn_contract_hash"] = _safe_str(
+                result.get("turn_contract_hash")
+                or row_identity.get("turn_contract_hash")
+            )
+            return result
+
+    result = _normalize_background_presentation_result(
+        result,
+        fallback_session_id=_safe_str(fallback_session_id),
+    )
+    return result
+
+
+def _attach_legacy_background_timing_events_turn_bound(
+    *,
+    transcript: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    session_id: str,
+    orphaned_results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    timing = _safe_dict(_safe_dict(summary).get("background_result_timing_summary"))
+    events: List[Dict[str, Any]] = []
+
+    for event_any in _safe_list(timing.get("attachment_events")):
+        legacy_event = _safe_dict(event_any)
+
+        result = _extract_legacy_background_result_from_event(legacy_event)
+        if not result:
+            result = {}
+
+        if not result.get("turn_index") and legacy_event.get("source_turn"):
+            result["turn_index"] = legacy_event.get("source_turn")
+
+        if not result.get("session_id"):
+            result["session_id"] = _safe_str(session_id)
+
+        result["phase"] = _safe_str(legacy_event.get("phase") or result.get("phase") or "legacy_timing")
+        result["job_id"] = _safe_str(legacy_event.get("job_id") or result.get("job_id"))
+
+        result = _build_background_result_identity_from_matching_row(
+            transcript=transcript,
+            result=result,
+            fallback_session_id=_safe_str(session_id),
+        )
+
+        attach_event = _attach_background_presentation_result_turn_bound(
+            transcript=transcript,
+            result=result,
+            orphaned_results=orphaned_results,
+        )
+
+        attach_event["phase"] = _safe_str(legacy_event.get("phase") or "legacy_timing_turn_bound")
+        attach_event["job_id"] = _safe_str(legacy_event.get("job_id"))
+        attach_event["source_turn"] = int(legacy_event.get("source_turn") or result.get("turn_index") or 0)
+        attach_event["attach_turn"] = int(legacy_event.get("attach_turn") or 0)
+        attach_event["lag_turns"] = int(
+            legacy_event.get("lag_turns")
+            or max(0, int(legacy_event.get("attach_turn") or 0) - int(legacy_event.get("source_turn") or 0))
+        )
+
+        attach_event["turn_bound_verified"] = bool(attach_event.get("attached"))
+        attach_event["legacy_observed_only"] = False
+        attach_event["converted_from_legacy_timing_event"] = True
+
+        events.append(attach_event)
+
+    return events
+
+
+def _attach_background_presentation_result_turn_bound(
+    *,
+    transcript: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    orphaned_results: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    payload_identity = _safe_dict(result.get("turn_presentation_identity"))
+
+    if not payload_identity:
+        payload_identity = {
+            "session_id": result.get("session_id"),
+            "turn_index": result.get("turn_index"),
+            "turn_id": result.get("turn_id"),
+            "canonical_turn_action_hash": result.get("canonical_turn_action_hash"),
+            "action_category": result.get("action_category"),
+            "turn_contract_hash": result.get("turn_contract_hash"),
+        }
+
+    row_idx = _find_transcript_row_index_by_turn_identity(transcript, payload_identity)
+
+    if row_idx < 0:
+        orphan = {
+            "reason": "no_matching_turn_row",
+            "turn_presentation_identity": payload_identity,
+            "result_preview": _extract_background_presentation_text(result),
+        }
+        orphaned_results.append(orphan)
+        return {
+            "attached": False,
+            "reason": "no_matching_turn_row",
+            "row_index": -1,
+            "turn_id": payload_identity.get("turn_id"),
+            "turn_bound_verified": False,
+            "legacy_observed_only": False,
+        }
+
+    row = _safe_dict(transcript[row_idx])
+    row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+    ok, diag = _presentation_identity_matches_turn(
+        payload_identity=payload_identity,
+        row_identity=row_identity,
+        require_contract_hash=False,
+    )
+
+    if not ok:
+        orphan = {
+            "reason": "identity_mismatch",
+            "diagnostic": diag,
+            "result_preview": _extract_background_presentation_text(result),
+        }
+        orphaned_results.append(orphan)
+        return {
+            "attached": False,
+            "reason": "identity_mismatch",
+            "row_index": row_idx,
+            "turn_id": payload_identity.get("turn_id"),
+            "diagnostic": diag,
+            "turn_bound_verified": False,
+            "legacy_observed_only": False,
+        }
+
+    attached_row = _attach_background_presentation_to_row(row, result)
+    attached_row = _apply_turn_bound_presentation_compatibility_gate(attached_row)
+    transcript[row_idx] = attached_row
+
+    return {
+        "attached": True,
+        "reason": "attached_to_matching_turn",
+        "row_index": row_idx,
+        "turn_id": payload_identity.get("turn_id"),
+        "turn_index": payload_identity.get("turn_index"),
+        "turn_bound_verified": True,
+        "legacy_observed_only": False,
+    }
+
+
+def _visible_presentation_text_for_compatibility(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    npc = _safe_dict(row.get("npc"))
+    return " ".join(
+        part
+        for part in (
+            _safe_str(row.get("selected_narration")),
+            _safe_str(row.get("display_narration")),
+            _safe_str(row.get("narration")),
+            _safe_str(npc.get("line")),
+            _safe_str(row.get("npc_line")),
+        )
+        if part
+    )
+
+
+def _clear_visible_npc_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    row["npc"] = {}
+    row["npc_line"] = ""
+    row["npc_speaker"] = ""
+
+    for key in ("selected_output", "selected", "presentation", "display"):
+        nested = dict(_safe_dict(row.get(key)))
+        if nested:
+            nested["npc"] = {}
+            nested["npc_line"] = ""
+            row[key] = nested
+
+    return row
+
+
+STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS = {
+    "combat_action_dialogue_mismatch",
+    "commerce_action_dialogue_mismatch",
+    "economy_action_dialogue_mismatch",
+    "service_action_dialogue_mismatch",
+    "travel_action_dialogue_mismatch",
+    "investigation_action_dialogue_mismatch",
+    "evidence_action_dialogue_mismatch",
+    "dialogue_action_dialogue_mismatch",
+    "action_presentation_category_mismatch",
+}
+
+
+def _sync_dialogue_relevance_block_with_validated_category(
+    relevance: Dict[str, Any],
+    *,
+    validated_category: str,
+    validated_intent: Dict[str, Any],
+) -> Dict[str, Any]:
+    relevance = dict(_safe_dict(relevance))
+    validated_category = _normalize_presentation_category(validated_category)
+    if not relevance or not validated_category:
+        return relevance
+
+    previous_action_kind = _safe_str(relevance.get("action_kind"))
+    relevance["action_kind_before_presentation_intent_sync"] = previous_action_kind
+    relevance["action_kind"] = validated_category
+    relevance["validated_presentation_category"] = validated_category
+    relevance["validated_presentation_intent"] = validated_intent
+
+    original_reasons = [_safe_str(reason) for reason in _safe_list(relevance.get("reasons")) if _safe_str(reason)]
+    kept_reasons = [
+        reason
+        for reason in original_reasons
+        if reason not in STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS
+        and not reason.endswith("_action_dialogue_mismatch")
+    ]
+    if kept_reasons:
+        relevance["reasons"] = kept_reasons
+    else:
+        relevance.pop("reasons", None)
+
+    if _safe_str(relevance.get("reason")) in STALE_DIALOGUE_CATEGORY_MISMATCH_REASONS:
+        relevance["reason"] = "validated_presentation_category_synced"
+
+    if original_reasons and not kept_reasons:
+        relevance["ok"] = True
+        relevance["presentation_intent_sync_repaired"] = True
+        relevance["presentation_intent_sync_reason"] = "stale_category_mismatch_reasons_cleared"
+
+    return relevance
+
+
+def _sync_dialogue_action_relevance_with_validated_presentation(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    validated_intent = _safe_dict(row.get("validated_presentation_intent"))
+    validated_category = _normalize_presentation_category(
+        row.get("validated_presentation_category")
+        or validated_intent.get("primary_category")
+    )
+    if not validated_category:
+        return row
+
+    row["validated_presentation_category"] = validated_category
+
+    display_action_kind = _display_action_kind_for_validated_category(validated_category)
+
+    relevance = _safe_dict(row.get("dialogue_action_relevance"))
+    if relevance:
+        relevance = _sync_dialogue_relevance_block_with_validated_category(
+            relevance,
+            validated_category=validated_category,
+            validated_intent=validated_intent,
+        )
+        relevance["action_kind"] = display_action_kind
+        row["dialogue_action_relevance"] = relevance
+
+    after_repair = _safe_dict(row.get("dialogue_action_relevance_after_repair"))
+    if after_repair:
+        after_repair = _sync_dialogue_relevance_block_with_validated_category(
+            after_repair,
+            validated_category=validated_category,
+            validated_intent=validated_intent,
+        )
+        after_repair["action_kind"] = display_action_kind
+        row["dialogue_action_relevance_after_repair"] = after_repair
+
+    return row

@@ -1,0 +1,468 @@
+
+
+def _summarize_profile_grounded_output(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows: List[Dict[str, Any]] = []
+    available_turns = 0
+    referenced_turns = 0
+    npc_ids = set()
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        combined = _safe_dict(row.get("combined_background_llm_result"))
+        diagnostics = _safe_dict(combined.get("diagnostics"))
+        profile_summary = (
+            _safe_dict(combined.get("profile_context_summary"))
+            or _safe_dict(diagnostics.get("profile_context_summary"))
+        )
+        if not profile_summary.get("available"):
+            continue
+
+        available_turns += 1
+        for npc_id in _safe_list(profile_summary.get("npc_ids")):
+            if _safe_str(npc_id):
+                npc_ids.add(_safe_str(npc_id))
+
+        runtime_state = _safe_dict(row.get("runtime_state"))
+        loaded = _safe_dict(_safe_dict(runtime_state.get("npc_evolution")).get("loaded_profiles"))
+
+        narration_payload = (
+            _safe_dict(combined.get("narration_payload"))
+            or _safe_dict(row.get("deferred_narration_result")).get("narration_payload")
+            or _safe_dict(_safe_dict(row.get("turn_result")).get("narration_payload"))
+        )
+        if not isinstance(narration_payload, dict):
+            narration_payload = {}
+
+        narration = _safe_str(combined.get("narration")) or _safe_str(narration_payload.get("narration"))
+        npc_line = _safe_str(_safe_dict(narration_payload.get("npc")).get("line"))
+        text = _safe_lower_text(f"{narration}\n{npc_line}")
+
+        row_matches: Dict[str, List[str]] = {}
+        for npc_id, loaded_row_any in loaded.items():
+            loaded_row = _safe_dict(loaded_row_any)
+            profile = _safe_dict(loaded_row.get("profile"))
+            terms = _profile_reference_terms(profile)
+            matches = [term for term in terms if term and term.lower() in text]
+            if matches:
+                row_matches[str(npc_id)] = matches[:6]
+                npc_bucket = by_npc.setdefault(str(npc_id), {"referenced_turns": 0, "matches": {}})
+                npc_bucket["referenced_turns"] += 1
+                for match in matches[:6]:
+                    npc_bucket["matches"][match] = int(npc_bucket["matches"].get(match) or 0) + 1
+
+        if row_matches:
+            referenced_turns += 1
+
+        rows.append(
+            {
+                "turn_index": row.get("turn_index"),
+                "profile_npcs": profile_summary.get("npc_ids") or [],
+                "referenced": bool(row_matches),
+                "matches": row_matches,
+                "arc_stages": profile_summary.get("arc_stages") or {},
+            }
+        )
+
+    return {
+        "available_turns": available_turns,
+        "referenced_turns": referenced_turns,
+        "reference_rate": round(referenced_turns / available_turns, 4) if available_turns else 0.0,
+        "loaded_npc_ids": sorted(npc_ids),
+        "by_npc": by_npc,
+        "examples": rows[:8],
+        "note": (
+            "This is a soft diagnostic. It checks whether provider output appears "
+            "to reference loaded profile context; it is not a hard requirement every turn."
+        ),
+    }
+
+
+def _summarize_npc_arc_progression(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    stage_changes: List[Dict[str, Any]] = []
+    latest_summary: Dict[str, Any] = {}
+    duplicate_milestone_ids = set()
+    out_of_bounds_axes: List[Dict[str, Any]] = []
+    by_npc: Dict[str, Dict[str, Any]] = {}
+
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        turn_index = row.get("turn_index")
+        evo_result = _safe_dict(row.get("npc_evolution_consumption_result"))
+        latest = _safe_dict(row.get("npc_evolution_summary"))
+        if latest:
+            latest_summary = latest
+            for dup in _safe_list(latest.get("duplicate_milestone_ids")):
+                if _safe_str(dup):
+                    duplicate_milestone_ids.add(_safe_str(dup))
+            out_of_bounds_axes.extend(_safe_list(latest.get("out_of_bounds_axes")))
+
+        for decision in _safe_list(evo_result.get("consume_decisions")):
+            decision = _safe_dict(decision)
+            if not decision.get("ok"):
+                continue
+            npc_id = _safe_str(decision.get("npc_id")) or "unknown"
+            bucket = by_npc.setdefault(
+                npc_id,
+                {
+                    "signals_consumed": 0,
+                    "stage_changes": 0,
+                    "latest_stage": "",
+                    "milestones": [],
+                },
+            )
+            bucket["signals_consumed"] += 1
+            bucket["latest_stage"] = _safe_str(decision.get("arc_stage_after"))
+            if decision.get("stage_changed"):
+                milestone = _safe_dict(decision.get("milestone"))
+                bucket["stage_changes"] += 1
+
+                if milestone:
+                    bucket["milestones"].append(milestone)
+                stage_changes.append(
+                    {
+                        "turn_index": turn_index,
+                        "npc_id": npc_id,
+                        "from": decision.get("arc_stage_before"),
+                        "to": decision.get("arc_stage_after"),
+                        "reason": milestone.get("reason") if milestone else "",
+                        "signal_id": decision.get("signal_id"),
+                        "milestone_id": milestone.get("milestone_id") if milestone else "",
+                    }
+                )
+
+    return {
+        "stage_change_count": len(stage_changes),
+        "stage_changes": stage_changes[:20],
+        "by_npc": by_npc,
+        "latest_summary": latest_summary,
+        "duplicate_milestone_ids": sorted(duplicate_milestone_ids),
+        "out_of_bounds_axes": out_of_bounds_axes,
+        "ok": not duplicate_milestone_ids and not out_of_bounds_axes,
+    }
+
+
+def _summarize_player_agent_prompt_budget(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    prompt_rows = [row for row in rows if isinstance(row.get("prompt_metrics"), dict)]
+    if not prompt_rows:
+        return {
+            "count": 0,
+            "avg_total_chars": 0.0,
+            "max_total_chars": 0,
+            "avg_estimated_tokens": 0.0,
+            "cache_hits": 0,
+            "sources": {},
+        }
+    sources: Dict[str, int] = {}
+    total_chars: List[int] = []
+    tokens: List[float] = []
+    cache_hits = 0
+    for row in prompt_rows:
+        source = str(row.get("source") or "unknown")
+        sources[source] = int(sources.get(source) or 0) + 1
+        metrics = row.get("prompt_metrics") or {}
+        total_chars.append(int(metrics.get("total_chars") or 0))
+        tokens.append(float(metrics.get("estimated_tokens") or 0.0))
+        if row.get("cache_hit"):
+            cache_hits += 1
+    return {
+        "count": len(prompt_rows),
+        "avg_total_chars": round(sum(total_chars) / len(total_chars), 3),
+        "max_total_chars": max(total_chars),
+        "avg_estimated_tokens": round(sum(tokens) / len(tokens), 3),
+        "max_estimated_tokens": round(max(tokens), 3),
+        "cache_hits": cache_hits,
+        "sources": sources,
+        "examples": prompt_rows[:3],
+    }
+
+
+def _summarize_manual_turn_errors(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    errors: List[Dict[str, Any]] = []
+    for row in transcript if isinstance(transcript, list) else []:
+        row = _safe_dict(row)
+        manual_summary = _safe_dict(row.get("manual_turn_summary"))
+        error = (
+            _safe_str(row.get("runtime_error"))
+            or _safe_str(manual_summary.get("error"))
+            or _safe_str(_safe_dict(row.get("turn_result")).get("error"))
+        )
+        if error:
+            errors.append(
+                {
+                    "turn_index": row.get("turn_index"),
+                    "error": error,
+                }
+            )
+    return {
+        "ok": not errors,
+        "error_count": len(errors),
+        "errors": errors[:20],
+    }
+
+
+REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS = (
+    "latest_state",
+    "quest_progress_summary",
+    "objective_progression_summary",
+    "quest_reconciliation_summary",
+    "quest_handoff_summary",
+    "final_state_field_coverage_summary",
+    "strict_progress_health_summary",
+    "post_transition_action_quality_summary",
+    "repeated_affordance_loop_summary",
+    "pre_turn_advisory_promotion_performance_summary",
+    "campaign_state_commit_summary",
+    "campaign_stale_state_summary",
+    "campaign_state_commit_performance_summary",
+    "handoff_progress_summary",
+    "scenario_progression_summary",
+    "scenario_progression_action_debug",
+    "progression_authority_summary",
+    "progression_authority_sidecar_present",
+    "scenario_progression_quest_state",
+    "scenario_progression_arc_summary",
+    "behavioral_autoplay_eval_summary",
+    "quality_gate_summary",
+)
+
+
+REQUIRED_FINAL_LIFECYCLE_GATES = (
+    "strict_progress_health_ok",
+    "post_transition_action_quality_ok",
+    "objective_progression_present_ok",
+    "repeated_affordance_loop_ok",
+    "quest_handoff_available_after_completion_ok",
+    "no_completed_without_next_objective_ok",
+    "final_state_field_coverage_ok",
+    "pre_turn_advisory_promotion_fast_ok",
+    "final_lifecycle_summary_fields_present_ok",
+    "campaign_state_commit_ok",
+    "campaign_state_not_stale_ok",
+    "campaign_state_commit_performance_ok",
+    "behavioral_autoplay_eval_ok",
+    "scenario_progression_arc_complete_ok",
+)
+
+
+def _final_lifecycle_field_presence_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    present = []
+    missing = []
+    empty = []
+    for key in REQUIRED_FINAL_LIFECYCLE_SUMMARY_FIELDS:
+        value = summary.get(key)
+        if key not in summary:
+            missing.append(key)
+        elif value in (None, {}, []):
+            empty.append(key)
+        else:
+            present.append(key)
+    return {
+        "ok": not missing and not empty,
+        "present": present,
+        "missing": missing,
+        "empty": empty,
+    }
+
+
+def _quest_progress_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    quest_progress = _safe_dict(state.get("quest_progress"))
+    quests = _safe_dict(quest_progress.get("quests"))
+    if quests:
+        return _quest_progress_summary_from_quest_mapping(quests, source="latest_state.quest_progress")
+
+    quest_log_state = _safe_dict(state.get("quest_log_state"))
+    quests = _safe_dict(quest_log_state.get("quests"))
+    if quests:
+        return _quest_progress_summary_from_quest_mapping(quests, source="latest_state.quest_log_state")
+
+    synthesized = _synthesize_quest_progress_summary_from_story_state(state)
+    if synthesized.get("quest_count"):
+        return synthesized
+
+    return {
+        "quest_count": 0,
+        "active_count": 0,
+        "completed_count": 0,
+        "quests": [],
+        "source": "none",
+    }
+
+
+def _objective_progression_summary_from_state(
+    state: Dict[str, Any],
+    transcript: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = _safe_list(state.get("objective_progression_log"))
+    hook_state = _safe_dict(state.get("autoplay_story_hook_state"))
+    fired_hooks = _safe_dict(hook_state.get("fired_hooks"))
+    objective_hooks = [
+        {"hook_id": hook_id, **_safe_dict(payload)}
+        for hook_id, payload in fired_hooks.items()
+        if _safe_str(hook_id).startswith("hook:objective")
+    ]
+    return {
+        "count": len(log) + len(objective_hooks),
+        "recent": log[-10:],
+        "objective_hooks": objective_hooks[-10:],
+        "transcript_turns": len(_safe_list(transcript)),
+        "ok": bool(log or objective_hooks),
+    }
+
+
+def _repeated_affordance_loop_summary(
+    transcript: List[Dict[str, Any]],
+    *,
+    threshold: int = 4,
+    campaign_complete_waiting: bool = False,
+) -> Dict[str, Any]:
+    try:
+        from tests.rpg.autoplay.executable_actions import action_signature
+    except Exception:
+        action_signature = lambda value: _safe_str(value).lower()
+
+    counts: Dict[str, int] = {}
+    max_streak = 0
+    max_signature = ""
+    current_signature = ""
+    current_streak = 0
+    examples: Dict[str, str] = {}
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        if campaign_complete_waiting and _is_campaign_complete_bridge_action(
+            row.get("player_action"),
+            row.get("top_scenario_progression_action_id"),
+        ):
+            continue
+        action = _safe_str(row.get("player_action"))
+        if not action:
+            current_signature = ""
+            current_streak = 0
+            continue
+        sig = action_signature(action)
+        counts[sig] = counts.get(sig, 0) + 1
+        examples.setdefault(sig, action)
+        if sig == current_signature:
+            current_streak += 1
+        else:
+            current_signature = sig
+            current_streak = 1
+        if current_streak > max_streak:
+            max_streak = current_streak
+            max_signature = sig
+
+    repeated = [
+        {"signature": sig, "count": count, "example": examples.get(sig, "")}
+        for sig, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)
+        if count >= int(threshold or 4)
+    ]
+    return {
+        "ok": max_streak < int(threshold or 4),
+        "max_streak": max_streak,
+        "max_signature": max_signature,
+        "repeated": repeated[:10],
+        "threshold": int(threshold or 4),
+    }
+
+
+def _quest_reconciliation_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = [_safe_dict(row) for row in _safe_list(state.get("quest_reconciliation_log"))]
+    errors = [row for row in log if _safe_str(row.get("error"))]
+    return {
+        "ok": not errors,
+        "count": len(log),
+        "changed_count": sum(1 for row in log if bool(row.get("changed"))),
+        "errors": errors[:20],
+        "recent": log[-10:],
+    }
+
+
+def _quest_handoff_summary_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    log = [_safe_dict(row) for row in _safe_list(state.get("quest_handoff_log"))]
+    quest_rows = _safe_dict(_safe_dict(state.get("quest_progress")).get("quests"))
+    active_handoff_quests = []
+    for quest_id, raw in quest_rows.items():
+        quest = _safe_dict(raw)
+        if _safe_str(quest.get("source")) != "generic_quest_handoff":
+            continue
+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed":
+            continue
+        active_handoff_quests.append(_safe_str(quest.get("quest_id") or quest_id))
+    return {
+        "ok": True,
+        "count": len(log),
+        "recent": log[-10:],
+        "active_handoff_quests": active_handoff_quests[:20],
+        "available_after_completion": bool(log or active_handoff_quests),
+    }
+
+
+def _final_state_field_coverage_summary(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    required_fields = (
+        "quest_progress",
+        "dialogue_state",
+        "objective_progression_log",
+        "quest_reconciliation_log",
+        "quest_handoff_log",
+        "autoplay_story_hook_state",
+        "location_history",
+        "recent_turns",
+        "action_history",
+    )
+    presence_only_fields = {
+        "quest_handoff_log",
+    }
+    present = []
+    missing = []
+    empty = []
+    for key in required_fields:
+        value = state.get(key)
+        if key not in state:
+            missing.append(key)
+        elif key in presence_only_fields:
+            present.append(key)
+        elif value in (None, {}, []):
+            empty.append(key)
+        else:
+            present.append(key)
+    return {
+        "ok": not missing and not empty,
+        "present": present,
+        "missing": missing,
+        "empty": empty,
+    }
+
+
+def _ensure_runtime_state_tracking_fields(
+    runtime_state: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    state = deepcopy(_safe_dict(runtime_state))
+    if "quest_handoff_log" not in state:
+        state["quest_handoff_log"] = []
+    if _safe_list(state.get("action_history")):
+        return state
+
+    action_history = []
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        player_action = _safe_str(row.get("player_action"))
+        if not player_action:
+            continue
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        action_history.append(
+            {
+                "turn": turn_index,
+                "turn_index": turn_index,
+                "player_action": player_action,
+            }
+        )
+    if action_history:
+        state["action_history"] = action_history[-200:]
+    return state

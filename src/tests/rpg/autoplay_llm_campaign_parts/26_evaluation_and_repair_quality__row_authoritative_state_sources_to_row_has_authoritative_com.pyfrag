@@ -1,0 +1,423 @@
+
+
+def _row_authoritative_state_sources(row: Dict[str, Any]) -> List[Dict[str, Any]]:
+    row = _safe_dict(row)
+    result = _safe_dict(row.get("result"))
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    contract_result = _safe_dict(turn_contract.get("result"))
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    return [
+        row,
+        result,
+        turn_contract,
+        contract_result,
+        _safe_dict(row.get("state_delta")),
+        _safe_dict(turn_contract.get("state_delta")),
+        _safe_dict(row.get("combat_result")),
+        _safe_dict(result.get("combat_result")),
+        _safe_dict(contract_result.get("combat_result")),
+        _safe_dict(row.get("combat_state_delta")),
+        _safe_dict(result.get("combat_state_delta")),
+        _safe_dict(contract_result.get("combat_state_delta")),
+        direct,
+    ]
+
+
+def _row_has_authoritative_combat_damage_support(row: Dict[str, Any]) -> bool:
+    mechanics = _row_mechanics_set(row)
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "damage",
+            "damage_dealt",
+            "damage_taken",
+            "combat_damage",
+            "hp_delta",
+            "health_delta",
+        )
+    ):
+        return True
+
+    damage_keys = (
+        "damage",
+        "damage_delta",
+        "damage_dealt",
+        "damage_taken",
+        "hp_delta",
+        "health_delta",
+        "enemy_hp_delta",
+        "player_hp_delta",
+        "hit_points_delta",
+    )
+    return any(_source_has_any_key(source, damage_keys) for source in _row_authoritative_state_sources(row))
+
+
+def _row_has_authoritative_combat_defeat_support(row: Dict[str, Any]) -> bool:
+    mechanics = _row_mechanics_set(row)
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "enemy_defeated",
+            "enemy_defeat",
+            "defeat",
+            "defeated",
+            "combat_resolved",
+        )
+    ):
+        return True
+
+    defeat_keys = (
+        "enemy_defeated",
+        "defeated_enemy",
+        "defeated_enemies",
+        "defeated",
+        "defeat",
+        "victory",
+        "enemy_status",
+    )
+    for source in _row_authoritative_state_sources(row):
+        source_d = _safe_dict(source)
+        if _source_has_any_key(source_d, defeat_keys):
+            return True
+        status = _safe_str(source_d.get("status")).lower()
+        if status in {"defeated", "dead", "resolved", "victory"}:
+            return True
+    return False
+
+
+def _row_has_authoritative_combat_resolution_support(row: Dict[str, Any]) -> bool:
+    mechanics = _row_mechanics_set(row)
+    if any(
+        mechanic in mechanics
+        for mechanic in (
+            "combat_resolved",
+            "encounter_resolved",
+            "combat_victory",
+            "combat_ended",
+        )
+    ):
+        return True
+
+    resolution_keys = (
+        "combat_resolved",
+        "encounter_resolved",
+        "resolved",
+        "victory",
+        "ended",
+        "combat_ended",
+    )
+    return any(_source_has_any_key(source, resolution_keys) for source in _row_authoritative_state_sources(row))
+
+
+def _turn_has_combat_support(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    mechanics = {
+        _safe_str(v)
+        for v in _safe_list(row.get("mechanics_covered_this_turn"))
+        if _safe_str(v)
+    }
+
+    if "combat_started" in mechanics or "combat_resolved" in mechanics:
+        return True
+
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    direct_mechanics = {
+        _safe_str(v)
+        for v in _safe_list(direct.get("mechanics"))
+        if _safe_str(v)
+    }
+
+    if "combat_started" in direct_mechanics or "combat_resolved" in direct_mechanics:
+        return True
+
+    if row.get("combat_result") or row.get("combat_state_delta"):
+        return True
+
+    return False
+
+
+def _assert_repaired_dialogue_visible_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+
+    if not row.get("dialogue_action_relevance_repaired"):
+        return row
+
+    selected = _safe_dict(row.get("selected_narration") or row.get("selected_output"))
+    final_narration = _safe_str(selected.get("narration"))
+    final_action = _safe_str(selected.get("action"))
+    final_source = _safe_str(
+        selected.get("dialogue_source")
+        or row.get("dialogue_source")
+        or "deterministic_action_relevance_fallback"
+    )
+
+    if final_narration:
+        row["narration"] = final_narration
+        row["display_narration"] = final_narration
+        row["selected_narration_text"] = final_narration
+
+    if final_action:
+        row["action"] = final_action
+
+    row["dialogue_source"] = final_source
+    row["display_source"] = final_source
+
+    row["selected_narration"] = selected
+    row["selected_output"] = selected
+
+    row["npc"] = {}
+    row["npc_line"] = ""
+    row["npc_speaker"] = ""
+    row["dialogue"] = ""
+
+    for nested_key in ("result", "presentation", "display", "ui"):
+        nested = dict(_safe_dict(row.get(nested_key)))
+        if not nested:
+            continue
+
+        if final_narration:
+            nested["narration"] = final_narration
+            nested["display_narration"] = final_narration
+            nested["selected_narration_text"] = final_narration
+
+        if final_action:
+            nested["action"] = final_action
+
+        nested["dialogue_source"] = final_source
+        nested["display_source"] = final_source
+        nested["selected_narration"] = selected
+        nested["selected_output"] = selected
+        nested["npc"] = {}
+        nested["npc_line"] = ""
+        nested["npc_speaker"] = ""
+        nested["dialogue"] = ""
+        row[nested_key] = nested
+
+    return row
+
+
+def _normalize_repaired_dialogue_transcript_rows(
+    transcript: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+
+    for row in _safe_list(transcript):
+        fixed = _assert_repaired_dialogue_visible_fields(_safe_dict(row))
+        normalized.append(fixed)
+
+    return normalized
+
+
+def _build_dialogue_action_relevance_summary(
+    *,
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+
+    checked_count = 0
+    mismatch_count = 0
+    repaired_count = 0
+    unrepaired_count = 0
+    source_gate_block_count = 0
+
+    by_action_kind: Dict[str, int] = {}
+    by_dialogue_kind: Dict[str, int] = {}
+    by_reason: Dict[str, int] = {}
+    examples: List[Dict[str, Any]] = []
+
+    for row in rows:
+        row = _sync_dialogue_action_relevance_with_validated_presentation(row)
+        relevance = _safe_dict(row.get("dialogue_action_relevance"))
+        source_gate = _safe_dict(row.get("dialogue_display_source_gate"))
+
+        if not relevance:
+            continue
+
+        checked_count += 1
+
+        action_kind = _safe_str(row.get("validated_presentation_category") or relevance.get("action_kind") or "unknown")
+        dialogue_kind = _safe_str(relevance.get("dialogue_kind") or "unknown")
+        by_action_kind[action_kind] = by_action_kind.get(action_kind, 0) + 1
+
+        by_dialogue_kind[dialogue_kind] = by_dialogue_kind.get(dialogue_kind, 0) + 1
+
+        source_blocked = bool(source_gate) and not bool(source_gate.get("ok", True))
+        if source_blocked:
+            source_gate_block_count += 1
+            for reason in _safe_list(source_gate.get("blocked_reasons")):
+                by_reason[_safe_str(reason)] = by_reason.get(_safe_str(reason), 0) + 1
+
+        if not bool(relevance.get("ok")):
+            mismatch_count += 1
+            for reason in _safe_list(relevance.get("reasons")):
+                by_reason[_safe_str(reason)] = by_reason.get(_safe_str(reason), 0) + 1
+
+        if row.get("dialogue_action_relevance_repaired"):
+            repaired_count += 1
+        elif relevance and not bool(relevance.get("ok")):
+            unrepaired_count += 1
+
+        if (source_blocked or not bool(relevance.get("ok")) or row.get("dialogue_action_relevance_repaired")) and len(examples) < 20:
+            selected_output = _safe_dict(row.get("selected_narration") or row.get("selected_output"))
+            final_npc = _safe_dict(selected_output.get("npc") or row.get("npc"))
+            final_narration = (
+                selected_output.get("narration")
+                or row.get("display_narration")
+                or row.get("narration")
+            )
+
+            examples.append(
+                {
+                    "turn_index": row.get("turn_index") or row.get("turn"),
+                    "player_action": row.get("player_action"),
+                    "dialogue_source": row.get("dialogue_source"),
+                    "relevance": relevance,
+                    "source_gate": source_gate,
+                    "repaired": bool(row.get("dialogue_action_relevance_repaired")),
+                    "final_narration": final_narration,
+                    "final_npc": final_npc,
+                    "after_repair": row.get("dialogue_action_relevance_after_repair"),
+                }
+            )
+
+    mismatch_rate = float(mismatch_count) / float(checked_count or 1)
+    repaired_rate = float(repaired_count) / float(checked_count or 1)
+    unrepaired_rate = float(unrepaired_count) / float(checked_count or 1)
+
+    return {
+        "format_version": "dialogue_action_relevance_summary_v1",
+        "ok": checked_count > 0 and unrepaired_rate <= 0.35,
+        "checked_count": checked_count,
+        "mismatch_count": mismatch_count,
+        "mismatch_rate": mismatch_rate,
+        "repaired_count": repaired_count,
+        "repaired_rate": repaired_rate,
+        "unrepaired_count": unrepaired_count,
+        "unrepaired_rate": unrepaired_rate,
+        "source_gate_block_count": source_gate_block_count,
+        "by_action_kind": by_action_kind,
+        "by_dialogue_kind": by_dialogue_kind,
+        "by_reason": by_reason,
+        "examples": examples,
+    }
+
+
+def _build_dialogue_repair_quality_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    dialogue = _safe_dict(summary.get("dialogue_action_relevance_summary"))
+
+    checked_count = int(dialogue.get("checked_count") or 0)
+    repaired_count = int(dialogue.get("repaired_count") or 0)
+    unrepaired_count = int(dialogue.get("unrepaired_count") or 0)
+
+    repair_rate = 0.0
+    if checked_count > 0:
+        repair_rate = repaired_count / checked_count
+
+    warnings: List[str] = []
+    if repair_rate > 0.25:
+        warnings.append("dialogue_action_relevance_repair_rate_high")
+    if unrepaired_count > 0:
+        warnings.append("dialogue_action_relevance_unrepaired_rows_present")
+
+    return {
+        "format_version": "dialogue_repair_quality_v1",
+        "ok": unrepaired_count == 0,
+        "product_quality_ok": repair_rate <= 0.25 and unrepaired_count == 0,
+        "checked_count": checked_count,
+        "repaired_count": repaired_count,
+        "unrepaired_count": unrepaired_count,
+        "repair_rate": repair_rate,
+        "max_recommended_repair_rate": 0.25,
+        "warnings": warnings,
+    }
+
+
+def _build_dialogue_stale_source_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    by_source: Dict[str, int] = {}
+    by_reason: Dict[str, int] = {}
+    by_action_category: Dict[str, int] = {}
+    by_presentation_category: Dict[str, int] = {}
+    examples: List[Dict[str, Any]] = []
+
+    repaired_count = 0
+    checked_count = 0
+
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        relevance = _safe_dict(
+            row.get("dialogue_action_relevance")
+            or row.get("dialogue_action_relevance_result")
+            or row.get("dialogue_action_relevance_gate")
+        )
+
+        if not relevance:
+            continue
+
+        checked_count += 1
+
+        repaired = bool(
+            relevance.get("repaired")
+            or relevance.get("fallback_applied")
+            or row.get("dialogue_action_relevance_repaired")
+        )
+
+        if not repaired:
+            continue
+
+        repaired_count += 1
+
+        compat = _safe_dict(row.get("dialogue_presentation_compatibility"))
+        source = _safe_str(
+            relevance.get("source")
+            or row.get("selected_narration_source")
+            or row.get("narration_source")
+            or row.get("combined_background_source")
+            or row.get("player_agent_selection_source")
+            or "unknown"
+        )
+        reason = _safe_str(
+            relevance.get("reason")
+            or relevance.get("repair_reason")
+            or relevance.get("fallback_reason")
+            or compat.get("reason")
+            or "unknown"
+        )
+
+        by_source[source] = by_source.get(source, 0) + 1
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+
+        action_category = _safe_str(compat.get("action_category"))
+        presentation_category = _safe_str(compat.get("presentation_category"))
+        by_action_category[action_category] = by_action_category.get(action_category, 0) + 1 if action_category else by_action_category.get(action_category, 0)
+        by_presentation_category[presentation_category] = by_presentation_category.get(presentation_category, 0) + 1 if presentation_category else by_presentation_category.get(presentation_category, 0)
+
+        if len(examples) < 20:
+            examples.append(
+                {
+                    "turn_index": row.get("turn_index") or row.get("turn"),
+                    "player_action": row.get("player_action"),
+                    "canonical_turn_action": row.get("canonical_turn_action"),
+                    "source": source,
+                    "reason": reason,
+                    "selected_narration_preview": _safe_str(
+                        row.get("selected_narration")
+                        or row.get("display_narration")
+                        or row.get("narration")
+                    )[:240],
+                }
+            )
+
+    repair_rate = repaired_count / checked_count if checked_count else 0.0
+
+    return {
+        "format_version": "dialogue_stale_source_summary_v1",
+        "ok": True,
+        "checked_count": checked_count,
+        "repaired_count": repaired_count,
+        "repair_rate": repair_rate,
+        "by_source": by_source,
+        "by_reason": by_reason,
+        "by_action_category": by_action_category,
+        "by_presentation_category": by_presentation_category,
+        "examples": examples,
+    }

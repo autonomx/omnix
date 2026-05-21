@@ -1,0 +1,480 @@
+
+
+def _run_autoplay_campaign(args: argparse.Namespace) -> Dict[str, Any]:
+    from app.shared import get_provider
+
+    campaign_perf_start = now_perf()
+    artifact_write_ms = 0.0
+    session_id = args.session_id or f"autoplay_{uuid.uuid4().hex[:12]}"
+    simulation_state: Dict[str, Any] = {}
+    seed_resolution = resolve_campaign_seed_name(
+        args.scenario_seed,
+        random_seed=args.random_seed,
+    )
+    seed_result = seed_campaign(simulation_state, seed_resolution["resolved_seed"])
+    seed_result["seed_resolution"] = seed_resolution
+    authoritative_state: Dict[str, Any] = deepcopy(simulation_state)
+    authoritative_state = _commit_authoritative_state(
+        session_id=session_id,
+        authoritative_state=authoritative_state,
+        runtime_narration=args.narration_mode,
+    )
+    last_committed_state: Dict[str, Any] = deepcopy(authoritative_state)
+    runtime_state: Dict[str, Any] = deepcopy(authoritative_state)
+    checkpoint_dir = Path(args.output_dir) / "checkpoints"
+
+    # Scenario progression action repeat accumulators
+    scenario_progression_warnings: List[Dict[str, Any]] = []
+    scenario_progression_suppressed_actions: Dict[str, Dict[str, Any]] = {}
+    scenario_progression_completed_action_ids: set[str] = set()
+    scenario_progression_completed_mechanics: set[str] = set()
+
+    provider = _load_provider() if args.player_agent == "llm" else None
+    provider_shape = describe_provider_shape(provider) if provider is not None else {}
+    if args.debug_provider_shape and provider_shape:
+        _timestamped_print("Player-agent provider shape:")
+        _timestamped_print(provider_shape)
+
+    effective_provider_workers = int(args.provider_workers)
+    effective_background_workers = int(args.background_workers)
+    if (
+        int(args.turns or 0) >= int(getattr(args, "strict_eval_turns", 100) or 100)
+        and _safe_str(args.background_llm_mode) == "combined"
+        and effective_provider_workers <= 1
+    ):
+        effective_provider_workers = 2
+    if (
+        int(args.turns or 0) >= int(getattr(args, "strict_eval_turns", 100) or 100)
+        and effective_background_workers < 3
+    ):
+        effective_background_workers = 3
+    pipeline = AutoplayBackgroundPipeline(
+        background_workers=effective_background_workers,
+        provider_workers=effective_provider_workers,
+    )
+    background_results_summary: Dict[str, Any] = {}
+
+
+    transcript: List[Dict[str, Any]] = []
+    carried_campaign_runtime_state: Dict[str, Any] = {}
+    background_result_timing_tracker = _new_background_result_timing_tracker()
+    background_job_registry = _new_background_job_registry()
+    background_drain_events: List[Dict[str, Any]] = []
+    player_agent_cache = PlayerAgentDecisionCache(max_entries=256)
+    player_agent_prompt_rows: List[Dict[str, Any]] = []
+    regression_warnings: List[Dict[str, Any]] = []
+    pre_turn_advisory_promotion_auto_disabled = False
+    pre_turn_advisory_promotion_disable_reason = ""
+    pre_turn_advisory_promotion_slow_events: List[Dict[str, Any]] = []
+    started = time.time()
+    stopped_reason = ""
+
+    progression_authority_state: Dict[str, Any] = _extract_progression_authority_sidecar(runtime_state)
+    progression_authority_state = _stamp_progression_authority(
+        progression_authority_state,
+        reason="main_loop_sidecar_initialized",
+
+        turn_index=0,
+    )
+    runtime_state = _overlay_progression_authority_sidecar(
+        runtime_state,
+        progression_authority_state,
+        reason="main_loop_initial_overlay",
+        turn_index=0,
+    )
+    authoritative_state = deepcopy(runtime_state)
+    last_committed_state = deepcopy(runtime_state)
+    progression_sidecar_max_node_count = _progression_node_count(progression_authority_state)
+    progression_sidecar_max_revision = _progression_revision(progression_authority_state)
+    checkpoint_validation_rows: List[Dict[str, Any]] = []
+
+    mechanics_runtime_state: Dict[str, Any] = {
+        "current_location": "scene:rusty_flagon",
+        "currency": {"gold": 15, "silver": 20, "copper": 50},
+        "inventory": [],
+        "flags": {},
+        "xp": 0,
+        "level": 1,
+    }
+
+    mechanics_failed_opportunity_ids: set[str] = set()
+
+    mechanics_coverage_runtime: Dict[str, bool] = {
+        "travel": False,
+        "npc_interaction": False,
+        "quest_progress": False,
+        "service_or_lodging": False,
+        "buying": False,
+        "selling": False,
+        "currency_change": False,
+        "inventory_change": False,
+        "party_recruitment": False,
+        "combat_started": False,
+        "combat_resolved": False,
+        "xp_gain": False,
+        "level_up": False,
+        "loot_acquired": False,
+    }
+
+    def _default_tavern_story_arcs() -> Dict[str, Any]:
+        return {
+            "arc:marked_coin_investigation": {
+                "arc_id": "arc:marked_coin_investigation",
+                "title": "Marked Coin Investigation",
+                "status": "active",
+                "current_stage": "follow_the_marked_coin_lead",
+                "started_turn": 1,
+                "last_progress_turn": 1,
+                "progress_count": 0,
+                "completed_objectives": [],
+                "flags": {},
+                "history": [
+                    {
+                        "turn": 1,
+                        "type": "arc_started",
+                        "summary": "The marked coin lead begins at the Rusty Flagon.",
+                    }
+                ],
+            },
+            "arc:mill_road_threat": {
+                "arc_id": "arc:mill_road_threat",
+                "title": "Mill Road Threat",
+                "status": "active",
+                "current_stage": "reach_and_secure_the_old_mill_road",
+                "started_turn": 1,
+                "last_progress_turn": 1,
+                "progress_count": 0,
+                "completed_objectives": [],
+                "flags": {},
+                "history": [
+                    {
+                        "turn": 1,
+                        "type": "arc_started",
+                        "summary": "Rumors point toward trouble on the road to the old mill.",
+                    }
+                ],
+            },
+        }
+
+    story_arc_runtime_state: Dict[str, Any] = _default_tavern_story_arcs()
+    story_arc_resolution_events: List[Dict[str, Any]] = []
+
+    story_arc_aftermath_applied_keys: set[str] = set()
+    story_arc_aftermath_events: List[Dict[str, Any]] = []
+    story_arc_aftermath_world_signals: List[Dict[str, Any]] = []
+    story_arc_aftermath_followup_hooks: List[Dict[str, Any]] = []
+    world_signal_events: List[Dict[str, Any]] = []
+    npc_memory_events: List[Dict[str, Any]] = []
+    followup_hook_events: List[Dict[str, Any]] = []
+
+    followup_arc_progression_applied_keys: set[str] = set()
+    followup_arc_progression_events: List[Dict[str, Any]] = []
+    followup_arc_progression_world_signals: List[Dict[str, Any]] = []
+
+    faction_pressure_last_emitted_turn_by_rule: Dict[str, int] = {}
+    faction_pressure_events: List[Dict[str, Any]] = []
+
+    followup_arc_resolution_applied_keys: set[str] = set()
+    followup_arc_resolution_events: List[Dict[str, Any]] = []
+    followup_arc_resolution_world_signals: List[Dict[str, Any]] = []
+    followup_arc_resolution_escalation_hooks: List[Dict[str, Any]] = []
+
+    escalation_arc_seed_events: List[Dict[str, Any]] = []
+
+    pressure_pacing_emitted_key_turns: Dict[str, int] = {}
+    pressure_pacing_rejected_events: List[Dict[str, Any]] = []
+    pressure_pacing_rejected_world_signals: List[Dict[str, Any]] = []
+
+    escalation_arc_progression_applied_keys: set[str] = set()
+    escalation_arc_progression_events: List[Dict[str, Any]] = []
+    escalation_arc_progression_world_signals: List[Dict[str, Any]] = []
+    escalation_arc_pressure_events: List[Dict[str, Any]] = []
+
+    world_state_compression_events: List[Dict[str, Any]] = []
+    latest_compressed_world_state: Dict[str, Any] = {}
+
+    faction_reputation_state: Dict[str, Any] = {
+        "faction:rusty_flagon_locals": {
+            "faction_id": "faction:rusty_flagon_locals",
+            "reputation": 0,
+            "tier": "neutral",
+            "history": [],
+        },
+        "faction:sable_chain": {
+            "faction_id": "faction:sable_chain",
+            "reputation": 0,
+            "tier": "neutral",
+            "history": [],
+        },
+    }
+
+    economy_pressure_state: Dict[str, Any] = {
+        "currency": {
+            "gold": 10,
+            "silver": 0,
+            "copper": 30,
+        }
+    }
+    economy_pressure_events: List[Dict[str, Any]] = []
+    economy_pressure_world_signals: List[Dict[str, Any]] = []
+    economy_pressure_warnings: List[Dict[str, Any]] = []
+    economy_pressure_currency_deltas: List[Dict[str, Any]] = []
+    economy_pressure_last_emitted_turn_by_rule: Dict[str, int] = {}
+    faction_reputation_events: List[Dict[str, Any]] = []
+
+    followup_arc_seed_events: List[Dict[str, Any]] = []
+
+    npc_presence_state: Dict[str, Any] = {}
+    npc_schedule_events: List[Dict[str, Any]] = []
+    npc_agency_events: List[Dict[str, Any]] = []
+    npc_agency_world_signals: List[Dict[str, Any]] = []
+    npc_agency_memory_events: List[Dict[str, Any]] = []
+    npc_agency_last_emitted_turn_by_rule: Dict[str, int] = {}
+
+    combat_lifecycle_state: Dict[str, Any] = {}
+    combat_player_state: Dict[str, Any] = {
+        "hp": 20,
+        "max_hp": 20,
+    }
+    combat_lifecycle_events: List[Dict[str, Any]] = []
+    combat_lifecycle_encounters: List[Dict[str, Any]] = []
+    combat_lifecycle_world_signals: List[Dict[str, Any]] = []
+    combat_lifecycle_memory_events: List[Dict[str, Any]] = []
+    combat_lifecycle_injuries: List[Dict[str, Any]] = []
+    combat_consequence_events: List[Dict[str, Any]] = []
+    combat_consequence_economy_hints: List[Dict[str, Any]] = []
+    combat_lifecycle_last_trigger_turn_by_rule: Dict[str, int] = {}
+
+    faction_consequence_events: List[Dict[str, Any]] = []
+    faction_consequence_world_signals: List[Dict[str, Any]] = []
+    faction_consequence_last_emitted_turn_by_rule: Dict[str, int] = {}
+
+    npc_reaction_events: List[Dict[str, Any]] = []
+    npc_reaction_memory_events: List[Dict[str, Any]] = []
+    npc_reaction_world_signals: List[Dict[str, Any]] = []
+    npc_reaction_last_emitted_turn_by_rule: Dict[str, int] = {}
+
+    for turn_index in range(1, int(args.turns) + 1):
+        # Initialize player agent selection variables
+        player_agent_selection_source = "unknown"
+        player_agent_selection_reason = "unknown"
+
+        runtime_state = _overlay_and_assert_progression_sidecar(
+            last_committed_state,
+            progression_authority_state,
+            reason="turn_start",
+            turn_index=turn_index,
+        )
+        authoritative_state = deepcopy(runtime_state)
+        last_committed_state = deepcopy(runtime_state)
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "scenario_progression.sidecar.start",
+            turn_index=turn_index,
+            runtime_revision=_progression_revision(runtime_state),
+            sidecar_revision=_progression_revision(progression_authority_state),
+            runtime_completed_node_count=_progression_node_count(runtime_state),
+            sidecar_completed_node_count=_progression_node_count(progression_authority_state),
+            runtime_fact_count=_progression_fact_count(runtime_state),
+            sidecar_fact_count=_progression_fact_count(progression_authority_state),
+            next_actions=[
+                _safe_str(_safe_dict(row).get("action_id"))
+                for row in _safe_list(runtime_state.get("scenario_progression_actions"))[:5]
+            ],
+        )
+        progression_node_count_at_turn_start = _progression_node_count(authoritative_state)
+        progression_revision_at_turn_start = _progression_revision(authoritative_state)
+
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "turn.start",
+            turn_index=turn_index,
+            transcript_len=len(transcript),
+        )
+        transcript_len_at_turn_start = len(transcript)
+
+        if int(getattr(args, "pre_turn_background_drain_ms", 0) or 0) >= 0:
+            with _ProbeTimer(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "pre_turn_background_drain",
+                turn_index=turn_index,
+                wait_ms=int(getattr(args, "pre_turn_background_drain_ms", 0) or 0),
+            ):
+                drain_event = _drain_completed_background_jobs_for_transcript(
+                    pipeline=pipeline,
+                    job_registry=background_job_registry,
+                    transcript=transcript,
+                    current_turn=turn_index,
+                    phase="pre_turn",
+                    wait_ms=int(getattr(args, "pre_turn_background_drain_ms", 0) or 0),
+                    timing_tracker=background_result_timing_tracker,
+                )
+            background_drain_events.append(drain_event)
+            _probe_log(
+                bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                "pre_turn_background_drain.result",
+                turn_index=turn_index,
+                checked=drain_event.get("checked"),
+                pipeline_completed_drained=drain_event.get("pipeline_completed_drained"),
+                ready=drain_event.get("ready"),
+                attached=drain_event.get("attached"),
+                not_ready=drain_event.get("not_ready"),
+            )
+
+            # Re-run deterministic promotion/evolution over newly attached
+            # advisory candidates so future turns can see promoted runtime state.
+            pre_turn_promotion_start = now_perf()
+            if (
+                not bool(getattr(args, "disable_pre_turn_advisory_promotion", False))
+                and not bool(pre_turn_advisory_promotion_auto_disabled)
+                and int(drain_event.get("attached") or 0) > 0
+            ):
+                pre_turn_promotion_result: Dict[str, Any] = {}
+                with _ProbeTimer(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "pre_turn_deferred_advisory_promotion",
+                    turn_index=turn_index,
+                    transcript_len=len(transcript),
+                    attached=drain_event.get("attached"),
+                    max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
+                    persist_profiles=False,
+                ):
+                    pre_turn_promotion_result = run_deferred_advisory_promotions_for_transcript(
+                        transcript=transcript,
+                        max_promotions_per_turn=int(args.max_advisory_promotions_per_turn),
+                        max_rows=int(getattr(args, "pre_turn_advisory_promotion_max_rows", 6) or 6),
+                        persist_profiles=False,
+                        incremental_pre_turn=True,
+                        mark_pre_turn_promoted=True,
+                        current_turn=turn_index,
+                        carry_candidate_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_candidate_limit", 30) or 30
+                        ),
+                        carry_pending_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_pending_limit", 30) or 30
+                        ),
+                        carry_accepted_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_accepted_limit", 60) or 60
+                        ),
+                        carry_rejected_limit=int(
+                            getattr(args, "pre_turn_advisory_carry_rejected_limit", 60) or 60
+                        ),
+                        fast_pre_turn=bool(getattr(args, "pre_turn_advisory_fast_path", True)),
+                        skip_profile_load_for_pre_turn=bool(
+                            getattr(args, "pre_turn_advisory_skip_profile_load", True)
+                        ),
+                        skip_evolution_for_pre_turn=bool(
+                            getattr(args, "pre_turn_advisory_skip_evolution", True)
+                        ),
+                        skip_mutation_compare_for_pre_turn=bool(
+                            getattr(args, "pre_turn_advisory_skip_mutation_compare", True)
+                        ),
+                    )
+                _probe_log(
+                    bool(getattr(args, "debug_autoplay_stage_timing", False)),
+                    "pre_turn_deferred_advisory_promotion.result",
+                    turn_index=turn_index,
+                    turns=pre_turn_promotion_result.get("turns"),
+                    source_transcript_turns=pre_turn_promotion_result.get("source_transcript_turns"),
+                    incremental_pre_turn=pre_turn_promotion_result.get("incremental_pre_turn"),
+                    accepted=pre_turn_promotion_result.get("accepted"),
+                    rejected=pre_turn_promotion_result.get("rejected"),
+                    pending=pre_turn_promotion_result.get("pending"),
+                    persist_profiles=pre_turn_promotion_result.get("persist_profiles"),
+                    carry_candidate_limit=pre_turn_promotion_result.get("carry_candidate_limit"),
+                    carry_pending_limit=pre_turn_promotion_result.get("carry_pending_limit"),
+                    carry_accepted_limit=pre_turn_promotion_result.get("carry_accepted_limit"),
+                    carry_rejected_limit=pre_turn_promotion_result.get("carry_rejected_limit"),
+                )
+                drain_event["pre_turn_advisory_promotion_result"] = {
+                    "ok": pre_turn_promotion_result.get("ok"),
+                    "turns": pre_turn_promotion_result.get("turns"),
+                    "source_transcript_turns": pre_turn_promotion_result.get("source_transcript_turns"),
+                    "incremental_pre_turn": pre_turn_promotion_result.get("incremental_pre_turn"),
+                    "accepted": pre_turn_promotion_result.get("accepted"),
+                    "rejected": pre_turn_promotion_result.get("rejected"),
+                    "pending": pre_turn_promotion_result.get("pending"),
+                    "persist_profiles": pre_turn_promotion_result.get("persist_profiles"),
+                    "fast_pre_turn": pre_turn_promotion_result.get("fast_pre_turn"),
+                    "elapsed_ms": pre_turn_promotion_result.get("elapsed_ms"),
+                    "slow_guard_ms": int(getattr(args, "pre_turn_advisory_slow_guard_ms", 5000) or 5000),
+                    "carry_candidate_limit": pre_turn_promotion_result.get("carry_candidate_limit"),
+                    "carry_pending_limit": pre_turn_promotion_result.get("carry_pending_limit"),
+                    "carry_accepted_limit": pre_turn_promotion_result.get("carry_accepted_limit"),
+                    "carry_rejected_limit": pre_turn_promotion_result.get("carry_rejected_limit"),
+                }
+
+                if pre_turn_promotion_result.get("slow", False):
+                    pre_turn_advisory_promotion_auto_disabled = True
+                    pre_turn_advisory_promotion_disable_reason = "slow pre-turn promotion"
+                    pre_turn_advisory_promotion_slow_events.append({
+                        "turn_index": turn_index,
+                        "reason": "slow pre-turn promotion",
+                        "elapsed_ms": elapsed_ms(pre_turn_promotion_start),
+                    })
+
+        turn_perf_start = now_perf()
+        turn_performance: Dict[str, Any] = {
+            "turn_index": turn_index,
+        }
+        background_runtime_state: Dict[str, Any] = {}
+        resolved_turn_contract: Dict[str, Any] = {}
+        resolved_narration_payload: Dict[str, Any] = {}
+        combined_background_result: Dict[str, Any] = {}
+        journal_narration_text = ""
+        combined_background_llm_job_id = ""
+        # The previous turn's committed state is the only valid baseline.
+        # Never derive the next before_state from manual session reloads.
+        expected_baseline_state = deepcopy(last_committed_state)
+        authoritative_state = deepcopy(last_committed_state)
+        authoritative_state = _commit_authoritative_state(
+            session_id=session_id,
+            authoritative_state=authoritative_state,
+        )
+        authoritative_state = _commit_campaign_state_authority(
+            authoritative_state,
+            transcript_tail=transcript[-12:],
+            phase="turn",
+        )
+        authoritative_state = _overlay_and_assert_progression_sidecar(
+            authoritative_state,
+            progression_authority_state,
+            reason="before_player_context",
+            turn_index=turn_index,
+        )
+        authoritative_state = _refresh_scenario_progression_actions_for_turn(
+            authoritative_state,
+            args,
+            turn_index=turn_index,
+        )
+        simulation_state = deepcopy(authoritative_state)
+        context = build_player_action_context(
+            authoritative_state,
+            turn_index=turn_index,
+            limit=args.suggested_action_limit,
+        )
+        if isinstance(context, dict) and isinstance(authoritative_state, dict):
+            context["dialogue_state"] = authoritative_state.get("dialogue_state") or {}
+            context["autoplay_story_hook_state"] = authoritative_state.get("autoplay_story_hook_state") or {}
+            context["quest_progress"] = authoritative_state.get("quest_progress") or {}
+            context["campaign_state_commit_summary"] = authoritative_state.get("campaign_state_commit_summary") or {}
+            context["unresolved_leads"] = authoritative_state.get("unresolved_leads") or []
+            context["current_location"] = authoritative_state.get("current_location") or authoritative_state.get("current_location_name") or ""
+            context["current_location_name"] = authoritative_state.get("current_location_name") or ""
+            context["scenario_progression_actions"] = _filter_suppressed_graph_actions(
+                _safe_list(authoritative_state.get("scenario_progression_actions")),
+                suppressed_actions=scenario_progression_suppressed_actions,
+                completed_action_ids=scenario_progression_completed_action_ids,
+                completed_mechanics=scenario_progression_completed_mechanics,
+                turn_index=turn_index,
+            )
+            context["scenario_progression_suppressed_actions"] = dict(scenario_progression_suppressed_actions)
+            context["scenario_progression_summary"] = authoritative_state.get("scenario_progression_summary") or {}
+            context["scenario_progression_active"] = _scenario_progression_active(authoritative_state)
+            context["progression_authority_summary"] = authoritative_state.get("progression_authority_summary") or {}
+            context["progression_sidecar_completed_node_count"] = _progression_node_count(
+                progression_authority_state
+            )
+            context["progression_sidecar_revision"] = _progression_revision(
+                progression_authority_state
+            )

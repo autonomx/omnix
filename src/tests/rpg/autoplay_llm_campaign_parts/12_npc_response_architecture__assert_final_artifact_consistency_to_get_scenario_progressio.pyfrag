@@ -1,0 +1,136 @@
+
+
+def _assert_final_artifact_consistency(summary: Dict[str, Any]) -> None:
+    summary = _safe_dict(summary)
+
+    health = _safe_dict(summary.get("autoplay_health"))
+    evaluation = _safe_dict(summary.get("hundred_turn_evaluation"))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+
+    authoritative_ok = bool(summary.get("ok")) and bool(evaluation.get("ok")) and bool(readiness.get("ok"))
+
+    if authoritative_ok and not bool(health.get("ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"authoritative_ok=true:health={health}"
+        )
+
+    if bool(summary.get("ok")) != bool(health.get("summary_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"summary_ok={summary.get('ok')}:health_summary_ok={health.get('summary_ok')}"
+        )
+
+    _assert_background_presentation_attachment_wired(summary)
+    _assert_turn_bound_attachment_verified(summary)
+
+    if bool(evaluation.get("ok")) != bool(health.get("hundred_turn_evaluation_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"evaluation_ok={evaluation.get('ok')}:"
+            f"health_evaluation_ok={health.get('hundred_turn_evaluation_ok')}"
+        )
+
+    if bool(readiness.get("ok")) != bool(health.get("hundred_turn_readiness_ok")):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"readiness_ok={readiness.get('ok')}:"
+            f"health_readiness_ok={health.get('hundred_turn_readiness_ok')}"
+        )
+
+    failed_eval = _safe_list(evaluation.get("failed_gates"))
+    failed_ready = _safe_list(readiness.get("failed_gates"))
+
+    if authoritative_ok and (failed_eval or failed_ready):
+        raise RuntimeError(
+            "final_artifact_consistency_failed:"
+            f"authoritative_ok_with_failed_gates:"
+            f"evaluation={failed_eval}:readiness={failed_ready}"
+        )
+
+
+def _get_scenario_progression_actions(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    try:
+        from app.rpg.progression.runtime import get_active_progression_actions
+
+        return get_active_progression_actions(
+            runtime_state,
+            scenario_seed=scenario_seed,
+            limit=limit,
+        )
+    except Exception as exc:
+        errors = runtime_state.setdefault("scenario_progression_errors", [])
+        if isinstance(errors, list):
+            errors.append(f"{type(exc).__name__}: {exc}")
+            del errors[:-20]
+        return []
+
+
+def _refresh_scenario_progression_actions_for_turn(
+    runtime_state: Dict[str, Any],
+    args: Any,
+    *,
+    turn_index: int,
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    runtime_state["scenario_progression_actions"] = _get_scenario_progression_actions(
+        runtime_state,
+        scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+        limit=int(getattr(args, "suggested_action_limit", 8) or 8),
+    )
+    runtime_state = _stamp_progression_authority(
+        runtime_state,
+        reason="scenario_progression_actions_recomputed",
+        turn_index=turn_index,
+    )
+    return runtime_state
+
+
+def _apply_scenario_progression_for_action(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+    player_action: str,
+    turn_index: int,
+) -> Dict[str, Any]:
+    try:
+        from app.rpg.progression.runtime import apply_progression_for_action
+
+        result = apply_progression_for_action(
+            runtime_state,
+            scenario_seed=scenario_seed,
+            player_action=player_action,
+            turn_index=turn_index,
+        )
+        progressed = _safe_dict(result.get("state")) or runtime_state
+        progressed = _authoritative_progression_state(
+            runtime_state,
+            progressed,
+            reason="progression_applied",
+            turn_index=turn_index,
+        )
+        current_summary = _safe_dict(result.get("summary"))
+        if int(current_summary.get("turn_index") or -1) == int(turn_index):
+            progressed["scenario_progression_current_turn_summary"] = current_summary
+        return progressed
+    except Exception as exc:
+        errors = runtime_state.setdefault("scenario_progression_errors", [])
+        if isinstance(errors, list):
+            errors.append(f"{type(exc).__name__}: {exc}")
+            del errors[:-20]
+        return runtime_state
+
+
+def _is_campaign_complete_bridge_action(action: Any, action_id: Any = "") -> bool:
+    action_id = _safe_str(action_id)
+    action = _safe_str(action).lower()
+    return bool(
+        action_id.startswith("arc_complete")
+        or "completed ambush and mill investigation" in action
+        or "what threat or lead we should follow next" in action
+    )

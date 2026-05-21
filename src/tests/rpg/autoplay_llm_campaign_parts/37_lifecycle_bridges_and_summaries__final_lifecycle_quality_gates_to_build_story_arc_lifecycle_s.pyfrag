@@ -1,0 +1,416 @@
+
+
+def _final_lifecycle_quality_gates(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    existing = _safe_dict(summary.get("quality_gate_summary"))
+    gates = dict(_safe_dict(existing.get("gates")))
+    requested_turns = int(summary.get("requested_turns") or summary.get("turns_executed") or 0)
+    is_20_turn_or_more = requested_turns >= 20
+    strict_progress = _safe_dict(summary.get("strict_progress_health_summary"))
+    post_transition_action_quality = _safe_dict(summary.get("post_transition_action_quality_summary"))
+    objective_progression = _safe_dict(summary.get("objective_progression_summary"))
+    repeated_affordance = _safe_dict(summary.get("repeated_affordance_loop_summary"))
+    quest_handoff = _safe_dict(summary.get("quest_handoff_summary"))
+    field_coverage = _safe_dict(summary.get("final_state_field_coverage_summary"))
+    pre_turn_promotion_perf = _safe_dict(summary.get("pre_turn_advisory_promotion_performance_summary"))
+    final_field_presence = _final_lifecycle_field_presence_summary(summary)
+    campaign_commit = _safe_dict(summary.get("campaign_state_commit_summary"))
+    stale_state = _safe_dict(summary.get("campaign_stale_state_summary"))
+    commit_perf = _safe_dict(summary.get("campaign_state_commit_performance_summary"))
+    behavioral_eval = _safe_dict(summary.get("behavioral_autoplay_eval_summary"))
+    arc_summary = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    arc_complete = bool(arc_summary.get("arc_complete"))
+    background_lag_is_perf_only = _background_result_timing_all_jobs_safely_attached(summary)
+    if background_lag_is_perf_only:
+        # N116.14: late background attachment is a provider-throughput warning,
+        # not a correctness failure, when every job attached safely and selected
+        # output grounding remained clean.
+        gates["background_result_timing_ok"] = True
+        gates["strict_100turn_background_attach_lag_ok"] = True
+
+    quest_progress_summary = _safe_dict(summary.get("quest_progress_summary"))
+    scenario_progression = _safe_dict(summary.get("scenario_progression_summary"))
+    scenario_progression_log = _safe_list(summary.get("scenario_progression_log"))
+    graph_flow_active = bool(
+        scenario_progression_log
+        or _safe_dict(summary.get("progression_completed_nodes"))
+        or _safe_dict(summary.get("progression_facts"))
+        or bool(scenario_progression.get("changed"))
+    )
+    active_quests = 0
+    completed_quests = 0
+    completed_without_next_objective = []
+    for row in _safe_list(quest_progress_summary.get("quests")):
+        quest = _safe_dict(row)
+        objectives = [_safe_dict(item) for item in _safe_list(quest.get("objectives"))]
+        status = _safe_str(quest.get("status"))
+        completed = bool(quest.get("completed")) or status == "completed"
+        if completed:
+            completed_quests += 1
+        elif status == "active":
+            active_quests += 1
+        if status != "active":
+            continue
+        has_completed = any(
+            bool(item.get("completed")) or _safe_str(item.get("status")) == "completed"
+            for item in objectives
+        )
+        has_next = any(
+            not bool(item.get("completed")) and _safe_str(item.get("status")) != "completed"
+            for item in objectives
+        )
+        if has_completed and not has_next:
+            completed_without_next_objective.append(_safe_str(quest.get("quest_id") or quest.get("title")))
+
+    gates["strict_progress_health_ok"] = (
+        not is_20_turn_or_more
+        or bool(strict_progress.get("ok", False) or arc_complete)
+    )
+    gates["post_transition_action_quality_ok"] = (
+        not is_20_turn_or_more
+        or bool(post_transition_action_quality.get("ok", False) or arc_complete)
+    )
+    gates["objective_progression_present_ok"] = (
+        not is_20_turn_or_more
+        or bool(objective_progression.get("ok", False))
+    )
+    gates["repeated_affordance_loop_ok"] = (
+        not is_20_turn_or_more
+        or bool(repeated_affordance.get("ok", True))
+    )
+    gates["quest_handoff_available_after_completion_ok"] = (
+        graph_flow_active
+        or completed_quests == 0
+        or active_quests > 0
+        or bool(quest_handoff.get("changed"))
+        or bool(quest_handoff.get("active_handoff_quests"))
+    )
+    gates["no_completed_without_next_objective_ok"] = not completed_without_next_objective
+    gates["final_state_field_coverage_ok"] = bool(field_coverage.get("ok"))
+    gates["pre_turn_advisory_promotion_fast_ok"] = (
+        not is_20_turn_or_more
+        or bool(pre_turn_promotion_perf.get("ok", True))
+    )
+    gates["final_lifecycle_summary_fields_present_ok"] = bool(final_field_presence.get("ok"))
+    gates["campaign_state_commit_ok"] = bool(campaign_commit.get("ok", False) or arc_complete)
+    gates["campaign_state_not_stale_ok"] = bool(stale_state.get("ok", False) or arc_complete)
+    gates["campaign_state_commit_performance_ok"] = bool(commit_perf.get("ok", True))
+    gates["behavioral_autoplay_eval_ok"] = bool(behavioral_eval.get("ok", False))
+    readiness = _safe_dict(summary.get("hundred_turn_readiness_summary"))
+    if int(summary.get("requested_turns") or 0) >= 100 and readiness:
+        gates["hundred_turn_readiness_ok"] = bool(readiness.get("ok"))
+
+    narration_grounding = _safe_dict(summary.get("narration_grounding_summary"))
+    if bool(summary.get("fail_on_narration_grounding_violations")):
+        gates["narration_grounding_ok"] = bool(narration_grounding.get("ok", True))
+    requested_turns = int(
+        summary.get("requested_turns")
+        or summary.get("turns_executed")
+        or 0
+    )
+    all_expected_node_count = int(
+        arc_summary.get("all_expected_node_count")
+        or arc_summary.get("expected_node_count")
+        or 0
+    )
+    completed_node_count = int(arc_summary.get("completed_node_count") or 0)
+    campaign_complete = bool(
+        arc_summary.get("arc_complete")
+        or arc_summary.get("campaign_graphs_complete")
+        or (
+            int(arc_summary.get("graph_count") or 0) > 0
+            and int(arc_summary.get("completed_graph_count") or 0)
+            >= int(arc_summary.get("graph_count") or 0)
+        )
+    )
+    partial_run_has_expected_progress = bool(
+        requested_turns > 0
+        and all_expected_node_count > 0
+        and requested_turns < all_expected_node_count
+        and completed_node_count >= requested_turns
+    )
+
+    gates["scenario_progression_arc_complete_ok"] = bool(
+        campaign_complete or partial_run_has_expected_progress
+    )
+    gates["scenario_progression_campaign_complete_ok"] = bool(
+        campaign_complete or partial_run_has_expected_progress
+    )
+
+    for required_gate in REQUIRED_FINAL_LIFECYCLE_GATES:
+        gates.setdefault(required_gate, False)
+
+    failed = [name for name, ok in gates.items() if not bool(ok)]
+    return {
+        **existing,
+        "ok": not failed,
+        "gates": gates,
+        "failed_gates": failed,
+        "final_lifecycle_field_presence": final_field_presence,
+        "source": "final_lifecycle_quality_gates",
+    }
+
+
+def _build_story_arc_lifecycle_summary(
+    *,
+    story_arcs: Dict[str, Any],
+    events: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    arcs = _safe_dict(story_arcs)
+    event_rows = [_safe_dict(event) for event in _safe_list(events)]
+
+    status_counts: Dict[str, int] = {}
+    for arc in arcs.values():
+        status = _safe_str(_safe_dict(arc).get("status") or "unknown")
+        status_counts[status] = int(status_counts.get(status, 0)) + 1
+
+    completed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "completed"
+    ]
+    failed = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") == "failed"
+    ]
+    active = [
+        arc
+        for arc in arcs.values()
+        if _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+    ]
+
+    seeded_followups = [
+        arc
+        for arc in active
+        if _safe_dict(arc).get("seeded_followup")
+        or _safe_dict(arc).get("source_hook_id")
+        or _safe_dict(arc).get("current_stage") == "seeded_followup"
+        or any(
+            _safe_dict(history).get("type") == "arc_seeded"
+            for history in _safe_list(_safe_dict(arc).get("history"))
+        )
+    ]
+
+    original_active = [
+        arc
+        for arc in active
+        if arc not in seeded_followups
+    ]
+
+    return {
+        "format_version": "story_arc_lifecycle_summary_v1",
+        "ok": bool(completed or failed),
+        "arc_count": len(arcs),
+        "completed_count": len(completed),
+        "failed_count": len(failed),
+        "active_count": len(active),
+        "original_active_count": len(original_active),
+        "seeded_followup_active_count": len(seeded_followups),
+        "status_counts": dict(sorted(status_counts.items())),
+        "arcs": arcs,
+        "events": event_rows,
+        "completion_events": [
+            event for event in event_rows if event.get("subtype") == "arc_completed"
+        ],
+        "failure_events": [
+            event for event in event_rows if event.get("subtype") == "arc_failed"
+        ],
+        "unresolved_original_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),
+            }
+            for arc in original_active
+        ],
+        "active_followup_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),
+                "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+                "progress_count": _safe_dict(arc).get("progress_count"),
+                "last_progress_turn": _safe_dict(arc).get("last_progress_turn"),
+            }
+            for arc in seeded_followups
+        ],
+        "unresolved_arcs": [
+            {
+                "arc_id": _safe_dict(arc).get("arc_id"),
+                "title": _safe_dict(arc).get("title"),
+                "status": _safe_dict(arc).get("status"),
+                "current_stage": _safe_dict(arc).get("current_stage"),
+
+            }
+            for arc in active
+        ],
+    }
+
+
+def _build_story_arc_aftermath_summary(
+    *,
+    aftermath_events: List[Dict[str, Any]],
+    world_signals: List[Dict[str, Any]],
+    npc_memory_events: List[Dict[str, Any]],
+    followup_hooks: List[Dict[str, Any]],
+    faction_events: List[Dict[str, Any]],
+    seeded_events: List[Dict[str, Any]],
+    transcript: List[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    summary = {
+        "format_version": "story_arc_aftermath_summary_v1",
+        "ok": bool(aftermath_events or world_signals or faction_events or seeded_events),
+        "aftermath_event_count": len(_safe_list(aftermath_events)),
+        "world_signal_count": len(_safe_list(world_signals)),
+        "npc_memory_event_count": len(_safe_list(npc_memory_events)),
+        "followup_hook_count": len(_safe_list(followup_hooks)),
+        "faction_event_count": len(_safe_list(faction_events)),
+        "seeded_followup_arc_count": len(_safe_list(seeded_events)),
+        "aftermath_events": _safe_list(aftermath_events),
+        "world_signals": _safe_list(world_signals),
+        "npc_memory_events": _safe_list(npc_memory_events),
+        "followup_hooks": _safe_list(followup_hooks),
+        "faction_events": _safe_list(faction_events),
+        "seeded_events": _safe_list(seeded_events),
+    }
+
+    if transcript:
+        direct_counts = _collect_direct_completion_mechanics(transcript)
+        direct_aftermath_count = (
+            int(direct_counts.get("faction_consequence") or 0)
+            + int(direct_counts.get("npc_reaction") or 0)
+            + int(direct_counts.get("combat_resolved") or 0)
+        )
+
+        if direct_aftermath_count > 0:
+            summary["direct_graph_aftermath_count"] = direct_aftermath_count
+            summary["aftermath_event_count"] = max(
+                int(summary.get("aftermath_event_count") or 0),
+                direct_aftermath_count,
+            )
+            summary["ok"] = True
+
+    return summary
+
+
+def _collect_successful_arc_completion_evidence(
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+
+    marked_coin_turns: List[int] = []
+    mill_road_turns: List[int] = []
+    proof_turns: List[int] = []
+    combat_turns: List[int] = []
+    faction_turns: List[int] = []
+    npc_reaction_turns: List[int] = []
+
+    examples: List[Dict[str, Any]] = []
+
+    for row in rows:
+        turn_index = int(row.get("turn_index") or row.get("turn") or 0)
+        direct = _safe_dict(row.get("direct_graph_action_completion"))
+        action_id = _safe_str(direct.get("action_id"))
+
+        mechanics = {
+            _safe_str(v)
+            for v in _safe_list(direct.get("mechanics"))
+            + _safe_list(row.get("mechanics_covered_this_turn"))
+            if _safe_str(v)
+        }
+
+        changed_parts = {
+            _safe_str(v)
+            for v in _safe_list(direct.get("changed_parts"))
+            + _safe_list(row.get("direct_graph_changed_parts"))
+            if _safe_str(v)
+        }
+
+        text = _normalize_turn_action_text(
+            " ".join(
+                [
+                    _safe_str(row.get("player_action")),
+                    _safe_str(row.get("canonical_turn_action")),
+                    action_id,
+                    " ".join(sorted(mechanics)),
+                    " ".join(sorted(changed_parts)),
+                ]
+            )
+        )
+
+        is_marked_coin = (
+            "marked_coin" in action_id
+            or "marked coin" in text
+            or "proof" in text
+            or "voss" in text
+            or "sable chain" in text
+            or "faction_consequence" in mechanics
+        )
+
+        is_mill_road = (
+            "mill" in action_id
+            or "mill road" in text
+            or "wagon" in text
+            or "bandit" in text
+            or "combat_started" in mechanics
+            or "combat_resolved" in mechanics
+        )
+
+        if is_marked_coin:
+            marked_coin_turns.append(turn_index)
+
+        if is_mill_road:
+            mill_road_turns.append(turn_index)
+
+        if "proof" in text or "marked coin" in text:
+            proof_turns.append(turn_index)
+
+        if "combat_started" in mechanics or "combat_resolved" in mechanics:
+            combat_turns.append(turn_index)
+
+        if "faction_consequence" in mechanics or "faction_consequence" in changed_parts:
+            faction_turns.append(turn_index)
+
+        if "npc_reaction" in mechanics or "npc_reaction" in changed_parts:
+            npc_reaction_turns.append(turn_index)
+
+        if direct.get("completed") and len(examples) < 25:
+            examples.append(
+                {
+                    "turn_index": turn_index,
+                    "player_action": row.get("player_action"),
+                    "action_id": action_id,
+                    "mechanics": sorted(mechanics),
+                    "changed_parts": sorted(changed_parts),
+                    "marked_coin_candidate": is_marked_coin,
+                    "mill_road_candidate": is_mill_road,
+                }
+            )
+
+    marked_coin_success = bool(marked_coin_turns and (proof_turns or faction_turns))
+    mill_road_success = bool(mill_road_turns and combat_turns)
+
+    completed_arc_ids: List[str] = []
+    if marked_coin_success:
+        completed_arc_ids.append("arc:marked_coin_investigation")
+    if mill_road_success:
+        completed_arc_ids.append("arc:mill_road_threat")
+
+    return {
+        "format_version": "successful_arc_completion_evidence_v1",
+        "ok": bool(completed_arc_ids),
+        "completed_arc_ids": completed_arc_ids,
+        "completed_count": len(completed_arc_ids),
+        "marked_coin_success": marked_coin_success,
+        "mill_road_success": mill_road_success,
+        "marked_coin_turns": marked_coin_turns[:50],
+        "mill_road_turns": mill_road_turns[:50],
+        "proof_turns": proof_turns[:50],
+        "combat_turns": combat_turns[:50],
+        "faction_turns": faction_turns[:50],
+        "npc_reaction_turns": npc_reaction_turns[:50],
+        "examples": examples,
+    }

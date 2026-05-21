@@ -1,0 +1,443 @@
+
+
+def _stable_json_hash(value: Any) -> str:
+    try:
+        payload = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        payload = repr(value)
+    return hashlib.sha256(payload.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def _turn_action_hash(action: str) -> str:
+    return _stable_json_hash(_normalize_turn_action_text(_safe_str(action)))
+
+
+def _turn_contract_hash(contract: Any) -> str:
+    contract_d = _safe_dict(contract)
+    if not contract_d:
+        return ""
+    return _stable_json_hash(contract_d)
+
+
+def _build_turn_presentation_identity(
+    *,
+    session_id: str,
+    turn_index: int,
+    canonical_turn_action: str,
+    turn_contract: Any = None,
+    action_category: str = "",
+) -> Dict[str, Any]:
+    action_s = _safe_str(canonical_turn_action)
+    category_s = _safe_str(action_category) or _turn_action_category(action_s)
+
+    return {
+        "format_version": "turn_presentation_identity_v1",
+        "session_id": _safe_str(session_id),
+        "turn_index": int(turn_index or 0),
+        "turn_id": f"{_safe_str(session_id)}:turn:{int(turn_index or 0)}",
+        "canonical_turn_action": action_s,
+        "canonical_turn_action_hash": _turn_action_hash(action_s),
+        "action_category": category_s,
+        "turn_contract_hash": _turn_contract_hash(turn_contract),
+    }
+
+
+
+
+PRESENTATION_INTENT_ALLOWED_CATEGORIES = {
+    "dialogue",
+    "evidence",
+    "investigation",
+    "travel",
+    "combat",
+    "service",
+    "economy",
+    "stealth",
+    "social",
+    "lore",
+    "quest",
+    "mixed",
+    "general",
+}
+
+
+def _normalize_presentation_category(value: Any) -> str:
+    category = _safe_str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "conversation": "dialogue",
+        "talk": "dialogue",
+        "speaking": "dialogue",
+        "social": "dialogue",
+        "buying": "economy",
+        "purchase": "economy",
+        "shop": "economy",
+        "shopping": "economy",
+        "lodging": "service",
+        "room": "service",
+        "rest": "service",
+        "clue": "evidence",
+        "proof": "evidence",
+        "search": "investigation",
+        "scouting": "investigation",
+        "move": "travel",
+
+        "movement": "travel",
+        "fight": "combat",
+        "battle": "combat",
+        "buying_supplies": "economy",
+    }
+    category = aliases.get(category, category)
+    if category not in PRESENTATION_INTENT_ALLOWED_CATEGORIES:
+        return "general"
+    return category
+
+
+def _normalize_presentation_intent(value: Any) -> Dict[str, Any]:
+    raw = _safe_dict(value)
+    primary = _normalize_presentation_category(
+        raw.get("primary_category")
+        or raw.get("category")
+        or raw.get("primary")
+        or raw.get("intent_category")
+        or raw.get("label")
+    )
+    secondary: List[str] = []
+    for item in _safe_list(
+        raw.get("secondary_categories")
+        or raw.get("secondary")
+        or raw.get("categories")
+        or raw.get("secondary_intents")
+    ):
+        normalized = _normalize_presentation_category(item)
+        if normalized and normalized != primary and normalized not in secondary:
+            secondary.append(normalized)
+
+    try:
+        confidence = float(raw.get("confidence") or 0.0)
+    except Exception:
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    return {
+        "format_version": "presentation_intent_v1",
+        "primary_category": primary,
+        "secondary_categories": secondary[:4],
+        "confidence": round(confidence, 3),
+        "reason": _safe_str(raw.get("reason") or raw.get("rationale"))[:240],
+    }
+
+
+def _normalize_current_action_response(value: Any) -> Dict[str, Any]:
+    raw = _safe_dict(value)
+    required_focus: List[str] = []
+    for item in _safe_list(
+        raw.get("required_focus")
+        or raw.get("required_response_focus")
+        or raw.get("focus")
+        or raw.get("must_address")
+    ):
+        text = _safe_str(item).strip().lower().replace(" ", "_").replace("-", "_")
+        if text and text not in required_focus:
+            required_focus.append(text[:64])
+    addresses_raw = raw.get("npc_line_addresses_current_action")
+    if addresses_raw is None:
+        addresses_raw = raw.get("addresses_current_action")
+    addresses = bool(addresses_raw) if addresses_raw is not None else False
+    return {
+        "format_version": "current_action_response_v1",
+        "required_focus": required_focus[:6],
+        "npc_line_addresses_current_action": addresses,
+        "reason": _safe_str(raw.get("reason") or raw.get("rationale"))[:240],
+    }
+
+
+def _find_current_action_response_candidate(value: Any) -> Tuple[Dict[str, Any], str]:
+    value = _safe_dict(value)
+    if not value:
+        return {}, "missing"
+    direct_keys = (
+        "current_action_response",
+        "response_focus",
+        "required_response_focus",
+        "current_action_focus",
+        "npc_line_relevance",
+    )
+    for key in direct_keys:
+        candidate = value.get(key)
+        if isinstance(candidate, dict):
+            return candidate, key
+    nested_paths = (
+        ("combined_background_llm_result", "current_action_response"),
+        ("combined_background_llm_result", "narration_payload", "current_action_response"),
+        ("resolved_narration_payload", "current_action_response"),
+        ("narration_payload", "current_action_response"),
+        ("background_presentation_result", "current_action_response"),
+        ("presentation", "current_action_response"),
+        ("narration", "current_action_response"),
+        ("structured_narration", "current_action_response"),
+        ("result", "current_action_response"),
+        ("data", "current_action_response"),
+        ("payload", "current_action_response"),
+    )
+    for path in nested_paths:
+        cursor: Any = value
+        ok = True
+        for key in path:
+            cursor = _safe_dict(cursor).get(key)
+            if cursor is None:
+                ok = False
+                break
+        if ok and isinstance(cursor, dict):
+            return cursor, ".".join(path)
+    return {}, "missing"
+
+
+def _find_presentation_intent_candidate(value: Any) -> Tuple[Dict[str, Any], str]:
+    payload = _safe_dict(value)
+    if not payload:
+        return {}, "missing"
+
+    direct_keys = (
+        "presentation_intent",
+        "intent",
+        "presentationIntent",
+        "classification",
+        "category",
+        "intent_category",
+    )
+    fallback_candidate: Dict[str, Any] = {}
+    fallback_source = "missing"
+    for key in direct_keys:
+        candidate = payload.get(key)
+        if isinstance(candidate, dict):
+            normalized = _normalize_presentation_intent(candidate)
+            if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
+                return candidate, key
+            if not fallback_candidate:
+                fallback_candidate = candidate
+                fallback_source = key
+        if isinstance(candidate, str) and candidate.strip():
+            return {"primary_category": candidate.strip()}, key
+
+    nested_paths = (
+        ("presentation", "intent"),
+        ("presentation", "presentation_intent"),
+        ("narration", "presentation_intent"),
+        ("narration", "intent"),
+        ("narration_payload", "presentation_intent"),
+        ("narration_payload", "intent"),
+        ("structured_narration", "presentation_intent"),
+        ("structured_narration", "intent"),
+        ("combined_background_llm_result", "presentation_intent"),
+        ("combined_background_llm_result", "narration_payload", "presentation_intent"),
+        ("deferred_narration_result", "presentation_intent"),
+        ("deferred_narration_result", "narration_payload", "presentation_intent"),
+        ("resolved_narration_payload", "presentation_intent"),
+        ("selected_output", "presentation_intent"),
+        ("result", "presentation_intent"),
+        ("result", "intent"),
+        ("data", "presentation_intent"),
+        ("data", "intent"),
+        ("payload", "presentation_intent"),
+        ("payload", "intent"),
+    )
+    for path in nested_paths:
+        cursor: Any = payload
+        ok = True
+        for key in path:
+            cursor = _safe_dict(cursor).get(key)
+            if cursor is None:
+                ok = False
+                break
+        if not ok:
+            continue
+        if isinstance(cursor, dict):
+            normalized = _normalize_presentation_intent(cursor)
+            if normalized.get("primary_category") != "general" or normalized.get("secondary_categories"):
+                return cursor, ".".join(path)
+            if not fallback_candidate:
+                fallback_candidate = cursor
+                fallback_source = ".".join(path)
+        if isinstance(cursor, str) and cursor.strip():
+            return {"primary_category": cursor.strip()}, ".".join(path)
+
+    return fallback_candidate or {}, fallback_source or "missing"
+
+
+def _presentation_identity_matches_turn(
+    *,
+    payload_identity: Any,
+    row_identity: Any,
+    require_contract_hash: bool = False,
+) -> Tuple[bool, Dict[str, Any]]:
+    payload = _safe_dict(payload_identity)
+    row = _safe_dict(row_identity)
+
+    mismatches: List[str] = []
+
+    for key in ("session_id", "turn_index", "turn_id"):
+        if _safe_str(payload.get(key)) != _safe_str(row.get(key)):
+            mismatches.append(key)
+
+    if _safe_str(payload.get("canonical_turn_action_hash")) != _safe_str(
+        row.get("canonical_turn_action_hash")
+    ):
+        mismatches.append("canonical_turn_action_hash")
+
+    if _safe_str(payload.get("action_category")) != _safe_str(row.get("action_category")):
+        mismatches.append("action_category")
+
+    payload_contract_hash = _safe_str(payload.get("turn_contract_hash"))
+    row_contract_hash = _safe_str(row.get("turn_contract_hash"))
+
+    if require_contract_hash or (payload_contract_hash and row_contract_hash):
+        if payload_contract_hash != row_contract_hash:
+            mismatches.append("turn_contract_hash")
+
+    return (
+        not mismatches,
+        {
+            "ok": not mismatches,
+            "mismatches": mismatches,
+            "payload_identity": payload,
+            "row_identity": row,
+        },
+    )
+
+
+def _find_transcript_row_index_by_turn_identity(
+    transcript: List[Dict[str, Any]],
+    identity: Dict[str, Any],
+) -> int:
+    identity = _safe_dict(identity)
+    wanted_turn_id = _safe_str(identity.get("turn_id"))
+    wanted_session_id = _safe_str(identity.get("session_id"))
+    wanted_turn_index = int(identity.get("turn_index") or 0)
+
+    for idx, row_any in enumerate(_safe_list(transcript)):
+        row = _safe_dict(row_any)
+        row_identity = _safe_dict(row.get("turn_presentation_identity"))
+
+        if wanted_turn_id and _safe_str(row_identity.get("turn_id") or row.get("turn_id")) == wanted_turn_id:
+            return idx
+
+        if (
+            wanted_session_id
+            and wanted_turn_index
+            and _safe_str(row_identity.get("session_id")) == wanted_session_id
+            and int(row_identity.get("turn_index") or row.get("turn_index") or 0) == wanted_turn_index
+        ):
+            return idx
+
+    return -1
+
+
+def _extract_background_presentation_text(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    narration_payload = _safe_dict(result.get("narration_payload"))
+    selected = _safe_dict(result.get("selected"))
+
+    presentation_intent_candidate, presentation_intent_parse_source = _find_presentation_intent_candidate(result)
+    presentation_intent = _normalize_presentation_intent(presentation_intent_candidate)
+    presentation_intent["parse_source"] = presentation_intent_parse_source
+
+    narration = _safe_str(
+        result.get("narration")
+        or result.get("display_narration")
+        or result.get("selected_narration")
+        or narration_payload.get("narration")
+    )
+
+    npc = _safe_dict(result.get("npc")) or _safe_dict(narration_payload.get("npc"))
+    npc_line = _safe_str(
+        npc.get("line")
+        or result.get("npc_line")
+        or result.get("npc_response")
+    )
+    npc_speaker = _safe_str(
+        npc.get("speaker")
+        or result.get("npc_speaker")
+    )
+
+    current_action_response = _normalize_current_action_response(
+        result.get("current_action_response")
+        or narration_payload.get("current_action_response")
+        or selected.get("current_action_response")
+    )
+
+    if not narration:
+        narration = _safe_str(
+            selected.get("narration")
+            or selected.get("display_narration")
+            or selected.get("selected_narration")
+        )
+
+    selected_npc = _safe_dict(selected.get("npc"))
+    if not npc_line:
+        npc_line = _safe_str(selected_npc.get("line"))
+    if not npc_speaker:
+        npc_speaker = _safe_str(selected_npc.get("speaker"))
+
+    return {
+        "narration": narration,
+        "presentation_intent": presentation_intent,
+        "presentation_intent_parse_source": presentation_intent_parse_source,
+        "current_action_response": current_action_response,
+        "npc": {
+            "speaker": npc_speaker,
+            "line": npc_line,
+        } if npc_line else {},
+    }
+
+
+def _attach_background_presentation_to_row(
+    row: Dict[str, Any],
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    result = _safe_dict(result)
+
+    presentation = _extract_background_presentation_text(result)
+
+    narration = _safe_str(presentation.get("narration"))
+    npc = _safe_dict(presentation.get("npc"))
+    presentation_intent = _safe_dict(presentation.get("presentation_intent"))
+    presentation_intent_parse_source = _safe_str(presentation.get("presentation_intent_parse_source"))
+    presentation_intent["parse_source"] = presentation_intent_parse_source
+    row["presentation_intent_parse_source"] = presentation_intent_parse_source
+
+    if narration:
+        row["narration"] = narration
+        row["display_narration"] = narration
+        row["selected_narration"] = narration
+
+    if npc:
+        row["npc"] = npc
+        row["npc_speaker"] = _safe_str(npc.get("speaker"))
+        row["npc_line"] = _safe_str(npc.get("line"))
+
+    row["presentation_intent"] = presentation_intent
+    current_action_response = _safe_dict(presentation.get("current_action_response"))
+    if current_action_response:
+        row["current_action_response"] = current_action_response
+        row["npc_line_addresses_current_action"] = bool(
+            current_action_response.get("npc_line_addresses_current_action")
+        )
+    row["llm_presentation_category"] = _safe_str(presentation_intent.get("primary_category"))
+    row["npc_response_architecture"] = _build_npc_response_architecture_for_row(row)
+    row["npc_response_architecture_persisted"] = True
+    row = _sync_current_action_response_from_npc_response_architecture(row)
+
+    row["presentation_status"] = "attached"
+    row["presentation_attached_from"] = _safe_str(
+        result.get("source") or result.get("phase") or "background"
+    )
+    row["background_presentation_result"] = {
+        "turn_id": result.get("turn_id"),
+        "turn_index": result.get("turn_index"),
+        "canonical_turn_action_hash": result.get("canonical_turn_action_hash"),
+        "action_category": result.get("action_category"),
+        "presentation_intent": presentation_intent,
+    }
+
+    return row

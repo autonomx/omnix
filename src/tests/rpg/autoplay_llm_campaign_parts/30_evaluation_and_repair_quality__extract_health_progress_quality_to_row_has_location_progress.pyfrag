@@ -1,0 +1,217 @@
+
+
+def _extract_health_progress_quality(final_summary: Dict[str, Any]) -> Dict[str, Any]:
+    health = _safe_dict(final_summary.get("health"))
+    metrics = _safe_dict(health.get("metrics"))
+    return _safe_dict(metrics.get("progress_quality"))
+
+
+def _row_has_location_progression(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+
+    candidates = [
+        row,
+        _safe_dict(row.get("result")),
+        _safe_dict(row.get("resolved_result")),
+        _safe_dict(row.get("turn_contract")),
+        _safe_dict(row.get("state_delta")),
+        _safe_dict(_safe_dict(row.get("result")).get("state_delta")),
+        _safe_dict(_safe_dict(row.get("turn_contract")).get("state_delta")),
+    ]
+
+    for candidate in candidates:
+        if candidate.get("location_changed") is True:
+            return True
+        if _safe_str(candidate.get("progress_category")) == "location_progression":
+            return True
+        travel_result = _safe_dict(candidate.get("travel_result"))
+        if travel_result.get("ok") is True and travel_result.get("to_location"):
+            return True
+
+    return False
+
+
+def _default_player_progression_state() -> Dict[str, Any]:
+    return {
+        "name": "The Player",
+        "level": 1,
+        "xp": 0,
+        "xp_to_next_level": 25,
+        "progress_log": [],
+        "currency": {
+            "gold": 15,
+            "silver": 20,
+            "copper": 50,
+        },
+        "inventory": [
+            {
+                "id": "item:travelers_cloak",
+                "name": "Traveler's Cloak",
+                "quantity": 1,
+                "type": "gear",
+                "description": "A weathered cloak suitable for road travel.",
+            },
+            {
+                "id": "item:iron_dagger",
+                "name": "Iron Dagger",
+                "quantity": 1,
+                "type": "weapon",
+                "description": "A simple backup blade.",
+            },
+            {
+                "id": "item:trail_rations",
+                "name": "Trail Rations",
+                "quantity": 3,
+                "type": "consumable",
+                "description": "Basic food for short travel.",
+            },
+            {
+                "id": "item:waterskin",
+                "name": "Waterskin",
+                "quantity": 1,
+                "type": "gear",
+                "description": "A filled waterskin.",
+            },
+            {
+                "id": "item:plain_journal",
+                "name": "Plain Journal",
+                "quantity": 1,
+                "type": "tool",
+                "description": "A small book for notes, rumors, and leads.",
+            },
+        ],
+    }
+
+
+def _item_display_name(item_id: str) -> str:
+    item_id = _safe_str(item_id)
+    names = {
+        "item:rations": "Rations",
+        "item:torch": "Torch",
+        "item:marked_coin": "Marked Coin",
+        "item:bandit_knife": "Bandit Knife",
+        "item:travelers_cloak": "Traveler's Cloak",
+        "item:iron_dagger": "Iron Dagger",
+        "item:trail_rations": "Trail Rations",
+        "item:waterskin": "Waterskin",
+        "item:plain_journal": "Plain Journal",
+    }
+    return names.get(item_id, item_id.replace("item:", "").replace("_", " ").title())
+
+
+def _item_type(item_id: str) -> str:
+    item_id = _safe_str(item_id)
+    if item_id in {"item:iron_dagger", "item:bandit_knife"}:
+        return "weapon"
+    if item_id in {"item:rations", "item:trail_rations"}:
+        return "consumable"
+    if item_id in {"item:marked_coin"}:
+        return "quest"
+    if item_id in {"item:torch", "item:plain_journal"}:
+        return "tool"
+    return "gear"
+
+
+def _normalize_inventory_items(items: Any) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    for raw in _safe_list(items):
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id") or item.get("name"))
+        if not item_id:
+            continue
+        quantity = int(item.get("quantity") or item.get("qty") or 1)
+        normalized.append(
+            {
+                "id": item_id,
+                "name": _safe_str(item.get("name") or _item_display_name(item_id)),
+                "quantity": quantity,
+                "type": _safe_str(item.get("type") or _item_type(item_id)),
+                "description": _safe_str(item.get("description") or ""),
+            }
+        )
+    return normalized
+
+
+def _apply_inventory_delta_to_items(
+
+    inventory: List[Dict[str, Any]],
+    inventory_delta: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    items = [dict(item) for item in _normalize_inventory_items(inventory)]
+
+    def add_item(raw: Dict[str, Any]) -> None:
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if not item_id:
+            return
+        quantity = int(item.get("quantity") or item.get("qty") or 1)
+        for existing in items:
+            if existing.get("id") == item_id:
+                existing["quantity"] = int(existing.get("quantity") or 0) + quantity
+                return
+        items.append(
+            {
+                "id": item_id,
+                "name": _safe_str(item.get("name") or _item_display_name(item_id)),
+                "quantity": quantity,
+                "type": _safe_str(item.get("type") or _item_type(item_id)),
+                "description": _safe_str(item.get("description") or ""),
+            }
+        )
+
+    def remove_item(raw: Dict[str, Any]) -> None:
+        item = _safe_dict(raw)
+        item_id = _safe_str(item.get("id") or item.get("item_id"))
+        if not item_id:
+            return
+        quantity = int(item.get("quantity") or item.get("qty") or 1)
+        for existing in list(items):
+            if existing.get("id") == item_id:
+                existing["quantity"] = max(0, int(existing.get("quantity") or 0) - quantity)
+                if int(existing.get("quantity") or 0) <= 0:
+                    items.remove(existing)
+                return
+
+    for raw_item in _safe_list(_safe_dict(inventory_delta).get("items_added")):
+        add_item(_safe_dict(raw_item))
+
+    for raw_item in _safe_list(_safe_dict(inventory_delta).get("items_removed")):
+        remove_item(_safe_dict(raw_item))
+
+    return items
+
+
+def _apply_currency_delta(currency: Dict[str, int], currency_delta: Dict[str, Any]) -> Dict[str, int]:
+    result = {str(k): int(v or 0) for k, v in _safe_dict(currency).items()}
+    for key, value in _safe_dict(currency_delta).items():
+        result[str(key)] = int(result.get(str(key), 0)) + int(value or 0)
+    return result
+
+
+def _currency_can_pay_delta(currency: Dict[str, Any], currency_delta: Dict[str, Any]) -> bool:
+    current = {
+        str(key): int(value or 0)
+        for key, value in _safe_dict(currency).items()
+    }
+
+    for key, value in _safe_dict(currency_delta).items():
+        amount = int(value or 0)
+        if amount < 0 and int(current.get(str(key), 0)) + amount < 0:
+            return False
+
+    return True
+
+
+def _opportunity_is_affordable(
+    opportunity: Dict[str, Any],
+    mechanics_state: Dict[str, Any],
+) -> bool:
+    effects = _safe_dict(_safe_dict(opportunity).get("effects_preview"))
+    currency_delta = _safe_dict(effects.get("currency_delta"))
+    if not currency_delta:
+        return True
+
+    return _currency_can_pay_delta(
+        _safe_dict(mechanics_state.get("currency")),
+        currency_delta,
+    )

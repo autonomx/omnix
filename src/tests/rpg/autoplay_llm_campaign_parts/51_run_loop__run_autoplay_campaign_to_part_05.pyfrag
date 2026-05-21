@@ -1,0 +1,480 @@
+            seen_arc_event_keys = {
+                (
+                    event.get("arc_id"),
+                    event.get("subtype"),
+                    event.get("outcome"),
+                )
+                for event in story_arc_resolution_events
+
+            }
+
+            new_arc_events = []
+            for event in _safe_list(arc_lifecycle.get("story_arc_events")):
+                key = (
+                    event.get("arc_id"),
+                    event.get("subtype"),
+                    event.get("outcome"),
+                )
+                if key in seen_arc_event_keys:
+                    continue
+                new_arc_events.append(event)
+                seen_arc_event_keys.add(key)
+
+            arc_events = new_arc_events
+            if arc_events:
+                story_arc_resolution_events.extend(arc_events)
+
+                record["story_arc_lifecycle"] = arc_lifecycle
+                record["story_arc_events"] = arc_events
+                record["meaningful_progress"] = True
+                record["progress_category"] = "story_arc_resolution"
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "story_arc_events": arc_events,
+                    "story_arc_resolution": {
+                        "resolved_count": arc_lifecycle.get("resolved_count"),
+                        "failed_count": arc_lifecycle.get("failed_count"),
+                    },
+                    "meaningful_progress": True,
+                    "progress_category": "story_arc_resolution",
+                }
+
+        aftermath = apply_story_arc_aftermath(
+            arc_events=arc_events,
+            already_applied_keys=story_arc_aftermath_applied_keys,
+            rules=tavern_story_aftermath_rules(),
+        )
+
+        if aftermath.get("ok"):
+            story_arc_aftermath_applied_keys = set(_safe_list(aftermath.get("applied_keys")))
+
+            aftermath_events = _safe_list(aftermath.get("aftermath_events"))
+            if aftermath_events:
+                story_arc_aftermath_events.extend(aftermath_events)
+                pure_aftermath_world_signals = _safe_list(aftermath.get("world_signals"))
+                pure_aftermath_followup_hooks = _safe_list(aftermath.get("followup_hooks"))
+
+                story_arc_aftermath_world_signals.extend(pure_aftermath_world_signals)
+                story_arc_aftermath_followup_hooks.extend(pure_aftermath_followup_hooks)
+
+                world_signal_events.extend(pure_aftermath_world_signals)
+                npc_memory_events.extend(_safe_list(aftermath.get("npc_memory_events")))
+                followup_hook_events.extend(pure_aftermath_followup_hooks)
+
+                record["story_arc_aftermath"] = aftermath
+                record["story_arc_aftermath_events"] = aftermath_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(aftermath.get("world_signals"))
+                record["npc_memory_events"] = _safe_list(record.get("npc_memory_events")) + _safe_list(aftermath.get("npc_memory_events"))
+                record["followup_hooks"] = _safe_list(record.get("followup_hooks")) + _safe_list(aftermath.get("followup_hooks"))
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arc_aftermath_flags": _safe_dict(aftermath.get("flags")),
+                    "faction_deltas": _safe_list(aftermath.get("faction_deltas")),
+                    "followup_hooks": _safe_list(aftermath.get("followup_hooks")),
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "story_arc_aftermath_events": aftermath_events,
+                    "world_signals": _safe_list(aftermath.get("world_signals")),
+                    "npc_memory_events": _safe_list(aftermath.get("npc_memory_events")),
+                    "faction_deltas": _safe_list(aftermath.get("faction_deltas")),
+                    "followup_hooks": _safe_list(aftermath.get("followup_hooks")),
+                }
+
+        faction_update = apply_faction_deltas(
+            faction_state=faction_reputation_state,
+            faction_deltas=_safe_list(_safe_dict(record.get("state_delta")).get("faction_deltas")),
+            turn_index=int(record.get("turn_index") or turn_index),
+        )
+
+        if faction_update.get("ok"):
+            faction_reputation_state = _safe_dict(faction_update.get("factions"))
+            new_faction_events = _safe_list(faction_update.get("events"))
+            if new_faction_events:
+                faction_reputation_events.extend(new_faction_events)
+                record["faction_reputation_events"] = new_faction_events
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "faction_reputation": faction_reputation_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "faction_reputation_events": new_faction_events,
+                }
+
+        followup_seed = seed_followup_arcs(
+            existing_arcs=story_arc_runtime_state,
+            followup_hooks=_safe_list(record.get("followup_hooks")),
+            turn_index=int(record.get("turn_index") or turn_index),
+            max_active_arcs=3,
+        )
+
+        if followup_seed.get("ok"):
+            story_arc_runtime_state = _safe_dict(followup_seed.get("story_arcs")) or story_arc_runtime_state
+            seeded_events = _safe_list(followup_seed.get("seeded_events"))
+            if seeded_events:
+                followup_arc_seed_events.extend(seeded_events)
+                record["followup_arc_seed_events"] = seeded_events
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "followup_arc_seed_events": seeded_events,
+                }
+
+        followup_progression_state = {
+            "flags": {
+                **_safe_dict(mechanics_runtime_state.get("flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_progression_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
+            },
+            "faction_reputation": faction_reputation_state,
+        }
+
+        record["followup_progression_probe"] = {
+            "turn_index": int(record.get("turn_index") or turn_index),
+            "active_followup_arcs": [
+                {
+                    "arc_id": _safe_dict(arc).get("arc_id"),
+                    "status": _safe_dict(arc).get("status"),
+                    "current_stage": _safe_dict(arc).get("current_stage"),
+                    "started_turn": _safe_dict(arc).get("started_turn"),
+                    "last_progress_turn": _safe_dict(arc).get("last_progress_turn"),
+                    "progress_count": _safe_dict(arc).get("progress_count"),
+                    "source_hook_id": _safe_dict(arc).get("source_hook_id"),
+                    "seeded_followup": _safe_dict(arc).get("seeded_followup"),
+                }
+                for arc in _safe_dict(story_arc_runtime_state).values()
+                if _safe_dict(arc).get("seeded_followup")
+                and _safe_dict(arc).get("status") not in {"completed", "failed", "abandoned"}
+            ],
+            "faction_tiers": {
+                faction_id: _safe_dict(data).get("tier")
+                for faction_id, data in _safe_dict(faction_reputation_state).items()
+            },
+        }
+
+        followup_progression = progress_followup_arcs(
+            story_arcs=story_arc_runtime_state,
+            state=followup_progression_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_followup_progression_rules(),
+            already_progressed_keys=followup_arc_progression_applied_keys,
+        )
+
+        if followup_progression.get("ok"):
+            followup_arc_progression_applied_keys = set(
+                _safe_list(followup_progression.get("applied_keys"))
+            )
+
+            progression_events = _safe_list(followup_progression.get("events"))
+            if progression_events:
+                story_arc_runtime_state = _safe_dict(followup_progression.get("story_arcs")) or story_arc_runtime_state
+                followup_arc_progression_events.extend(progression_events)
+                followup_arc_progression_world_signals.extend(
+                    _safe_list(followup_progression.get("world_signals"))
+                )
+                world_signal_events.extend(_safe_list(followup_progression.get("world_signals")))
+                followup_hook_events.extend(_safe_list(followup_progression.get("followup_hooks")))
+
+                record["followup_arc_progression"] = followup_progression
+                record["followup_arc_progression_events"] = progression_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(
+                    followup_progression.get("world_signals")
+                )
+                record["followup_hooks"] = _safe_list(record.get("followup_hooks")) + _safe_list(
+                    followup_progression.get("followup_hooks")
+                )
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                    "followup_arc_progression_flags": _safe_dict(followup_progression.get("flags")),
+                    "followup_hooks": _safe_list(record.get("followup_hooks")),
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "followup_arc_progression_events": progression_events,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                    "followup_hooks": _safe_list(record.get("followup_hooks")),
+                    "meaningful_progress": True,
+                    "progress_category": "followup_arc_progression",
+                }
+
+                record["meaningful_progress"] = True
+                record["progress_category"] = "followup_arc_progression"
+
+        followup_resolution_state = {
+            "flags": {
+                **_safe_dict(mechanics_runtime_state.get("flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_progression_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
+            },
+            "faction_reputation": faction_reputation_state,
+        }
+
+        followup_resolution = resolve_followup_arcs(
+            story_arcs=story_arc_runtime_state,
+            state=followup_resolution_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_followup_resolution_rules(),
+            already_resolved_keys=followup_arc_resolution_applied_keys,
+        )
+
+        if followup_resolution.get("ok"):
+            followup_arc_resolution_applied_keys = set(
+                _safe_list(followup_resolution.get("applied_keys"))
+            )
+
+            resolution_events = _safe_list(followup_resolution.get("events"))
+            if resolution_events:
+                story_arc_runtime_state = _safe_dict(followup_resolution.get("story_arcs")) or story_arc_runtime_state
+                followup_arc_resolution_events.extend(resolution_events)
+                followup_arc_resolution_world_signals.extend(
+                    _safe_list(followup_resolution.get("world_signals"))
+                )
+                followup_arc_resolution_escalation_hooks.extend(
+                    _safe_list(followup_resolution.get("escalation_hooks"))
+                )
+
+                world_signal_events.extend(_safe_list(followup_resolution.get("world_signals")))
+
+                record["followup_arc_resolution"] = followup_resolution
+                record["followup_arc_resolution_events"] = resolution_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(
+                    followup_resolution.get("world_signals")
+                )
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                    "followup_arc_resolution_flags": _safe_dict(followup_resolution.get("flags")),
+                    "faction_deltas": _safe_list(_safe_dict(record.get("state_delta")).get("faction_deltas"))
+                    + _safe_list(followup_resolution.get("faction_deltas")),
+                    "followup_resolution_faction_deltas": _safe_list(followup_resolution.get("faction_deltas")),
+                    "xp_delta": int(_safe_dict(record.get("state_delta")).get("xp_delta") or 0)
+                    + int(followup_resolution.get("xp_delta") or 0),
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "followup_arc_resolution_events": resolution_events,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                    "faction_deltas": _safe_list(followup_resolution.get("faction_deltas")),
+                    "escalation_hooks": _safe_list(followup_resolution.get("escalation_hooks")),
+                    "xp_delta": followup_resolution.get("xp_delta"),
+                    "meaningful_progress": True,
+                    "progress_category": "followup_arc_resolution",
+                }
+
+                record["meaningful_progress"] = True
+                record["progress_category"] = "followup_arc_resolution"
+
+        resolution_faction_update = apply_faction_deltas(
+            faction_state=faction_reputation_state,
+            faction_deltas=_safe_list(_safe_dict(record.get("state_delta")).get("followup_resolution_faction_deltas")),
+            turn_index=int(record.get("turn_index") or turn_index),
+        )
+
+        if resolution_faction_update.get("ok"):
+            faction_reputation_state = _safe_dict(resolution_faction_update.get("factions"))
+            new_resolution_faction_events = _safe_list(resolution_faction_update.get("events"))
+            if new_resolution_faction_events:
+                faction_reputation_events.extend(new_resolution_faction_events)
+                record["faction_reputation_events"] = _safe_list(record.get("faction_reputation_events")) + new_resolution_faction_events
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "faction_reputation": faction_reputation_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "faction_reputation_events": _safe_list(record.get("faction_reputation_events")),
+                }
+
+        escalation_seed = seed_escalation_arcs(
+            existing_arcs=story_arc_runtime_state,
+            escalation_hooks=_safe_list(followup_arc_resolution_escalation_hooks),
+            turn_index=int(record.get("turn_index") or turn_index),
+            max_active_escalations=2,
+        )
+
+        if escalation_seed.get("ok"):
+            story_arc_runtime_state = _safe_dict(escalation_seed.get("story_arcs")) or story_arc_runtime_state
+            seeded_escalations = _safe_list(escalation_seed.get("seeded_events"))
+
+            if seeded_escalations:
+                escalation_arc_seed_events.extend(seeded_escalations)
+
+                record["escalation_arc_seed_events"] = seeded_escalations
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                }
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "escalation_arc_seed_events": seeded_escalations,
+                    "meaningful_progress": True,
+                    "progress_category": "escalation_branching",
+                }
+
+                record["meaningful_progress"] = True
+                record["progress_category"] = "escalation_branching"
+
+        escalation_progression_state = {
+            "faction_reputation": faction_reputation_state,
+            "flags": {
+                **_safe_dict(mechanics_runtime_state.get("flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("story_arc_aftermath_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_progression_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("followup_arc_resolution_flags")),
+                **_safe_dict(_safe_dict(record.get("state_delta")).get("faction_pressure_flags")),
+            },
+        }
+
+        escalation_progression = progress_escalation_arcs(
+            story_arcs=story_arc_runtime_state,
+            state=escalation_progression_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_escalation_progression_rules(),
+            already_progressed_keys=escalation_arc_progression_applied_keys,
+        )
+
+        if escalation_progression.get("ok"):
+            escalation_arc_progression_applied_keys = set(
+                _safe_list(escalation_progression.get("applied_keys"))
+            )
+
+            escalation_events = _safe_list(escalation_progression.get("events"))
+            if escalation_events:
+                story_arc_runtime_state = _safe_dict(escalation_progression.get("story_arcs")) or story_arc_runtime_state
+
+                escalation_arc_progression_events.extend(escalation_events)
+                escalation_arc_progression_world_signals.extend(
+                    _safe_list(escalation_progression.get("world_signals"))
+                )
+                escalation_arc_pressure_events.extend(
+                    _safe_list(escalation_progression.get("pressure_events"))
+                )
+                world_signal_events.extend(_safe_list(escalation_progression.get("world_signals")))
+
+                record["escalation_arc_progression"] = escalation_progression
+                record["escalation_arc_progression_events"] = escalation_events
+                record["world_signals"] = _safe_list(record.get("world_signals")) + _safe_list(
+                    escalation_progression.get("world_signals")
+                )
+
+                record["state_delta"] = {
+                    **_safe_dict(record.get("state_delta")),
+                    "story_arcs": story_arc_runtime_state,
+                    "escalation_arc_progression_flags": _safe_dict(escalation_progression.get("flags")),
+                }
+
+                record["result"] = {
+                    **_safe_dict(record.get("result")),
+                    "escalation_arc_progression_events": escalation_events,
+                    "world_signals": _safe_list(record.get("world_signals")),
+                    "meaningful_progress": True,
+                    "progress_category": "escalation_arc_progression",
+                }
+
+                record["meaningful_progress"] = True
+                record["progress_category"] = "escalation_arc_progression"
+
+        pressure = emit_faction_pressure_events(
+            faction_state=faction_reputation_state,
+            turn_index=int(record.get("turn_index") or turn_index),
+            rules=tavern_faction_pressure_rules(),
+            last_emitted_turn_by_rule=faction_pressure_last_emitted_turn_by_rule,
+        )
+
+        if pressure.get("ok"):
+            faction_pressure_last_emitted_turn_by_rule = {
+                str(k): int(v or 0)
+                for k, v in _safe_dict(pressure.get("last_emitted_turn_by_rule")).items()
+            }
+
+            pressure_events = _safe_list(pressure.get("events"))
+            pressure_world_signals = _safe_list(pressure.get("world_signals"))
+
+            paced_pressure = filter_pressure_events_for_pacing(
+                pressure_events=pressure_events,
+                world_signals=pressure_world_signals,
+                turn_index=int(record.get("turn_index") or turn_index),
+                emitted_key_turns=pressure_pacing_emitted_key_turns,
+                min_gap_turns=12,
+                max_events_per_turn=1,
+            )
+
+            if paced_pressure.get("ok"):
+                pressure_pacing_emitted_key_turns = {
+                    str(k): int(v or 0)
+                    for k, v in _safe_dict(paced_pressure.get("emitted_key_turns")).items()
+                }
+
+                accepted_pressure_events = _safe_list(paced_pressure.get("accepted_events"))
+                accepted_pressure_signals = _safe_list(paced_pressure.get("accepted_world_signals"))
+                rejected_pressure_events = _safe_list(paced_pressure.get("rejected_events"))
+                rejected_pressure_signals = _safe_list(paced_pressure.get("rejected_world_signals"))
+
+                pressure_pacing_rejected_events.extend(rejected_pressure_events)
+                pressure_pacing_rejected_world_signals.extend(rejected_pressure_signals)
+
+                record["faction_pressure_pacing"] = paced_pressure
+
+                if accepted_pressure_events:
+                    faction_pressure_events.extend(accepted_pressure_events)
+                    world_signal_events.extend(accepted_pressure_signals)
+
+                    record["faction_pressure_events"] = accepted_pressure_events
+                    record["world_signals"] = _safe_list(record.get("world_signals")) + accepted_pressure_signals
+
+                    record["state_delta"] = {
+                        **_safe_dict(record.get("state_delta")),
+                        "faction_pressure_flags": _safe_dict(pressure.get("flags")),
+                    }
+
+                    record["result"] = {
+                        **_safe_dict(record.get("result")),
+                        "faction_pressure_events": accepted_pressure_events,
+                        "faction_pressure_pacing": {
+                            "accepted_count": paced_pressure.get("accepted_count"),
+                            "rejected_count": paced_pressure.get("rejected_count"),
+                        },
+                        "world_signals": _safe_list(record.get("world_signals")),
+                    }
+
+        else:
+            mechanics_runtime_state["current_location"] = _current_row_location(
+                record,
+                fallback=_safe_str(mechanics_runtime_state.get("current_location") or "scene:rusty_flagon"),
+            )
+
+            forced_opportunity_id = _safe_str(
+                _safe_dict(record.get("mechanics_forced_action")).get("opportunity_id")
+            )
+            if forced_opportunity_id:
+                mechanics_failed_opportunity_ids.add(forced_opportunity_id)
+                record["mechanic_resolution_failed_opportunity_id"] = forced_opportunity_id
+                record["mechanic_resolution_failed_reason"] = _safe_str(
+                    mechanic_resolution.get("reason")
+                )
+
+        schedule_state = resolve_npc_schedule_state(
+            npc_ids=tavern_npc_ids(),
+            schedule_blocks=tavern_npc_schedule_blocks(),
+            turn_index=int(record.get("turn_index") or turn_index),
+            minutes_per_turn=int(getattr(args, "campaign_minutes_per_turn", 60) or 60),
+            start_hour=8,

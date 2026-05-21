@@ -1,0 +1,442 @@
+
+
+def _build_narration_grounding_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = _safe_list(transcript)
+    checked = 0
+    invalid = 0
+    fallback_used = 0
+    violation_counts: Dict[str, int] = {}
+    selected_candidate_counts: Dict[str, int] = {}
+    fallback_source_counts: Dict[str, int] = {}
+    primary_violation_counts: Dict[str, int] = {}
+
+    for row in rows:
+        row = _safe_dict(row)
+        validation = _safe_dict(row.get("narration_grounding_validation"))
+        if not validation:
+            validation = _extract_grounding_validation_from_any(row)
+        if not validation:
+            continue
+        if row.get("unsupported_combat_claim_suppressed"):
+            repaired_violation_counts = violation_counts  # count as handled
+            repaired_violation_counts["unsupported_combat_claim_suppressed"] = (
+                repaired_violation_counts.get("unsupported_combat_claim_suppressed", 0) + 1
+            )
+            continue
+        checked += 1
+        if not bool(validation.get("ok")):
+            invalid += 1
+        if bool(validation.get("fallback_used")):
+            fallback_used += 1
+        for violation in _safe_list(validation.get("violations")):
+            code = _safe_str(_safe_dict(violation).get("code") or "unknown")
+            violation_counts[code] = int(violation_counts.get(code, 0)) + 1
+
+        selected = _safe_str(validation.get("selected_candidate") or "unknown")
+        selected_candidate_counts[selected] = int(selected_candidate_counts.get(selected, 0)) + 1
+
+        source = _safe_str(validation.get("fallback_source") or "none")
+        fallback_source_counts[source] = int(fallback_source_counts.get(source, 0)) + 1
+
+        for violation in _safe_list(validation.get("primary_violations")):
+            code = _safe_str(_safe_dict(violation).get("code") or "unknown")
+            primary_violation_counts[code] = int(primary_violation_counts.get(code, 0)) + 1
+
+    return {
+        "ok": invalid == 0,
+        "checked_count": checked,
+        "invalid_count": invalid,
+        "fallback_used_count": fallback_used,
+        "violation_counts": dict(sorted(violation_counts.items())),
+        "selected_candidate_counts": dict(sorted(selected_candidate_counts.items())),
+        "fallback_source_counts": dict(sorted(fallback_source_counts.items())),
+        "primary_violation_counts": dict(sorted(primary_violation_counts.items())),
+    }
+
+
+def _summarize_background_prompt_budget(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows: List[Dict[str, Any]] = []
+    for row in transcript:
+        combined = _safe_dict(row.get("combined_background_llm_result"))
+        diagnostics = _safe_dict(combined.get("diagnostics"))
+        prompt_metrics = (
+            _safe_dict(combined.get("prompt_metrics"))
+            or _safe_dict(diagnostics.get("prompt_metrics"))
+        )
+        if not prompt_metrics:
+            continue
+        rows.append(
+            {
+                "turn_index": row.get("turn_index"),
+                "source": _safe_str(combined.get("source")),
+                "total_chars": int(prompt_metrics.get("total_chars") or 0),
+                "estimated_tokens": float(prompt_metrics.get("estimated_tokens") or 0.0),
+                "by_section": _safe_dict(prompt_metrics.get("by_section")),
+            }
+        )
+
+    if not rows:
+        return {
+            "count": 0,
+            "avg_total_chars": 0.0,
+            "max_total_chars": 0,
+            "avg_estimated_tokens": 0.0,
+            "max_estimated_tokens": 0.0,
+            "by_section_avg_chars": {},
+            "examples": [],
+        }
+
+    section_totals: Dict[str, List[int]] = {}
+    for item in rows:
+        for section, metrics in _safe_dict(item.get("by_section")).items():
+            section_totals.setdefault(section, []).append(int(_safe_dict(metrics).get("chars") or 0))
+
+    return {
+        "count": len(rows),
+        "avg_total_chars": round(sum(item["total_chars"] for item in rows) / len(rows), 3),
+        "max_total_chars": max(item["total_chars"] for item in rows),
+        "avg_estimated_tokens": round(sum(item["estimated_tokens"] for item in rows) / len(rows), 3),
+        "max_estimated_tokens": round(max(item["estimated_tokens"] for item in rows), 3),
+        "by_section_avg_chars": {
+            section: round(sum(values) / len(values), 3)
+            for section, values in section_totals.items()
+            if values
+        },
+        "examples": rows[:3],
+    }
+
+
+def _summarize_combined_quality_shape(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    narration_lengths: List[int] = []
+    candidate_counts: List[int] = []
+    candidate_kinds: Dict[str, int] = {}
+
+    for row in transcript:
+        combined = _safe_dict(row.get("combined_background_llm_result"))
+        if not combined:
+            continue
+        narration = _safe_str(combined.get("narration"))
+        if narration:
+            narration_lengths.append(len(narration))
+        candidates = combined.get("candidates") if isinstance(combined.get("candidates"), list) else []
+        candidate_counts.append(len(candidates))
+        for candidate in candidates:
+            kind = _safe_str(_safe_dict(candidate).get("kind")) or "unknown"
+            candidate_kinds[kind] = int(candidate_kinds.get(kind) or 0) + 1
+
+    def avg(values: List[int]) -> float:
+        return round(sum(values) / len(values), 3) if values else 0.0
+
+    return {
+        "combined_turns": len(candidate_counts),
+        "avg_narration_chars": avg(narration_lengths),
+        "min_narration_chars": min(narration_lengths) if narration_lengths else 0,
+        "avg_candidate_count": avg(candidate_counts),
+        "min_candidate_count": min(candidate_counts) if candidate_counts else 0,
+        "candidate_kinds": candidate_kinds,
+    }
+
+
+def _summarize_promotion_target_grounding(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    seen_grounding_candidate_ids = set()
+    seen_example_candidate_ids = set()
+    accepted_relationship_ids = set()
+    rejected_relationship_ids = set()
+
+    summary: Dict[str, Any] = {
+        "grounded": 0,
+        "ungrounded": 0,
+        "by_reason": {},
+        "relationship_accepted": 0,
+        "relationship_rejected": 0,
+        "unique_relationship_accepted": 0,
+        "unique_relationship_rejected": 0,
+        "examples": [],
+    }
+
+    def candidate_marker(value: Any, *, prefix: str = "candidate") -> str:
+        text = _safe_str(value)
+        if text:
+            return text
+        return f"{prefix}:missing"
+
+    for row in transcript:
+        result = _safe_dict(row.get("deferred_advisory_promotion_result"))
+        for decision in result.get("decisions") if isinstance(result.get("decisions"), list) else []:
+            decision = _safe_dict(decision)
+            grounding = _safe_dict(decision.get("target_grounding"))
+            if not grounding:
+                continue
+            marker = candidate_marker(decision.get("candidate_id"))
+            if marker in seen_grounding_candidate_ids:
+                continue
+            seen_grounding_candidate_ids.add(marker)
+
+            reason = _safe_str(grounding.get("reason")) or "unknown"
+            summary["by_reason"][reason] = int(summary["by_reason"].get(reason) or 0) + 1
+            if grounding.get("grounded"):
+                summary["grounded"] += 1
+            else:
+                summary["ungrounded"] += 1
+            if len(summary["examples"]) < 5 and marker not in seen_example_candidate_ids:
+                seen_example_candidate_ids.add(marker)
+                summary["examples"].append(
+                    {
+                        "turn_index": row.get("turn_index"),
+                        "candidate_id": decision.get("candidate_id"),
+                        "status": decision.get("status"),
+                        "reason": decision.get("reason"),
+                        "target_grounding": grounding,
+                    }
+                )
+
+        runtime_state = _safe_dict(row.get("runtime_state"))
+        accepted = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("accepted"))
+        rejected = _safe_list(_safe_dict(runtime_state.get("deferred_advisory")).get("rejected"))
+        for item in accepted:
+            item = _safe_dict(item)
+            if item.get("kind") != "relationship_delta":
+                continue
+            marker = candidate_marker(item.get("candidate_id"), prefix="accepted")
+            accepted_relationship_ids.add(marker)
+        for item in rejected:
+            item = _safe_dict(item)
+            if item.get("kind") != "relationship_delta":
+                continue
+            marker = candidate_marker(item.get("candidate_id"), prefix="rejected")
+            rejected_relationship_ids.add(marker)
+
+    summary["relationship_accepted"] = len(accepted_relationship_ids)
+    summary["relationship_rejected"] = len(rejected_relationship_ids)
+    summary["unique_relationship_accepted"] = len(accepted_relationship_ids)
+    summary["unique_relationship_rejected"] = len(rejected_relationship_ids)
+    summary["dedup"] = {
+        "grounding_candidate_ids": len(seen_grounding_candidate_ids),
+        "accepted_relationship_candidate_ids": len(accepted_relationship_ids),
+        "rejected_relationship_candidate_ids": len(rejected_relationship_ids),
+    }
+    return summary
+
+
+def _dialogue_text_from_selected_output(row: Dict[str, Any]) -> Dict[str, str]:
+    row = _safe_dict(row)
+
+    selected = _safe_dict(row.get("selected_narration"))
+    if selected:
+        npc = _safe_dict(selected.get("npc"))
+        return {
+            "narration": _safe_str(selected.get("narration")),
+            "npc_speaker": _safe_str(npc.get("speaker")),
+            "npc_line": _safe_str(npc.get("line")),
+            "display_source": _safe_str(selected.get("dialogue_source") or row.get("dialogue_source")),
+        }
+
+    npc = _safe_dict(row.get("npc"))
+    return {
+        "narration": _safe_str(row.get("narration") or row.get("display_narration")),
+        "npc_speaker": _safe_str(npc.get("speaker") or row.get("npc_speaker")),
+        "npc_line": _safe_str(npc.get("line") or row.get("npc_line") or row.get("dialogue")),
+        "display_source": _safe_str(row.get("dialogue_source") or row.get("display_source")),
+    }
+
+
+def _apply_dialogue_action_relevance_gate(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    player_action = _safe_str(row.get("player_action") or row.get("action") or row.get("input"))
+
+    selected = _dialogue_text_from_selected_output(row)
+    display_source = selected.get("display_source", "")
+
+    source_gate = should_allow_display_source(
+        player_action=player_action,
+        display_source=display_source,
+        row=row,
+    )
+
+    relevance = validate_dialogue_action_relevance(
+        player_action=player_action,
+        row=row,
+        display_source=display_source,
+        narration=selected.get("narration", ""),
+        npc_speaker=selected.get("npc_speaker", ""),
+        npc_line=selected.get("npc_line", ""),
+    )
+
+    row["dialogue_action_relevance"] = relevance
+    row["dialogue_display_source_gate"] = source_gate
+    if row.get("validated_presentation_intent"):
+        row = _apply_validated_presentation_category_to_relevance(row)
+
+    if source_gate.get("ok") and relevance.get("ok"):
+        return row
+
+    fallback = build_action_relevant_fallback(
+        player_action=player_action,
+        row=row,
+    )
+
+    fallback_narration = _safe_str(fallback.get("narration"))
+    fallback_action = _safe_str(fallback.get("action"))
+    fallback_source = _safe_str(fallback.get("dialogue_source"))
+
+    row["dialogue_action_relevance_repaired"] = True
+    row["dialogue_action_relevance_repair_reason"] = {
+        "source_gate": source_gate,
+        "relevance": relevance,
+    }
+
+    row["selected_narration"] = fallback
+    row["selected_output"] = fallback
+
+    row["narration"] = fallback_narration
+    row["display_narration"] = fallback_narration
+    row["selected_narration_text"] = fallback_narration
+
+    row["dialogue_source"] = fallback_source
+    row["display_source"] = fallback_source
+
+    row["npc"] = {}
+    row["npc_line"] = ""
+    row["npc_speaker"] = ""
+    row["dialogue"] = ""
+
+    row["action"] = fallback_action or row.get("action")
+
+    for nested_key in ("result", "presentation", "display", "ui"):
+        nested = dict(_safe_dict(row.get(nested_key)))
+        if nested:
+            nested["selected_narration"] = fallback
+            nested["selected_output"] = fallback
+            nested["narration"] = fallback_narration
+            nested["display_narration"] = fallback_narration
+            nested["selected_narration_text"] = fallback_narration
+            nested["dialogue_source"] = fallback_source
+            nested["display_source"] = fallback_source
+            nested["npc"] = {}
+            nested["npc_line"] = ""
+            nested["npc_speaker"] = ""
+            nested["dialogue"] = ""
+            row[nested_key] = nested
+
+    # Then keep the after-repair validation:
+
+    row["dialogue_action_relevance_after_repair"] = validate_dialogue_action_relevance(
+        player_action=player_action,
+        row=row,
+        display_source=fallback_source,
+        narration=fallback_narration,
+        npc_speaker="",
+        npc_line="",
+    )
+    row = _apply_validated_presentation_category_to_relevance(row)
+
+    return row
+
+
+def _turn_action_category(text: str) -> str:
+    """Conservative fallback category for missing provider intent.
+
+    This must not turn nouns such as ambush, bandit, road, room, scout, or
+    supplies into authoritative combat/travel/service/economy by themselves.
+    Prefer the validated provider presentation intent and authoritative row
+    mechanics where available.
+    """
+    text_n = _normalize_turn_action_text(text)
+
+    has_dialogue_verb = any(t in text_n for t in ("ask", "tell", "question", "persuade", "talk", "speak", "report", "warn"))
+    has_service_term = any(t in text_n for t in ("room", "lodging", "bed", "rest", "sleep"))
+    has_evidence_term = any(t in text_n for t in ("evidence", "clue", "proof", "coin", "track", "trail", "sign", "ledger", "note"))
+    has_investigation_verb = any(t in text_n for t in ("inspect", "search", "look", "examine", "scout", "track", "watch"))
+
+    if has_dialogue_verb and (has_service_term or has_evidence_term or has_investigation_verb):
+        return "mixed"
+
+    if has_dialogue_verb:
+        return "dialogue"
+
+    if any(t in text_n for t in ("buy", "purchase", "pay for")):
+        return "economy"
+
+    if any(t in text_n for t in ("rent", "book lodging", "take lodging")) or (
+        has_service_term and any(t in text_n for t in ("pay", "rent", "book"))
+    ):
+        return "service"
+
+    if any(t in text_n for t in ("attack", "fight", "combat", "strike", "defend")):
+        return "combat"
+
+    if has_investigation_verb or has_evidence_term:
+        return "investigation"
+
+    if any(t in text_n for t in ("travel", "leave", "go to", "move", "enter")):
+        return "travel"
+
+    return "general"
+
+
+
+def _row_direct_action_id(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    return _safe_str(
+        direct.get("action_id")
+        or row.get("direct_graph_execution_kind")
+        or row.get("direct_graph_canonical_action_id")
+        or row.get("direct_graph_xp_execution_action_id")
+    )
+
+
+def _row_mechanics_set(row: Dict[str, Any]) -> set[str]:
+    row = _safe_dict(row)
+    mechanics = {
+        _safe_str(v)
+        for v in _safe_list(row.get("mechanics_covered_this_turn"))
+        if _safe_str(v)
+    }
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    mechanics.update(
+        _safe_str(v)
+        for v in _safe_list(direct.get("mechanics"))
+        if _safe_str(v)
+    )
+    result = _safe_dict(row.get("result"))
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    contract_result = _safe_dict(turn_contract.get("result"))
+    for value in (
+        result.get("mechanic"),
+        row.get("mechanic"),
+        turn_contract.get("mechanic"),
+        contract_result.get("mechanic"),
+    ):
+        mechanic = _safe_str(value)
+        if mechanic:
+            mechanics.add(mechanic)
+    return mechanics
+
+
+def _extract_row_presentation_intent(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    candidate, source = _find_presentation_intent_candidate(row)
+    normalized = _normalize_presentation_intent(candidate)
+
+    explicit_source = _safe_str(
+        row.get("presentation_intent_parse_source")
+        or _safe_dict(row.get("presentation_intent")).get("parse_source")
+    )
+
+    if (
+        source == "presentation_intent"
+        and normalized.get("primary_category") == "general"
+        and not normalized.get("secondary_categories")
+    ):
+        nested_payload = dict(row)
+        for key in ("presentation_intent", "presentationIntent", "intent"):
+            nested_payload.pop(key, None)
+        nested_candidate, nested_source = _find_presentation_intent_candidate(nested_payload)
+        if nested_candidate and nested_source != "missing":
+            candidate = nested_candidate
+            source = nested_source
+            normalized = _normalize_presentation_intent(candidate)
+
+    normalized["parse_source"] = explicit_source or source
+    return normalized

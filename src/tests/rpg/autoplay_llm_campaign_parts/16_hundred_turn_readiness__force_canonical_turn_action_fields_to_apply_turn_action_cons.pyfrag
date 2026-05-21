@@ -1,0 +1,462 @@
+
+
+def _force_canonical_turn_action_fields(
+    row: Dict[str, Any],
+    *,
+    canonical_turn_action: str,
+) -> Dict[str, Any]:
+    row = dict(_safe_dict(row))
+    canonical = _choose_authoritative_turn_action(
+        row,
+        proposed_canonical_turn_action=canonical_turn_action,
+    )
+
+    if not canonical:
+        return row
+
+    row["canonical_turn_action"] = canonical
+
+    # Preserve explicit source-of-truth fields.
+    row.setdefault("actual_sent_action", canonical)
+    row.setdefault("resolver_input_action", canonical)
+    row.setdefault("selected_player_action", canonical)
+    row.setdefault("original_player_action", canonical)
+    row.setdefault("visible_player_action", canonical)
+
+    # Only force player_action to canonical when canonical came from an actual/visible
+    # action source. Never let stale progress/advisory text overwrite it.
+    row["player_action"] = canonical
+
+    progress_quality = dict(_safe_dict(row.get("progress_quality")))
+    if progress_quality:
+        progress_quality["player_action"] = canonical
+        row["progress_quality"] = progress_quality
+
+    result = dict(_safe_dict(row.get("result")))
+    if result:
+        if "player_action" in result or "action" in result or "input" in result:
+            result["player_action"] = canonical
+        row["result"] = result
+
+    turn_contract = dict(_safe_dict(row.get("turn_contract")))
+    if turn_contract:
+        if "player_action" in turn_contract or "action" in turn_contract or "input" in turn_contract:
+            turn_contract["player_action"] = canonical
+        row["turn_contract"] = turn_contract
+
+    presentation = dict(_safe_dict(row.get("presentation")))
+    if presentation:
+        presentation["canonical_turn_action"] = canonical
+        presentation["player_action"] = canonical
+        row["presentation"] = presentation
+
+    return row
+
+
+def _apply_turn_action_consistency_gate(
+    row: Dict[str, Any],
+    *,
+    canonical_turn_action: str,
+) -> Dict[str, Any]:
+    authoritative_action = _choose_authoritative_turn_action(
+        row,
+        proposed_canonical_turn_action=canonical_turn_action,
+    )
+
+    before = _build_turn_action_consistency(
+        row=row,
+        canonical_turn_action=authoritative_action,
+    )
+
+    row["turn_action_consistency"] = before
+
+    if before.get("ok"):
+        return row
+
+    row = _force_canonical_turn_action_fields(
+        row,
+        canonical_turn_action=authoritative_action,
+    )
+
+    after = _build_turn_action_consistency(
+        row=row,
+        canonical_turn_action=authoritative_action,
+    )
+
+    row["turn_action_consistency_repaired"] = True
+    row["turn_action_consistency_before_repair"] = before
+    row["turn_action_consistency"] = after
+
+    source_check = _detect_canonical_source_inversion(row)
+    row["turn_action_source_check"] = source_check
+    if not source_check.get("ok"):
+        consistency = dict(_safe_dict(row.get("turn_action_consistency")))
+        mismatches = dict(_safe_dict(consistency.get("mismatches")))
+        mismatches["canonical_turn_action"] = {
+            "expected": source_check.get("original_player_action"),
+            "actual": source_check.get("canonical_turn_action"),
+        }
+        consistency["ok"] = False
+        consistency["mismatch_count"] = len(mismatches)
+        consistency["mismatches"] = mismatches
+        row["turn_action_consistency"] = consistency
+
+    return row
+
+
+
+def _hook_action_text(hook: Any) -> str:
+    hook = _safe_dict(hook)
+    return _safe_str(
+        hook.get("player_action")
+        or hook.get("action")
+        or hook.get("input")
+        or hook.get("source_player_action")
+        or hook.get("trigger_action")
+    )
+
+
+def _filter_action_inconsistent_story_hooks(
+    fired_hooks: List[Any],
+    *,
+    canonical_turn_action: str,
+) -> Dict[str, Any]:
+    kept: List[Any] = []
+    rejected: List[Dict[str, Any]] = []
+
+    canonical = _safe_str(canonical_turn_action)
+
+    for raw_hook in _safe_list(fired_hooks):
+        hook = _safe_dict(raw_hook)
+        hook_action = _hook_action_text(hook)
+
+        # Hooks without action text are kept for backward compatibility,
+        # but marked as unchecked.
+        if not hook_action:
+            kept.append(hook)
+            continue
+
+        if _action_texts_consistent(canonical, hook_action):
+            kept.append(hook)
+            continue
+
+        rejected.append(
+            {
+                "hook_id": hook.get("hook_id"),
+                "kind": hook.get("kind"),
+                "source": hook.get("source"),
+                "expected_action": canonical,
+                "actual_action": hook_action,
+                "summary": hook.get("summary") or hook.get("story_summary"),
+            }
+        )
+
+    return {
+        "kept_hooks": kept,
+        "rejected_hooks": rejected,
+        "rejected_count": len(rejected),
+    }
+
+
+def _normalize_turn_action_consistency_transcript_rows(
+    transcript: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+
+    for row in _safe_list(transcript):
+        row_dict = dict(_safe_dict(row))
+        canonical = _choose_authoritative_turn_action(row_dict)
+        if canonical:
+            row_dict = _apply_turn_action_consistency_gate(
+                row_dict,
+                canonical_turn_action=canonical,
+            )
+        normalized.append(row_dict)
+
+    return normalized
+
+
+def _row_has_scenario_progress(row: Dict[str, Any]) -> bool:
+    row = _safe_dict(row)
+    scenario_summary = _safe_dict(row.get("scenario_progression_summary"))
+    action_id = _safe_str(row.get("top_scenario_progression_action_id"))
+
+    if bool(scenario_summary.get("changed")):
+        return True
+    if action_id and not action_id.startswith("arc_complete"):
+        return True
+
+    completed_node = (
+        scenario_summary.get("completed_node_id")
+        or scenario_summary.get("node_id")
+        or scenario_summary.get("completed_node")
+    )
+    if _safe_str(completed_node):
+        return True
+
+    return False
+
+
+def _quest_progress_quests(state: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(_safe_dict(state).get("quest_progress")).get("quests"))
+
+
+def _is_scenario_progression_quest(quest_id: str, quest: Dict[str, Any]) -> bool:
+    quest = _safe_dict(quest)
+    quest_id = _safe_str(quest_id)
+    return (
+        _safe_str(quest.get("source")) == "scenario_progression_graph"
+        or quest_id in {
+            "quest:witness_search",
+            "quest:warn_wagon",
+            "quest:quarry_road_ambush",
+        }
+    )
+
+
+def _extract_scenario_progression_quest_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = _safe_dict(state)
+    quests = _quest_progress_quests(state)
+    graph_quests: Dict[str, Any] = {}
+    for quest_id, quest in quests.items():
+        quest = _safe_dict(quest)
+        if _is_scenario_progression_quest(_safe_str(quest_id), quest):
+            graph_quests[_safe_str(quest_id)] = dict(quest)
+    return graph_quests
+
+
+def _overlay_scenario_progression_quests(
+    runtime_state: Dict[str, Any],
+    graph_quest_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    runtime_state = _safe_dict(runtime_state)
+    graph_quest_state = _safe_dict(graph_quest_state)
+    if not graph_quest_state:
+        return runtime_state
+
+    out = dict(runtime_state)
+    quest_progress = dict(_safe_dict(out.get("quest_progress")))
+    quests = dict(_safe_dict(quest_progress.get("quests")))
+
+    for quest_id, sidecar_quest in graph_quest_state.items():
+        sidecar_quest = _safe_dict(sidecar_quest)
+        existing = _safe_dict(quests.get(quest_id))
+
+        # Do not overwrite a completed graph quest with an older active copy.
+        existing_completed = bool(existing.get("completed")) or _safe_str(existing.get("status")) == "completed"
+        sidecar_completed = bool(sidecar_quest.get("completed")) or _safe_str(sidecar_quest.get("status")) == "completed"
+        if existing_completed and not sidecar_completed:
+            continue
+
+        merged = dict(existing)
+        merged.update(sidecar_quest)
+        merged.setdefault("quest_id", quest_id)
+        merged.setdefault("source", "scenario_progression_graph")
+        quests[quest_id] = merged
+
+    quest_progress["quests"] = quests
+    out["quest_progress"] = quest_progress
+    out["scenario_progression_quest_state"] = graph_quest_state
+    out["scenario_progression_quest_ids"] = sorted(graph_quest_state.keys())
+    return out
+
+
+def _assert_graph_second_quest_invariant(
+    runtime_state: Dict[str, Any],
+    *,
+    turn_index: int,
+    stage: str,
+) -> None:
+    completed_nodes = _safe_dict(_safe_dict(runtime_state).get("progression_completed_nodes"))
+    if "report_findings_to_bran" not in completed_nodes:
+        return
+
+    quests = _quest_progress_quests(runtime_state)
+    warn_wagon = _safe_dict(quests.get("quest:warn_wagon"))
+    quarry = _safe_dict(quests.get("quest:quarry_road_ambush"))
+
+    warn_completed = bool(warn_wagon.get("completed")) or _safe_str(warn_wagon.get("status")) == "completed"
+    quarry_started = bool(quarry)
+
+    if not warn_wagon and not quarry_started:
+        raise RuntimeError(
+            "graph_second_quest_missing_after_report:"
+            f"turn={turn_index}:stage={stage}"
+        )
+
+    if warn_wagon and not warn_completed and _safe_str(warn_wagon.get("status")) != "active":
+        raise RuntimeError(
+            "graph_second_quest_not_active_after_report:"
+            f"turn={turn_index}:stage={stage}:"
+            f"status={warn_wagon.get('status')}"
+        )
+
+
+def _active_graph_objective_count_from_state(runtime_state: Dict[str, Any]) -> int:
+    count = 0
+    quests = _quest_progress_quests(runtime_state)
+    for _quest_id, quest in quests.items():
+        quest = _safe_dict(quest)
+        if _safe_str(quest.get("source")) != "scenario_progression_graph":
+            continue
+        if bool(quest.get("completed")) or _safe_str(quest.get("status")) == "completed":
+            continue
+        for objective in _safe_list(quest.get("objectives")):
+            objective = _safe_dict(objective)
+            if bool(objective.get("completed")) or _safe_str(objective.get("status")) == "completed":
+                continue
+            count += 1
+    return count
+
+
+def _scenario_progression_arc_summary(
+    runtime_state: Dict[str, Any],
+    *,
+    scenario_seed: str,
+) -> Dict[str, Any]:
+    try:
+        from app.rpg.progression.runtime import build_scenario_progression_arc_summary
+
+        return build_scenario_progression_arc_summary(
+            runtime_state,
+            scenario_seed=scenario_seed,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "arc_complete": False,
+            "expected_node_count": 0,
+            "completed_node_count": 0,
+        }
+
+
+def _arc_complete_graph_action_from_state(runtime_state: Dict[str, Any]) -> str:
+    runtime_state = _safe_dict(runtime_state)
+    for action in _safe_list(runtime_state.get("scenario_progression_actions")):
+        action = _safe_dict(action)
+        source = _safe_str(action.get("source"))
+        action_id = _safe_str(action.get("action_id"))
+        command = _safe_str(action.get("command"))
+        if command and (
+            source in {
+                "scenario_progression_arc_complete_idle",
+                "scenario_progression_arc_complete_bridge",
+            }
+            or action_id in {
+                "arc_complete_regroup",
+                "arc_complete_ask_next_lead",
+            }
+        ):
+            return command
+    return ""
+
+
+def _scenario_arc_complete_from_state(runtime_state: Dict[str, Any], args: Any) -> bool:
+    arc = _scenario_progression_arc_summary(
+        runtime_state,
+        scenario_seed=str(getattr(args, "scenario_seed", "") or ""),
+    )
+    return bool(arc.get("arc_complete"))
+
+
+def _top_scenario_progression_action(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    actions = [_safe_dict(row) for row in _safe_list(_safe_dict(runtime_state).get("scenario_progression_actions"))]
+    if not actions:
+        return {}
+    actions.sort(
+        key=lambda row: (
+            -int(row.get("priority") or 0),
+            _safe_str(row.get("action_id")),
+        )
+    )
+    return actions[0]
+
+
+def _top_scenario_progression_command(runtime_state: Dict[str, Any]) -> str:
+    action = _top_scenario_progression_action(runtime_state)
+    return _safe_str(action.get("command"))
+
+
+def _recent_same_graph_action_without_progress(
+    transcript: List[Dict[str, Any]],
+    *,
+    action_id: str,
+    command: str,
+    max_repeats: int = 2,
+) -> bool:
+    action_id = _safe_str(action_id)
+    command = _safe_str(command).strip()
+    if not action_id and not command:
+        return False
+
+    repeats = 0
+    for row in reversed(_safe_list(transcript)):
+        row = _safe_dict(row)
+        row_action_id = _safe_str(row.get("top_scenario_progression_action_id"))
+        row_command = _safe_str(row.get("player_action")).strip()
+        progressed = bool(_safe_dict(row.get("scenario_progression_summary")).get("changed"))
+
+        if progressed:
+            break
+        if (action_id and row_action_id == action_id) or (command and row_command == command):
+            repeats += 1
+            if repeats >= max_repeats:
+                return True
+        else:
+            break
+    return False
+
+
+def _graph_action_source_state(*states: Dict[str, Any]) -> Dict[str, Any]:
+    for state in states:
+        state = _safe_dict(state)
+        if _safe_list(state.get("scenario_progression_actions")):
+            return state
+    for state in states:
+        state = _safe_dict(state)
+        if state:
+            return state
+    return {}
+
+
+def _graph_action_id(action: Any) -> str:
+    action = _safe_dict(action)
+    return _safe_str(
+        action.get("id")
+        or action.get("action_id")
+        or action.get("node_id")
+        or action.get("hook_id")
+    )
+
+
+def _graph_expected_action_is_available(
+    action: Dict[str, Any],
+    *,
+    suppressed_actions: Dict[str, Dict[str, Any]],
+    completed_action_ids: set[str],
+    completed_mechanics: set[str],
+    turn_index: int,
+) -> bool:
+    action = _safe_dict(action)
+    action_id = _graph_action_id(action)
+    mechanic = _safe_str(
+        action.get("mechanic")
+        or action.get("required_mechanic")
+        or action.get("completes_mechanic")
+    )
+
+    if action_id and action_id in completed_action_ids:
+        return False
+
+    if mechanic and mechanic in completed_mechanics:
+        return False
+
+    if action_id and _is_graph_action_suppressed(
+        action_id,
+        suppressed_actions=suppressed_actions,
+        turn_index=int(turn_index),
+    ):
+        return False
+
+    return True
