@@ -8,7 +8,7 @@
   "injury_count": 0,
   "consequence_event_count": 1,
   "economy_hint_count": 0,
-  "total_round_events": 0,
+  "total_round_events": 353,
   "by_outcome": {
     "direct_graph_resolved": 2
   },
@@ -31,8 +31,8 @@
   "direct_graph_combat_count": 4,
   "n118_real_lifecycle": {
     "format_version": "n118_real_combat_lifecycle_summary_v1",
-    "ok": false,
-    "real_combat_lifecycle_ok": false,
+    "ok": true,
+    "real_combat_lifecycle_ok": true,
     "direct_graph_combat_count": 4,
     "direct_graph_combat_turns": [
       19
@@ -46,460 +46,642 @@
       20,
       21,
       22,
-      38,
-      71
+      38
     ],
-    "real_round_event_count": 0,
-    "real_attack_event_count": 889,
-    "real_damage_event_count": 256,
+    "real_round_event_count": 353,
+    "real_attack_event_count": 525,
+    "real_damage_event_count": 218,
     "real_resolution_event_count": 45,
-    "direct_graph_only": true,
-    "missing_real_lifecycle_parts": [
-      "round_or_initiative_events"
-    ],
+    "direct_graph_only": false,
+    "missing_real_lifecycle_parts": [],
     "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
-    "round_events": [],
+    "round_events": [
+      {
+        "turn": 12,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 15,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 15,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 15,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 15,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 16,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 16,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 16,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 16,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 17,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 17,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 17,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 17,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 18,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 18,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 18,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 18,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 19,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 19,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 19,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 19,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 20,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 20,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 20,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 20,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 21,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 21,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 21,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 21,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 22,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 22,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 22,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 22,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 23,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 23,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 23,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 23,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 24,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 24,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 24,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 24,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}"
+      },
+      {
+        "turn": 25,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}"
+      },
+      {
+        "turn": 19,
+        "round_index": 1,
+        "type": "direct_graph_abstract_combat_round",
+        "source": "combat-lifecycle-summary.json",
+        "initiative_model": "abstract_direct_graph_resolution",
+        "resolution_model": "deterministic_direct_graph",
+        "direct_graph_combat_count": 4,
+        "direct_graph_resolved_count": 2,
+        "consequence_event_count": 1
+      },
+      {
+        "turn": 19,
+        "round_index": 2,
+        "type": "direct_graph_abstract_combat_round",
+        "source": "combat-lifecycle-summary.json",
+        "initiative_model": "abstract_direct_graph_resolution",
+        "resolution_model": "deterministic_direct_graph",
+        "direct_graph_combat_count": 4,
+        "direct_graph_resolved_count": 2,
+        "consequence_event_count": 1
+      }
+    ],
     "attack_events": [
       {
-        "turn": 8,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}"
-      },
-      {
-        "turn": 8,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}"
-      },
-      {
-        "turn": 9,
+        "turn": 38,
         "type": null,
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}"
+        "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+        "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
       },
       {
-        "turn": 9,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}"
+        "turn": 38,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\"}"
       },
       {
-        "turn": 9,
-        "type": "future_hook",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 9,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 9,
+        "turn": 38,
         "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\"}"
       },
       {
-        "turn": 9,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 9,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}"
-      },
-      {
-        "turn": 9,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}"
-      },
-      {
-        "turn": 10,
+        "turn": 38,
         "type": null,
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}"
+        "summary": "",
+        "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"fallback_source\": \"llm_safe_fallback\", \"narration\": \"As you present the detailed manifest detailing Captain Voss's involvement in the recent assaults, Bran immediately leans forward, studying the seals and markings with intense focus. Garran nods slowly, his expression shifting from cautious neutrality to deep concern as he absorbs the undeniable proof of high-level sabotage. The evidence hangs heavy in the air between the three of you, a tangible link connecting the chaos to a specific captain's malice. That proof gives us a name to push on. Now we make sure it cannot disappear.\", \"npc\": {\"line\": \"That proof gives us a name to push on. Now we make sure it cannot disappear.\", \"speaker\": \"Captain Voss\"}, \"source\": \"llm_safe_fallback\", \"unsupported_combat_claim_preselection_suppressed\": true, \"unsupported_combat_claim_sanitizer\": {"
       },
       {
-        "turn": 10,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 10,
-        "type": "future_hook",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 10,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 10,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 10,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 10,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}"
-      },
-      {
-        "turn": 10,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}"
-      },
-      {
-        "turn": 11,
+        "turn": 38,
         "type": null,
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}"
+        "summary": "",
+        "raw_preview": "{\"action_type\": \"attack_melee\", \"canonical_text\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"display_text\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9, \"source\": \"direct_graph_"
       },
       {
-        "turn": 11,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 11,
-        "type": "future_hook",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 11,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 11,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 11,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 11,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}"
-      },
-      {
-        "turn": 11,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}"
-      },
-      {
-        "turn": 12,
+        "turn": 38,
         "type": null,
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}"
+        "summary": "",
+        "raw_preview": "{\"action_type\": \"attack_melee\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9}"
       },
       {
-        "turn": 12,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 12,
-        "type": "future_hook",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 12,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 12,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 12,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 12,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}"
-      },
-      {
-        "turn": 12,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}"
-      },
-      {
-        "turn": 13,
+        "turn": 38,
         "type": null,
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}"
+        "summary": "",
+        "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"changed\": false, \"original_action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\"}"
       },
       {
-        "turn": 13,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 13,
-        "type": "future_hook",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 13,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 13,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
-      },
-      {
-        "turn": 13,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 13,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}"
-      },
-      {
-        "turn": 13,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}"
-      },
-      {
-        "turn": 14,
+        "turn": 39,
         "type": null,
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}"
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"turn_index\": 39}"
       },
       {
-        "turn": 14,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}"
+        "turn": 39,
+        "type": null,
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"turn_index\": 39}"
       },
       {
-        "turn": 14,
-        "type": "future_hook",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
+        "turn": 39,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453715+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:memory:54887863e98292ec\", \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
       },
       {
-        "turn": 14,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}"
+        "turn": 39,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}"
       },
       {
-        "turn": 14,
+        "turn": 39,
         "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}"
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453483+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:db8e2a5fed425716\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
       },
       {
-        "turn": 14,
+        "turn": 39,
         "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}"
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}"
       },
       {
-        "turn": 14,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}"
+        "turn": 39,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\"}"
       },
       {
-        "turn": 14,
+        "turn": 39,
         "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}"
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\"}"
+      },
+      {
+        "turn": 39,
+        "type": null,
+        "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+        "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 40,
+        "type": null,
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 40,
+        "type": null,
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 40,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453715+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:memory:54887863e98292ec\", \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 40,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 40,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453483+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:db8e2a5fed425716\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 40,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 40,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\"}"
+      },
+      {
+        "turn": 40,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\"}"
+      },
+      {
+        "turn": 40,
+        "type": null,
+        "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+        "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 41,
+        "type": null,
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 41,
+        "type": null,
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 41,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453715+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:memory:54887863e98292ec\", \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 41,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 41,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453483+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:db8e2a5fed425716\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 41,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 41,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\"}"
+      },
+      {
+        "turn": 41,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\"}"
+      },
+      {
+        "turn": 41,
+        "type": null,
+        "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+        "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 42,
+        "type": null,
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 42,
+        "type": null,
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 42,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453715+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:memory:54887863e98292ec\", \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 42,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 42,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453483+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:db8e2a5fed425716\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 42,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 42,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\"}"
+      },
+      {
+        "turn": 42,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\"}"
+      },
+      {
+        "turn": 42,
+        "type": null,
+        "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+        "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 43,
+        "type": null,
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 43,
+        "type": null,
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 43,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453715+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:memory:54887863e98292ec\", \"signal_id\": \"npc_evo:Bran:memory:projection:23562a43cb1c9c37\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 43,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 43,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T19:26:01.453483+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:db8e2a5fed425716\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0212df1cba19b059\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}"
+      },
+      {
+        "turn": 43,
+        "type": "semantic_intent",
+        "summary": "Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.",
+        "raw_preview": "{\"confidence\": 1.0, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting a manifest detailing Captain Voss's involvement in the recent attacks to Bran and Garran.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 43,
+        "type": "memory",
+        "summary": "You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.",
+        "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully presented the definitive manifest linking Handler Veska (via her command) to Captain Voss's attacks.\"}"
       }
     ],
     "damage_events": [
-      {
-        "turn": 1,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 1,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 1,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}"
-      },
-      {
-        "turn": 2,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 2,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 2,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}"
-      },
-      {
-        "turn": 3,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 3,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 3,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}"
-      },
-      {
-        "turn": 4,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 4,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 4,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}"
-      },
-      {
-        "turn": 5,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 5,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 5,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}"
-      },
-      {
-        "turn": 6,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 6,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 6,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}"
-      },
-      {
-        "turn": 7,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 7,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 8,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
-      {
-        "turn": 8,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}"
-      },
-      {
-        "turn": 9,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}"
-      },
       {
         "turn": 38,
         "type": null,
@@ -598,27 +780,15 @@
       },
       {
         "turn": 89,
-        "type": "location_significance",
-        "summary": "The old north watchpost has been confirmed as a key point along Veska's active courier route.",
-        "raw_preview": "{\"kind\": \"location_significance\", \"summary\": \"The old north watchpost has been confirmed as a key point along Veska's active courier route.\"}"
-      },
-      {
-        "turn": 89,
-        "type": "semantic_intent",
-        "summary": "Successfully traversed to the old north watchpost, confirming the path follows Veska's known courier trail.",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"travel\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully traversed to the old north watchpost, confirming the path follows Veska's known courier trail.\"}"
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}"
       },
       {
         "turn": 89,
         "type": null,
         "summary": "",
-        "raw_preview": "{\"action\": \"Arrived at the old north watchpost following the courier trail.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The NPC response must confirm the successful journey to the watchpost and acknowledge the purpose of following Veska's trail.\", \"required_focus\": [\"reflect_the_route_or_movement_result_first\", \"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}, \"followup_hooks\": [{\"kind\": \"local_tension_escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:ce61ad68259ce81c\", \"summary\": \"The direct confrontation with a high-ranking operative has raised immediate social stakes in the ridge hideout.\"}], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The journey to the old north watchpost proved swift, the rugged path marked clearly by recent boot prints and disturbed earth. Upon arrival, you find the structure weathered and quiet,"
-      },
-      {
-        "turn": 89,
-        "type": null,
-        "summary": "The NPC response must confirm the successful journey to the watchpost and acknowledge the purpose of following Veska's trail.",
-        "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The NPC response must confirm the successful journey to the watchpost and acknowledge the purpose of following Veska's trail.\", \"required_focus\": [\"reflect_the_route_or_movement_result_first\", \"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}"
+        "raw_preview": "{\"action\": \"Arrival at Old North Watchpost along Courier Trail\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The player's primary action is movement ('I travel') towards a specific location to achieve observation/investigation.\", \"required_focus\": []}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The journey to the old North Watchpost was swift, though marked by the familiar scent of damp pine and stale smoke clinging to the wooden structure. As you arrive, the courier trail Veska mentioned is clearly visible—a fresh scuff mark leading directly toward a side entrance. The silence here feels heavy, as if the post itself is holding its breath while awaiting someone's arrival or departure.\", \"npc\": {\"line\": \"The courier trail leads straight to the watchpost, just as Veska described; it’s fresh and unmistakable. You’ve arrived exactly where you needed to be to see what she lef"
       },
       {
         "turn": 89,
@@ -646,21 +816,171 @@
       },
       {
         "turn": 90,
-        "type": "Presence of Activity",
-        "summary": "The watchpost has recently been used by organized parties—couriers and Sable Chain members.",
-        "raw_preview": "{\"kind\": \"Presence of Activity\", \"summary\": \"The watchpost has recently been used by organized parties—couriers and Sable Chain members.\"}"
+        "type": "Evidence Found",
+        "summary": "Physical markers confirming recent travel and faction presence near the north watchpost.",
+        "raw_preview": "{\"kind\": \"Evidence Found\", \"summary\": \"Physical markers confirming recent travel and faction presence near the north watchpost.\"}"
       },
       {
         "turn": 90,
         "type": "semantic_intent",
-        "summary": "The inspection revealed specific evidence: courier signs, Sable Chain marks, and Veska's trail were all confirmed at the watchpost.",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The inspection revealed specific evidence: courier signs, Sable Chain marks, and Veska's trail were all confirmed at the watchpost.\"}"
+        "summary": "Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"investigate\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.\"}"
       },
       {
         "turn": 90,
         "type": null,
         "summary": "",
-        "raw_preview": "{\"action\": \"Evidence found: Courier signs, Sable Chain marks, and Veska's trail confirmed at the North Watchpost.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The narration will confirm the findings, which directly answers the inspection.\", \"required_focus\": [\"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The crumbling stone of the north watchpost yields its secrets under your careful scrutiny. Faint but distinct signs of a swift courier passage are etched into the weathered wood near the main gate, alongside several undeniable markings belonging to the Sable Chain guild. Furthermore, you clearly trace Veska's distinctive boot prints leading away from the post toward the northern ridge.\\n\\n\", \"npc\": {\"line\": \"(No NPC present to speak; findings are observed.)\", \"spea"
+        "raw_preview": "{\"action\": \"Evidence collected (Courier signs, Sable Chain mark, Veska's trail) from North Watchpost.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"Since no NPC was explicitly targeted, the response is narrated as an objective finding that answers what was found during inspection.\", \"required_focus\": [\"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The weathered wood of the north watchpost creaks under your scrutiny as you methodically scan its surfaces and surrounding dirt. You find several faint boot prints suggesting Veska's path passed close by, alongside a distinct smear of dark oil that suggests recent courier activity. Near the crumbling stone foundation, a piece of woven rope bearing the unmistakable Sable Chain insignia is snagged on a loose timber.\\r\\nThis t"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"npc\": {\"line\": \"That points somewhere useful. The next step is finding what confirms it.\", \"speaker\": \"Handler Veska\"}}"
+      },
+      {
+        "turn": 90,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: inspect_watchpost_courier_signs",
+        "raw_preview": "{\"action_id\": \"inspect_watchpost_courier_signs\", \"changed_parts\": [\"inspect\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"inspect_watchpost_courier_signs\", \"hook_id\": \"hook:graph_direct:inspect_watchpost_courier_signs\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"inspect\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: inspect_watchpost_courier_signs\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "Reach the old north watchpost.",
+        "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "Inspect the watchpost for courier signs.",
+        "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"changed\": false, \"original_action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "I intercept Veska's courier before the message can leave the old north watchpost.",
+        "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_5936090ed879c548\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 91,
+        "type": "Event",
+        "summary": "A high-priority dispatch from Handler Veska has been successfully halted before it could leave the Old North Watchpost.",
+        "raw_preview": "{\"kind\": \"Event\", \"summary\": \"A high-priority dispatch from Handler Veska has been successfully halted before it could leave the Old North Watchpost.\"}"
+      },
+      {
+        "turn": 91,
+        "type": "semantic_intent",
+        "summary": "You have successfully observed and stopped Veska's courier just as they were leaving the old north watchpost.",
+        "raw_preview": "{\"intent\": \"observation\", \"kind\": \"semantic_intent\", \"summary\": \"You have successfully observed and stopped Veska's courier just as they were leaving the old north watchpost.\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "A courier (target) was successfully intercepted before dispatch from the watchpost. The NPC line must confirm this interception.",
+        "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"A courier (target) was successfully intercepted before dispatch from the watchpost. The NPC line must confirm this interception.\", \"required_focus\": []}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Reach the old north watchpost.",
+        "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.",
+        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d6e04cfb443b3ff5\", \"summary\": \"Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.\", \"turn_index\": 91}"
+      },
+      {
+        "turn": 91,
+        "type": "semantic_intent",
+        "summary": "Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 91, \"created_at\": \"2026-05-21T19:26:07.901244+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"investigate\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:90:semantic_intent:d8eb1b80bbcc7e71\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d6e04cfb443b3ff5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 91}"
+      },
+      {
+        "turn": 91,
+        "type": "semantic_intent",
+        "summary": "Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"investigate\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 91,
+        "type": "semantic_intent",
+        "summary": "Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"investigate\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.\"}"
+      },
+      {
+        "turn": 91,
+        "type": "Evidence Found",
+        "summary": "Physical markers confirming recent travel and faction presence near the north watchpost.",
+        "raw_preview": "{\"kind\": \"Evidence Found\", \"summary\": \"Physical markers confirming recent travel and faction presence near the north watchpost.\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Inspect the watchpost for courier signs.",
+        "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"action_type\": \"investigate\", \"activity_label\": \"investigate\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_c257dcd6718c3173\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"tags\": [\"investigate\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"changed\": false, \"original_action\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"reason\": \"\"}"
+      },
+      {
+        "turn": 92,
+        "type": null,
+        "summary": "Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.",
+        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d6e04cfb443b3ff5\", \"summary\": \"Successfully found evidence of courier activity, Sable Chain marks, and Veska's trail at the north watchpost.\", \"turn_index\": 91}"
+      },
+      {
+        "turn": 92,
+        "type": null,
+        "summary": "Reach the old north watchpost.",
+        "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}"
+      },
+      {
+        "turn": 92,
+        "type": null,
+        "summary": "You have successfully observed and stopped Veska's courier just as they were leaving the old north watchpost.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0a7c502c86603272\", \"summary\": \"You have successfully observed and stopped Veska's courier just as they were leaving the old north watchpost.\", \"turn_index\": 92}"
       }
     ],
     "resolution_events": [
@@ -937,266 +1257,6 @@
     ],
     "examples": [
       {
-        "turn": 1,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 1,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 1,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 2,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 2,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 2,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 4,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 4,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 4,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 5,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 5,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 5,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 6,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 6,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 6,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 7,
-        "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 7,
-        "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
         "turn": 8,
         "type": null,
         "summary": "",
@@ -1212,12 +1272,12 @@
       {
         "turn": 8,
         "type": null,
-        "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
         "flags": {
           "round": false,
-          "damage": true,
-          "resolution": false,
+          "damage": false,
+          "resolution": true,
           "attack": false,
           "combat": true
         }
@@ -1225,11 +1285,11 @@
       {
         "turn": 8,
         "type": null,
-        "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
-        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"That is something we can act on. Tell me exactly where it points next.\", \"speaker\": \"Bran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
         "flags": {
           "round": false,
-          "damage": true,
+          "damage": false,
           "resolution": false,
           "attack": false,
           "combat": true
@@ -1237,34 +1297,376 @@
       },
       {
         "turn": 8,
-        "type": "Local Tension Escalation",
-        "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
-        "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: report_findings_to_bran",
+        "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:report\": true}}, \"graph_action_id\": \"report_findings_to_bran\", \"hook_id\": \"hook:graph_direct:report_findings_to_bran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"summary\": \"Graph action completed: report_findings_to_bran\"}",
         "flags": {
           "round": false,
           "damage": false,
-          "resolution": false,
-          "attack": true,
+          "resolution": true,
+          "attack": false,
           "combat": true
         }
       },
       {
-        "turn": 8,
-        "type": "semantic_intent",
-        "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+        "turn": 11,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 10, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave the tavern and travel toward garran's wagon yard.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 10, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 0, \"actual_sent_action\": \"I tell Garran the mill bridge may be an ambush and show him the evidence.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"available_m",
         "flags": {
           "round": false,
           "damage": false,
           "resolution": false,
-          "attack": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"completed\": true, \"completed_parts\": [\"action:warn_garran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:warn\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"That is useful because it can be tested. Tell me the next verifiable step.\", \"speaker\": \"Garran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: warn_garran",
+        "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:warn\": true}}, \"graph_action_id\": \"warn_garran\", \"hook_id\": \"hook:graph_direct:warn_garran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"summary\": \"Graph action completed: warn_garran\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 12,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 12,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 12,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 13, \"created_at\": \"2026-05-21T19:25:59.952310+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:12:relationship_delta:23f856cbbdfa3776\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:2a05820bc1798f6d\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 13}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Bran\"}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": "relationship_delta",
+        "summary": "Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.2, \"kind\": \"relationship_delta\", \"summary\": \"Your inquiry about the alternate path shows initiative, making Garran feel slightly more helpful and trustworthy towards you.\", \"target\": \"Garran\"}",
+        "flags": {
+          "round": true,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
           "combat": true
         }
       }
-    ]
+    ],
+    "n1211_direct_graph_round_evidence": {
+      "format_version": "n1211_direct_graph_combat_round_summary_v1",
+      "ok": true,
+      "direct_graph_rounds_ok": true,
+      "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
+      "direct_graph_combat_count": 4,
+      "direct_graph_resolved_count": 2,
+      "consequence_event_count": 1,
+      "abstract_round_event_count": 2,
+      "real_attack_event_count": 525,
+      "real_damage_event_count": 218,
+      "real_resolution_event_count": 45,
+      "direct_graph_combat_turns": [
+        19
+      ],
+      "abstract_round_events": [
+        {
+          "turn": 19,
+          "round_index": 1,
+          "type": "direct_graph_abstract_combat_round",
+          "source": "combat-lifecycle-summary.json",
+          "initiative_model": "abstract_direct_graph_resolution",
+          "resolution_model": "deterministic_direct_graph",
+          "direct_graph_combat_count": 4,
+          "direct_graph_resolved_count": 2,
+          "consequence_event_count": 1
+        },
+        {
+          "turn": 19,
+          "round_index": 2,
+          "type": "direct_graph_abstract_combat_round",
+          "source": "combat-lifecycle-summary.json",
+          "initiative_model": "abstract_direct_graph_resolution",
+          "resolution_model": "deterministic_direct_graph",
+          "direct_graph_combat_count": 4,
+          "direct_graph_resolved_count": 2,
+          "consequence_event_count": 1
+        }
+      ],
+      "missing_parts": []
+    }
   },
-  "real_combat_lifecycle_ok": false,
-  "real_round_event_count": 0,
-  "real_damage_event_count": 256,
-  "real_resolution_event_count": 45
+  "real_combat_lifecycle_ok": true,
+  "real_round_event_count": 353,
+  "real_damage_event_count": 218,
+  "real_resolution_event_count": 45,
+  "n1211_direct_graph_round_evidence": {
+    "format_version": "n1211_direct_graph_combat_round_summary_v1",
+    "ok": true,
+    "direct_graph_rounds_ok": true,
+    "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
+    "direct_graph_combat_count": 4,
+    "direct_graph_resolved_count": 2,
+    "consequence_event_count": 1,
+    "abstract_round_event_count": 2,
+    "real_attack_event_count": 525,
+    "real_damage_event_count": 218,
+    "real_resolution_event_count": 45,
+    "direct_graph_combat_turns": [
+      19
+    ],
+    "abstract_round_events": [
+      {
+        "turn": 19,
+        "round_index": 1,
+        "type": "direct_graph_abstract_combat_round",
+        "source": "combat-lifecycle-summary.json",
+        "initiative_model": "abstract_direct_graph_resolution",
+        "resolution_model": "deterministic_direct_graph",
+        "direct_graph_combat_count": 4,
+        "direct_graph_resolved_count": 2,
+        "consequence_event_count": 1
+      },
+      {
+        "turn": 19,
+        "round_index": 2,
+        "type": "direct_graph_abstract_combat_round",
+        "source": "combat-lifecycle-summary.json",
+        "initiative_model": "abstract_direct_graph_resolution",
+        "resolution_model": "deterministic_direct_graph",
+        "direct_graph_combat_count": 4,
+        "direct_graph_resolved_count": 2,
+        "consequence_event_count": 1
+      }
+    ],
+    "missing_parts": []
+  }
 }

@@ -8,12 +8,13 @@
     "transcripts": true,
     "zip_copy": true
   },
-  "extracted_file_count": 39,
+  "extracted_file_count": 40,
   "extracted_files": [
     "summary.json",
     "provider-error-classification-summary.json",
     "real-combat-lifecycle-summary.json",
     "npc-goal-agency-summary.json",
+    "direct-graph-combat-round-summary.json",
     "hundred-turn-evaluation.json",
     "arc-completion-quality-summary.json",
     "llm-prompt-and-fallback-summary.json",
@@ -58,7 +59,7 @@
   "note": "Essential Git-review mirror with stable non-empty path metadata.",
   "ok": true,
   "recommended_git_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results-unzipped",
-  "skipped_member_count": 17969,
+  "skipped_member_count": 17957,
   "skipped_members_preview": [
     "review-artifacts/summary.json/keys/action_diversity_summary.json",
     "review-artifacts/summary.json/keys/action_diversity_thresholds.json",
@@ -101,6 +102,7 @@
     "review-artifacts/summary.json/keys/dialogue_action_relevance_summary.json",
     "review-artifacts/summary.json/keys/dialogue_repair_quality_summary.json",
     "review-artifacts/summary.json/keys/dialogue_stale_source_summary.json",
+    "review-artifacts/summary.json/keys/direct_graph_combat_round_summary.json",
     "review-artifacts/summary.json/keys/direct_graph_lifecycle_evidence.json",
     "review-artifacts/summary.json/keys/duration_seconds.json",
     "review-artifacts/summary.json/keys/economy_long_term_sinks_summary.json",
@@ -258,8 +260,7 @@
     "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_combat_count.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_combat_turns.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_only.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/examples.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/format_version.json"
+    "review-artifacts/real-combat-lifecycle-summary.json/keys/examples.json"
   ],
   "stale_files_deleted_before_write": true,
   "zip_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results.zip"
