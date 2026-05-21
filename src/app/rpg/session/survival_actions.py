@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-"""N123.2 deterministic survival action resolution.
+"""Deterministic survival action resolution and suggestions.
 
-Resolves player relief actions (eat, drink, rest/sleep, and purchased meal,
-drink, or lodging) without invoking an LLM.  Inventory consumption is applied
-immediately for carried food/drink items.
+N123.2 resolves relief actions (eat, drink, rest/sleep, and purchased meal,
+drink, or lodging) without invoking an LLM.  N123.3 adds deterministic suggested
+actions backed by inventory/service availability.
 """
 
 from typing import Any, Dict, List, Tuple
 
 from app.rpg.economy.currency import (
     can_afford,
+    format_currency,
     get_player_currency,
     normalize_currency,
     set_player_currency,
@@ -20,6 +21,13 @@ from app.rpg.economy.service_registry import (
     SERVICE_KIND_DRINK,
     SERVICE_KIND_LODGING,
     SERVICE_KIND_MEAL,
+    SERVICE_PROVIDERS,
+    get_provider_offers,
+)
+from app.rpg.world.location_registry import (
+    has_explicit_location,
+    location_allows_service,
+    provider_present_at_location,
 )
 
 
@@ -90,6 +98,10 @@ def _item_name(item: Dict[str, Any]) -> str:
     return _safe_str(item.get("name") or item.get("label") or item.get("item_id") or item.get("id") or "item")
 
 
+def _item_quantity(item: Dict[str, Any]) -> int:
+    return max(0, _safe_int(item.get("quantity", item.get("qty", 1)), 1))
+
+
 def _item_tags(item: Dict[str, Any]) -> List[str]:
     tags = []
     for key in ("tags", "item_tags", "categories"):
@@ -112,6 +124,14 @@ def _is_drink_item(item: Dict[str, Any]) -> bool:
     tags = _item_tags(item)
     haystack = " ".join([ident, _item_name(item).lower()] + tags)
     return any(term in haystack for term in ("drink", "water", "waterskin", "ale", "wine", "beer", "canteen"))
+
+
+def _find_first_matching_item(simulation_state: Dict[str, Any], predicate) -> Dict[str, Any]:
+    for raw_item in _safe_list(_inventory_state(simulation_state).get("items")):
+        item = _safe_dict(raw_item)
+        if _item_quantity(item) > 0 and predicate(item):
+            return dict(item)
+    return {}
 
 
 def _consume_first_matching_item(simulation_state: Dict[str, Any], predicate) -> Dict[str, Any]:
@@ -272,6 +292,126 @@ def _apply_purchase_cost(simulation_state: Dict[str, Any], purchase: Dict[str, A
     after = subtract_currency_cost(before, price)
     set_player_currency(simulation_state, after)
     return {"applied": True, "price": price, "currency_before": before, "currency_after": after}
+
+
+def _offer_available_here(simulation_state: Dict[str, Any], provider_id: str, offer: Dict[str, Any]) -> bool:
+    service_kind = _safe_str(offer.get("service_kind"))
+    provider = _safe_dict(SERVICE_PROVIDERS.get(provider_id))
+    if not has_explicit_location(simulation_state):
+        return False
+    if not provider_present_at_location(
+        simulation_state,
+        provider_id=provider_id,
+        provider_name=_safe_str(provider.get("provider_name")),
+    ):
+        return False
+    if service_kind and not location_allows_service(simulation_state, service_kind):
+        return False
+    return True
+
+
+def _service_suggestion_for_kind(simulation_state: Dict[str, Any], service_kind: str) -> Dict[str, Any]:
+    wallet = get_player_currency(simulation_state)
+    for provider_id, provider in SERVICE_PROVIDERS.items():
+        provider = _safe_dict(provider)
+        for offer in get_provider_offers(provider_id, service_kind):
+            offer = _safe_dict(offer)
+            if not _offer_available_here(simulation_state, provider_id, offer):
+                continue
+            price = normalize_currency(offer.get("price"))
+            if not can_afford(wallet, price):
+                continue
+            label = _safe_str(offer.get("label") or offer.get("offer_id"))
+            provider_name = _safe_str(provider.get("provider_name") or provider_id)
+            verb = "buy"
+            if service_kind == SERVICE_KIND_LODGING:
+                verb = "rent"
+            return {
+                "type": "survival_relief",
+                "source": "n1233_survival_suggestion",
+                "action_kind": f"buy_{service_kind}",
+                "service_kind": service_kind,
+                "provider_id": provider_id,
+                "provider_name": provider_name,
+                "offer_id": _safe_str(offer.get("offer_id")),
+                "label": f"{verb.title()} {label}",
+                "command": f"I {verb} {label} from {provider_name}",
+                "reason": f"{service_kind}_available",
+                "price": price,
+                "price_label": format_currency(price),
+            }
+    return {}
+
+
+def build_survival_suggested_actions(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
+) -> List[Dict[str, Any]]:
+    """Return deterministic, availability-backed survival relief suggestions."""
+
+    del runtime_state  # reserved for future schedule/provider-context filters
+    needs = _current_needs(simulation_state)
+    suggestions: List[Dict[str, Any]] = []
+
+    if needs["hunger"] >= 50:
+        food = _find_first_matching_item(simulation_state, _is_food_item)
+        if food:
+            suggestions.append({
+                "type": "survival_relief",
+                "source": "n1233_survival_suggestion",
+                "action_kind": "eat_food",
+                "label": f"Eat {_item_name(food)}",
+                "command": f"I eat {_item_name(food)}",
+                "reason": "hunger_high_inventory_food_available",
+                "item_id": _safe_str(food.get("item_id") or food.get("id") or food.get("name")),
+                "quantity": _item_quantity(food),
+            })
+        meal = _service_suggestion_for_kind(simulation_state, SERVICE_KIND_MEAL)
+        if meal:
+            meal["reason"] = "hunger_high_service_meal_available"
+            suggestions.append(meal)
+
+    if needs["thirst"] >= 50:
+        drink = _find_first_matching_item(simulation_state, _is_drink_item)
+        if drink:
+            suggestions.append({
+                "type": "survival_relief",
+                "source": "n1233_survival_suggestion",
+                "action_kind": "drink_water",
+                "label": f"Drink {_item_name(drink)}",
+                "command": f"I drink {_item_name(drink)}",
+                "reason": "thirst_high_inventory_drink_available",
+                "item_id": _safe_str(drink.get("item_id") or drink.get("id") or drink.get("name")),
+                "quantity": _item_quantity(drink),
+            })
+        beverage = _service_suggestion_for_kind(simulation_state, SERVICE_KIND_DRINK)
+        if beverage:
+            beverage["reason"] = "thirst_high_service_drink_available"
+            suggestions.append(beverage)
+
+    if needs["fatigue"] >= 50:
+        suggestions.append({
+            "type": "survival_relief",
+            "source": "n1233_survival_suggestion",
+            "action_kind": "rest",
+            "label": "Rest",
+            "command": "I rest",
+            "reason": "fatigue_high_rest_available",
+        })
+        lodging = _service_suggestion_for_kind(simulation_state, SERVICE_KIND_LODGING)
+        if lodging:
+            lodging["reason"] = "fatigue_high_lodging_available"
+            suggestions.append(lodging)
+
+    deduped: List[Dict[str, Any]] = []
+    seen = set()
+    for suggestion in suggestions:
+        key = (_safe_str(suggestion.get("action_kind")), _safe_str(suggestion.get("item_id")), _safe_str(suggestion.get("offer_id")))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(suggestion)
+    return deduped[:8]
 
 
 def resolve_survival_action(
