@@ -1,0 +1,82 @@
+# N124 — Survival-aware autoplay + balance + supply + advisory readiness gate.
+#
+# Late fragment so it runs after N122/N123 compatibility/report wrappers.
+
+_N124_EVAL_PREV = globals().get("_build_100_turn_evaluation_summary")
+_N124_READY_PREV = globals().get("_build_100_turn_readiness_summary")
+
+try:
+    from app.rpg.session.survival_autoplay import (
+        build_survival_autoplay_response_metrics,
+        build_survival_response_readiness_gate,
+        build_survival_supply_metrics,
+        run_survival_balance_simulation,
+    )
+except Exception:  # pragma: no cover - defensive for partial import contexts
+    build_survival_autoplay_response_metrics = None
+    build_survival_response_readiness_gate = None
+    build_survival_supply_metrics = None
+    run_survival_balance_simulation = None
+
+
+def _n124_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _n124_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _n124_transcript_from_args(args, kwargs):
+    transcript = kwargs.get("transcript")
+    if transcript is None and len(args) >= 5:
+        transcript = args[4]
+    if transcript is None and len(args) >= 2 and isinstance(args[1], list):
+        transcript = args[1]
+    return _n124_list(transcript)
+
+
+def _n124_attach_survival_autoplay_fields(summary, transcript):
+    base = dict(_n124_dict(summary))
+    transcript = _n124_list(transcript)
+    if callable(build_survival_autoplay_response_metrics):
+        base["survival_autoplay_response_metrics"] = build_survival_autoplay_response_metrics(transcript)
+    if callable(build_survival_supply_metrics):
+        base["survival_supply_metrics"] = build_survival_supply_metrics(transcript)
+    if callable(run_survival_balance_simulation):
+        base["survival_balance_simulation"] = run_survival_balance_simulation(100)
+    if callable(build_survival_response_readiness_gate):
+        gate_input = dict(base)
+        base["survival_response_gate"] = build_survival_response_readiness_gate(gate_input)
+    artifacts = dict(_n124_dict(base.get("artifact_level_summaries")))
+    if base.get("survival_autoplay_response_metrics"):
+        artifacts["survival-autoplay-response-metrics.json"] = base["survival_autoplay_response_metrics"]
+    if base.get("survival_supply_metrics"):
+        artifacts["survival-supply-metrics.json"] = base["survival_supply_metrics"]
+    if base.get("survival_response_gate"):
+        artifacts["survival-response-gate.json"] = base["survival_response_gate"]
+    base["artifact_level_summaries"] = artifacts
+    return base
+
+
+if callable(_N124_EVAL_PREV):
+    def _build_100_turn_evaluation_summary(*args, **kwargs):
+        result = _N124_EVAL_PREV(*args, **kwargs)
+        return _n124_attach_survival_autoplay_fields(result, _n124_transcript_from_args(args, kwargs))
+
+
+if callable(_N124_READY_PREV):
+    def _build_100_turn_readiness_summary(*args, **kwargs):
+        result = _N124_READY_PREV(*args, **kwargs)
+        transcript = _n124_transcript_from_args(args, kwargs)
+        enriched = _n124_attach_survival_autoplay_fields(result, transcript)
+        gate = _n124_dict(enriched.get("survival_response_gate"))
+        gates = dict(_n124_dict(enriched.get("gates")))
+        if gate:
+            gates["survival_response_ok"] = bool(gate.get("ok"))
+        enriched["gates"] = gates
+        advisory = list(_n124_list(enriched.get("advisory_gates")))
+        if gate and "survival_response_ok" not in advisory:
+            advisory.append("survival_response_ok")
+        enriched["advisory_gates"] = advisory
+        return enriched
