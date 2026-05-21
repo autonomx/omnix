@@ -49,6 +49,27 @@
     allow_scene_activity_world_signals: true,
     // Bundle BM-BN-BO — NPC Profile Auto-creation
     auto_create_npc_profiles_on_introduction: true,
+    // N122 — Climate + Survival
+    climate_time_enabled: true,
+    day_night_cycle_enabled: true,
+    seasons_enabled: true,
+    weather_enabled: true,
+    temperature_enabled: true,
+    survival_enabled: true,
+    survival_hunger_enabled: true,
+    survival_thirst_enabled: true,
+    survival_sleep_enabled: true,
+    survival_auto_care_enabled: true,
+    survival_hunger_per_day: 28,
+    survival_thirst_per_day: 40,
+    survival_fatigue_per_day: 32,
+    survival_hungry_threshold: 55,
+    survival_thirsty_threshold: 50,
+    survival_tired_threshold: 60,
+    survival_sleep_start_hour: 22,
+    survival_wake_hour: 6,
+    weather_volatility: "normal",
+    climate_season_start: "spring",
   };
 
   function loadSettings() {
@@ -169,6 +190,31 @@
           ${boolInput("Auto-create NPC profiles when first introduced", "auto_create_npc_profiles_on_introduction", settings)}
         </div>
       </details>
+      <details>
+        <summary><strong>Climate + Survival</strong></summary>
+        <div class="rpg-conv-settings-grid">
+          ${boolInput("Enable climate/time system", "climate_time_enabled", settings)}
+          ${boolInput("Day/night cycle", "day_night_cycle_enabled", settings)}
+          ${boolInput("Seasons", "seasons_enabled", settings)}
+          ${boolInput("Weather", "weather_enabled", settings)}
+          ${boolInput("Temperature", "temperature_enabled", settings)}
+          ${selectInput("Season start", "climate_season_start", settings, ["spring", "summer", "autumn", "winter"])}
+          ${selectInput("Weather volatility", "weather_volatility", settings, ["calm", "normal", "harsh"])}
+          ${boolInput("Enable survival pressure", "survival_enabled", settings)}
+          ${boolInput("Hunger", "survival_hunger_enabled", settings)}
+          ${boolInput("Thirst", "survival_thirst_enabled", settings)}
+          ${boolInput("Sleep/fatigue", "survival_sleep_enabled", settings)}
+          ${boolInput("Auto-care in campaign/autoplay", "survival_auto_care_enabled", settings)}
+          ${numberInput("Hunger gain/day", "survival_hunger_per_day", settings, 0, 100)}
+          ${numberInput("Thirst gain/day", "survival_thirst_per_day", settings, 0, 120)}
+          ${numberInput("Fatigue gain/day", "survival_fatigue_per_day", settings, 0, 120)}
+          ${numberInput("Eat when hunger >=", "survival_hungry_threshold", settings, 0, 100)}
+          ${numberInput("Drink when thirst >=", "survival_thirsty_threshold", settings, 0, 100)}
+          ${numberInput("Sleep when fatigue >=", "survival_tired_threshold", settings, 0, 100)}
+          ${numberInput("Sleep starts hour", "survival_sleep_start_hour", settings, 0, 23)}
+          ${numberInput("Wake hour", "survival_wake_hour", settings, 0, 23)}
+        </div>
+      </details>
     `;
 
     panel.querySelectorAll("[data-conv-setting]").forEach((input) => {
@@ -190,11 +236,34 @@
   function attachToPayload(payload) {
     payload = payload || {};
     payload.runtime_settings = payload.runtime_settings || {};
-    payload.runtime_settings.conversation_settings = loadSettings();
+    const settings = loadSettings();
+    payload.runtime_settings.conversation_settings = settings;
+    payload.runtime_settings.climate_survival_settings = {
+      climate_time_enabled: settings.climate_time_enabled !== false,
+      day_night_cycle_enabled: settings.day_night_cycle_enabled !== false,
+      seasons_enabled: settings.seasons_enabled !== false,
+      weather_enabled: settings.weather_enabled !== false,
+      temperature_enabled: settings.temperature_enabled !== false,
+      survival_enabled: settings.survival_enabled !== false,
+      hunger_enabled: settings.survival_hunger_enabled !== false,
+      thirst_enabled: settings.survival_thirst_enabled !== false,
+      sleep_enabled: settings.survival_sleep_enabled !== false,
+      auto_care_enabled: settings.survival_auto_care_enabled !== false,
+      hunger_per_day: Number(settings.survival_hunger_per_day || 0),
+      thirst_per_day: Number(settings.survival_thirst_per_day || 0),
+      fatigue_per_day: Number(settings.survival_fatigue_per_day || 0),
+      hungry_threshold: Number(settings.survival_hungry_threshold || 0),
+      thirsty_threshold: Number(settings.survival_thirsty_threshold || 0),
+      tired_threshold: Number(settings.survival_tired_threshold || 0),
+      sleep_start_hour: Number(settings.survival_sleep_start_hour || 22),
+      wake_hour: Number(settings.survival_wake_hour || 6),
+      season_start: settings.climate_season_start || "spring",
+      weather_volatility: settings.weather_volatility || "normal",
+    };
     payload.runtime_settings.npc_profile_generation = {
       auto_create_on_introduction: !!document.getElementById("rpgAutoCreateNpcProfilesToggle")
         ? document.getElementById("rpgAutoCreateNpcProfilesToggle").checked
-        : loadSettings().auto_create_npc_profiles_on_introduction !== false,
+        : settings.auto_create_npc_profiles_on_introduction !== false,
       allow_manual_create: true,
       draft_with_llm_on_create: false,
     };
