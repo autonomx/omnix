@@ -1,0 +1,324 @@
+
+# N118 -- Real Combat Lifecycle Evidence + 1000-Turn Gate Wiring
+# Late-loaded wrapper: keeps the split runtime stable while adding a stricter
+# distinction between direct-graph combat coverage and real round/damage/
+# resolution lifecycle evidence.
+_N118_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N118_PREVIOUS_N1172_INJECT_1000_SECTION = globals().get("_n1172_inject_1000_turn_gap_section")
+_N118_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+
+
+def _n1178_console_error_lines(summary: Dict[str, Any]) -> List[str]:
+    """N118 carry-forward: make the N117.8 provider classifier null-safe."""
+    console = _safe_dict(_safe_dict(summary).get("console_log_summary"))
+    lines: List[Any] = []
+    lines.extend(_safe_list(console.get("turn_errors")))
+    lines.extend(_safe_list(console.get("errors")))
+    long_run = _safe_dict(_safe_dict(summary).get("long_run_warning_summary"))
+    for warning in _safe_list(long_run.get("warnings")):
+        details = _safe_dict(_safe_dict(warning).get("details"))
+        lines.extend(_safe_list(details.get("turn_errors")))
+    if "_n1178_unique_lines" in globals() and callable(globals().get("_n1178_unique_lines")):
+        return globals()["_n1178_unique_lines"](lines)
+    out: List[str] = []
+    seen = set()
+    for line in lines:
+        text = _safe_str(line).strip()
+        if text and text not in seen:
+            seen.add(text)
+            out.append(text)
+    return out
+
+
+def _n118_walk_values(value: Any) -> List[Any]:
+    stack = [value]
+    out: List[Any] = []
+    while stack:
+        item = stack.pop()
+        out.append(item)
+        if isinstance(item, dict):
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return out
+
+
+def _n118_event_text(event: Dict[str, Any]) -> str:
+    event = _safe_dict(event)
+    parts: List[str] = []
+    for key in (
+        "type", "kind", "subtype", "event_type", "mechanic", "mechanics",
+        "action", "action_type", "status", "outcome", "summary", "message",
+        "reason", "effect", "changed_parts",
+    ):
+        value = event.get(key)
+        if isinstance(value, list):
+            parts.extend(_safe_str(v) for v in value)
+        else:
+            parts.append(_safe_str(value))
+    return " ".join(part for part in parts if part).lower()
+
+
+def _n118_collect_event_dicts(row: Dict[str, Any]) -> List[Dict[str, Any]]:
+    row = _safe_dict(row)
+    events: List[Dict[str, Any]] = []
+    preferred_keys = (
+        "events", "world_events", "runtime_events", "mechanics_events",
+        "combat_events", "lifecycle_events", "state_events",
+        "direct_graph_events", "turn_events", "progress_events",
+    )
+    for key in preferred_keys:
+        for item in _safe_list(row.get(key)):
+            item = _safe_dict(item)
+            if item:
+                events.append(item)
+    for value in _n118_walk_values(row):
+        if not isinstance(value, dict):
+            continue
+        text = _n118_event_text(value)
+        if any(token in text for token in ("combat", "initiative", "attack", "damage", "defeat", "wound", "hp")):
+            events.append(value)
+    unique: List[Dict[str, Any]] = []
+    seen = set()
+    for event in events:
+        marker = json.dumps(event, sort_keys=True, default=str)[:2000]
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique.append(event)
+    return unique
+
+
+def _n118_turn_text(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    parts = [
+        row.get("player_action"),
+        row.get("canonical_turn_action"),
+        row.get("narration"),
+        row.get("selected_narration"),
+    ]
+    direct = _safe_dict(row.get("direct_graph_action_completion"))
+    parts.extend(_safe_list(direct.get("mechanics")))
+    parts.extend(_safe_list(direct.get("changed_parts")))
+    parts.append(direct.get("action_id"))
+    return " ".join(_safe_str(part) for part in parts if part).lower()
+
+
+def _n118_is_direct_graph_only(row: Dict[str, Any]) -> bool:
+    direct = _safe_dict(_safe_dict(row).get("direct_graph_action_completion"))
+    if bool(direct.get("completed")):
+        mechanics = " ".join(_safe_str(v) for v in _safe_list(direct.get("mechanics"))).lower()
+        changed = " ".join(_safe_str(v) for v in _safe_list(direct.get("changed_parts"))).lower()
+        action_id = _safe_str(direct.get("action_id")).lower()
+        return any(token in " ".join([mechanics, changed, action_id]) for token in ("combat", "attack", "defeat"))
+    return False
+
+
+def _n118_classify_combat_event(event: Dict[str, Any]) -> Dict[str, bool]:
+    text = _n118_event_text(event)
+    has_round = any(token in text for token in ("combat_round", "round", "initiative", "turn_order", "combat_turn"))
+    has_damage = any(token in text for token in ("damage", "hp", "wound", "injury", "hit_points"))
+    has_resolution = any(token in text for token in ("defeat", "defeated", "resolved", "victory", "fled", "surrender"))
+    has_attack = any(token in text for token in ("attack", "strike", "enemy_ai", "combat_ai"))
+    return {
+        "round": has_round,
+        "damage": has_damage,
+        "resolution": has_resolution,
+        "attack": has_attack,
+        "combat": "combat" in text or has_round or has_damage or has_resolution or has_attack,
+    }
+
+
+def _n118_build_real_combat_lifecycle_summary(
+    summary: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    existing = _safe_dict(_safe_dict(summary).get("combat_lifecycle_summary"))
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+    round_events: List[Dict[str, Any]] = []
+    damage_events: List[Dict[str, Any]] = []
+    attack_events: List[Dict[str, Any]] = []
+    resolution_events: List[Dict[str, Any]] = []
+    direct_graph_turns: List[int] = []
+    combat_text_turns: List[int] = []
+    examples: List[Dict[str, Any]] = []
+
+    for row in rows:
+        turn = int(row.get("turn_index") or row.get("turn") or 0)
+        text = _n118_turn_text(row)
+        if any(token in text for token in ("combat", "attack", "bandit", "ambush", "defeat")):
+            combat_text_turns.append(turn)
+        if _n118_is_direct_graph_only(row):
+            direct_graph_turns.append(turn)
+        for event in _n118_collect_event_dicts(row):
+            flags = _n118_classify_combat_event(event)
+            if not flags.get("combat"):
+                continue
+            row_event = {
+                "turn": turn,
+                "type": event.get("type") or event.get("kind") or event.get("subtype") or event.get("event_type"),
+                "summary": event.get("summary") or event.get("message") or event.get("reason") or "",
+                "raw_preview": json.dumps(event, ensure_ascii=False, sort_keys=True, default=str)[:1000],
+            }
+            if flags.get("round"):
+                round_events.append(row_event)
+            if flags.get("damage"):
+                damage_events.append(row_event)
+            if flags.get("attack"):
+                attack_events.append(row_event)
+            if flags.get("resolution"):
+                resolution_events.append(row_event)
+            if len(examples) < 25:
+                examples.append({**row_event, "flags": flags})
+
+    real_round_count = len(round_events)
+    real_damage_count = len(damage_events)
+    real_attack_count = len(attack_events)
+    real_resolution_count = len(resolution_events)
+    direct_graph_count = int(existing.get("direct_graph_combat_count") or len(set(direct_graph_turns)))
+    ok = bool(real_round_count > 0 and real_damage_count > 0 and real_resolution_count > 0)
+    return {
+        "format_version": "n118_real_combat_lifecycle_summary_v1",
+        "ok": ok,
+        "real_combat_lifecycle_ok": ok,
+        "direct_graph_combat_count": direct_graph_count,
+        "direct_graph_combat_turns": sorted(set(direct_graph_turns))[:100],
+        "combat_text_turns": sorted(set(combat_text_turns))[:100],
+        "real_round_event_count": real_round_count,
+        "real_attack_event_count": real_attack_count,
+        "real_damage_event_count": real_damage_count,
+        "real_resolution_event_count": real_resolution_count,
+        "direct_graph_only": bool(direct_graph_count and not ok),
+        "missing_real_lifecycle_parts": [
+            name for name, present in (
+                ("round_or_initiative_events", real_round_count > 0),
+                ("damage_or_hp_events", real_damage_count > 0),
+                ("resolution_or_defeat_events", real_resolution_count > 0),
+            ) if not present
+        ],
+        "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
+        "round_events": round_events[:50],
+        "attack_events": attack_events[:50],
+        "damage_events": damage_events[:50],
+        "resolution_events": resolution_events[:50],
+        "examples": examples,
+    }
+
+
+def _n118_apply_real_combat_lifecycle(summary: Dict[str, Any], transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    real = _n118_build_real_combat_lifecycle_summary(summary, transcript)
+    summary["real_combat_lifecycle_summary"] = real
+    combat = dict(_safe_dict(summary.get("combat_lifecycle_summary")))
+    combat["n118_real_lifecycle"] = real
+    combat["real_combat_lifecycle_ok"] = bool(real.get("ok"))
+    combat["real_round_event_count"] = int(real.get("real_round_event_count") or 0)
+    combat["real_damage_event_count"] = int(real.get("real_damage_event_count") or 0)
+    combat["real_resolution_event_count"] = int(real.get("real_resolution_event_count") or 0)
+    summary["combat_lifecycle_summary"] = combat
+
+    gap = dict(_safe_dict(summary.get("one_thousand_turn_readiness_gap_report")))
+    gates = dict(_safe_dict(gap.get("gates")))
+    if gates:
+        gate = dict(_safe_dict(gates.get("combat_rounds_real")))
+        gate["ok"] = bool(real.get("ok"))
+        gate["source"] = "real-combat-lifecycle-summary.json"
+        gate["source_artifact"] = "real-combat-lifecycle-summary.json"
+        gate["message"] = (
+            "Real combat lifecycle evidence requires round/initiative, damage/HP, and resolution events."
+            if not real.get("ok") else
+            "Real combat lifecycle evidence is present."
+        )
+        gate["value"] = {
+            "real_round_event_count": real.get("real_round_event_count"),
+            "real_attack_event_count": real.get("real_attack_event_count"),
+            "real_damage_event_count": real.get("real_damage_event_count"),
+            "real_resolution_event_count": real.get("real_resolution_event_count"),
+            "direct_graph_combat_count": real.get("direct_graph_combat_count"),
+            "direct_graph_only": real.get("direct_graph_only"),
+            "missing_real_lifecycle_parts": real.get("missing_real_lifecycle_parts"),
+        }
+        gates["combat_rounds_real"] = gate
+        gap["gates"] = gates
+        blocked = [name for name, item in gates.items() if not bool(_safe_dict(item).get("ok"))]
+        gap["one_thousand_turn_blocked_reasons"] = blocked
+        gap["one_thousand_turn_candidate"] = not blocked
+        gap["n118_real_combat_lifecycle_applied"] = True
+        summary["one_thousand_turn_readiness_gap_report"] = gap
+    return summary
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N118_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N118_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    transcript = _safe_list(args[1]) if len(args) > 1 else _safe_list(kwargs.get("transcript") or kwargs.get("final_transcript_rows"))
+    return _n118_apply_real_combat_lifecycle(summary, transcript)
+
+
+def _n118_real_combat_lifecycle_html_section(summary: Dict[str, Any]) -> str:
+    real = _safe_dict(_safe_dict(summary).get("real_combat_lifecycle_summary"))
+    if "_n1178_html_escape" in globals() and callable(globals().get("_n1178_html_escape")):
+        esc = globals()["_n1178_html_escape"]
+    else:
+        esc = lambda value: _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    missing = ", ".join(_safe_str(v) for v in _safe_list(real.get("missing_real_lifecycle_parts"))) or "none"
+    return (
+        "<section id=\"n118-real-combat-lifecycle\" class=\"card\">"
+        "<h2>N118 Real Combat Lifecycle</h2>"
+        "<p>Direct-graph combat coverage is separated from real initiative/round, damage, and resolution evidence.</p>"
+        "<ul>"
+        f"<li>Real lifecycle OK: {esc(real.get('ok'))}</li>"
+        f"<li>Direct-graph combat count: {esc(real.get('direct_graph_combat_count'))}</li>"
+        f"<li>Round/initiative events: {esc(real.get('real_round_event_count'))}</li>"
+        f"<li>Damage/HP events: {esc(real.get('real_damage_event_count'))}</li>"
+        f"<li>Resolution/defeat events: {esc(real.get('real_resolution_event_count'))}</li>"
+        f"<li>Missing: {esc(missing)}</li>"
+        "</ul>"
+        "</section>"
+    )
+
+
+def _n1172_inject_1000_turn_gap_section(html_report: str, final_summary: Dict[str, Any]) -> str:
+    if callable(_N118_PREVIOUS_N1172_INJECT_1000_SECTION):
+        html_report = _N118_PREVIOUS_N1172_INJECT_1000_SECTION(html_report, final_summary)
+    html_text = _safe_str(html_report)
+    if "id=\"n118-real-combat-lifecycle\"" in html_text:
+        return html_text
+    section = _n118_real_combat_lifecycle_html_section(final_summary)
+    lower = html_text.lower()
+    index = lower.rfind("</body>")
+    if index >= 0:
+        return html_text[:index] + section + html_text[index:]
+    return html_text + section
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N118_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N118_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    real = _safe_dict(value.get("real_combat_lifecycle_summary"))
+    artifact_name = "real-combat-lifecycle-summary.json"
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    if real and artifact_name not in generated_files:
+        serialized = json.dumps(real, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N118_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N118_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(
+                zip_handle,
+                artifact_manifest,
+                artifact_name,
+                real,
+                serialized_text=serialized,
+                force=True,
+            )
+    return result
