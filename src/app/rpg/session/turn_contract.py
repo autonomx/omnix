@@ -28,33 +28,91 @@ def safe_int(v: Any, default: int = 0) -> int:
         return default
 
 
-def _merge_resource_changes(existing: Dict[str, Any], survival_changes: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_resource_change_bucket(existing: Dict[str, Any]) -> Dict[str, Any]:
     existing = dict(safe_dict(existing))
-    survival_changes = safe_dict(survival_changes)
     if not existing:
-        return dict(survival_changes)
-    source = safe_str(survival_changes.get("source") or "n1231_climate_survival_tick")
-    existing["climate_survival" if source == "n1231_climate_survival_tick" else "survival_action"] = survival_changes
+        return {}
+    source = safe_str(existing.get("source"))
+    if source == "n1231_climate_survival_tick" and "climate_survival" not in existing:
+        return {
+            "source": "merged_turn_resource_changes",
+            "sources": [source],
+            "climate_survival": existing,
+        }
+    if source == "n1232_survival_action_resolution" and "survival_action" not in existing:
+        return {
+            "source": "merged_turn_resource_changes",
+            "sources": [source],
+            "survival_action": existing,
+        }
     existing.setdefault("sources", [])
-    if isinstance(existing["sources"], list):
-        existing["sources"].append(source)
+    return existing
+
+
+def _merge_resource_changes(existing: Dict[str, Any], survival_changes: Dict[str, Any]) -> Dict[str, Any]:
+    survival_changes = safe_dict(survival_changes)
+    if not survival_changes:
+        return _normalize_resource_change_bucket(existing)
+    source = safe_str(survival_changes.get("source") or "n1231_climate_survival_tick")
+    merged = _normalize_resource_change_bucket(existing)
+    if not merged:
+        merged = {"source": "merged_turn_resource_changes", "sources": []}
+    key = "climate_survival" if source == "n1231_climate_survival_tick" else "survival_action"
+    merged[key] = survival_changes
+    sources = safe_list(merged.get("sources"))
+    if source not in sources:
+        sources.append(source)
+    merged["sources"] = sources
+    return merged
+
+
+def _normalize_effect_bucket(existing: Dict[str, Any]) -> Dict[str, Any]:
+    existing = dict(safe_dict(existing))
+    if not existing:
+        return {}
+    source = safe_str(existing.get("source"))
+    if source == "n1231_climate_survival_tick" and "climate_survival" not in existing:
+        return {
+            "source": "merged_turn_effect_result",
+            "sources": [source],
+            "effects": safe_list(existing.get("effects")),
+            "warnings": safe_list(existing.get("warnings")),
+            "applied": bool(existing.get("applied")),
+            "climate_survival": existing,
+        }
+    if source == "n1232_survival_action_resolution" and "survival_action" not in existing:
+        return {
+            "source": "merged_turn_effect_result",
+            "sources": [source],
+            "effects": safe_list(existing.get("effects")),
+            "warnings": safe_list(existing.get("warnings")),
+            "applied": bool(existing.get("applied")),
+            "survival_action": existing,
+        }
+    existing.setdefault("sources", [])
+    existing.setdefault("effects", safe_list(existing.get("effects")))
+    existing.setdefault("warnings", safe_list(existing.get("warnings")))
     return existing
 
 
 def _merge_effect_result(existing: Dict[str, Any], survival_effect: Dict[str, Any]) -> Dict[str, Any]:
-    existing = dict(safe_dict(existing))
     survival_effect = safe_dict(survival_effect)
-    if not existing:
-        return dict(survival_effect)
+    if not survival_effect:
+        return _normalize_effect_bucket(existing)
     source = safe_str(survival_effect.get("source") or "n1231_climate_survival_tick")
-    existing_effects = safe_list(existing.get("effects"))
-    survival_effects = safe_list(survival_effect.get("effects"))
-    existing["effects"] = existing_effects + survival_effects
-    existing["climate_survival" if source == "n1231_climate_survival_tick" else "survival_action"] = survival_effect
-    existing["applied"] = bool(existing.get("applied") or survival_effect.get("applied"))
-    warnings = safe_list(existing.get("warnings")) + safe_list(survival_effect.get("warnings"))
-    existing["warnings"] = list(dict.fromkeys(warnings))
-    return existing
+    merged = _normalize_effect_bucket(existing)
+    if not merged:
+        merged = {"source": "merged_turn_effect_result", "sources": [], "effects": [], "warnings": [], "applied": False}
+    key = "climate_survival" if source == "n1231_climate_survival_tick" else "survival_action"
+    merged[key] = survival_effect
+    merged["effects"] = safe_list(merged.get("effects")) + safe_list(survival_effect.get("effects"))
+    merged["warnings"] = list(dict.fromkeys(safe_list(merged.get("warnings")) + safe_list(survival_effect.get("warnings"))))
+    merged["applied"] = bool(merged.get("applied") or survival_effect.get("applied"))
+    sources = safe_list(merged.get("sources"))
+    if source not in sources:
+        sources.append(source)
+    merged["sources"] = sources
+    return merged
 
 
 def _find_actor(simulation_state: Dict[str, Any], target_id: str) -> Dict[str, Any]:
@@ -86,47 +144,26 @@ def _guess_target_id(simulation_state: Dict[str, Any], text: str, action: Dict[s
             name = safe_str(row.get("name") or row.get("display_name") or actor_id)
             if actor_id and (actor_id.lower() in text_l or name.lower() in text_l):
                 return actor_id
-
-    # Fallback for common names if not found in state
     if "bran" in text_l:
         return "Bran"
-
     return ""
 
 
-def interpret_turn_action(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    player_input: str,
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
+def interpret_turn_action(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], player_input: str, action: Dict[str, Any]) -> Dict[str, Any]:
     text = safe_str(player_input)
     text_l = text.lower()
     action = safe_dict(action)
-
     action_type = safe_str(action.get("action_type") or "unknown")
     target_id = _guess_target_id(simulation_state, text, action)
-    if (
-        target_id == "player"
-        or target_id.startswith("npc:")
-        or target_id.startswith("npc_")
-        or target_id.startswith("np:")
-    ):
+    if target_id == "player" or target_id.startswith("npc:") or target_id.startswith("npc_") or target_id.startswith("np:"):
         target_id = ""
     target = _find_actor(simulation_state, target_id)
     target_name = safe_str(target.get("name") or target.get("display_name") or target_id)
-
     hostile_words = ("punch", "kick", "hit", "strike", "throw", "slam", "shove", "attack", "stab", "shoot")
     apology_words = ("sorry", "apologize", "apologise", "forgive", "make amends")
     question_words = ("ask", "how", "what", "why", "where", "when", "who")
     performance_words = ("dance", "sing", "perform", "juggle", "play music")
-    service_words = (
-        "room", "rent", "inn", "bed", "stay", "lodging", "accommodation",
-        "price", "cost", "buy", "purchase", "sell", "sells", "shop", "goods",
-        "food", "meal", "drink", "ale", "rumor", "rumour", "information",
-        "repair", "train", "transport",
-    )
-
+    service_words = ("room", "rent", "inn", "bed", "stay", "lodging", "accommodation", "price", "cost", "buy", "purchase", "sell", "sells", "shop", "goods", "food", "meal", "drink", "ale", "rumor", "rumour", "information", "repair", "train", "transport")
     intent = action_type
     if any(w in text_l for w in hostile_words):
         intent = "attack"
@@ -138,51 +175,29 @@ def interpret_turn_action(
         intent = "ask"
     elif any(w in text_l for w in performance_words):
         intent = "perform"
-
-    return {
-        "intent": intent,
-        "raw_input": text,
-        "action_type": action_type,
-        "verb": action_type,
-        "target_id": target_id,
-        "target_name": target_name,
-        "style": action.get("style") or "",
-        "force": "high" if any(w in text_l for w in ("throw", "slam", "kick")) else "moderate",
-        "confidence": action.get("confidence", 0.75),
-        "source": "turn_contract_v1",
-    }
+    return {"intent": intent, "raw_input": text, "action_type": action_type, "verb": action_type, "target_id": target_id, "target_name": target_name, "style": action.get("style") or "", "force": "high" if any(w in text_l for w in ("throw", "slam", "kick")) else "moderate", "confidence": action.get("confidence", 0.75), "source": "turn_contract_v1"}
 
 
-def derive_state_delta(
-    simulation_state: Dict[str, Any],
-    interpreted_action: Dict[str, Any],
-    resolved_action: Dict[str, Any],
-) -> Dict[str, Any]:
+def derive_state_delta(simulation_state: Dict[str, Any], interpreted_action: Dict[str, Any], resolved_action: Dict[str, Any]) -> Dict[str, Any]:
     intent = safe_str(interpreted_action.get("intent"))
     target_id = safe_str(interpreted_action.get("target_id"))
     target_name = safe_str(interpreted_action.get("target_name") or target_id)
-
     delta = {"npc_updates": [], "scene_updates": {}, "flags": [], "memories": []}
-
     if intent == "attack" and target_id:
         delta["npc_updates"].append({"id": target_id, "mood": "angry", "activity": "recovering from the player's attack", "relationship_to_player_delta": -35, "trust_delta": -25, "fear_delta": 10, "health_delta": -4, "memory": f"The player attacked {target_name}."})
         delta["scene_updates"]["tension_delta"] = 25
         delta["flags"].append("hostile_action")
         return delta
-
     if intent == "apologize" and target_id:
         delta["npc_updates"].append({"id": target_id, "mood": "wary", "activity": "listening cautiously", "relationship_to_player_delta": 8, "trust_delta": 3, "memory": f"The player apologized to {target_name}."})
         delta["scene_updates"]["tension_delta"] = -5
         return delta
-
     if intent == "perform":
         delta["scene_updates"]["attention_delta"] = 10
         delta["flags"].append("performance")
         return delta
-
     if intent in {"ask", "service"} and target_id:
         delta["npc_updates"].append({"id": target_id, "activity": "speaking with the player", "memory": f"The player asked: {safe_str(interpreted_action.get('raw_input'))}"})
-
     return delta
 
 
