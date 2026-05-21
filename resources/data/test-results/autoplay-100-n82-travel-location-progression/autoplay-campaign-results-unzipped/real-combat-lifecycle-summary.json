@@ -7,19 +7,13 @@
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 38,
-      "type": "Investigation Advancement"
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 38,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"fallback_source\": \"llm_safe_fallback\", \"narration\": \"As you present the manifest detailing Captain Voss’s involvement in the recent skirmishes, Bran immediately leans forward, his usual calm demeanor shifting into intense focus. Garran takes the document with a decisive nod, his grip tightening around the heavy parchment. The weight of this proof hangs heavily between the three of you, signaling a definitive shift in the investigation's direction. If that proof is solid, we copy it, guard it, and press the name it gives us.\", \"npc\": {\"line\": \"If that proof is solid, we copy it, guard it, and press the name it gives us.\", \"speaker\": \"Captain Voss\"}, \"source\": \"llm_safe_fallback\", \"unsupported_combat_claim_preselection_suppressed\": true, \"unsupported_combat_claim_sanitizer\": {\"dropped_sentence_count\": 0, \"dropped_sentence_preview\":",
+      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"fallback_source\": \"llm_safe_fallback\", \"narration\": \"Bran immediately leans forward, his initial cautious demeanor melting away as he examines the manifest you present. Garran nods slowly, his gaze fixed on the damning documentation, a grim understanding settling over his features. The evidence provides concrete confirmation that Captain Voss is not just involved in the recent attacks; he orchestrated them from within the command structure itself. Then the proof needs daylight and witnesses before anyone can make it vanish.\", \"npc\": {\"line\": \"Then the proof needs daylight and witnesses before anyone can make it vanish.\", \"speaker\": \"Captain Voss\"}, \"source\": \"llm_safe_fallback\", \"unsupported_combat_claim_preselection_suppressed\": true, \"unsupported_combat_claim_sanitizer\": {\"dropped_sentence_count\": 0, \"dropped_sentence_preview\":",
       "summary": "",
       "turn": 38,
       "type": null
@@ -43,52 +37,28 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 39,
-      "type": null
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 39,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:5a0aa849ccbfe3ba\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 39,
       "type": "future_hook"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 39,
-      "type": "Investigation Advancement"
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939689+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:1d55dc2e023f8c07\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 39,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 39,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 39,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 39,
-      "type": "semantic_intent"
+      "type": "Tension Shift"
     },
     {
       "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
@@ -97,52 +67,28 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 40,
-      "type": null
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 40,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:5a0aa849ccbfe3ba\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 40,
       "type": "future_hook"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 40,
-      "type": "Investigation Advancement"
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939689+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:1d55dc2e023f8c07\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 40,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 40,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 40,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 40,
-      "type": "semantic_intent"
+      "type": "Tension Shift"
     },
     {
       "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
@@ -151,52 +97,28 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 41,
-      "type": null
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 41,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:5a0aa849ccbfe3ba\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 41,
       "type": "future_hook"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 41,
-      "type": "Investigation Advancement"
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939689+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:1d55dc2e023f8c07\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 41,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 41,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 41,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 41,
-      "type": "semantic_intent"
+      "type": "Tension Shift"
     },
     {
       "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
@@ -205,52 +127,28 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 42,
-      "type": null
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 42,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:5a0aa849ccbfe3ba\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 42,
       "type": "future_hook"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 42,
-      "type": "Investigation Advancement"
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939689+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:1d55dc2e023f8c07\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 42,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 42,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 42,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
-      "turn": 42,
-      "type": "semantic_intent"
+      "type": "Tension Shift"
     },
     {
       "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
@@ -259,46 +157,148 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue/evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 43,
-      "type": null
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 43,
-      "type": "Investigation Advancement"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:5a0aa849ccbfe3ba\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:82e1fe4c2441a4fa\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 43,
       "type": "future_hook"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\", \"target\": \"Bran\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 43,
-      "type": "Investigation Advancement"
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T20:49:12.939689+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:1d55dc2e023f8c07\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:d60ebe01079a43f1\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
       "turn": 43,
-      "type": "semantic_intent"
+      "type": "Tension Shift"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue/evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.\", \"target\": \"Bran\"}",
-      "summary": "The manifest confirms Captain Voss orchestrated the attacks, leading to immediate discussion and confirmation of his guilt.",
+      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
       "turn": 43,
-      "type": "semantic_intent"
+      "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Investigation Advancement\", \"summary\": \"The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.\"}",
-      "summary": "The investigation into the attacks has yielded definitive evidence pointing directly at Captain Voss.",
-      "turn": 43,
-      "type": "Investigation Advancement"
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 44,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 44,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 44,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 44,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+      "turn": 44,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 45,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 45,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 45,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 45,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+      "turn": 45,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 46,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 46,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 46,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 46,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+      "turn": 46,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 47,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T21:27:44.994692+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:9c1302b143b9a53e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:423dfebd91c0de54\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 47,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 47,
+      "type": "Tension Shift"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Tension Shift\", \"summary\": \"The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.\"}",
+      "summary": "The immediate threat of unknown attackers shifts into focused outrage directed squarely at Captain Voss.",
+      "turn": 47,
+      "type": "Tension Shift"
     }
   ],
   "combat_text_turns": [
@@ -311,309 +311,309 @@
     21,
     22,
     38,
-    71,
-    72
+    39,
+    71
   ],
   "damage_events": [
     {
-      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
-      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
-      "turn": 38,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
-      "summary": "",
-      "turn": 38,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
-      "summary": "",
-      "turn": 38,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
-      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
-      "turn": 63,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
-      "summary": "",
-      "turn": 63,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
-      "summary": "",
-      "turn": 63,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
-      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
-      "summary": "",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
-      "summary": "",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
-      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
-      "summary": "",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
-      "summary": "",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
-      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
-      "summary": "",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
-      "summary": "",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
-      "turn": 89,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 0}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 89,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Location Arrival\", \"summary\": \"Arrived at the Old North Watchpost, a quiet but significant location on the courier's route.\"}",
-      "summary": "Arrived at the Old North Watchpost, a quiet but significant location on the courier's route.",
-      "turn": 89,
-      "type": "Location Arrival"
-    },
-    {
-      "raw_preview": "{\"confidence\": 0.98, \"intent\": \"travel\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully navigated the path to the old north watchpost, following the courier's tracks.\"}",
-      "summary": "Successfully navigated the path to the old north watchpost, following the courier's tracks.",
-      "turn": 89,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"action\": \"Travel to North Watchpost\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"Since the player is moving alone (solo interaction), the NPC line should confirm the successful traversal to the location.\", \"required_focus\": [\"reflect_the_route_or_movement_result_first\", \"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}, \"followup_hooks\": [\"Investigate inside the watchpost to find further clues regarding Veska's courier trail.\"], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The trail leading toward the old north watchpost was difficult to track initially, winding through dense scrub and over uneven, rocky ground. After a solid hour of determined travel, you arrive at the dilapidated stone structure, finding it eerily quiet save for the rustle of dry leaves in the wind.\\n\\nThe courier's fresh tracks are clearly visible near the main en",
-      "summary": "",
-      "turn": 89,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_id\": \"travel_to_old_north_watchpost\", \"changed_parts\": [\"travel\"], \"effects\": {\"flags\": {\"mechanic:travel\": true}}, \"graph_action_id\": \"travel_to_old_north_watchpost\", \"hook_id\": \"hook:graph_direct:travel_to_old_north_watchpost\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"travel\", \"mechanics\": [\"travel\"], \"summary\": \"Graph action completed: travel_to_old_north_watchpost\"}",
-      "summary": "Graph action completed: travel_to_old_north_watchpost",
-      "turn": 89,
-      "type": "graph_direct_completion"
-    },
-    {
-      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
-      "summary": "Reach the old north watchpost.",
-      "turn": 89,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"changed\": false, \"original_action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\"}",
-      "summary": "",
-      "turn": 89,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"investigate\", \"activity_label\": \"investigate\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_c257dcd6718c3173\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"tags\": [\"investigate\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Evidence Found\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\"}",
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
       "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
-      "turn": 90,
+      "turn": 1,
       "type": "Evidence Found"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\"}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
       "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
-      "turn": 90,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"action\": \"Evidence gathered at watchpost confirms recent passage by couriers, Sable Chain affiliation, and Veska's presence.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The watchpost itself yields immediate evidence upon inspection.\", \"required_focus\": [\"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"As you meticulously scan the weathered timbers and dusty ground of the old north watchpost, several signs begin to coalesce into a coherent picture. You spot faint boot prints matching known courier gear near the main gate, alongside clear markings suggesting Sable Chain insignia were recently affixed to the post itself. Furthermore, a distinct, hurried set of footprints clearly belongs to Veska, leading away from the structure and down the northern slope.\", \"npc\": {\"",
-      "summary": "",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The watchpost itself yields immediate evidence upon inspection.\", \"required_focus\": [\"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}",
-      "summary": "The watchpost itself yields immediate evidence upon inspection.",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"npc\": {\"line\": \"That points somewhere useful. The next step is finding what confirms it.\", \"speaker\": \"Handler Veska\"}}",
-      "summary": "",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_id\": \"inspect_watchpost_courier_signs\", \"changed_parts\": [\"inspect\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"inspect_watchpost_courier_signs\", \"hook_id\": \"hook:graph_direct:inspect_watchpost_courier_signs\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"inspect\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: inspect_watchpost_courier_signs\"}",
-      "summary": "Graph action completed: inspect_watchpost_courier_signs",
-      "turn": 90,
-      "type": "graph_direct_completion"
-    },
-    {
-      "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}",
-      "summary": "Inspect the watchpost for courier signs.",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
-      "summary": "Reach the old north watchpost.",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 90,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T20:49:21.047210+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\", \"turn_index\": 0}, \"projection_id\": \"adv:89:future_hook:aa20842cef5f2f40\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 90,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\", \"turn_index\": 0}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 90,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 0}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 90,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Location Arrival\", \"summary\": \"Arrived at the Old North Watchpost, a quiet but significant location on the courier's route.\"}",
-      "summary": "Arrived at the Old North Watchpost, a quiet but significant location on the courier's route.",
-      "turn": 90,
-      "type": "Location Arrival"
-    },
-    {
-      "raw_preview": "{\"confidence\": 0.98, \"intent\": \"travel\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully navigated the path to the old north watchpost, following the courier's tracks.\"}",
-      "summary": "Successfully navigated the path to the old north watchpost, following the courier's tracks.",
-      "turn": 90,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"changed\": false, \"original_action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\"}",
-      "summary": "",
-      "turn": 90,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 91,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_5936090ed879c548\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I intercept Veska's courier before the message can leave the old north watchpost.",
-      "turn": 91,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}",
-      "summary": "Inspect the watchpost for courier signs.",
-      "turn": 91,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
-      "summary": "Reach the old north watchpost.",
-      "turn": 91,
+      "turn": 1,
       "type": null
     },
     {
       "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
       "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
-      "turn": 91,
+      "turn": 2,
       "type": "Evidence Found"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
     },
     {
       "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
       "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
-      "turn": 91,
+      "turn": 2,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 91, \"created_at\": \"2026-05-21T20:49:21.218056+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Evidence Found\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:90:future_hook:5008096da95e1bf6\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 91}",
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
       "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
-      "turn": 91,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Evidence Found\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"target\": \"Bran\"}",
-      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
-      "turn": 91,
+      "turn": 3,
       "type": "Evidence Found"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 91, \"created_at\": \"2026-05-21T20:49:21.217978+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"target\": \"Bran\"}, \"projection_id\": \"adv:90:memory:92e4ec556be3acc1\", \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 91}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
-      "turn": 91,
-      "type": "memory"
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"target\": \"Bran\"}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
       "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
-      "turn": 91,
-      "type": "memory"
+      "turn": 3,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 4,
+      "type": "Evidence Found"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 4,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T21:27:43.077576+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:7e430b935113f5cb\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 5,
+      "type": "Evidence Found"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 5,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-21T21:27:43.094133+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:4:future_hook:011b1ef80235af93\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 5,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T21:27:43.077576+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:7e430b935113f5cb\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 5,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 6,
+      "type": "Evidence Found"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 6,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-21T21:27:43.094133+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:4:future_hook:011b1ef80235af93\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 6,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T21:27:43.077576+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:7e430b935113f5cb\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 6,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 7,
+      "type": "Evidence Found"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 7,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-21T21:27:43.094133+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:4:future_hook:011b1ef80235af93\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 7,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T21:27:43.077576+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:7e430b935113f5cb\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 7,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
     }
   ],
   "direct_graph_combat_count": 4,
@@ -626,326 +626,326 @@
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
+        "damage": true,
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 7, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i approach the local patron and quietly ask what he knows about the mill bridge.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 7, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 2, \"actual_sent_action\": \"I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0",
-      "summary": "",
-      "turn": 8,
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 1,
+      "type": "Evidence Found"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 1,
       "type": null
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
-        "resolution": true,
+        "damage": true,
+        "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
-      "summary": "",
-      "turn": 8,
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 2,
+      "type": "Evidence Found"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 2,
       "type": null
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
+        "damage": true,
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"That is useful because it can be tested. Tell me the next verifiable step.\", \"speaker\": \"Bran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
-      "summary": "",
-      "turn": 8,
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 3,
+      "type": "Evidence Found"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 3,
       "type": null
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
-        "resolution": true,
+        "damage": true,
+        "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:report\": true}}, \"graph_action_id\": \"report_findings_to_bran\", \"hook_id\": \"hook:graph_direct:report_findings_to_bran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"summary\": \"Graph action completed: report_findings_to_bran\"}",
-      "summary": "Graph action completed: report_findings_to_bran",
-      "turn": 8,
-      "type": "graph_direct_completion"
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
+        "damage": true,
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 10, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave the tavern and travel toward garran's wagon yard.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 10, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 0, \"actual_sent_action\": \"I tell Garran the mill bridge may be an ambush and show him the evidence.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"available_m",
-      "summary": "",
-      "turn": 11,
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 4,
+      "type": "Evidence Found"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 4,
       "type": null
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
-        "resolution": true,
+        "damage": true,
+        "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"completed\": true, \"completed_parts\": [\"action:warn_garran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:warn\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
-      "summary": "",
-      "turn": 11,
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T21:27:43.077576+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:7e430b935113f5cb\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "future_hook"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:edf544c7b8ed1ed8\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 4}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Evidence Found\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:367ee7a73d13d8ad\", \"summary\": \"Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.\", \"turn_index\": 91}",
+      "summary": "Physical evidence confirming recent activity at the North Watchpost, specifically linking to courier movement and Sable Chain operations.",
+      "turn": 5,
+      "type": "Evidence Found"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:babdcde25f3a18c3\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f4d7d3cde9f49db7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)\", \"turn_index\": 91}",
+      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks. (Importance: 0.5)",
+      "turn": 5,
       "type": null
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
+        "damage": true,
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"Good. Proof narrows the road; show me which direction it leaves open.\", \"speaker\": \"Garran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
-      "summary": "",
-      "turn": 11,
-      "type": null
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
+        "damage": true,
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
-      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
-      "turn": 11,
-      "type": null
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-21T21:27:43.094133+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:4:future_hook:011b1ef80235af93\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:12ddc1b6a975da1f\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 5}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 5,
+      "type": "future_hook"
     },
     {
       "flags": {
         "attack": false,
         "combat": true,
-        "damage": false,
+        "damage": true,
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
-      "summary": "",
-      "turn": 11,
-      "type": "mechanic"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": true,
-        "round": false
-      },
-      "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:warn\": true}}, \"graph_action_id\": \"warn_garran\", \"hook_id\": \"hook:graph_direct:warn_garran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"summary\": \"Graph action completed: warn_garran\"}",
-      "summary": "Graph action completed: warn_garran",
-      "turn": 11,
-      "type": "graph_direct_completion"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
-      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
-      "turn": 12,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
-      "summary": "",
-      "turn": 12,
-      "type": "mechanic"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
-      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
-      "turn": 13,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
-      "summary": "",
-      "turn": 13,
-      "type": "mechanic"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
-      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
-      "turn": 14,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
-      "summary": "",
-      "turn": 14,
-      "type": "mechanic"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
-      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
-      "turn": 15,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
-      "summary": "",
-      "turn": 15,
-      "type": "mechanic"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 12, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave garran's wagon yard with the wagon and take the quarry road.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 12, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 2, \"actual_sent_action\": \"I scout ahead on the quarry road for tracks, hiding places, and ambush signs.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302",
-      "summary": "",
-      "turn": 16,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": true,
-        "round": false
-      },
-      "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:scout_quarry_road\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
-      "summary": "",
-      "turn": 16,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_action_relevance_fallback\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"You examine the scene for concrete signs, narrowing the search to details that can be acted on.\", \"npc\": {}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
-      "summary": "",
-      "turn": 16,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
-      "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
-      "turn": 16,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
-      "summary": "",
-      "turn": 16,
-      "type": "mechanic"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": true,
-        "round": false
-      },
-      "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"scout_quarry_road\", \"hook_id\": \"hook:graph_direct:scout_quarry_road\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: scout_quarry_road\"}",
-      "summary": "Graph action completed: scout_quarry_road",
-      "turn": 16,
-      "type": "graph_direct_completion"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": false,
-        "resolution": true,
-        "round": false
-      },
-      "raw_preview": "{\"action_id\": \"spot_bridge_watchers\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:spot_bridge_watchers\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
-      "summary": "",
-      "turn": 17,
-      "type": null
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).\", \"target\": \"Bran\"}",
+      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail (Bran's hook suggests this).",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
     }
   ],
   "format_version": "n118_real_combat_lifecycle_summary_v1",
@@ -987,15 +987,15 @@
     "missing_parts": [],
     "ok": true,
     "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
-    "real_attack_event_count": 496,
-    "real_damage_event_count": 231,
+    "real_attack_event_count": 281,
+    "real_damage_event_count": 4952,
     "real_resolution_event_count": 45
   },
   "ok": true,
   "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
-  "real_attack_event_count": 496,
+  "real_attack_event_count": 281,
   "real_combat_lifecycle_ok": true,
-  "real_damage_event_count": 231,
+  "real_damage_event_count": 4952,
   "real_resolution_event_count": 45,
   "real_round_event_count": 2,
   "resolution_events": [
@@ -1271,18 +1271,6 @@
     }
   ],
   "round_events": [
-    {
-      "raw_preview": "{\"action\": \"Initiative established; Combat started\", \"combat_narration_accepted\": true, \"combat_narration_attempted\": true, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], \"facts\": {\"actor_id\": \"\", \"actor_name\": \"\", \"attack_roll\": null, \"attack_total\": null, \"combat_ended\": false, \"damage_applied\": null, \"defeated\": false, \"hit\": null, \"next_actor_id\": \"player\", \"party_defeated\": false, \"reason\": \"combat_started\", \"round\": 1, \"target_defense\": null, \"target_",
-      "summary": "",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"Initiative established; Combat started\", \"followup_hooks\": [\"Player's action in Round 1\", \"Enemy: Bandit 1's action in Round 1\"], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The ambush has begun, and the first round of combat commences. You find yourself at the forefront, ready to face the incoming threat. Bandit 1 is poised for action, eager to press the attack against your party. With initiative rolls settled, it is currently your turn to act.\", \"npc\": {\"line\": \"\", \"speaker\": \"Bandit\"}, \"reward\": \"\"}",
-      "summary": "",
-      "turn": 72,
-      "type": null
-    },
     {
       "consequence_event_count": 1,
       "direct_graph_combat_count": 4,
