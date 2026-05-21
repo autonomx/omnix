@@ -467,9 +467,9 @@
         "ok": true,
         "severity": "advisory",
         "value": {
-          "real_round_event_count": 353,
-          "real_attack_event_count": 525,
-          "real_damage_event_count": 218,
+          "real_round_event_count": 244,
+          "real_attack_event_count": 283,
+          "real_damage_event_count": 264,
           "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
           "abstract_round_event_count": 2,
@@ -513,11 +513,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 3024080,
-          "operational_bytes_per_turn": 30240.8,
-          "operational_projected_1000_turn_bytes": 30240800,
-          "full_debug_bytes_sampled": 292844524,
-          "full_debug_projected_1000_turn_bytes": 2928445240,
+          "operational_bytes_sampled": 3031620,
+          "operational_bytes_per_turn": 30316.2,
+          "operational_projected_1000_turn_bytes": 30316200,
+          "full_debug_bytes_sampled": 291543161,
+          "full_debug_projected_1000_turn_bytes": 2915431610,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -558,7 +558,8 @@
       "combat_rounds_real": "real-combat-lifecycle-summary.json",
       "faction_consequence_present": "faction-consequence-summary.json",
       "dialogue_repair_pressure_bounded": "dialogue-action-relevance-summary.json",
-      "transcript_growth_budget_projected_1000": "transcript-size-summary.json + review-artifacts/index.json"
+      "transcript_growth_budget_projected_1000": "transcript-size-summary.json + review-artifacts/index.json",
+      "combined_endurance_systems": "combined-endurance-systems-summary.json"
     },
     "source_consistency": {
       "format_version": "n11721_readiness_gap_source_consistency_v1",
@@ -579,7 +580,8 @@
     "n1193_strict_npc_goal_agency_applied": true,
     "n120_memory_arc_faction_compaction_applied": true,
     "n121_combined_endurance_systems_applied": true,
-    "n1211_direct_graph_combat_rounds_applied": true
+    "n1211_direct_graph_combat_rounds_applied": true,
+    "n1212_launch_certification_applied": true
   },
   "one_thousand_turn_candidate": true,
   "one_thousand_turn_blocked_reasons": [],

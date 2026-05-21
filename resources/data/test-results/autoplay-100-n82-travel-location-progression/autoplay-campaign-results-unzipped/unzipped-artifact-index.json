@@ -8,13 +8,17 @@
     "transcripts": true,
     "zip_copy": true
   },
-  "extracted_file_count": 40,
+  "extracted_file_count": 44,
   "extracted_files": [
     "summary.json",
     "provider-error-classification-summary.json",
     "real-combat-lifecycle-summary.json",
     "npc-goal-agency-summary.json",
+    "economy-long-term-sinks-summary.json",
+    "combined-endurance-systems-summary.json",
     "direct-graph-combat-round-summary.json",
+    "one-thousand-turn-launch-certification-summary.json",
+    "climate-survival-campaign-summary.json",
     "hundred-turn-evaluation.json",
     "arc-completion-quality-summary.json",
     "llm-prompt-and-fallback-summary.json",
@@ -59,7 +63,7 @@
   "note": "Essential Git-review mirror with stable non-empty path metadata.",
   "ok": true,
   "recommended_git_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results-unzipped",
-  "skipped_member_count": 17957,
+  "skipped_member_count": 17999,
   "skipped_members_preview": [
     "review-artifacts/summary.json/keys/action_diversity_summary.json",
     "review-artifacts/summary.json/keys/action_diversity_thresholds.json",
@@ -90,6 +94,7 @@
     "review-artifacts/summary.json/keys/checkpoint_every.json",
     "review-artifacts/summary.json/keys/checkpoint_mode.json",
     "review-artifacts/summary.json/keys/checkpoint_validation_summary.json",
+    "review-artifacts/summary.json/keys/climate_survival_campaign_summary.json",
     "review-artifacts/summary.json/keys/combat_lifecycle_summary.json",
     "review-artifacts/summary.json/keys/combined_endurance_systems_summary.json",
     "review-artifacts/summary.json/keys/combined_quality_shape_summary.json",
@@ -151,6 +156,7 @@
     "review-artifacts/summary.json/keys/npc_response_architecture_persistence_summary.json",
     "review-artifacts/summary.json/keys/objective_progression_summary.json",
     "review-artifacts/summary.json/keys/ok.json",
+    "review-artifacts/summary.json/keys/one_thousand_turn_launch_certification_summary.json",
     "review-artifacts/summary.json/keys/one_thousand_turn_readiness_gap_report.json",
     "review-artifacts/summary.json/keys/orphaned_background_presentation_results.json",
     "review-artifacts/summary.json/keys/performance.json",
@@ -219,6 +225,7 @@
     "review-artifacts/summary.json/keys/strict_progress_quality_certification.json",
     "review-artifacts/summary.json/keys/successful_arc_completion_evidence.json",
     "review-artifacts/summary.json/keys/suppressed_selection_guard_summary.json",
+    "review-artifacts/summary.json/keys/survival_summary.json",
     "review-artifacts/summary.json/keys/top_scenario_progression_action_id.json",
     "review-artifacts/summary.json/keys/top_scenario_progression_command.json",
     "review-artifacts/summary.json/keys/transcript_artifact_quality_summary.json",
@@ -257,10 +264,7 @@
     "review-artifacts/real-combat-lifecycle-summary.json/keys/attack_events.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/combat_text_turns.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/damage_events.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_combat_count.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_combat_turns.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_only.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/examples.json"
+    "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_combat_count.json"
   ],
   "stale_files_deleted_before_write": true,
   "zip_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results.zip"
