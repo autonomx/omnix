@@ -34,29 +34,22 @@ def _normalize_resource_change_bucket(existing: Dict[str, Any]) -> Dict[str, Any
         return {}
     source = safe_str(existing.get("source"))
     if source == "n1231_climate_survival_tick" and "climate_survival" not in existing:
-        return {
-            "source": "merged_turn_resource_changes",
-            "sources": [source],
-            "climate_survival": existing,
-        }
+        return {"source": "merged_turn_resource_changes", "sources": [source], "climate_survival": existing}
     if source == "n1232_survival_action_resolution" and "survival_action" not in existing:
-        return {
-            "source": "merged_turn_resource_changes",
-            "sources": [source],
-            "survival_action": existing,
-        }
+        return {"source": "merged_turn_resource_changes", "sources": [source], "survival_action": existing}
     existing.setdefault("sources", [])
     return existing
 
 
 def _merge_resource_changes(existing: Dict[str, Any], survival_changes: Dict[str, Any]) -> Dict[str, Any]:
     survival_changes = safe_dict(survival_changes)
+    existing_dict = dict(safe_dict(existing))
     if not survival_changes:
-        return _normalize_resource_change_bucket(existing)
+        return existing_dict
     source = safe_str(survival_changes.get("source") or "n1231_climate_survival_tick")
-    merged = _normalize_resource_change_bucket(existing)
-    if not merged:
-        merged = {"source": "merged_turn_resource_changes", "sources": []}
+    if not existing_dict:
+        return dict(survival_changes)
+    merged = _normalize_resource_change_bucket(existing_dict)
     key = "climate_survival" if source == "n1231_climate_survival_tick" else "survival_action"
     merged[key] = survival_changes
     sources = safe_list(merged.get("sources"))
@@ -72,23 +65,9 @@ def _normalize_effect_bucket(existing: Dict[str, Any]) -> Dict[str, Any]:
         return {}
     source = safe_str(existing.get("source"))
     if source == "n1231_climate_survival_tick" and "climate_survival" not in existing:
-        return {
-            "source": "merged_turn_effect_result",
-            "sources": [source],
-            "effects": safe_list(existing.get("effects")),
-            "warnings": safe_list(existing.get("warnings")),
-            "applied": bool(existing.get("applied")),
-            "climate_survival": existing,
-        }
+        return {"source": "merged_turn_effect_result", "sources": [source], "effects": safe_list(existing.get("effects")), "warnings": safe_list(existing.get("warnings")), "applied": bool(existing.get("applied")), "climate_survival": existing}
     if source == "n1232_survival_action_resolution" and "survival_action" not in existing:
-        return {
-            "source": "merged_turn_effect_result",
-            "sources": [source],
-            "effects": safe_list(existing.get("effects")),
-            "warnings": safe_list(existing.get("warnings")),
-            "applied": bool(existing.get("applied")),
-            "survival_action": existing,
-        }
+        return {"source": "merged_turn_effect_result", "sources": [source], "effects": safe_list(existing.get("effects")), "warnings": safe_list(existing.get("warnings")), "applied": bool(existing.get("applied")), "survival_action": existing}
     existing.setdefault("sources", [])
     existing.setdefault("effects", safe_list(existing.get("effects")))
     existing.setdefault("warnings", safe_list(existing.get("warnings")))
@@ -97,12 +76,13 @@ def _normalize_effect_bucket(existing: Dict[str, Any]) -> Dict[str, Any]:
 
 def _merge_effect_result(existing: Dict[str, Any], survival_effect: Dict[str, Any]) -> Dict[str, Any]:
     survival_effect = safe_dict(survival_effect)
+    existing_dict = dict(safe_dict(existing))
     if not survival_effect:
-        return _normalize_effect_bucket(existing)
+        return existing_dict
     source = safe_str(survival_effect.get("source") or "n1231_climate_survival_tick")
-    merged = _normalize_effect_bucket(existing)
-    if not merged:
-        merged = {"source": "merged_turn_effect_result", "sources": [], "effects": [], "warnings": [], "applied": False}
+    if not existing_dict:
+        return dict(survival_effect)
+    merged = _normalize_effect_bucket(existing_dict)
     key = "climate_survival" if source == "n1231_climate_survival_tick" else "survival_action"
     merged[key] = survival_effect
     merged["effects"] = safe_list(merged.get("effects")) + safe_list(survival_effect.get("effects"))
@@ -127,15 +107,8 @@ def _find_actor(simulation_state: Dict[str, Any], target_id: str) -> Dict[str, A
 
 def _guess_target_id(simulation_state: Dict[str, Any], text: str, action: Dict[str, Any]) -> str:
     explicit = safe_str(action.get("target_id") or action.get("target"))
-    if (
-        explicit
-        and explicit not in {"room", "inn", "service", "player"}
-        and not explicit.startswith("npc:")
-        and not explicit.startswith("npc_")
-        and not explicit.startswith("np:")
-    ):
+    if explicit and explicit not in {"room", "inn", "service", "player"} and not explicit.startswith("npc:") and not explicit.startswith("npc_") and not explicit.startswith("np:"):
         return explicit
-
     text_l = text.lower()
     for key in ("actor_states", "npc_states", "npcs", "actors"):
         for row in safe_list(simulation_state.get(key)):
@@ -351,7 +324,6 @@ def build_turn_contract(*, player_input: str, action: Dict[str, Any], resolved_a
     resolved_for_contract["resource_changes"] = _merge_resource_changes(resolved_for_contract.get("resource_changes"), survival_result.get("resource_changes"))
     resolved_for_contract["effect_result"] = _merge_effect_result(resolved_for_contract.get("effect_result"), survival_result.get("effect_result"))
     resolved_for_contract["climate_survival"] = climate_survival
-
     relief_result = resolve_survival_action(player_input=player_input, simulation_state=simulation_state_after, service_result=service_result)
     if relief_result.get("matched"):
         resolved_for_contract["survival_action"] = relief_result
@@ -359,7 +331,6 @@ def build_turn_contract(*, player_input: str, action: Dict[str, Any], resolved_a
         resolved_for_contract["effect_result"] = _merge_effect_result(resolved_for_contract.get("effect_result"), relief_result.get("effect_result"))
         resolved_for_contract["climate_survival"] = safe_dict(simulation_state_after.get("climate_survival")) or climate_survival
         climate_survival = resolved_for_contract["climate_survival"]
-
     state_delta = derive_state_delta(simulation_state_before, interpreted, resolved_for_contract)
     narration_brief = build_narration_brief(interpreted, resolved_for_contract, state_delta)
     resolved = supplement_generic_resolved_action(resolved_for_contract, interpreted, narration_brief)
