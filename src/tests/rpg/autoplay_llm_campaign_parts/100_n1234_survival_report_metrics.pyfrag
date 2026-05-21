@@ -1,0 +1,338 @@
+# N123.4 — Survival report + autoplay metrics integration.
+#
+# Late fragment: extracts deterministic survival pressure/relief metrics from
+# transcript rows and turn contracts, then exposes JSON-summary and HTML-section
+# helpers.  It also wraps the 100-turn evaluation summary so autoplay summary
+# artifacts carry the survival report data without changing the runtime loop.
+
+_N1234_EVAL_PREV = globals().get("_build_100_turn_evaluation_summary")
+
+
+def _n1234_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _n1234_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _n1234_int(value, default=0):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _n1234_row_contract(row):
+    row = _n1234_dict(row)
+    return _n1234_dict(
+        row.get("turn_contract")
+        or row.get("contract")
+        or _n1234_dict(row.get("result")).get("turn_contract")
+        or _n1234_dict(row.get("authoritative_result")).get("turn_contract")
+    )
+
+
+def _n1234_resolved_action(row):
+    row = _n1234_dict(row)
+    contract = _n1234_row_contract(row)
+    return _n1234_dict(
+        row.get("resolved_action")
+        or row.get("resolved_result")
+        or contract.get("resolved_action")
+        or contract.get("resolved_result")
+        or _n1234_dict(row.get("result")).get("resolved_action")
+    )
+
+
+def _n1234_climate_survival(row):
+    row = _n1234_dict(row)
+    contract = _n1234_row_contract(row)
+    resolved = _n1234_resolved_action(row)
+    result = _n1234_dict(row.get("result"))
+    return _n1234_dict(
+        row.get("climate_survival")
+        or contract.get("climate_survival")
+        or resolved.get("climate_survival")
+        or result.get("climate_survival")
+        or result.get("climate_survival_runtime_payload")
+        or _n1234_dict(result.get("presentation")).get("climate_survival")
+    )
+
+
+def _n1234_resource_changes(row):
+    row = _n1234_dict(row)
+    contract = _n1234_row_contract(row)
+    resolved = _n1234_resolved_action(row)
+    result = _n1234_dict(row.get("result"))
+    return _n1234_dict(
+        row.get("resource_changes")
+        or contract.get("resource_changes")
+        or resolved.get("resource_changes")
+        or result.get("resource_changes")
+    )
+
+
+def _n1234_effect_result(row):
+    row = _n1234_dict(row)
+    contract = _n1234_row_contract(row)
+    resolved = _n1234_resolved_action(row)
+    result = _n1234_dict(row.get("result"))
+    return _n1234_dict(
+        row.get("effect_result")
+        or contract.get("effect_result")
+        or resolved.get("effect_result")
+        or result.get("effect_result")
+    )
+
+
+def _n1234_survival_action(row):
+    row = _n1234_dict(row)
+    contract = _n1234_row_contract(row)
+    resolved = _n1234_resolved_action(row)
+    result = _n1234_dict(row.get("result"))
+    changes = _n1234_resource_changes(row)
+    return _n1234_dict(
+        row.get("survival_action")
+        or contract.get("survival_action")
+        or resolved.get("survival_action")
+        or result.get("survival_action")
+        or changes.get("survival_action")
+    )
+
+
+def _n1234_survival_from_climate(climate):
+    climate = _n1234_dict(climate)
+    return _n1234_dict(climate.get("survival"))
+
+
+def _n1234_turn_index(row, fallback):
+    row = _n1234_dict(row)
+    for key in ("turn_index", "turn", "tick"):
+        if key in row:
+            return _n1234_int(row.get(key), fallback)
+    climate = _n1234_climate_survival(row)
+    if climate.get("tick") is not None:
+        return _n1234_int(climate.get("tick"), fallback)
+    return fallback
+
+
+def _n1234_count_warnings(row):
+    warnings = []
+    survival = _n1234_survival_from_climate(_n1234_climate_survival(row))
+    warnings.extend(str(item) for item in _n1234_list(survival.get("warnings")) if item)
+    effect = _n1234_effect_result(row)
+    warnings.extend(str(item) for item in _n1234_list(effect.get("warnings")) if item)
+    climate_effect = _n1234_dict(effect.get("climate_survival"))
+    warnings.extend(str(item) for item in _n1234_list(climate_effect.get("warnings")) if item)
+    return len(set(warnings)), sorted(set(warnings))
+
+
+def _n1234_flat_resource_change(row, key):
+    changes = _n1234_resource_changes(row)
+    if changes.get(key) is not None:
+        return _n1234_int(changes.get(key), 0)
+    climate = _n1234_dict(changes.get("climate_survival"))
+    relief = _n1234_dict(changes.get("survival_action"))
+    return _n1234_int(climate.get(key), 0) + _n1234_int(relief.get(key), 0)
+
+
+def _n1234_inventory_consumed_from_action(action):
+    action = _n1234_dict(action)
+    resource_changes = _n1234_dict(action.get("resource_changes"))
+    consumed = _n1234_dict(resource_changes.get("inventory_consumed"))
+    if not consumed.get("consumed"):
+        consumed = _n1234_dict(action.get("inventory_consumed"))
+    if not consumed.get("consumed"):
+        return {}
+    item_id = str(consumed.get("item_id") or consumed.get("name") or "unknown_item")
+    return {
+        "item_id": item_id,
+        "name": str(consumed.get("name") or item_id),
+        "quantity": max(1, _n1234_int(consumed.get("quantity"), 1)),
+    }
+
+
+def _n1234_purchase_from_action(action):
+    action = _n1234_dict(action)
+    resource_changes = _n1234_dict(action.get("resource_changes"))
+    purchase = _n1234_dict(resource_changes.get("purchase")) or _n1234_dict(action.get("purchase"))
+    if not purchase:
+        return {}
+    return purchase
+
+
+def _build_survival_pressure_relief_summary(transcript):
+    transcript = _n1234_list(transcript)
+    trend_rows = []
+    warning_counts_by_type = {}
+    relief_counts_by_kind = {}
+    blocked_counts_by_reason = {}
+    inventory_consumed = {}
+    service_purchases = {}
+    pressure_turn_count = 0
+    relief_action_count = 0
+    blocked_relief_count = 0
+    total_warning_count = 0
+    net_deltas = {"hunger_delta": 0, "thirst_delta": 0, "fatigue_delta": 0}
+    final_needs = {"hunger": 0, "thirst": 0, "fatigue": 0}
+
+    for index, row in enumerate(transcript, start=1):
+        row = _n1234_dict(row)
+        climate = _n1234_climate_survival(row)
+        survival = _n1234_survival_from_climate(climate)
+        action = _n1234_survival_action(row)
+        action_changes = _n1234_dict(action.get("resource_changes"))
+        warning_count, warning_types = _n1234_count_warnings(row)
+        for warning in warning_types:
+            warning_counts_by_type[warning] = warning_counts_by_type.get(warning, 0) + 1
+        total_warning_count += warning_count
+
+        hunger = _n1234_int(survival.get("hunger"), _n1234_int(row.get("hunger"), 0))
+        thirst = _n1234_int(survival.get("thirst"), _n1234_int(row.get("thirst"), 0))
+        fatigue = _n1234_int(survival.get("fatigue"), _n1234_int(row.get("fatigue"), 0))
+        final_needs = {"hunger": hunger, "thirst": thirst, "fatigue": fatigue}
+
+        deltas = {
+            "hunger_delta": _n1234_flat_resource_change(row, "hunger_delta"),
+            "thirst_delta": _n1234_flat_resource_change(row, "thirst_delta"),
+            "fatigue_delta": _n1234_flat_resource_change(row, "fatigue_delta"),
+        }
+        for key, value in deltas.items():
+            net_deltas[key] += value
+        if any(value > 0 for value in deltas.values()) or warning_count:
+            pressure_turn_count += 1
+
+        if action.get("matched") or action.get("action_kind"):
+            kind = str(action.get("action_kind") or action_changes.get("action_kind") or "unknown_survival_action")
+            relief_counts_by_kind[kind] = relief_counts_by_kind.get(kind, 0) + 1
+            if action.get("applied"):
+                relief_action_count += 1
+            if action.get("blocked") or action.get("blocked_reason"):
+                blocked_relief_count += 1
+                reason = str(action.get("blocked_reason") or action_changes.get("blocked_reason") or "unknown")
+                blocked_counts_by_reason[reason] = blocked_counts_by_reason.get(reason, 0) + 1
+            consumed = _n1234_inventory_consumed_from_action(action)
+            if consumed:
+                bucket = inventory_consumed.setdefault(consumed["item_id"], {"item_id": consumed["item_id"], "name": consumed["name"], "quantity": 0})
+                bucket["quantity"] += consumed["quantity"]
+            purchase = _n1234_purchase_from_action(action)
+            if purchase:
+                service_kind = kind.replace("buy_", "") if kind.startswith("buy_") else kind
+                bucket = service_purchases.setdefault(service_kind, {"service_kind": service_kind, "count": 0, "blocked_count": 0, "total_price": {"gold": 0, "silver": 0, "copper": 0}})
+                bucket["count"] += 1
+                if purchase.get("blocked") or purchase.get("blocked_reason") or purchase.get("applied") is False:
+                    bucket["blocked_count"] += 1
+                price = _n1234_dict(purchase.get("price"))
+                for unit in ("gold", "silver", "copper"):
+                    bucket["total_price"][unit] += _n1234_int(price.get(unit), 0)
+
+        trend_rows.append({
+            "turn_index": _n1234_turn_index(row, index),
+            "hunger": hunger,
+            "thirst": thirst,
+            "fatigue": fatigue,
+            "hunger_delta": deltas["hunger_delta"],
+            "thirst_delta": deltas["thirst_delta"],
+            "fatigue_delta": deltas["fatigue_delta"],
+            "warning_count": warning_count,
+            "warnings": warning_types,
+            "relief_action_kind": action.get("action_kind") or action_changes.get("action_kind") or "",
+            "relief_applied": bool(action.get("applied")),
+            "relief_blocked": bool(action.get("blocked") or action.get("blocked_reason")),
+        })
+
+    max_needs = {
+        "hunger": max([_n1234_int(row.get("hunger"), 0) for row in trend_rows] or [0]),
+        "thirst": max([_n1234_int(row.get("thirst"), 0) for row in trend_rows] or [0]),
+        "fatigue": max([_n1234_int(row.get("fatigue"), 0) for row in trend_rows] or [0]),
+    }
+    return {
+        "format_version": "n1234_survival_pressure_relief_summary_v1",
+        "source": "transcript.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
+        "turn_count": len(transcript),
+        "trend_rows": trend_rows,
+        "trend_row_count": len(trend_rows),
+        "pressure_turn_count": pressure_turn_count,
+        "survival_warning_count": total_warning_count,
+        "warning_counts_by_type": warning_counts_by_type,
+        "relief_action_count": relief_action_count,
+        "relief_counts_by_kind": relief_counts_by_kind,
+        "blocked_relief_count": blocked_relief_count,
+        "blocked_counts_by_reason": blocked_counts_by_reason,
+        "inventory_consumed_summary": sorted(inventory_consumed.values(), key=lambda item: item["item_id"]),
+        "service_relief_purchases_summary": sorted(service_purchases.values(), key=lambda item: item["service_kind"]),
+        "net_resource_deltas": net_deltas,
+        "max_needs": max_needs,
+        "final_needs": final_needs,
+        "artifact_files": {"summary": "survival-pressure-relief-summary.json", "trend_rows": "survival-pressure-trend-rows.json"},
+        "report_section_title": "N123.4 Survival Pressure vs Player Response",
+    }
+
+
+def _html_escape(value):
+    text = str(value if value is not None else "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
+
+
+def _render_survival_pressure_relief_report_section(summary):
+    summary = _n1234_dict(summary)
+    if not summary:
+        return ""
+    consumed = _n1234_list(summary.get("inventory_consumed_summary"))
+    purchases = _n1234_list(summary.get("service_relief_purchases_summary"))
+    trend_rows = _n1234_list(summary.get("trend_rows"))[-12:]
+    consumed_rows = "".join(f"<tr><td>{_html_escape(item.get('name') or item.get('item_id'))}</td><td>{_html_escape(item.get('quantity'))}</td></tr>" for item in consumed) or "<tr><td colspan='2'>None</td></tr>"
+    purchase_rows = "".join(f"<tr><td>{_html_escape(item.get('service_kind'))}</td><td>{_html_escape(item.get('count'))}</td><td>{_html_escape(item.get('blocked_count'))}</td></tr>" for item in purchases) or "<tr><td colspan='3'>None</td></tr>"
+    trend_html = "".join(
+        "<tr>"
+        f"<td>{_html_escape(row.get('turn_index'))}</td>"
+        f"<td>{_html_escape(row.get('hunger'))}</td>"
+        f"<td>{_html_escape(row.get('thirst'))}</td>"
+        f"<td>{_html_escape(row.get('fatigue'))}</td>"
+        f"<td>{_html_escape(row.get('relief_action_kind'))}</td>"
+        f"<td>{_html_escape(', '.join(_n1234_list(row.get('warnings'))))}</td>"
+        "</tr>"
+        for row in trend_rows
+    ) or "<tr><td colspan='6'>No survival trend rows recorded.</td></tr>"
+    return f"""
+<section id="n1234-survival-pressure" class="report-section n1234-survival-pressure">
+  <h2>N123.4 Survival Pressure vs Player Response</h2>
+  <div class="metric-grid">
+    <div><strong>Pressure turns</strong><span>{_html_escape(summary.get('pressure_turn_count'))}</span></div>
+    <div><strong>Warnings</strong><span>{_html_escape(summary.get('survival_warning_count'))}</span></div>
+    <div><strong>Relief actions</strong><span>{_html_escape(summary.get('relief_action_count'))}</span></div>
+    <div><strong>Blocked relief</strong><span>{_html_escape(summary.get('blocked_relief_count'))}</span></div>
+  </div>
+  <h3>Recent survival trend</h3>
+  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody>{trend_html}</tbody></table>
+  <h3>Inventory consumed</h3>
+  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody>{consumed_rows}</tbody></table>
+  <h3>Service relief purchases</h3>
+  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody>{purchase_rows}</tbody></table>
+</section>
+""".strip()
+
+
+def _attach_survival_report_metrics(summary, transcript):
+    base = dict(_n1234_dict(summary))
+    survival_summary = _build_survival_pressure_relief_summary(transcript)
+    base["survival_pressure_relief_summary"] = survival_summary
+    base["survival_pressure_trend_rows"] = survival_summary.get("trend_rows", [])
+    report_sections = list(_n1234_list(base.get("report_sections")))
+    report_sections.append({"id": "n1234-survival-pressure", "title": "N123.4 Survival Pressure vs Player Response", "html": _render_survival_pressure_relief_report_section(survival_summary), "source": survival_summary.get("source")})
+    base["report_sections"] = report_sections
+    artifacts = dict(_n1234_dict(base.get("artifact_level_summaries")))
+    artifacts["survival-pressure-relief-summary.json"] = survival_summary
+    artifacts["survival-pressure-trend-rows.json"] = survival_summary.get("trend_rows", [])
+    base["artifact_level_summaries"] = artifacts
+    return base
+
+
+if callable(_N1234_EVAL_PREV):
+    def _build_100_turn_evaluation_summary(*args, **kwargs):
+        result = _N1234_EVAL_PREV(*args, **kwargs)
+        transcript = kwargs.get("transcript")
+        if transcript is None and len(args) >= 5:
+            transcript = args[4]
+        return _attach_survival_report_metrics(result, _n1234_list(transcript))
