@@ -1,14 +1,7 @@
-"""Mechanical source chunks for tests.rpg.autoplay_llm_campaign.
+"""Named source fragments for the autoplay LLM campaign harness.
 
-N117.4 keeps the public script path stable while moving the large historical
-implementation into bounded source fragments. The loader in
-``autoplay_llm_campaign.py`` concatenates and compiles these fragments as one
-module so split boundaries do not change Python semantics.
+These files are loaded in lexicographic order by ``autoplay_llm_campaign.py``.
+They are intentionally fragments, not standalone modules, so the historical
+single-file runtime can be preserved while the implementation is split into
+small, reviewable files.
 """
-
-from __future__ import annotations
-
-CHUNK_COUNT = 30
-MAX_CHUNK_LINES = 925
-
-__all__ = ["CHUNK_COUNT", "MAX_CHUNK_LINES"]
