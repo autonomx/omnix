@@ -1,0 +1,266 @@
+
+# N120 -- Real memory aging + arc/faction compaction evidence
+#
+# This phase makes endurance compression evidence explicit and sourceable.  It
+# does not treat the mere presence of a compression tick as real compaction.
+# Gates pass only when old memories/arcs/faction-pressure histories are actually
+# dropped, summarized, archived, or compacted by deterministic policy.
+_N120_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N120_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+_N120_PREVIOUS_N1172_INJECT_1000_SECTION = globals().get("_n1172_inject_1000_turn_gap_section")
+
+
+def _n120_event_summary(event: Dict[str, Any]) -> Dict[str, Any]:
+    event = _safe_dict(event)
+    summary = _safe_dict(event.get("summary"))
+    if not summary:
+        summary = event
+    return summary
+
+
+def _n120_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
+
+
+def _n120_collect_compression_events(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    compression = _safe_dict(_safe_dict(summary).get("world_state_compression_summary"))
+    events: List[Dict[str, Any]] = []
+    for item in _safe_list(compression.get("events")):
+        item = _safe_dict(item)
+        if item:
+            events.append(item)
+    return events
+
+
+def _n120_build_memory_compaction_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    compression = _safe_dict(summary.get("world_state_compression_summary"))
+    events = _n120_collect_compression_events(summary)
+    memory_events: List[Dict[str, Any]] = []
+    arc_events: List[Dict[str, Any]] = []
+    faction_events: List[Dict[str, Any]] = []
+    world_signal_expiry_events: List[Dict[str, Any]] = []
+
+    totals = {
+        "npc_memory_dropped_count": 0,
+        "npc_memory_summarized_count": 0,
+        "npc_memory_archived_count": 0,
+        "compacted_arc_count": 0,
+        "summarized_arc_count": 0,
+        "archived_arc_count": 0,
+        "compacted_faction_count": 0,
+        "summarized_faction_count": 0,
+        "pressure_event_summarized_count": 0,
+        "expired_world_signal_count": 0,
+    }
+
+    for event in events:
+        turn = _n120_int(event.get("turn") or event.get("turn_index"))
+        payload = _n120_event_summary(event)
+        counts = {
+            "npc_memory_dropped_count": _n120_int(payload.get("npc_memory_dropped_count")),
+            "npc_memory_summarized_count": _n120_int(payload.get("npc_memory_summarized_count")),
+            "npc_memory_archived_count": _n120_int(payload.get("npc_memory_archived_count")),
+            "compacted_arc_count": _n120_int(payload.get("compacted_arc_count")),
+            "summarized_arc_count": _n120_int(payload.get("summarized_arc_count")),
+            "archived_arc_count": _n120_int(payload.get("archived_arc_count")),
+            "compacted_faction_count": _n120_int(payload.get("compacted_faction_count")),
+            "summarized_faction_count": _n120_int(payload.get("summarized_faction_count")),
+            "pressure_event_summarized_count": _n120_int(payload.get("pressure_event_summarized_count")),
+            "expired_world_signal_count": _n120_int(payload.get("expired_world_signal_count")),
+        }
+        for key, count in counts.items():
+            totals[key] += count
+        if any(counts[key] for key in ("npc_memory_dropped_count", "npc_memory_summarized_count", "npc_memory_archived_count")):
+            memory_events.append({"turn": turn, "counts": counts})
+        if any(counts[key] for key in ("compacted_arc_count", "summarized_arc_count", "archived_arc_count")):
+            arc_events.append({"turn": turn, "counts": counts})
+        if any(counts[key] for key in ("compacted_faction_count", "summarized_faction_count", "pressure_event_summarized_count")):
+            faction_events.append({"turn": turn, "counts": counts})
+        if counts["expired_world_signal_count"]:
+            world_signal_expiry_events.append({"turn": turn, "expired_world_signal_count": counts["expired_world_signal_count"]})
+
+    memory_aging_count = totals["npc_memory_dropped_count"] + totals["npc_memory_summarized_count"] + totals["npc_memory_archived_count"]
+    arc_compaction_count = totals["compacted_arc_count"] + totals["summarized_arc_count"] + totals["archived_arc_count"]
+    faction_compaction_count = totals["compacted_faction_count"] + totals["summarized_faction_count"] + totals["pressure_event_summarized_count"]
+    memory_ok = memory_aging_count > 0
+    arc_faction_ok = (arc_compaction_count + faction_compaction_count) > 0
+
+    return {
+        "format_version": "n120_memory_arc_faction_compaction_summary_v1",
+        "ok": bool(memory_ok and arc_faction_ok),
+        "compression_tick_count": _n120_int(compression.get("compression_event_count") or len(events)),
+        "memory_aging_ok": memory_ok,
+        "arc_faction_compaction_ok": arc_faction_ok,
+        "memory_aging_count": memory_aging_count,
+        "arc_compaction_count": arc_compaction_count,
+        "faction_compaction_count": faction_compaction_count,
+        "world_signal_expiry_count": totals["expired_world_signal_count"],
+        "counts": totals,
+        "memory_events": memory_events[:100],
+        "arc_events": arc_events[:100],
+        "faction_events": faction_events[:100],
+        "world_signal_expiry_events": world_signal_expiry_events[:100],
+        "missing_real_memory_aging_parts": [] if memory_ok else [
+            "npc_memory_dropped_count_or_summarized_count_or_archived_count"
+        ],
+        "missing_real_arc_faction_compaction_parts": [] if arc_faction_ok else [
+            "compacted_or_summarized_story_arc_history",
+            "compacted_or_summarized_faction_pressure_history",
+        ],
+        "policy": "Compression ticks and world-signal expiry alone do not satisfy 1000-turn memory/arc/faction compaction readiness. Gates require deterministic aging or summarization of old NPC memories and old arc/faction pressure history.",
+    }
+
+
+def _n120_apply_memory_compaction_summary(summary: Dict[str, Any], transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    compaction = _n120_build_memory_compaction_summary(summary)
+    summary["memory_arc_faction_compaction_summary"] = compaction
+
+    compression = dict(_safe_dict(summary.get("world_state_compression_summary")))
+    compression["n120_memory_arc_faction_compaction"] = compaction
+    compression["memory_aging_ok"] = bool(compaction.get("memory_aging_ok"))
+    compression["arc_faction_compaction_ok"] = bool(compaction.get("arc_faction_compaction_ok"))
+    compression["memory_aging_count"] = compaction.get("memory_aging_count")
+    compression["arc_compaction_count"] = compaction.get("arc_compaction_count")
+    compression["faction_compaction_count"] = compaction.get("faction_compaction_count")
+    summary["world_state_compression_summary"] = compression
+
+    gap = dict(_safe_dict(summary.get("one_thousand_turn_readiness_gap_report")))
+    gates = dict(_safe_dict(gap.get("gates")))
+    if gates:
+        memory_gate = dict(_safe_dict(gates.get("memory_aging_real")))
+        memory_gate["ok"] = bool(compaction.get("memory_aging_ok"))
+        memory_gate["source"] = "memory-arc-faction-compaction-summary.json"
+        memory_gate["source_artifact"] = "memory-arc-faction-compaction-summary.json"
+        memory_gate["message"] = "Real NPC memory aging evidence is present." if memory_gate["ok"] else "Memory aging is not yet proven; no NPC memories were dropped, archived, or summarized by deterministic policy."
+        memory_gate["value"] = {
+            "memory_aging_count": compaction.get("memory_aging_count"),
+            "npc_memory_dropped_count": _safe_dict(compaction.get("counts")).get("npc_memory_dropped_count"),
+            "npc_memory_summarized_count": _safe_dict(compaction.get("counts")).get("npc_memory_summarized_count"),
+            "npc_memory_archived_count": _safe_dict(compaction.get("counts")).get("npc_memory_archived_count"),
+            "missing_real_memory_aging_parts": compaction.get("missing_real_memory_aging_parts"),
+        }
+        gates["memory_aging_real"] = memory_gate
+
+        arc_gate = dict(_safe_dict(gates.get("arc_faction_compaction_real")))
+        arc_gate["ok"] = bool(compaction.get("arc_faction_compaction_ok"))
+        arc_gate["source"] = "memory-arc-faction-compaction-summary.json"
+        arc_gate["source_artifact"] = "memory-arc-faction-compaction-summary.json"
+        arc_gate["message"] = "Real arc/faction compaction evidence is present." if arc_gate["ok"] else "Arc/faction compaction is not yet proven; old arc/faction pressure history was not compacted or summarized."
+        arc_gate["value"] = {
+            "arc_compaction_count": compaction.get("arc_compaction_count"),
+            "faction_compaction_count": compaction.get("faction_compaction_count"),
+            "compacted_arc_count": _safe_dict(compaction.get("counts")).get("compacted_arc_count"),
+            "compacted_faction_count": _safe_dict(compaction.get("counts")).get("compacted_faction_count"),
+            "pressure_event_summarized_count": _safe_dict(compaction.get("counts")).get("pressure_event_summarized_count"),
+            "missing_real_arc_faction_compaction_parts": compaction.get("missing_real_arc_faction_compaction_parts"),
+        }
+        gates["arc_faction_compaction_real"] = arc_gate
+
+        gap["gates"] = gates
+        blocked = [name for name, item in gates.items() if not bool(_safe_dict(item).get("ok"))]
+        gap["one_thousand_turn_blocked_reasons"] = blocked
+        gap["one_thousand_turn_candidate"] = not blocked
+        rollup = dict(_safe_dict(gap.get("rollup")))
+        rollup["memory_compaction_real"] = bool(memory_gate.get("ok") and arc_gate.get("ok"))
+        rollup["memory_aging_real"] = bool(memory_gate.get("ok"))
+        rollup["arc_faction_compaction_real"] = bool(arc_gate.get("ok"))
+        gap["rollup"] = rollup
+        source_map = dict(_safe_dict(gap.get("source_map")))
+        source_map["memory_aging_real"] = "memory-arc-faction-compaction-summary.json"
+        source_map["arc_faction_compaction_real"] = "memory-arc-faction-compaction-summary.json"
+        gap["source_map"] = source_map
+        gap["n120_memory_arc_faction_compaction_applied"] = True
+        summary["one_thousand_turn_readiness_gap_report"] = gap
+
+        readiness = dict(_safe_dict(summary.get("hundred_turn_readiness_summary")))
+        if readiness:
+            readiness["one_thousand_turn_readiness_gap_report"] = gap
+            readiness["one_thousand_turn_candidate"] = bool(gap.get("one_thousand_turn_candidate"))
+            readiness["one_thousand_turn_blocked_reasons"] = _safe_list(gap.get("one_thousand_turn_blocked_reasons"))
+            readiness["readiness_grades"] = {
+                "hundred_turn_ready": bool(readiness.get("ok")),
+                "one_thousand_turn_candidate": bool(gap.get("one_thousand_turn_candidate")),
+                "one_thousand_turn_blocked_reasons": _safe_list(gap.get("one_thousand_turn_blocked_reasons")),
+            }
+            summary["hundred_turn_readiness_summary"] = readiness
+    return summary
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N120_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N120_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    transcript = _safe_list(args[1]) if len(args) > 1 else _safe_list(kwargs.get("transcript") or kwargs.get("final_transcript_rows"))
+    return _n120_apply_memory_compaction_summary(summary, transcript)
+
+
+def _n120_html_escape(value: Any) -> str:
+    if "_n1178_html_escape" in globals() and callable(globals().get("_n1178_html_escape")):
+        return globals()["_n1178_html_escape"](value)
+    return _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _n120_memory_compaction_html_section(summary: Dict[str, Any]) -> str:
+    compaction = _safe_dict(_safe_dict(summary).get("memory_arc_faction_compaction_summary"))
+    return (
+        "<section id=\"n120-memory-arc-faction-compaction\" class=\"card\">"
+        "<h2>N120 Memory Aging + Arc/Faction Compaction</h2>"
+        "<p>Compression ticks are separated from real deterministic aging/compaction evidence.</p>"
+        "<ul>"
+        f"<li>Memory aging OK: {_n120_html_escape(compaction.get('memory_aging_ok'))}</li>"
+        f"<li>Memory aging count: {_n120_html_escape(compaction.get('memory_aging_count'))}</li>"
+        f"<li>Arc compaction count: {_n120_html_escape(compaction.get('arc_compaction_count'))}</li>"
+        f"<li>Faction compaction count: {_n120_html_escape(compaction.get('faction_compaction_count'))}</li>"
+        f"<li>World-signal expiry count: {_n120_html_escape(compaction.get('world_signal_expiry_count'))}</li>"
+        "</ul>"
+        "</section>"
+    )
+
+
+def _n1172_inject_1000_turn_gap_section(html_report: str, final_summary: Dict[str, Any]) -> str:
+    if callable(_N120_PREVIOUS_N1172_INJECT_1000_SECTION):
+        html_report = _N120_PREVIOUS_N1172_INJECT_1000_SECTION(html_report, final_summary)
+    html_text = _safe_str(html_report)
+    if "id=\"n120-memory-arc-faction-compaction\"" in html_text:
+        return html_text
+    section = _n120_memory_compaction_html_section(final_summary)
+    index = html_text.lower().rfind("</body>")
+    if index >= 0:
+        return html_text[:index] + section + html_text[index:]
+    return html_text + section
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N120_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N120_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    compaction = _safe_dict(value.get("memory_arc_faction_compaction_summary"))
+    artifact_name = "memory-arc-faction-compaction-summary.json"
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    if compaction and artifact_name not in generated_files:
+        serialized = json.dumps(compaction, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N120_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N120_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(
+                zip_handle,
+                artifact_manifest,
+                artifact_name,
+                compaction,
+                serialized_text=serialized,
+                force=True,
+            )
+    return result
