@@ -10,6 +10,7 @@ from app.rpg.presentation import (
     build_runtime_presentation_payload,
     build_scene_presentation_payload,
 )
+from app.rpg.session.runtime_promotions import attach_runtime_promotion_payloads
 from app.rpg.session.state_normalization import _safe_dict, _safe_list, _safe_str
 
 
@@ -187,7 +188,7 @@ def build_turn_payload(
     equipment = _safe_dict(inventory_state.get("equipment"))
     transaction_menus = build_transaction_menus_for_state(simulation_state, runtime_state)
 
-    return {
+    payload = {
         "success": True,
         "session_id": _safe_str(_safe_dict(session.get("manifest")).get("id")),
         "narration": _safe_str(narration_result.get("narrative") or current_scene.get("summary")),
@@ -212,7 +213,7 @@ def build_turn_payload(
         "summary": summary[:8],
         "scene": current_scene,
         "scene_presentation": build_scene_presentation_payload(simulation_state, current_scene),
-        "presentation": build_runtime_presentation_payload(simulation_state),
+        "presentation": build_runtime_presentation_payload(simulation_state, runtime_state),
         "dialogue_memory_context": memory_context,
         "llm_memory_prompt_block": build_llm_memory_prompt_block(memory_context),
         "voice_assignments": _safe_dict(runtime_state.get("voice_assignments")),
@@ -232,6 +233,7 @@ def build_turn_payload(
         "effect_result": _safe_dict(last_turn.get("effect_result")),
         "transaction_menus": transaction_menus,
     }
+    return attach_runtime_promotion_payloads(payload, simulation_state, runtime_state)
 
 
 
@@ -239,6 +241,9 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
     authoritative_result = _safe_dict(authoritative_result)
     authoritative = _safe_dict(authoritative_result.get("authoritative"))
     result_sub = _safe_dict(authoritative_result.get("result"))
+    session = _safe_dict(authoritative_result.get("session"))
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
     resolved_result = _first_dict(
         authoritative.get("resolved_result"),
         result_sub.get("resolved_result"),
@@ -247,6 +252,12 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
         authoritative_result.get("turn_contract")
         or authoritative.get("turn_contract")
     )
+    if simulation_state:
+        turn_contract = attach_runtime_promotion_payloads(
+            turn_contract,
+            simulation_state,
+            runtime_state,
+        )
     narration = result_sub.get("narration")
     if narration is None:
         narration = authoritative.get("deterministic_fallback_narration")
@@ -331,6 +342,12 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
     }
 
     result_payload = _attach_living_world_debug_fields(result_payload)
+    if simulation_state:
+        result_payload = attach_runtime_promotion_payloads(
+            result_payload,
+            simulation_state,
+            runtime_state,
+        )
 
     return {
         "ok": True,
