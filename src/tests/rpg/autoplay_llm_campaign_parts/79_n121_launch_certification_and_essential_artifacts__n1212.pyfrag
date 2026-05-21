@@ -1,0 +1,171 @@
+
+# N121.2 -- 1000-turn launch certification + essential artifact cleanup
+#
+# The N121.1 run can make one_thousand_turn_candidate true.  Add a focused
+# certification artifact for the handoff to the 1000-turn harness and ensure the
+# essential Git-review mirror includes all N121/N121.1 summaries.
+_N1212_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N1212_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+_N1212_PREVIOUS_N1172_INJECT_1000_SECTION = globals().get("_n1172_inject_1000_turn_gap_section")
+
+try:
+    _N1192_EXACT_ESSENTIAL_ARTIFACTS.update({
+        "combined-endurance-systems-summary.json",
+        "economy-long-term-sinks-summary.json",
+        "direct-graph-combat-round-summary.json",
+        "one-thousand-turn-launch-certification-summary.json",
+    })
+except Exception:
+    pass
+
+
+def _n1212_gate_ok(gates: Dict[str, Any], name: str) -> bool:
+    return bool(_safe_dict(gates.get(name)).get("ok"))
+
+
+def _n1212_build_launch_certification(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    gap = _safe_dict(summary.get("one_thousand_turn_readiness_gap_report"))
+    health = _safe_dict(summary.get("autoplay_health") or summary.get("health"))
+    gates = _safe_dict(gap.get("gates"))
+    blocker_reasons = _safe_list(gap.get("one_thousand_turn_blocked_reasons"))
+    hard_blockers = _safe_list(gap.get("one_thousand_turn_hard_blockers"))
+    required_gates = [
+        "compression_loop_present",
+        "memory_aging_real",
+        "arc_faction_compaction_real",
+        "npc_schedule_present",
+        "npc_goal_agency_real",
+        "economy_pressure_foundation",
+        "economy_long_term_sinks_real",
+        "combat_coverage_present",
+        "combat_rounds_real",
+        "transcript_growth_budget_projected_1000",
+    ]
+    gate_status = {name: _n1212_gate_ok(gates, name) for name in required_gates}
+    failed_gates = [name for name, ok in gate_status.items() if not ok]
+    ok = bool(
+        gap.get("one_thousand_turn_candidate")
+        and not blocker_reasons
+        and not hard_blockers
+        and not failed_gates
+        and bool(health.get("ok", True))
+        and int(health.get("runtime_error_count") or 0) == 0
+    )
+    return {
+        "format_version": "n1212_1000_turn_launch_certification_v1",
+        "ok": ok,
+        "advisory_only": True,
+        "one_thousand_turn_candidate": bool(gap.get("one_thousand_turn_candidate")),
+        "hundred_turn_ready": bool(gap.get("hundred_turn_ready", True)),
+        "blocked_reasons": blocker_reasons,
+        "hard_blockers": hard_blockers,
+        "required_gate_status": gate_status,
+        "failed_required_gates": failed_gates,
+        "autoplay_health_ok": bool(health.get("ok", True)),
+        "runtime_error_count": int(health.get("runtime_error_count") or 0),
+        "warning_count": int(health.get("warning_count") or 0),
+        "recommended_next_phase": "N121.3_1000_turn_endurance_smoke" if ok else "resolve_failed_readiness_gates_before_1000_turn_run",
+        "recommended_next_command_profile": "smoke_1000" if ok else "smoke_100",
+        "message": (
+            "100-turn readiness gates now certify the branch as a 1000-turn candidate."
+            if ok else
+            "1000-turn launch certification is not yet clean; inspect failed_required_gates and blocked_reasons."
+        ),
+        "source_artifacts": {
+            "readiness_gap": "one-thousand-turn-readiness-gap-report.json",
+            "health": "autoplay-health.json",
+            "combined_endurance": "combined-endurance-systems-summary.json",
+            "direct_graph_combat_rounds": "direct-graph-combat-round-summary.json",
+        },
+    }
+
+
+def _n1212_apply_launch_certification(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    gap = dict(_safe_dict(summary.get("one_thousand_turn_readiness_gap_report")))
+    if gap:
+        source_map = dict(_safe_dict(gap.get("source_map")))
+        source_map["combat_rounds_real"] = "direct-graph-combat-round-summary.json + real-combat-lifecycle-summary.json"
+        source_map["combined_endurance_systems"] = "combined-endurance-systems-summary.json"
+        gap["source_map"] = source_map
+        gap["n1212_launch_certification_applied"] = True
+        summary["one_thousand_turn_readiness_gap_report"] = gap
+    summary["one_thousand_turn_launch_certification_summary"] = _n1212_build_launch_certification(summary)
+    return summary
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N1212_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N1212_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    return _n1212_apply_launch_certification(summary)
+
+
+def _n1212_html_escape(value: Any) -> str:
+    if "_n1178_html_escape" in globals() and callable(globals().get("_n1178_html_escape")):
+        return globals()["_n1178_html_escape"](value)
+    return _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _n1212_launch_certification_html_section(summary: Dict[str, Any]) -> str:
+    cert = _safe_dict(_safe_dict(summary).get("one_thousand_turn_launch_certification_summary"))
+    failed = ", ".join(_safe_str(v) for v in _safe_list(cert.get("failed_required_gates"))) or "none"
+    blocked = ", ".join(_safe_str(v) for v in _safe_list(cert.get("blocked_reasons"))) or "none"
+    return (
+        "<section id=\"n1212-1000-turn-launch-certification\" class=\"card\">"
+        "<h2>N121.2 1000-Turn Launch Certification</h2>"
+        "<ul>"
+        f"<li>Certified candidate: {_n1212_html_escape(cert.get('ok'))}</li>"
+        f"<li>Recommended next phase: {_n1212_html_escape(cert.get('recommended_next_phase'))}</li>"
+        f"<li>Recommended profile: {_n1212_html_escape(cert.get('recommended_next_command_profile'))}</li>"
+        f"<li>Blocked reasons: {_n1212_html_escape(blocked)}</li>"
+        f"<li>Failed required gates: {_n1212_html_escape(failed)}</li>"
+        "</ul>"
+        "</section>"
+    )
+
+
+def _n1172_inject_1000_turn_gap_section(html_report: str, final_summary: Dict[str, Any]) -> str:
+    if callable(_N1212_PREVIOUS_N1172_INJECT_1000_SECTION):
+        html_report = _N1212_PREVIOUS_N1172_INJECT_1000_SECTION(html_report, final_summary)
+    html_text = _safe_str(html_report)
+    if "id=\"n1212-1000-turn-launch-certification\"" in html_text:
+        return html_text
+    section = _n1212_launch_certification_html_section(final_summary)
+    index = html_text.lower().rfind("</body>")
+    if index >= 0:
+        return html_text[:index] + section + html_text[index:]
+    return html_text + section
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N1212_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N1212_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    value = _n1212_apply_launch_certification(value)
+    artifacts = {
+        "one-thousand-turn-launch-certification-summary.json": value.get("one_thousand_turn_launch_certification_summary"),
+        "combined-endurance-systems-summary.json": value.get("combined_endurance_systems_summary"),
+        "economy-long-term-sinks-summary.json": value.get("economy_long_term_sinks_summary"),
+        "direct-graph-combat-round-summary.json": value.get("direct_graph_combat_round_summary"),
+    }
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    for artifact_name, payload in artifacts.items():
+        payload = _safe_dict(payload)
+        if not payload or artifact_name in generated_files:
+            continue
+        serialized = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N1212_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N1212_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(zip_handle, artifact_manifest, artifact_name, payload, serialized_text=serialized, force=True)
+    return result
