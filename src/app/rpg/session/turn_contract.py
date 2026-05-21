@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List
 
 from app.rpg.economy.service_resolver import resolve_service_turn
+from app.rpg.session.runtime_promotions import apply_climate_survival_turn_effects
 from app.rpg.world.travel_graph import list_available_routes
 
 
@@ -24,6 +25,33 @@ def safe_int(v: Any, default: int = 0) -> int:
         return int(v)
     except Exception:
         return default
+
+
+def _merge_resource_changes(existing: Dict[str, Any], survival_changes: Dict[str, Any]) -> Dict[str, Any]:
+    existing = dict(safe_dict(existing))
+    survival_changes = safe_dict(survival_changes)
+    if not existing:
+        return dict(survival_changes)
+    existing["climate_survival"] = survival_changes
+    existing.setdefault("sources", [])
+    if isinstance(existing["sources"], list):
+        existing["sources"].append("n1231_climate_survival_tick")
+    return existing
+
+
+def _merge_effect_result(existing: Dict[str, Any], survival_effect: Dict[str, Any]) -> Dict[str, Any]:
+    existing = dict(safe_dict(existing))
+    survival_effect = safe_dict(survival_effect)
+    if not existing:
+        return dict(survival_effect)
+    existing_effects = safe_list(existing.get("effects"))
+    survival_effects = safe_list(survival_effect.get("effects"))
+    existing["effects"] = existing_effects + survival_effects
+    existing["climate_survival"] = survival_effect
+    existing["applied"] = bool(existing.get("applied") or survival_effect.get("applied"))
+    warnings = safe_list(existing.get("warnings")) + safe_list(survival_effect.get("warnings"))
+    existing["warnings"] = list(dict.fromkeys(warnings))
+    return existing
 
 
 def _find_actor(simulation_state: Dict[str, Any], target_id: str) -> Dict[str, Any]:
@@ -538,6 +566,21 @@ def build_turn_contract(
     if service_result.get("matched"):
         resolved_for_contract["service_result"] = service_result
 
+    survival_result = apply_climate_survival_turn_effects(
+        simulation_state_after,
+        runtime_state,
+    )
+    climate_survival = safe_dict(survival_result.get("climate_survival"))
+    resolved_for_contract["resource_changes"] = _merge_resource_changes(
+        resolved_for_contract.get("resource_changes"),
+        survival_result.get("resource_changes"),
+    )
+    resolved_for_contract["effect_result"] = _merge_effect_result(
+        resolved_for_contract.get("effect_result"),
+        survival_result.get("effect_result"),
+    )
+    resolved_for_contract["climate_survival"] = climate_survival
+
     state_delta = derive_state_delta(
         simulation_state_before,
         interpreted,
@@ -559,6 +602,7 @@ def build_turn_contract(
         "purchase_applied",
         "effect_result",
         "resource_changes",
+        "climate_survival",
         "blocked",
         "blocked_reason",
         "semantic_action",
@@ -605,6 +649,9 @@ def build_turn_contract(
         "narration_brief": narration_brief,
         "available_routes": available_routes,
         "suggested_actions": travel_suggestions,
+        "climate_survival": climate_survival,
+        "resource_changes": safe_dict(resolved.get("resource_changes")),
+        "effect_result": safe_dict(resolved.get("effect_result")),
         "presentation": {
             "available_actions": safe_list(service_result.get("available_actions"))
             if service_result.get("matched")
