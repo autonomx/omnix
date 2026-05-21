@@ -1,0 +1,242 @@
+{
+  "by_field": {},
+  "checked_count": 100,
+  "examples": [
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I report the ambush evidence to Bran.",
+          "player_action": "I report the ambush evidence to Bran.",
+          "progress_quality.player_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush."
+        },
+        "canonical_turn_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I report the ambush evidence to Bran.",
+            "expected": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+      "progress_quality_player_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+      "turn_index": 8
+    },
+    {
+      "before_repair": {
+        "candidate_count": 4,
+        "candidates": {
+          "canonical_turn_action": "I leave the tavern and travel toward Garran's wagon yard.",
+          "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+          "progress_quality.player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+          "result.action": "The travel action resolves according to the turn contract."
+        },
+        "canonical_turn_action": "I leave the tavern and travel toward Garran's wagon yard.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "result.action": {
+            "actual": "The travel action resolves according to the turn contract.",
+            "expected": "I leave the tavern and travel toward Garran's wagon yard."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I leave the tavern and travel toward Garran's wagon yard.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+      "progress_quality_player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+      "turn_index": 10
+    },
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I warn Garran about the ambush signs on the road.",
+          "player_action": "I warn Garran about the ambush signs on the road.",
+          "progress_quality.player_action": "I tell Garran the mill bridge may be an ambush and show him the evidence."
+        },
+        "canonical_turn_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I warn Garran about the ambush signs on the road.",
+            "expected": "I tell Garran the mill bridge may be an ambush and show him the evidence."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+      "progress_quality_player_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+      "turn_index": 11
+    },
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I scout the quarry road for ambush signs.",
+          "player_action": "I scout the quarry road for ambush signs.",
+          "progress_quality.player_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs."
+        },
+        "canonical_turn_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I scout the quarry road for ambush signs.",
+            "expected": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+      "progress_quality_player_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+      "turn_index": 16
+    },
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I watch the bridge for hidden watchers.",
+          "player_action": "I watch the bridge for hidden watchers.",
+          "progress_quality.player_action": "I scan the rock shelf for watchers or scouts watching the quarry road."
+        },
+        "canonical_turn_action": "I scan the rock shelf for watchers or scouts watching the quarry road.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I watch the bridge for hidden watchers.",
+            "expected": "I scan the rock shelf for watchers or scouts watching the quarry road."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I scan the rock shelf for watchers or scouts watching the quarry road.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I scan the rock shelf for watchers or scouts watching the quarry road.",
+      "progress_quality_player_action": "I scan the rock shelf for watchers or scouts watching the quarry road.",
+      "turn_index": 17
+    },
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I choose how to respond to the ambush signs.",
+          "player_action": "I choose how to respond to the ambush signs.",
+          "progress_quality.player_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush."
+        },
+        "canonical_turn_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I choose how to respond to the ambush signs.",
+            "expected": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+      "progress_quality_player_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+      "turn_index": 18
+    },
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I protect the wagon and fight the bandits.",
+          "player_action": "I protect the wagon and fight the bandits.",
+          "progress_quality.player_action": "I check in with Garran and focus on the active wagon-road objective."
+        },
+        "canonical_turn_action": "I check in with Garran and focus on the active wagon-road objective.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I protect the wagon and fight the bandits.",
+            "expected": "I check in with Garran and focus on the active wagon-road objective."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I check in with Garran and focus on the active wagon-road objective.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I check in with Garran and focus on the active wagon-road objective.",
+      "progress_quality_player_action": "I check in with Garran and focus on the active wagon-road objective.",
+      "turn_index": 19
+    },
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I search the bandit's satchel for proof.",
+          "player_action": "I search the bandit's satchel for proof.",
+          "progress_quality.player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill."
+        },
+        "canonical_turn_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I search the bandit's satchel for proof.",
+            "expected": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+      "progress_quality_player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+      "turn_index": 21
+    },
+    {
+      "before_repair": {
+        "candidate_count": 3,
+        "candidates": {
+          "canonical_turn_action": "I return to Bran with the marked coin proof.",
+          "player_action": "I return to Bran with the marked coin proof.",
+          "progress_quality.player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill."
+        },
+        "canonical_turn_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+        "mismatch_count": 1,
+        "mismatches": {
+          "player_action": {
+            "actual": "I return to Bran with the marked coin proof.",
+            "expected": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill."
+          }
+        },
+        "ok": false
+      },
+      "canonical_turn_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+      "mismatches": {},
+      "ok": true,
+      "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+      "progress_quality_player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+      "turn_index": 22
+    }
+  ],
+  "forced_action_override_count": 0,
+  "forced_override_count": 0,
+  "format_version": "turn_action_consistency_summary_v1",
+  "mismatch_count": 0,
+  "mismatch_rate": 0.0,
+  "ok": true,
+  "repaired_count": 9,
+  "repaired_rate": 0.09,
+  "unrepaired_count": 0,
+  "unrepaired_rate": 0.0
+}

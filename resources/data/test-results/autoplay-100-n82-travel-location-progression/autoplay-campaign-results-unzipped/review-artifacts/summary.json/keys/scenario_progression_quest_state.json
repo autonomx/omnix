@@ -1,0 +1,302 @@
+{
+  "quest:captain_voss_consequence": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:plan_against_voss",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Plan how to use the evidence against Captain Voss."
+      }
+    ],
+    "quest_id": "quest:captain_voss_consequence",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Captain Voss Consequence"
+  },
+  "quest:handler_veska_leadership_pursuit": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:plan_pursuit_of_veska",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Plan how to pursue Handler Veska."
+      }
+    ],
+    "quest_id": "quest:handler_veska_leadership_pursuit",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Handler Veska Pursuit"
+  },
+  "quest:mill_ruins_lead": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: Identify any watchers or scouts near the route.",
+          "turn": null
+        },
+        "objective_id": "objective:identify_bandit_employer",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Identify who hired the ambushers."
+      }
+    ],
+    "quest_id": "quest:mill_ruins_lead",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Mill Ruins Lead"
+  },
+  "quest:north_road_shrine_contact": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:reach_north_road_shrine",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Reach the north road shrine."
+      }
+    ],
+    "quest_id": "quest:north_road_shrine_contact",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "North Road Shrine Contact"
+  },
+  "quest:quarry_road_ambush": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: Leave the wagon yard by the quarry road.",
+          "turn": null
+        },
+        "objective_id": "objective:leave_by_quarry_road",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Leave the wagon yard by the quarry road."
+      },
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: Scout the quarry road for ambush signs.",
+          "turn": null
+        },
+        "objective_id": "objective:scout_quarry_road",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Scout the quarry road for ambush signs."
+      },
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: Identify any watchers or scouts near the route.",
+          "turn": null
+        },
+        "objective_id": "objective:spot_bridge_watchers",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Identify any watchers or scouts near the route."
+      },
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: Choose how to handle the ambush threat.",
+          "turn": null
+        },
+        "objective_id": "objective:choose_ambush_response",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Choose how to handle the ambush threat."
+      }
+    ],
+    "quest_id": "quest:quarry_road_ambush",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Quarry Road Ambush"
+  },
+  "quest:sable_chain_countermove": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:plan_against_sable_chain",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Plan the next move against the Sable Chain."
+      }
+    ],
+    "quest_id": "quest:sable_chain_countermove",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Sable Chain Countermove"
+  },
+  "quest:sable_chain_endgame_opener": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:review_veska_ledgers",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Review Veska's ledgers to map the Sable Chain command structure."
+      }
+    ],
+    "quest_id": "quest:sable_chain_endgame_opener",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Sable Chain Endgame Opener"
+  },
+  "quest:sable_chain_handler_route_pressure": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:review_handler_orders",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Review the sealed orders naming the Sable Chain handler."
+      }
+    ],
+    "quest_id": "quest:sable_chain_handler_route_pressure",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Sable Chain Handler"
+  },
+  "quest:scenario_progression": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:prepare_for_mill_road",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Prepare for the mill road by gathering supplies, resting, and securing help."
+      }
+    ],
+    "quest_id": "quest:scenario_progression",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Scenario Progression"
+  },
+  "quest:voss_backers_investigation": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "scenario_progression_graph"
+        },
+        "objective_id": "objective:review_voss_backer_leads",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Review the evidence pointing beyond Captain Voss."
+      }
+    ],
+    "quest_id": "quest:voss_backers_investigation",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Voss Backers Investigation"
+  },
+  "quest:warn_wagon": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: Travel to Garran's wagon yard.",
+          "turn": null
+        },
+        "objective_id": "objective:travel_to_wagon_yard",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "Travel to Garran's wagon yard."
+      },
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: warn garran",
+          "turn": null
+        },
+        "objective_id": "objective:warn_garran",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "warn garran"
+      }
+    ],
+    "quest_id": "quest:warn_wagon",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Warn the Wagon"
+  },
+  "quest:witness_search": {
+    "completed": true,
+    "objectives": [
+      {
+        "completed": true,
+        "completion_evidence": {
+          "source": "autoplay_story_hook_state",
+          "summary": "Objective completed: Report the witness findings to Bran.",
+          "turn": null
+        },
+        "objective_id": "objective:find_witness",
+        "progress_count": 0,
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "summary": "find witness"
+      }
+    ],
+    "quest_id": "quest:witness_search",
+    "source": "scenario_progression_graph",
+    "status": "completed",
+    "title": "Witness Search"
+  }
+}

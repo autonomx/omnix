@@ -1,0 +1,338 @@
+{
+  "active_count": 0,
+  "completed_count": 12,
+  "completed_objective_count": 16,
+  "objective_count": 16,
+  "quest_count": 12,
+  "quests": [
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:find_witness",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "find witness"
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:witness_search",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Witness Search"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 2,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 2,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:travel_to_wagon_yard",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Travel to Garran's wagon yard."
+        },
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:warn_garran",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "warn garran"
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:warn_wagon",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Warn the Wagon"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:prepare_for_mill_road",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Prepare for the mill road by gathering supplies, resting, and securing help."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:scenario_progression",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Scenario Progression"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 4,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 4,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:leave_by_quarry_road",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Leave the wagon yard by the quarry road."
+        },
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:scout_quarry_road",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Scout the quarry road for ambush signs."
+        },
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:spot_bridge_watchers",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Identify any watchers or scouts near the route."
+        },
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:choose_ambush_response",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Choose how to handle the ambush threat."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:quarry_road_ambush",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Quarry Road Ambush"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:identify_bandit_employer",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Identify who hired the ambushers."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:mill_ruins_lead",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Mill Ruins Lead"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:reach_north_road_shrine",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Reach the north road shrine."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:north_road_shrine_contact",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "North Road Shrine Contact"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:plan_against_voss",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Plan how to use the evidence against Captain Voss."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:captain_voss_consequence",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Captain Voss Consequence"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:review_voss_backer_leads",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Review the evidence pointing beyond Captain Voss."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:voss_backers_investigation",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Voss Backers Investigation"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:plan_against_sable_chain",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Plan the next move against the Sable Chain."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:sable_chain_countermove",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Sable Chain Countermove"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:review_handler_orders",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Review the sealed orders naming the Sable Chain handler."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:sable_chain_handler_route_pressure",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Sable Chain Handler"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:plan_pursuit_of_veska",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Plan how to pursue Handler Veska."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:handler_veska_leadership_pursuit",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Handler Veska Pursuit"
+    },
+    {
+      "completed": true,
+      "completed_objective_count": 1,
+      "handoff_quest": false,
+      "lead": {},
+      "objective_count": 1,
+      "objectives": [
+        {
+          "affordance_priority": 0,
+          "completed": true,
+          "handoff_objective": false,
+          "objective_id": "objective:review_veska_ledgers",
+          "status": "completed",
+          "subject": "",
+          "suggested_actions": [],
+          "summary": "Review Veska's ledgers to map the Sable Chain command structure."
+        }
+      ],
+      "priority": 0,
+      "quest_id": "quest:sable_chain_endgame_opener",
+      "source": "scenario_progression_graph",
+      "status": "completed",
+      "title": "Sable Chain Endgame Opener"
+    }
+  ],
+  "source": "campaign_state_authority_commit.quest_progress"
+}

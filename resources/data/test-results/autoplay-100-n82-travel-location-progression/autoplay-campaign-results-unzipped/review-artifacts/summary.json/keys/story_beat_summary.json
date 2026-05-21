@@ -1,0 +1,127 @@
+{
+  "beat_count": 100,
+  "beats": [
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I read the route pressure instructions from the handler's dead drop. — The parchment felt thick and stiff beneath your fingers, bearing the distinctive wax seal of Handler Veska's inner circle. The instructions detailed a precise route designed to bypass known patrols along the old trade road. You note a critical marker: 'Pressur",
+      "turn_index": 81
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I travel to Black Ford before the Sable Chain handler's people can seize the crossing. — The journey toward Black Ford proved swift, and you managed to reach the relative safety of the crossing just ahead of the Sable Chain's advance scouts. The air here is heavy with the scent of wet earth and anticipation, a clear sign that Handler Veska’s peopl",
+      "turn_index": 82
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I confront the Sable Chain route pressure agents at Black Ford and order them to stand down. — As you sharply address the group of Sable Chain agents clustered at Black Ford, demanding they cease their pressuring activities, an immediate tension fills the air. The agents, initially bristling with stubborn defiance, pause mid-stride, several lowering the",
+      "turn_index": 83
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I secure the Black Ford crossing so the teamsters can keep the east road open. — With strategic placement of guards at key points, you successfully locked down the Black Ford crossing. The heavy-duty teamsters now have an unimpeded path across the gorge onto the east road, allowing their vital supply lines to flow freely into your camp. A ",
+      "turn_index": 84
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I study the captured route papers to identify the Sable Chain handler's signature. — As you pore over the brittle, ink-stained route papers, the familiar calligraphic flourish begins to assert itself amidst the mundane logistical notations. It is a distinctive, sharp loop that matches the known markers associated with Handler Veska's direct co",
+      "turn_index": 85
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I return to Bran and Garran with the name of the Sable Chain handler: Veska. — As you approach Bran and Garran, delivering the name of the Sable Chain handler, a noticeable shift occurs in their bearing. Bran straightens slightly, his expression moving from cautious watchfulness to focused interest, while Garran nods slowly, absorbing th",
+      "turn_index": 86
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I meet with Bran and Garran to plan how to pursue Handler Veska before the Sable Chain relocates. — The meeting with Bran and Garran is productive, setting a clear strategic direction for the immediate future. They quickly establish that Veska cannot be allowed to relocate unnoticed; they must intercept her before she consolidates her power further within th",
+      "turn_index": 87
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I trace Veska's courier route from the captured route papers and sealed orders. — The captured route papers, smelling faintly of stale parchment and courier wax, lay spread before you. As you trace Veska's designated path, key notations about waypoint transfers become clear against the faded ink. You observe a specific deviation noted near ",
+      "turn_index": 88
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I travel to the old north watchpost to follow Veska's courier trail. — The scene settles after the action.",
+      "turn_index": 89
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail. — The crumbling stone of the old north watchpost yields its secrets to your careful gaze. Dust motes dance in the weak sunlight filtering through broken crenellations as you meticulously scan the perimeter and interior pathways. You successfully locate faded cou",
+      "turn_index": 90
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I intercept Veska's courier before the message can leave the old north watchpost. — You successfully move into position just as the courier reaches the outer threshold of the old north watchpost. The messenger hesitates, clearly ready to hand over sealed documents before turning down the dusty road leading out towards the wilds. You now have ",
+      "turn_index": 91
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I recover Veska's coded message from the intercepted courier. — The tightly folded parchment, bearing the distinctive seal of Handler Veska, felt crisp and official in your grip. The coded script within is immediately recognizable as tactical dispatch language. You have successfully retrieved a vital piece of intelligence ",
+      "turn_index": 92
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I decode Veska's coded message to learn where the Sable Chain leadership is moving. — The complex cipher on Veska's parchment yields instantly under your focused scrutiny. The symbols resolve into a clear, terse directive detailing the Sable Chain leadership's intended movement towards the Western Pass.\n\nThis intelligence confirms rumors of a m",
+      "turn_index": 93
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I travel to the ridge hideout before Veska's leadership cell can relocate. — Your careful passage across the uneven terrain allowed you to slip into the perimeter of the ridge hideout without disturbing a single stone. The air here is crisp and carries the faint scent of woodsmoke mixed with damp earth, confirming this location is acti",
+      "turn_index": 94
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I scout the ridge hideout for guards, exits, and signs of Handler Veska. — The ridge crest offers a commanding view over the hidden compound. You successfully detect two pairs of guards patrolling the main perimeter, and a discreet service exit is visible near the eastern wall. Furthermore, you spot Handler Veska herself—she is direc",
+      "turn_index": 95
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I confront Handler Veska at the ridge hideout with the proof linking her to the Sable Chain route pressure. — The ridge hideout falls silent as you step forward, the damning proof held firmly in your hand. Handler Veska, who had been surveying the western pass with a practiced air of weary command, finally turns her attention to you. She studies the document—or eviden",
+      "turn_index": 96
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I secure Veska's leadership ledgers before the Sable Chain can destroy or move them. — With careful hands, you successfully retrieved Veska’s crucial leadership ledgers from where the Sable Chain patrols were about to sweep them away. The documents feel solid and weighty in your grasp, a tangible testament to her authority amidst the chaos of th",
+      "turn_index": 97
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I return to Bran and Garran with Veska's leadership ledgers and proof of the Sable Chain command structure. — The heavy, bound ledgers feel substantial in your hands as you present them to Bran and Garran. The crisp parchment detailing Veska’s operational mandates confirms precisely how the Sable Chain operates under her command. They immediately begin studying the do",
+      "turn_index": 98
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I review Veska's ledgers with Bran and Garran to map the Sable Chain command structure. — The brittle vellum of Veska’s ledgers feels cool beneath your fingers as Bran traces lines across a map while Garran leans in to confirm entries. The flowcharts detailing the Sable Chain's command structure begin to coalesce from scattered accounts and payment",
+      "turn_index": 99
+    },
+    {
+      "has_turn_contract": true,
+      "source": "fallback_turn_summary",
+      "summary": "Player: I study the ledger entries to identify the hidden Sable Chain paymaster. — The scene settles after the action.",
+      "turn_index": 100
+    }
+  ],
+  "empty_turn_contract_count": 0,
+  "warnings": []
+}

@@ -1,0 +1,14 @@
+{
+  "active_graph_quest_count": 0,
+  "active_objective_count": 0,
+  "active_quest_count": 0,
+  "completed_evidence_count": 10,
+  "completed_objective_count": 16,
+  "completed_quest_count": 12,
+  "completed_without_next_objective": false,
+  "graph_arc_end_state": true,
+  "graph_completed_node_count": 100,
+  "graph_quest_count": 12,
+  "ok": true,
+  "stale_active_objectives": []
+}

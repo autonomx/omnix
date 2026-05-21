@@ -1,0 +1,302 @@
+[
+  {
+    "raw_preview": "{\"action\": \"Initiative established; action pending.\", \"combat_narration_accepted\": true, \"combat_narration_attempted\": true, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], \"facts\": {\"actor_id\": \"\", \"actor_name\": \"\", \"attack_roll\": null, \"attack_total\": null, \"combat_ended\": false, \"damage_applied\": null, \"defeated\": false, \"hit\": null, \"next_actor_id\": \"player\", \"party_defeated\": false, \"reason\": \"combat_started\", \"round\": 1, \"target_defense\": null, \"target",
+    "summary": "",
+    "turn": 63,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"action\": \"Initiative established; action pending.\", \"followup_hooks\": [\"player_turn_start\", \"enemy:bandit_1_turn_pending\"], \"format_version\": \"rpg_narration_v2\", \"narration\": \"Combat has officially begun! The ambush is sprung, and the bandit stands ready for confrontation. You have initiative priority over the aggressive foe. It is your turn to act first in this opening round of battle.\", \"npc\": {\"line\": \"\", \"speaker\": \"Bandit\"}, \"reward\": \"\"}",
+    "summary": "",
+    "turn": 63,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 82,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 82,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 83,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 83,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 83,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 84,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 84,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 84,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 85,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 85,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 85,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 86,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 86,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 86,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 87,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 87,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 87,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 88,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 88,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 88,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 89,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 89,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 89,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 90,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 90,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 90,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 91,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 91,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 91,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 92,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 92,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 92,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 93,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 93,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 93,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 94,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 94,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 94,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 95,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 95,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 95,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 96,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 96,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 96,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 97,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 97,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 97,
+    "type": "relationship_delta"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}",
+    "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+    "turn": 98,
+    "type": "relationship_delta"
+  }
+]

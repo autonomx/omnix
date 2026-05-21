@@ -1,0 +1,183 @@
+{
+  "artifact_write_ms": 5093.709,
+  "avg_human_playable_blocking_ms": 348.673,
+  "avg_playable_blocking_ms": 5716.601,
+  "avg_turn_ms": 6083.65,
+  "campaign_wall_ms": 705005.026,
+  "campaign_wall_seconds": 705.005,
+  "max_human_playable_blocking_ms": 6328.332,
+  "max_playable_blocking_ms": 10880.571,
+  "max_turn_ms": 11301.776,
+  "median_turn_ms": 6238.422,
+  "min_turn_ms": 3331.42,
+  "p90_turn_ms": 8038.036,
+  "p95_human_playable_blocking_ms": 288.635,
+  "p95_playable_blocking_ms": 8201.097,
+  "p95_turn_ms": 8450.007,
+  "slowest_turns": [
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 5689.69,
+      "player_action": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
+      "player_agent_ms": 5154.068,
+      "story_hooks_ms": 11.554,
+      "turn_index": 72,
+      "turn_total_ms": 11301.776
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 4072.963,
+      "player_action": "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
+      "player_agent_ms": 6738.058,
+      "story_hooks_ms": 12.256,
+      "turn_index": 63,
+      "turn_total_ms": 11256.306
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 4713.714,
+      "player_action": "I capture the strike team's sealed orders before they can destroy them.",
+      "player_agent_ms": 5555.066,
+      "story_hooks_ms": 14.054,
+      "turn_index": 73,
+      "turn_total_ms": 10738.617
+    },
+    {
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 6290.42,
+      "player_action": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
+      "player_agent_ms": 3529.007,
+      "story_hooks_ms": 12.443,
+      "turn_index": 71,
+      "turn_total_ms": 10274.907
+    },
+    {
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 91.766,
+      "player_action": "I travel to the north road shrine to follow the Black Briar contact lead.",
+      "player_agent_ms": 8344.851,
+      "story_hooks_ms": 7.131,
+      "turn_index": 29,
+      "turn_total_ms": 8727.839
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 84.452,
+      "player_action": "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use.",
+      "player_agent_ms": 8075.997,
+      "story_hooks_ms": 6.946,
+      "turn_index": 25,
+      "turn_total_ms": 8435.384
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 136.374,
+      "player_action": "I shadow the Sable Chain watchers from the safehouse to learn where they report.",
+      "player_agent_ms": 7620.413,
+      "story_hooks_ms": 11.884,
+      "turn_index": 66,
+      "turn_total_ms": 8340.701
+    },
+    {
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 46.113,
+      "player_action": "I turn to Mira and ask what she saw near the side door.",
+      "player_agent_ms": 8134.152,
+      "story_hooks_ms": 2.09,
+      "turn_index": 4,
+      "turn_total_ms": 8304.373
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 135.084,
+      "player_action": "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes.",
+      "player_agent_ms": 7670.033,
+      "story_hooks_ms": 12.744,
+      "turn_index": 68,
+      "turn_total_ms": 8268.079
+    },
+    {
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 86.827,
+      "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+      "player_agent_ms": 7789.11,
+      "story_hooks_ms": 6.623,
+      "turn_index": 23,
+      "turn_total_ms": 8171.525
+    }
+  ],
+  "stage_summary": {
+    "background_enqueue_ms": {
+      "avg_ms": 6.259,
+      "count": 100,
+      "max_ms": 22.137,
+      "total_ms": 625.919
+    },
+    "base_response_ms": {
+      "avg_ms": 0.002,
+      "count": 100,
+      "max_ms": 0.014,
+      "total_ms": 0.163
+    },
+    "human_playable_blocking_ms": {
+      "avg_ms": 348.673,
+      "count": 100,
+      "max_ms": 6328.332,
+      "total_ms": 34867.297
+    },
+    "manual_turn_ms": {
+      "avg_ms": 316.089,
+      "count": 100,
+      "max_ms": 6290.42,
+      "total_ms": 31608.894
+    },
+    "playable_blocking_ms": {
+      "avg_ms": 5716.601,
+      "count": 100,
+      "max_ms": 10880.571,
+      "total_ms": 571660.149
+    },
+    "player_agent_ms": {
+      "avg_ms": 5367.929,
+      "count": 100,
+      "max_ms": 8344.851,
+      "total_ms": 536792.852
+    },
+    "progress_eval_ms": {
+      "avg_ms": 0.155,
+      "count": 100,
+      "max_ms": 0.337,
+      "total_ms": 15.525
+    },
+    "record_build_ms": {
+      "avg_ms": 18.932,
+      "count": 100,
+      "max_ms": 219.553,
+      "total_ms": 1893.2
+    },
+    "state_bounds_ms": {
+      "avg_ms": 4.01,
+      "count": 100,
+      "max_ms": 7.296,
+      "total_ms": 400.992
+    },
+    "story_hooks_ms": {
+      "avg_ms": 9.485,
+      "count": 100,
+      "max_ms": 21.807,
+      "total_ms": 948.523
+    }
+  },
+  "turn_count": 100,
+  "turns_per_second": 0.1418
+}

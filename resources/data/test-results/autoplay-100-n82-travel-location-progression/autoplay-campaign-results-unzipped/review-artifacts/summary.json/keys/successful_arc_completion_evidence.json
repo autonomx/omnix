@@ -1,0 +1,576 @@
+{
+  "combat_turns": [
+    19
+  ],
+  "completed_arc_ids": [
+    "arc:marked_coin_investigation",
+    "arc:mill_road_threat"
+  ],
+  "completed_count": 2,
+  "examples": [
+    {
+      "action_id": "ask_bran_about_tension",
+      "changed_parts": [
+        "ask",
+        "currency_change",
+        "mechanic_completed",
+        "service_or_lodging"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask",
+        "currency_change",
+        "service_or_lodging"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+      "turn_index": 1
+    },
+    {
+      "action_id": "ask_bran_who_left_side_door",
+      "changed_parts": [
+        "ask"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I ask Bran who left through the side door and why they were afraid.",
+      "turn_index": 2
+    },
+    {
+      "action_id": "ask_bran_direction",
+      "changed_parts": [
+        "ask"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I ask Bran what direction the cloaked traveler went after leaving.",
+      "turn_index": 3
+    },
+    {
+      "action_id": "ask_mira_side_door",
+      "changed_parts": [
+        "ask"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I turn to Mira and ask what she saw near the side door.",
+      "turn_index": 4
+    },
+    {
+      "action_id": "inspect_side_door",
+      "changed_parts": [
+        "inspect"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "inspect"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+      "turn_index": 5
+    },
+    {
+      "action_id": "ask_bran_bridge",
+      "changed_parts": [
+        "ask"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I ask Bran if the old east road leads to a bridge.",
+      "turn_index": 6
+    },
+    {
+      "action_id": "ask_patron_bridge",
+      "changed_parts": [
+        "ask"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I approach the local patron and quietly ask what he knows about the mill bridge.",
+      "turn_index": 7
+    },
+    {
+      "action_id": "report_findings_to_bran",
+      "changed_parts": [
+        "faction_consequence",
+        "mechanic_completed",
+        "npc_memory",
+        "npc_reaction",
+        "report",
+        "world_signal"
+      ],
+      "marked_coin_candidate": true,
+      "mechanics": [
+        "faction_consequence",
+        "npc_reaction",
+        "report"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I report the ambush evidence to Bran.",
+      "turn_index": 8
+    },
+    {
+      "action_id": "ask_bran_garran",
+      "changed_parts": [
+        "ask",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I ask Bran who is most likely to travel the road before dawn.",
+      "turn_index": 9
+    },
+    {
+      "action_id": "travel_to_wagon_yard",
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+      "turn_index": 10
+    },
+    {
+      "action_id": "warn_garran",
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "warn"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "warn"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I warn Garran about the ambush signs on the road.",
+      "turn_index": 11
+    },
+    {
+      "action_id": "ask_alternate_route",
+      "changed_parts": [
+        "ask",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I ask Garran if there is another route around the bridge.",
+      "turn_index": 12
+    },
+    {
+      "action_id": "buy_rations_from_bran",
+      "changed_parts": [
+        "buy",
+        "currency_change",
+        "inventory_change",
+        "mechanic_completed"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "buy",
+        "buying",
+        "currency_change",
+        "inventory_change"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I buy two rations from Bran.",
+      "turn_index": 13
+    },
+    {
+      "action_id": "prepare_quarry_road",
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "prepare"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I help Garran prepare the wagon for the safer route and get ready to leave.",
+      "turn_index": 14
+    },
+    {
+      "action_id": "leave_by_quarry_road",
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
+      "turn_index": 15
+    },
+    {
+      "action_id": "scout_quarry_road",
+      "changed_parts": [
+        "inspect",
+        "mechanic_completed"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "inspect"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I scout the quarry road for ambush signs.",
+      "turn_index": 16
+    },
+    {
+      "action_id": "spot_bridge_watchers",
+      "changed_parts": [
+        "inspect",
+        "mechanic_completed"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "inspect"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I watch the bridge for hidden watchers.",
+      "turn_index": 17
+    },
+    {
+      "action_id": "choose_ambush_response",
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "tell"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "tell"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I choose how to respond to the ambush signs.",
+      "turn_index": 18
+    },
+    {
+      "action_id": "protect_wagon_or_lure_bandits",
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "turn_index": 19
+    },
+    {
+      "action_id": "question_captured_bandit",
+      "changed_parts": [
+        "ask",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I question the captured bandit.",
+      "turn_index": 20
+    },
+    {
+      "action_id": "search_bandit_satchel",
+      "changed_parts": [
+        "faction_consequence",
+        "inspect",
+        "mechanic_completed",
+        "npc_memory",
+        "npc_reaction",
+        "world_signal"
+      ],
+      "marked_coin_candidate": true,
+      "mechanics": [
+        "faction_consequence",
+        "inspect",
+        "npc_reaction"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I search the bandit's satchel for proof.",
+      "turn_index": 21
+    },
+    {
+      "action_id": "return_to_bran_with_proof",
+      "changed_parts": [
+        "faction_consequence",
+        "mechanic_completed",
+        "npc_memory",
+        "npc_reaction",
+        "travel",
+        "world_signal"
+      ],
+      "marked_coin_candidate": true,
+      "mechanics": [
+        "faction_consequence",
+        "npc_reaction",
+        "travel"
+      ],
+      "mill_road_candidate": false,
+      "player_action": "I return to Bran with the marked coin proof.",
+      "turn_index": 22
+    },
+    {
+      "action_id": "ask_bran_about_old_mill",
+      "changed_parts": [
+        "ask"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "ask"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+      "turn_index": 23
+    },
+    {
+      "action_id": "travel_to_old_mill",
+      "changed_parts": [
+        "faction_consequence",
+        "mechanic_completed",
+        "npc_memory",
+        "npc_reaction",
+        "travel",
+        "world_signal"
+      ],
+      "marked_coin_candidate": true,
+      "mechanics": [
+        "faction_consequence",
+        "npc_reaction",
+        "travel"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I travel to the old mill ruins to follow the marked coin lead.",
+      "turn_index": 24
+    },
+    {
+      "action_id": "inspect_mill_cellar",
+      "changed_parts": [
+        "inspect"
+      ],
+      "marked_coin_candidate": false,
+      "mechanics": [
+        "inspect"
+      ],
+      "mill_road_candidate": true,
+      "player_action": "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use.",
+      "turn_index": 25
+    }
+  ],
+  "faction_turns": [
+    8,
+    21,
+    22,
+    24,
+    37,
+    38,
+    39,
+    40,
+    41,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    62,
+    64,
+    66,
+    74,
+    96,
+    98
+  ],
+  "format_version": "successful_arc_completion_evidence_v1",
+  "marked_coin_success": true,
+  "marked_coin_turns": [
+    8,
+    21,
+    22,
+    24,
+    37,
+    38,
+    39,
+    40,
+    41,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    68,
+    69,
+    70,
+    71,
+    72,
+    74,
+    75,
+    77,
+    78,
+    79,
+    80,
+    82,
+    83,
+    85,
+    86,
+    87,
+    90,
+    93,
+    96,
+    97,
+    98,
+    99
+  ],
+  "mill_road_success": true,
+  "mill_road_turns": [
+    10,
+    14,
+    15,
+    19,
+    20,
+    21,
+    23,
+    24,
+    25,
+    28,
+    49,
+    54
+  ],
+  "npc_reaction_turns": [
+    8,
+    21,
+    22,
+    24,
+    37,
+    38,
+    39,
+    40,
+    41,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    62,
+    64,
+    66,
+    74,
+    96,
+    98
+  ],
+  "ok": true,
+  "proof_turns": [
+    21,
+    22,
+    24,
+    38,
+    39,
+    46,
+    62,
+    64,
+    96,
+    98
+  ]
+}

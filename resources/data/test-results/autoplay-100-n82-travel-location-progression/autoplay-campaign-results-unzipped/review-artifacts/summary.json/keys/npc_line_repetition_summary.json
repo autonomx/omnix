@@ -1,0 +1,20 @@
+{
+  "max_streak": 3,
+  "max_value": "Bran: Ask the point directly; I will not chase rumors around it.",
+  "ok": false,
+  "repeated": [
+    {
+      "count": 3,
+      "value": "Bran: Ask the point directly; I will not chase rumors around it."
+    },
+    {
+      "count": 3,
+      "value": "Bran: Name what you need answered, and I will stay with the facts."
+    },
+    {
+      "count": 3,
+      "value": "Bran: That is something we can act on. Tell me exactly where it points next."
+    }
+  ],
+  "streak_threshold": 3
+}

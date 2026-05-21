@@ -1,0 +1,14 @@
+{
+  "churn_only_turns": 0,
+  "failed_gates": [],
+  "max_churn_only_streak": 0,
+  "max_no_change_streak": 0,
+  "meaningful_progress_rate": 1.0,
+  "meaningful_turns": 100,
+  "no_change_turns": 0,
+  "ok": true,
+  "progression_changed_count": 0,
+  "requested_turns": 100,
+  "scenario_progress_satisfies_requested": true,
+  "unique_progression_node_count": 0
+}

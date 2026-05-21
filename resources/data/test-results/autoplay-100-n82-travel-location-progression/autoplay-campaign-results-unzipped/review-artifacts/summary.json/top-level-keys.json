@@ -1,0 +1,810 @@
+{
+  "artifact_name": "summary.json",
+  "format_version": "n1176_review_dict_key_index_v1",
+  "keys": [
+    {
+      "file": "review-artifacts/summary.json/keys/action_diversity_summary.json",
+      "key": "action_diversity_summary",
+      "size_bytes": 2690
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/action_diversity_thresholds.json",
+      "key": "action_diversity_thresholds",
+      "size_bytes": 109
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/active_graph_objective_count.json",
+      "key": "active_graph_objective_count",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/arc_completion_quality_summary.json",
+      "key": "arc_completion_quality_summary",
+      "size_bytes": 308
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/artifact_detail.json",
+      "key": "artifact_detail",
+      "size_bytes": 6
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/artifact_size_summary.json",
+      "key": "artifact_size_summary",
+      "size_bytes": 1599
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/autoplay_health.json",
+      "key": "autoplay_health",
+      "size_bytes": 829
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/autoplay_profile.json",
+      "key": "autoplay_profile",
+      "size_bytes": 11
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_drain_events.json",
+      "key": "background_drain_events",
+      "size_bytes": 50583
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_executor_shutdown_summary.json",
+      "key": "background_executor_shutdown_summary",
+      "size_bytes": 470
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_jobs.json",
+      "key": "background_jobs",
+      "size_bytes": 1686
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_llm_mode.json",
+      "key": "background_llm_mode",
+      "size_bytes": 10
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_presentation_attachment_events.json",
+      "key": "background_presentation_attachment_events",
+      "size_bytes": 43647
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_presentation_attachment_summary.json",
+      "key": "background_presentation_attachment_summary",
+      "size_bytes": 843
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_presentation_completed_result_count.json",
+      "key": "background_presentation_completed_result_count",
+      "size_bytes": 3
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_prompt_budget_summary.json",
+      "key": "background_prompt_budget_summary",
+      "size_bytes": 2102
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_result_timing_summary.json",
+      "key": "background_result_timing_summary",
+      "size_bytes": 18813
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/background_workers.json",
+      "key": "background_workers",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/base_response_mode.json",
+      "key": "base_response_mode",
+      "size_bytes": 15
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/behavioral_autoplay_eval_summary.json",
+      "key": "behavioral_autoplay_eval_summary",
+      "size_bytes": 6148
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/campaign_calendar_summary.json",
+      "key": "campaign_calendar_summary",
+      "size_bytes": 7495
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/campaign_stale_state_summary.json",
+      "key": "campaign_stale_state_summary",
+      "size_bytes": 380
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/campaign_state_commit_performance_summary.json",
+      "key": "campaign_state_commit_performance_summary",
+      "size_bytes": 76
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/campaign_state_commit_summary.json",
+      "key": "campaign_state_commit_summary",
+      "size_bytes": 25234
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/canonical_progress_quality.json",
+      "key": "canonical_progress_quality",
+      "size_bytes": 762
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/character_inventory_progression.json",
+      "key": "character_inventory_progression",
+      "size_bytes": 3757
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/checkpoint_every.json",
+      "key": "checkpoint_every",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/checkpoint_mode.json",
+      "key": "checkpoint_mode",
+      "size_bytes": 12
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/checkpoint_validation_summary.json",
+      "key": "checkpoint_validation_summary",
+      "size_bytes": 2548
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/combat_lifecycle_summary.json",
+      "key": "combat_lifecycle_summary",
+      "size_bytes": 163537
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/combined_quality_shape_summary.json",
+      "key": "combined_quality_shape_summary",
+      "size_bytes": 275
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/console_log_summary.json",
+      "key": "console_log_summary",
+      "size_bytes": 53275
+    },
+    {
+      "file": "review-artifacts/summary.json__deferred_advisory_promotion_summary.json/index.json",
+      "key": "deferred_advisory_promotion_summary",
+      "size_bytes": 1637765
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/deferred_advisory_trace_summary.json",
+      "key": "deferred_advisory_trace_summary",
+      "size_bytes": 349
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/deferred_narration_trace_summary.json",
+      "key": "deferred_narration_trace_summary",
+      "size_bytes": 1702
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/dialogue_action_relevance_summary.json",
+      "key": "dialogue_action_relevance_summary",
+      "size_bytes": 86540
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/dialogue_repair_quality_summary.json",
+      "key": "dialogue_repair_quality_summary",
+      "size_bytes": 302
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/dialogue_stale_source_summary.json",
+      "key": "dialogue_stale_source_summary",
+      "size_bytes": 7842
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/direct_graph_lifecycle_evidence.json",
+      "key": "direct_graph_lifecycle_evidence",
+      "size_bytes": 14572
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/duration_seconds.json",
+      "key": "duration_seconds",
+      "size_bytes": 6
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/economy_pressure_summary.json",
+      "key": "economy_pressure_summary",
+      "size_bytes": 11155
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/effective_turns.json",
+      "key": "effective_turns",
+      "size_bytes": 3
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/escalation_arc_progression_summary.json",
+      "key": "escalation_arc_progression_summary",
+      "size_bytes": 385
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/escalation_branch_summary.json",
+      "key": "escalation_branch_summary",
+      "size_bytes": 76
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/faction_consequence_summary.json",
+      "key": "faction_consequence_summary",
+      "size_bytes": 629
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/faction_pressure_summary.json",
+      "key": "faction_pressure_summary",
+      "size_bytes": 277
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/faction_reputation_summary.json",
+      "key": "faction_reputation_summary",
+      "size_bytes": 587
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/fail_on_narration_grounding_violations.json",
+      "key": "fail_on_narration_grounding_violations",
+      "size_bytes": 5
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/final_lifecycle_field_presence_summary.json",
+      "key": "final_lifecycle_field_presence_summary",
+      "size_bytes": 901
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/final_state_field_coverage_summary.json",
+      "key": "final_state_field_coverage_summary",
+      "size_bytes": 300
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/followup_arc_progression_summary.json",
+      "key": "followup_arc_progression_summary",
+      "size_bytes": 355
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/followup_arc_resolution_summary.json",
+      "key": "followup_arc_resolution_summary",
+      "size_bytes": 437
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/forbidden_player_action_summary.json",
+      "key": "forbidden_player_action_summary",
+      "size_bytes": 33
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/graph_action_state_has_actions.json",
+      "key": "graph_action_state_has_actions",
+      "size_bytes": 4
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/handoff_progress_summary.json",
+      "key": "handoff_progress_summary",
+      "size_bytes": 47
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/health.json",
+      "key": "health",
+      "size_bytes": 20689
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/hundred_turn_eval_summary.json",
+      "key": "hundred_turn_eval_summary",
+      "size_bytes": 57574
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/hundred_turn_evaluation.json",
+      "key": "hundred_turn_evaluation",
+      "size_bytes": 14435
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/hundred_turn_readiness_summary.json",
+      "key": "hundred_turn_readiness_summary",
+      "size_bytes": 21258
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/hundred_turn_validation_classification.json",
+      "key": "hundred_turn_validation_classification",
+      "size_bytes": 40
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/latency_profile.json",
+      "key": "latency_profile",
+      "size_bytes": 10
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/latest_state.json",
+      "key": "latest_state",
+      "size_bytes": 624093
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/llm_prompt_and_fallback_summary.json",
+      "key": "llm_prompt_and_fallback_summary",
+      "size_bytes": 8646
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/location_progression_summary.json",
+      "key": "location_progression_summary",
+      "size_bytes": 6642
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/long_run_warning_summary.json",
+      "key": "long_run_warning_summary",
+      "size_bytes": 129
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/manual_turn_error_summary.json",
+      "key": "manual_turn_error_summary",
+      "size_bytes": 52
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/mechanics_coverage_summary.json",
+      "key": "mechanics_coverage_summary",
+      "size_bytes": 41002
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/n11721_readiness_gap_source_consistency.json",
+      "key": "n11721_readiness_gap_source_consistency",
+      "size_bytes": 598
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/n79_n81_status.json",
+      "key": "n79_n81_status",
+      "size_bytes": 298
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/narration_grounding_summary.json",
+      "key": "narration_grounding_summary",
+      "size_bytes": 654
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/narration_mode.json",
+      "key": "narration_mode",
+      "size_bytes": 10
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_agency_summary.json",
+      "key": "npc_agency_summary",
+      "size_bytes": 13395
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_arc_progression_summary.json",
+      "key": "npc_arc_progression_summary",
+      "size_bytes": 3692
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_dialogue_mode_summary.json",
+      "key": "npc_dialogue_mode_summary",
+      "size_bytes": 246
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_evolution_profile_persistence_summary.json",
+      "key": "npc_evolution_profile_persistence_summary",
+      "size_bytes": 612
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_evolution_report_summary.json",
+      "key": "npc_evolution_report_summary",
+      "size_bytes": 10509
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_evolution_summary.json",
+      "key": "npc_evolution_summary",
+      "size_bytes": 1040
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_line_repetition_summary.json",
+      "key": "npc_line_repetition_summary",
+      "size_bytes": 517
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_profile_load_summary.json",
+      "key": "npc_profile_load_summary",
+      "size_bytes": 145
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_reaction_summary.json",
+      "key": "npc_reaction_summary",
+      "size_bytes": 315
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/npc_response_architecture_persistence_summary.json",
+      "key": "npc_response_architecture_persistence_summary",
+      "size_bytes": 651
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/objective_progression_summary.json",
+      "key": "objective_progression_summary",
+      "size_bytes": 4639
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/ok.json",
+      "key": "ok",
+      "size_bytes": 5
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/one_thousand_turn_readiness_gap_report.json",
+      "key": "one_thousand_turn_readiness_gap_report",
+      "size_bytes": 10411
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/orphaned_background_presentation_results.json",
+      "key": "orphaned_background_presentation_results",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/performance.json",
+      "key": "performance",
+      "size_bytes": 5296
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/performance_budget_summary.json",
+      "key": "performance_budget_summary",
+      "size_bytes": 2126
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/performance_seconds_summary.json",
+      "key": "performance_seconds_summary",
+      "size_bytes": 6382
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/player_agent.json",
+      "key": "player_agent",
+      "size_bytes": 5
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/player_agent_cache_summary.json",
+      "key": "player_agent_cache_summary",
+      "size_bytes": 110
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/player_agent_latency_summary.json",
+      "key": "player_agent_latency_summary",
+      "size_bytes": 241
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/player_agent_prompt_budget_summary.json",
+      "key": "player_agent_prompt_budget_summary",
+      "size_bytes": 1912
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/player_agent_trace_summary.json",
+      "key": "player_agent_trace_summary",
+      "size_bytes": 255
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/player_journal_quality_summary.json",
+      "key": "player_journal_quality_summary",
+      "size_bytes": 212
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/player_journal_summary.json",
+      "key": "player_journal_summary",
+      "size_bytes": 30818
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/post_transition_action_quality.json",
+      "key": "post_transition_action_quality",
+      "size_bytes": 163
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/post_transition_action_quality_summary.json",
+      "key": "post_transition_action_quality_summary",
+      "size_bytes": 163
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/pre_turn_advisory_promotion_performance_summary.json",
+      "key": "pre_turn_advisory_promotion_performance_summary",
+      "size_bytes": 272
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/pressure_pacing_summary.json",
+      "key": "pressure_pacing_summary",
+      "size_bytes": 461
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/product_quality_warnings.json",
+      "key": "product_quality_warnings",
+      "size_bytes": 50
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/profile_grounded_output_summary.json",
+      "key": "profile_grounded_output_summary",
+      "size_bytes": 2769
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progress_quality_thresholds.json",
+      "key": "progress_quality_thresholds",
+      "size_bytes": 241
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progress_timeline_summary.json",
+      "key": "progress_timeline_summary",
+      "size_bytes": 50584
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_authority_sidecar_present.json",
+      "key": "progression_authority_sidecar_present",
+      "size_bytes": 4
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_authority_summary.json",
+      "key": "progression_authority_summary",
+      "size_bytes": 159
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_completed_nodes.json",
+      "key": "progression_completed_nodes",
+      "size_bytes": 25207
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_facts.json",
+      "key": "progression_facts",
+      "size_bytes": 21774
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_leads.json",
+      "key": "progression_leads",
+      "size_bytes": 18275
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_runtime_completed_node_count.json",
+      "key": "progression_runtime_completed_node_count",
+      "size_bytes": 3
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_runtime_revision.json",
+      "key": "progression_runtime_revision",
+      "size_bytes": 7
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/progression_stale_merge_log.json",
+      "key": "progression_stale_merge_log",
+      "size_bytes": 9555
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/promotion_target_grounding_summary.json",
+      "key": "promotion_target_grounding_summary",
+      "size_bytes": 2134
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/provider_error_classification_summary.json",
+      "key": "provider_error_classification_summary",
+      "size_bytes": 615
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/provider_shape.json",
+      "key": "provider_shape",
+      "size_bytes": 1397
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/provider_workers.json",
+      "key": "provider_workers",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/quality_gate_summary.json",
+      "key": "quality_gate_summary",
+      "size_bytes": 4238
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/quest_handoff_summary.json",
+      "key": "quest_handoff_summary",
+      "size_bytes": 216
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/quest_progress_summary.json",
+      "key": "quest_progress_summary",
+      "size_bytes": 10072
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/quest_reconciliation_summary.json",
+      "key": "quest_reconciliation_summary",
+      "size_bytes": 231
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/real_combat_lifecycle_summary.json",
+      "key": "real_combat_lifecycle_summary",
+      "size_bytes": 159609
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/repeated_affordance_loop_summary.json",
+      "key": "repeated_affordance_loop_summary",
+      "size_bytes": 116
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/requested_background_workers.json",
+      "key": "requested_background_workers",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/requested_provider_workers.json",
+      "key": "requested_provider_workers",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/requested_turns.json",
+      "key": "requested_turns",
+      "size_bytes": 3
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/resolved_scenario_seed.json",
+      "key": "resolved_scenario_seed",
+      "size_bytes": 19
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_action_debug.json",
+      "key": "scenario_progression_action_debug",
+      "size_bytes": 2081
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_action_repeat_summary.json",
+      "key": "scenario_progression_action_repeat_summary",
+      "size_bytes": 214
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_actions_empty_with_active_objectives.json",
+      "key": "scenario_progression_actions_empty_with_active_objectives",
+      "size_bytes": 5
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_arc_summary.json",
+      "key": "scenario_progression_arc_summary",
+      "size_bytes": 5191
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_log.json",
+      "key": "scenario_progression_log",
+      "size_bytes": 115829
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_quest_ids.json",
+      "key": "scenario_progression_quest_ids",
+      "size_bytes": 413
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_quest_state.json",
+      "key": "scenario_progression_quest_state",
+      "size_bytes": 9641
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_progression_summary.json",
+      "key": "scenario_progression_summary",
+      "size_bytes": 2466
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/scenario_seed.json",
+      "key": "scenario_seed",
+      "size_bytes": 19
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/seed_resolution.json",
+      "key": "seed_resolution",
+      "size_bytes": 292
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/seed_result.json",
+      "key": "seed_result",
+      "size_bytes": 766
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/selected_output_grounding_health.json",
+      "key": "selected_output_grounding_health",
+      "size_bytes": 1087
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/server_runtime_used.json",
+      "key": "server_runtime_used",
+      "size_bytes": 5
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/session_id.json",
+      "key": "session_id",
+      "size_bytes": 23
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/state_bounds_limits.json",
+      "key": "state_bounds_limits",
+      "size_bytes": 113
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/stopped_reason.json",
+      "key": "stopped_reason",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/story_arc_aftermath_summary.json",
+      "key": "story_arc_aftermath_summary",
+      "size_bytes": 438
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/story_arc_lifecycle_summary.json",
+      "key": "story_arc_lifecycle_summary",
+      "size_bytes": 4108
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/story_beat_summary.json",
+      "key": "story_beat_summary",
+      "size_bytes": 9381
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/story_variety.json",
+      "key": "story_variety",
+      "size_bytes": 20192
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/strategy.json",
+      "key": "strategy",
+      "size_bytes": 28
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/strategy_profile.json",
+      "key": "strategy_profile",
+      "size_bytes": 28
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/strict_progress_health_summary.json",
+      "key": "strict_progress_health_summary",
+      "size_bytes": 290
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/strict_progress_quality_certification.json",
+      "key": "strict_progress_quality_certification",
+      "size_bytes": 355
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/successful_arc_completion_evidence.json",
+      "key": "successful_arc_completion_evidence",
+      "size_bytes": 12400
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/suppressed_selection_guard_summary.json",
+      "key": "suppressed_selection_guard_summary",
+      "size_bytes": 195
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/top_scenario_progression_action_id.json",
+      "key": "top_scenario_progression_action_id",
+      "size_bytes": 28
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/top_scenario_progression_command.json",
+      "key": "top_scenario_progression_command",
+      "size_bytes": 106
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/transcript_artifact_quality_summary.json",
+      "key": "transcript_artifact_quality_summary",
+      "size_bytes": 286
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/transcript_size_summary.json",
+      "key": "transcript_size_summary",
+      "size_bytes": 501
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/turn_action_consistency_summary.json",
+      "key": "turn_action_consistency_summary",
+      "size_bytes": 11424
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/turn_runtime.json",
+      "key": "turn_runtime",
+      "size_bytes": 16
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/turns_executed.json",
+      "key": "turns_executed",
+      "size_bytes": 3
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/world_signal_summary.json",
+      "key": "world_signal_summary",
+      "size_bytes": 1707
+    },
+    {
+      "file": "review-artifacts/summary.json/keys/world_state_compression_summary.json",
+      "key": "world_state_compression_summary",
+      "size_bytes": 26122
+    }
+  ],
+  "note": "",
+  "omitted_monolithic": false,
+  "original_size_bytes": 3754816,
+  "top_level_key_count": 160
+}

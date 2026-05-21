@@ -1,0 +1,8 @@
+{
+  "fail_on_dialogue_coverage_gap": false,
+  "fail_on_post_objective_weak_progress": false,
+  "max_churn_only_rate": 0.95,
+  "max_churn_only_streak": 8,
+  "max_objective_target_no_progress_streak": 8,
+  "min_meaningful_progress_rate": 0.1
+}

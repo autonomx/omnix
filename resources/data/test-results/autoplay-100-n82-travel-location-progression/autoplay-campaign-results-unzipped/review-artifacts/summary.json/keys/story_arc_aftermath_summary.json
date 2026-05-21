@@ -1,0 +1,17 @@
+{
+  "aftermath_event_count": 372,
+  "aftermath_events": [],
+  "direct_graph_aftermath_count": 372,
+  "faction_event_count": 0,
+  "faction_events": [],
+  "followup_hook_count": 0,
+  "followup_hooks": [],
+  "format_version": "story_arc_aftermath_summary_v1",
+  "npc_memory_event_count": 0,
+  "npc_memory_events": [],
+  "ok": true,
+  "seeded_events": [],
+  "seeded_followup_arc_count": 0,
+  "world_signal_count": 364,
+  "world_signals": []
+}

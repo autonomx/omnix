@@ -1,0 +1,269 @@
+{
+  "cards": [
+    {
+      "arc_stage": "trusting",
+      "axes": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 4
+      },
+      "future_hooks": [
+        {
+          "kind": "Political Structure",
+          "signal_id": "npc_evo:Bran:future_hook:projection:1a758d4efaafa790",
+          "summary": "The clear evidence confirms Veska's established role as a key authority within the Sable Chain hierarchy.",
+          "turn_index": 97
+        },
+        {
+          "kind": "Direct Challenge (T100)",
+          "signal_id": "npc_evo:Bran:future_hook:projection:65d64a5f44c45601",
+          "summary": "Veska's documented authority suggests potential immediate negotiation or confrontation regarding her undisputed command in the region. (Turn 99)",
+          "turn_index": 97
+        },
+        {
+          "kind": "Political Structure",
+          "signal_id": "npc_evo:Bran:future_hook:projection:ea221d39b1220918",
+          "summary": "Veska's documented authority is confirmed via retrieved ledgers, showing a centralized chain of command within the Sable Chain organization.",
+          "turn_index": 98
+        },
+        {
+          "kind": "Direct Challenge (T100)",
+          "signal_id": "npc_evo:Bran:future_hook:projection:81d605ca46ce4371",
+          "summary": "Veska's documented authority suggests potential immediate negotiation or confrontation regarding her undisputed command in the region.",
+          "turn_index": 98
+        },
+        {
+          "kind": "Sable Chain Structure",
+          "signal_id": "npc_evo:Bran:future_hook:projection:55d101489d9433e7",
+          "summary": "The formal documentation now serves as irrefutable evidence that Veska is not a mere operative, but the central commander of the local chain.",
+          "turn_index": 99
+        },
+        {
+          "kind": "Direct Challenge (T100)",
+          "signal_id": "npc_evo:Bran:future_hook:projection:532dcef274680f1b",
+          "summary": "Veska's documented authority suggests potential immediate negotiation or confrontation regarding her undisputed command in the region. (Turn 99)",
+          "turn_index": 99
+        }
+      ],
+      "memories": [
+        {
+          "importance": 0.5,
+          "signal_id": "npc_evo:Bran:memory:projection:f5b93f01808309bd",
+          "source": "deferred_advisory_promotion",
+          "summary": "You confirmed Handler Veska's presence and noted clear signs of recent activity at the ridge hideout, specifically spotting guards, an exit path, and her sash. (T92 reinforced)",
+          "turn_index": 93
+        },
+        {
+          "importance": 0.5,
+          "signal_id": "npc_evo:Bran:memory:projection:6165329094891341",
+          "source": "deferred_advisory_promotion",
+          "summary": "You successfully decoded Veska's message, confirming the Sable Chain leadership is moving toward the Western Pass.",
+          "turn_index": 94
+        },
+        {
+          "importance": 0.5,
+          "signal_id": "npc_evo:Bran:memory:projection:97c98b7667d59bba",
+          "source": "deferred_advisory_promotion",
+          "summary": "You confirmed Handler Veska's presence and noted clear signs of recent activity at the ridge hideout, specifically spotting guards, an exit path, and her sash. (T92 reinforced)",
+          "turn_index": 96
+        },
+        {
+          "importance": 0.5,
+          "signal_id": "npc_evo:Bran:memory:projection:a2f8f7bafc67c67b",
+          "source": "deferred_advisory_promotion",
+          "summary": "You successfully presented definitive proof of Handler Veska's leadership structure, confirming her operational command over the Sable Chain routes (T97 reinforced).",
+          "turn_index": 97
+        },
+        {
+          "importance": 0.5,
+          "signal_id": "npc_evo:Bran:memory:projection:5274c609d592395b",
+          "source": "deferred_advisory_promotion",
+          "summary": "You successfully presented definitive proof of Handler Veska's leadership structure, confirming her operational command over the Sable Chain routes (T97 reinforced).",
+          "turn_index": 98
+        },
+        {
+          "importance": 0.5,
+          "signal_id": "npc_evo:Bran:memory:projection:707ca9c220d9bd5a",
+          "source": "deferred_advisory_promotion",
+          "summary": "You successfully presented definitive proof of Handler Veska's leadership structure, confirming her operational command over the Sable Chain routes (T97 reinforced).",
+          "turn_index": 99
+        }
+      ],
+      "milestones": [
+        {
+          "from": "stable",
+          "milestone_id": "npc_milestone:Bran:stable:trusting:npc_evo:Bran:relationship_delta:projection:ffd90d7fb132a207",
+          "reason": "relationship_delta:trust",
+          "signal_id": "npc_evo:Bran:relationship_delta:projection:ffd90d7fb132a207",
+          "source": "npc_evolution_signal",
+          "to": "trusting",
+          "turn_index": 52
+        },
+        {
+          "from": "trusting",
+          "milestone_id": "npc_milestone:Bran:trusting:stable:npc_evo:Bran:relationship_delta:projection:37ffa41bae50f06a",
+          "reason": "relationship_delta:trust",
+          "signal_id": "npc_evo:Bran:relationship_delta:projection:37ffa41bae50f06a",
+          "source": "npc_evolution_signal",
+          "to": "stable",
+          "turn_index": 62
+        },
+        {
+          "from": "stable",
+          "milestone_id": "npc_milestone:Bran:stable:trusting:npc_evo:Bran:relationship_delta:projection:01e73d52d7741b23",
+          "reason": "relationship_delta:trust",
+          "signal_id": "npc_evo:Bran:relationship_delta:projection:01e73d52d7741b23",
+          "source": "npc_evolution_signal",
+          "to": "trusting",
+          "turn_index": 99
+        }
+      ],
+      "npc_id": "Bran",
+      "profile_path": "resources\\data\\rpg_npc_profiles\\bran.json",
+      "semantic_intents": [
+        {
+          "intent": "dialogue",
+          "signal_id": "npc_evo:Bran:semantic_intent:projection:98141798aa92cfc3",
+          "summary": "Confronting Handler Veska with proof of Sable Chain route pressure manipulation.",
+          "turn_index": 97
+        },
+        {
+          "intent": "observe",
+          "signal_id": "npc_evo:Bran:semantic_intent:projection:dea9d8506836d047",
+          "summary": "You observed and successfully secured Veska's leadership ledgers before the threat of the Sable Chain could move or destroy them.",
+          "turn_index": 98
+        },
+        {
+          "intent": "evidence",
+          "signal_id": "npc_evo:Bran:semantic_intent:projection:2aa59be782446c60",
+          "summary": "You have formally presented documented proof of Veska's leadership and the Sable Chain's organizational structure to Bran and Garran.",
+          "turn_index": 99
+        },
+        {
+          "intent": "observation",
+          "signal_id": "npc_evo:Bran:semantic_intent:projection:76f176e0d34513c0",
+          "summary": "Fast deterministic interpretation of player input: I review Veska's ledgers with Bran and Garran to map the Sable Chain command structure.",
+          "turn_index": 100
+        }
+      ],
+      "signal_count": 283,
+      "signals_by_kind": {
+        "future_hook": 92,
+        "memory": 54,
+        "relationship_delta": 50,
+        "semantic_intent": 87
+      },
+      "world_signals": [
+        {
+          "kind": "world_signal",
+          "signal_id": "npc_evo:Bran:world_signal:projection:dec5397741e0e3d8",
+          "summary": "Movement/Logistics Confirmed: The critical passage at the Black Ford is now stable, confirming organized flow along the East Road network.",
+          "turn_index": 85
+        },
+        {
+          "kind": "world_signal",
+          "signal_id": "npc_evo:Bran:world_signal:projection:dcaeefb66a3f29d1",
+          "summary": "Movement/Logistics Confirmed: The critical passage at the Black Ford is now stable, confirming organized flow along the East Road network. (General context reinforcement.)",
+          "turn_index": 27
+        },
+        {
+          "kind": "world_signal",
+          "signal_id": "npc_evo:Bran:world_signal:projection:ad9133de3a5bee5e",
+          "summary": "The critical passage at the Black Ford is stable; your finding solidifies the intelligence flow along the East Road network.",
+          "turn_index": 81
+        },
+        {
+          "kind": "world_signal",
+          "signal_id": "npc_evo:Bran:world_signal:projection:af5beb542aa6a4ad",
+          "summary": "NPC_EVO:Bran:World Signal Applied: The immediate preparedness and secure state of the safehouse.",
+          "turn_index": 72
+        }
+      ]
+    },
+    {
+      "arc_stage": "stable",
+      "axes": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 0
+      },
+      "future_hooks": [],
+      "memories": [],
+      "milestones": [],
+      "npc_id": "Mira",
+      "profile_path": "",
+      "semantic_intents": [
+        {
+          "intent": "social",
+          "signal_id": "npc_evo:Mira:semantic_intent:projection:3fc70765df2f22e7",
+          "summary": "Fast deterministic interpretation of player input: I turn to Mira and ask what she saw near the side door.",
+          "turn_index": 5
+        }
+      ],
+      "signal_count": 1,
+      "signals_by_kind": {
+        "semantic_intent": 1
+      },
+      "world_signals": []
+    }
+  ],
+  "has_milestones": true,
+  "has_profile_paths": true,
+  "latest_summary": {
+    "arc_count": 2,
+    "arc_stages": {
+      "Bran": "trusting",
+      "Mira": "stable"
+    },
+    "arcs_by_npc": [
+      "Bran",
+      "Mira"
+    ],
+    "axes_by_npc": {
+      "Bran": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 4
+      },
+      "Mira": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 0
+      }
+    },
+    "consumed_projection_count": 284,
+    "duplicate_milestone_ids": [],
+    "milestone_total": 3,
+    "milestones_by_npc": {
+      "Bran": 3,
+      "Mira": 0
+    },
+    "out_of_bounds_axes": [],
+    "signal_consumed": 284,
+    "signal_pending": 0,
+    "signal_total": 284,
+    "signals_by_kind": {
+      "future_hook": 92,
+      "memory": 54,
+      "relationship_delta": 50,
+      "semantic_intent": 88
+    },
+    "signals_by_npc": {
+      "Bran": 283,
+      "Mira": 1
+    }
+  },
+  "npc_count": 2
+}

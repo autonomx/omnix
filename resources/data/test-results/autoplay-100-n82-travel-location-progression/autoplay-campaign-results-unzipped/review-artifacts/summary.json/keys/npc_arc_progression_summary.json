@@ -1,0 +1,127 @@
+{
+  "by_npc": {
+    "Bran": {
+      "latest_stage": "trusting",
+      "milestones": [
+        {
+          "from": "stable",
+          "milestone_id": "npc_milestone:Bran:stable:trusting:npc_evo:Bran:relationship_delta:projection:ffd90d7fb132a207",
+          "reason": "relationship_delta:trust",
+          "signal_id": "npc_evo:Bran:relationship_delta:projection:ffd90d7fb132a207",
+          "source": "npc_evolution_signal",
+          "to": "trusting",
+          "turn_index": 52
+        },
+        {
+          "from": "trusting",
+          "milestone_id": "npc_milestone:Bran:trusting:stable:npc_evo:Bran:relationship_delta:projection:37ffa41bae50f06a",
+          "reason": "relationship_delta:trust",
+          "signal_id": "npc_evo:Bran:relationship_delta:projection:37ffa41bae50f06a",
+          "source": "npc_evolution_signal",
+          "to": "stable",
+          "turn_index": 62
+        },
+        {
+          "from": "stable",
+          "milestone_id": "npc_milestone:Bran:stable:trusting:npc_evo:Bran:relationship_delta:projection:01e73d52d7741b23",
+          "reason": "relationship_delta:trust",
+          "signal_id": "npc_evo:Bran:relationship_delta:projection:01e73d52d7741b23",
+          "source": "npc_evolution_signal",
+          "to": "trusting",
+          "turn_index": 99
+        }
+      ],
+      "signals_consumed": 283,
+      "stage_changes": 3
+    },
+    "Mira": {
+      "latest_stage": "stable",
+      "milestones": [],
+      "signals_consumed": 1,
+      "stage_changes": 0
+    }
+  },
+  "duplicate_milestone_ids": [],
+  "latest_summary": {
+    "arc_count": 2,
+    "arc_stages": {
+      "Bran": "trusting",
+      "Mira": "stable"
+    },
+    "arcs_by_npc": [
+      "Bran",
+      "Mira"
+    ],
+    "axes_by_npc": {
+      "Bran": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 4
+      },
+      "Mira": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 0
+      }
+    },
+    "consumed_projection_count": 284,
+    "duplicate_milestone_ids": [],
+    "milestone_total": 3,
+    "milestones_by_npc": {
+      "Bran": 3,
+      "Mira": 0
+    },
+    "out_of_bounds_axes": [],
+    "signal_consumed": 284,
+    "signal_pending": 0,
+    "signal_total": 284,
+    "signals_by_kind": {
+      "future_hook": 92,
+      "memory": 54,
+      "relationship_delta": 50,
+      "semantic_intent": 88
+    },
+    "signals_by_npc": {
+      "Bran": 283,
+      "Mira": 1
+    }
+  },
+  "ok": true,
+  "out_of_bounds_axes": [],
+  "stage_change_count": 3,
+  "stage_changes": [
+    {
+      "from": "stable",
+      "milestone_id": "npc_milestone:Bran:stable:trusting:npc_evo:Bran:relationship_delta:projection:ffd90d7fb132a207",
+      "npc_id": "Bran",
+      "reason": "relationship_delta:trust",
+      "signal_id": "npc_evo:Bran:relationship_delta:projection:ffd90d7fb132a207",
+      "to": "trusting",
+      "turn_index": 52
+    },
+    {
+      "from": "trusting",
+      "milestone_id": "npc_milestone:Bran:trusting:stable:npc_evo:Bran:relationship_delta:projection:37ffa41bae50f06a",
+      "npc_id": "Bran",
+      "reason": "relationship_delta:trust",
+      "signal_id": "npc_evo:Bran:relationship_delta:projection:37ffa41bae50f06a",
+      "to": "stable",
+      "turn_index": 62
+    },
+    {
+      "from": "stable",
+      "milestone_id": "npc_milestone:Bran:stable:trusting:npc_evo:Bran:relationship_delta:projection:01e73d52d7741b23",
+      "npc_id": "Bran",
+      "reason": "relationship_delta:trust",
+      "signal_id": "npc_evo:Bran:relationship_delta:projection:01e73d52d7741b23",
+      "to": "trusting",
+      "turn_index": 99
+    }
+  ]
+}

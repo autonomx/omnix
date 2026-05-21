@@ -1,0 +1,27 @@
+{
+  "by_faction": {
+    "faction:sable_chain": 182
+  },
+  "changed_faction_count": 1,
+  "direct_graph_reputation_event_count": 182,
+  "faction_count": 2,
+  "factions": [
+    {
+      "faction_id": "faction:rusty_flagon_locals",
+      "history_count": 0,
+      "recent_history": [],
+      "reputation": 0,
+      "tier": "neutral"
+    },
+    {
+      "faction_id": "faction:sable_chain",
+      "history_count": 0,
+      "recent_history": [],
+      "reputation": 0,
+      "tier": "neutral"
+    }
+  ],
+  "format_version": "faction_reputation_summary_v1",
+  "history_count": 182,
+  "ok": true
+}

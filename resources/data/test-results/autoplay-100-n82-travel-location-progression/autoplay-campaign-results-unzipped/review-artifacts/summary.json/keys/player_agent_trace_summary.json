@@ -1,0 +1,13 @@
+{
+  "avg_player_agent_ms": 5367.929,
+  "errors": {},
+  "fallback_reason_counts": {},
+  "fallback_turns": 0,
+  "llm_turns": 0,
+  "max_player_agent_ms": 8344.851,
+  "selected_source_counts": {
+    "unknown": 100
+  },
+  "turns": 100,
+  "unknown_turns": 100
+}

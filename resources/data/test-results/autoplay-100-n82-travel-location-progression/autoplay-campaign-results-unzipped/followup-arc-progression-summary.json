@@ -1,0 +1,14 @@
+{
+  "format_version": "followup_arc_progression_summary_v1",
+  "ok": true,
+  "progressed_count": 0,
+  "progressed_arc_ids": [],
+  "events": [],
+  "world_signal_count": 0,
+  "world_signals": [],
+  "followup_threads": [],
+  "active_followups": [],
+  "direct_graph_progression_count": 554,
+  "progression_event_count": 554,
+  "active_followup_arc_count": 1
+}

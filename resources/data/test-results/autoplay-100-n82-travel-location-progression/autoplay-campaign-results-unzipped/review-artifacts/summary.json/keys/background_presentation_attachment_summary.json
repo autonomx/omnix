@@ -1,0 +1,29 @@
+{
+  "attached_count": 100,
+  "attached_row_count": 100,
+  "by_reason": {
+    "attached_to_matching_turn": 100
+  },
+  "category_reclassification_rate": 0.48,
+  "category_reclassified_count": 48,
+  "converted_from_legacy_timing_count": 100,
+  "event_count": 100,
+  "expected_attachment_count": 100,
+  "format_version": "background_presentation_attachment_summary_v1",
+  "hard_repair_rate": 0.0,
+  "hard_repaired_count": 0,
+  "legacy_observed_count": 0,
+  "metadata_repair_rate": 0.68,
+  "metadata_repaired_count": 68,
+  "ok": true,
+  "orphan_examples": [],
+  "orphaned_count": 0,
+  "pending_count": 0,
+  "rejected_count": 0,
+  "repaired_attached_count": 68,
+  "soft_reclassified_count": 68,
+  "turn_bound_attachment_verified": true,
+  "turn_bound_verified_count": 100,
+  "visible_text_replaced_count": 0,
+  "visible_text_replacement_rate": 0.0
+}

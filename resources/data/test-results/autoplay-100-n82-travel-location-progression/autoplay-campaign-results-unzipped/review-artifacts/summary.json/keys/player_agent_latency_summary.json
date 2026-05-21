@@ -1,0 +1,9 @@
+{
+  "avg_ms": 0.0,
+  "count": 0,
+  "max_ms": 0.0,
+  "note": "Player-agent LLM planning is measured separately and is not counted as authoritative human-playable blocking.",
+  "ok": true,
+  "p95_ms": 0.0,
+  "quality_gate": "diagnostic_only"
+}

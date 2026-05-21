@@ -1,0 +1,17 @@
+{
+  "count": 1,
+  "end_index": 80,
+  "format_version": "n1176_review_row_chunk_v1",
+  "rows": [
+    {
+      "approximate_size_bytes": 6084303,
+      "field_count": 164,
+      "format_version": "n1177_oversized_review_row_pointer_v1",
+      "index_file": "review-artifacts/full-transcript.json/oversized-rows/row_0081/index.json",
+      "oversized_row": true,
+      "row_index": 80,
+      "row_number": 81
+    }
+  ],
+  "start_index": 80
+}

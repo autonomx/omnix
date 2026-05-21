@@ -1,0 +1,29 @@
+{
+  "empty": [],
+  "missing": [],
+  "ok": true,
+  "present": [
+    "latest_state",
+    "quest_progress_summary",
+    "objective_progression_summary",
+    "quest_reconciliation_summary",
+    "quest_handoff_summary",
+    "final_state_field_coverage_summary",
+    "strict_progress_health_summary",
+    "post_transition_action_quality_summary",
+    "repeated_affordance_loop_summary",
+    "pre_turn_advisory_promotion_performance_summary",
+    "campaign_state_commit_summary",
+    "campaign_stale_state_summary",
+    "campaign_state_commit_performance_summary",
+    "handoff_progress_summary",
+    "scenario_progression_summary",
+    "scenario_progression_action_debug",
+    "progression_authority_summary",
+    "progression_authority_sidecar_present",
+    "scenario_progression_quest_state",
+    "scenario_progression_arc_summary",
+    "behavioral_autoplay_eval_summary",
+    "quality_gate_summary"
+  ]
+}

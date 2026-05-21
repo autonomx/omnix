@@ -1,0 +1,302 @@
+[
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 20,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 20,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"action\": \"Bandit provides initial answers regarding the hiring party and motive for attacking Garran's wagon.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The bandit must immediately answer who hired them and why they attacked Garran's wagon.\", \"required_focus\": []}, \"followup_hooks\": [{\"hook_id\": \"vorlag_cargo_lead\", \"kind\": \"Investigation Deepening\", \"summary\": \"The bandit mentioned 'Vorlag' and 'shiny things,' suggesting a specific employer and valuable cargo were involved. (New lead)\"}], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The captured bandit shifts slightly against the restraints, his eyes darting around before settling back onto yours. He spits a piece of dried grit onto the dirt floor near your boots, clearly hesitant to give up information freely. Despite his bravado, there's a flicker of genuine fear in his gaze when you press him about the employer behind the attack on Gar",
+    "summary": "",
+    "turn": 20,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The bandit must immediately answer who hired them and why they attacked Garran's wagon.\", \"required_focus\": []}",
+    "summary": "The bandit must immediately answer who hired them and why they attacked Garran's wagon.",
+    "turn": 20,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 21,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 21,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 21,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 21,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 21,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 21,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 21,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 21,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 22,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 22,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 22,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 22,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 22,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 22,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 22,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 22,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 23,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 23,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 23,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 23,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 23,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 23,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 23,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 23,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 24,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 24,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 24,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 24,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 24,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 24,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 24,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 24,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 25,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 25,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 25,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 25,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 25,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 25,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 25,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 25,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 26,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 26,
+    "type": null
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 26,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}",
+    "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+    "turn": 26,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 26,
+    "type": "semantic_intent"
+  },
+  {
+    "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+    "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+    "turn": 26,
+    "type": "semantic_intent"
+  }
+]

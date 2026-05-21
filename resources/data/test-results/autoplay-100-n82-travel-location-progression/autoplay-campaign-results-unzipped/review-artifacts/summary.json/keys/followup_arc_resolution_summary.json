@@ -1,0 +1,17 @@
+{
+  "direct_graph_resolution_count": 1,
+  "escalation_arcs": [],
+  "escalation_hook_count": 0,
+  "escalation_hooks": [],
+  "escalation_seed_count": 0,
+  "escalation_seed_events": [],
+  "events": [],
+  "format_version": "followup_arc_resolution_summary_v1",
+  "ok": true,
+  "resolution_event_count": 1,
+  "resolved_arc_ids": [],
+  "resolved_count": 0,
+  "resolved_or_escalated_count": 1,
+  "world_signal_count": 0,
+  "world_signals": []
+}

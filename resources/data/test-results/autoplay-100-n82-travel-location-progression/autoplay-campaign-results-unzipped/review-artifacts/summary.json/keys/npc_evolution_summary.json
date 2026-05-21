@@ -1,0 +1,54 @@
+{
+  "latest": {
+    "arc_count": 2,
+    "arc_stages": {
+      "Bran": "trusting",
+      "Mira": "stable"
+    },
+    "arcs_by_npc": [
+      "Bran",
+      "Mira"
+    ],
+    "axes_by_npc": {
+      "Bran": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 4
+      },
+      "Mira": {
+        "curiosity": 0,
+        "fear": 0,
+        "loyalty": 0,
+        "resentment": 0,
+        "respect": 0,
+        "trust": 0
+      }
+    },
+    "consumed_projection_count": 284,
+    "duplicate_milestone_ids": [],
+    "milestone_total": 3,
+    "milestones_by_npc": {
+      "Bran": 3,
+      "Mira": 0
+    },
+    "out_of_bounds_axes": [],
+    "signal_consumed": 284,
+    "signal_pending": 0,
+    "signal_total": 284,
+    "signals_by_kind": {
+      "future_hook": 92,
+      "memory": 54,
+      "relationship_delta": 50,
+      "semantic_intent": 88
+    },
+    "signals_by_npc": {
+      "Bran": 283,
+      "Mira": 1
+    }
+  },
+  "signals_consumed": 284,
+  "signals_created": 284
+}

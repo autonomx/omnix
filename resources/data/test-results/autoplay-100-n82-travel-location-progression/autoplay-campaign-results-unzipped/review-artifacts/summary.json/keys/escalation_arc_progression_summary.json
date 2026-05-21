@@ -1,0 +1,15 @@
+{
+  "active_escalation_arc_count": 1,
+  "direct_graph_escalation_count": 194,
+  "escalation_arcs": [],
+  "events": [],
+  "format_version": "escalation_arc_progression_summary_v1",
+  "ok": true,
+  "pressure_event_count": 0,
+  "pressure_events": [],
+  "progressed_arc_ids": [],
+  "progressed_count": 0,
+  "progression_event_count": 194,
+  "world_signal_count": 0,
+  "world_signals": []
+}

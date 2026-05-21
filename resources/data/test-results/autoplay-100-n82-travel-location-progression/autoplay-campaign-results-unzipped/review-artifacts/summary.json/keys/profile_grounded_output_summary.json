@@ -1,0 +1,148 @@
+{
+  "available_turns": 100,
+  "by_npc": {
+    "Bran": {
+      "matches": {
+        "active": 1,
+        "agent": 1,
+        "ambush": 1,
+        "before": 1,
+        "chain": 9,
+        "clear": 5,
+        "command": 1,
+        "confirming": 3,
+        "directly": 1,
+        "evidence": 1,
+        "found": 1,
+        "handler": 10,
+        "hideout": 2,
+        "immediate": 3,
+        "leading": 1,
+        "manifest": 1,
+        "northern": 1,
+        "noted": 1,
+        "operational": 2,
+        "operations": 1,
+        "prepare": 1,
+        "presence": 1,
+        "recent": 2,
+        "ridge": 4,
+        "sable": 10,
+        "silver": 2,
+        "specific": 2,
+        "structure": 3,
+        "successfully": 6,
+        "their": 1,
+        "veska": 1,
+        "veska's": 7,
+        "warning": 1,
+        "within": 1
+      },
+      "referenced_turns": 52
+    }
+  },
+  "examples": [
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {},
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": false,
+      "turn_index": 1
+    },
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {},
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": false,
+      "turn_index": 2
+    },
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {},
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": false,
+      "turn_index": 3
+    },
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {},
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": false,
+      "turn_index": 4
+    },
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {},
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": false,
+      "turn_index": 5
+    },
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {
+        "Bran": [
+          "confirming"
+        ]
+      },
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": true,
+      "turn_index": 6
+    },
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {
+        "Bran": [
+          "structure"
+        ]
+      },
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": true,
+      "turn_index": 7
+    },
+    {
+      "arc_stages": {
+        "Bran": "trusting"
+      },
+      "matches": {},
+      "profile_npcs": [
+        "Bran"
+      ],
+      "referenced": false,
+      "turn_index": 8
+    }
+  ],
+  "loaded_npc_ids": [
+    "Bran"
+  ],
+  "note": "This is a soft diagnostic. It checks whether provider output appears to reference loaded profile context; it is not a hard requirement every turn.",
+  "reference_rate": 0.52,
+  "referenced_turns": 52
+}

@@ -1,0 +1,63 @@
+{
+  "avg_worker_ms": 13220.222,
+  "diagnostics_examples": [
+    {
+      "payload_error": null,
+      "payload_original_error": null,
+      "provider_shape": {
+        "has_chat_completion": true,
+        "has_complete": false,
+        "module": "app.providers.lmstudio_provider",
+        "present": true,
+        "provider_display_name": "LM Studio",
+        "provider_name": "lmstudio",
+        "type": "LMStudioProvider"
+      },
+      "source": "provider_runtime_narration",
+      "turn_index": 1,
+      "worker_ms": 11315.036
+    },
+    {
+      "payload_error": null,
+      "payload_original_error": null,
+      "provider_shape": {
+        "has_chat_completion": true,
+        "has_complete": false,
+        "module": "app.providers.lmstudio_provider",
+        "present": true,
+        "provider_display_name": "LM Studio",
+        "provider_name": "lmstudio",
+        "type": "LMStudioProvider"
+      },
+      "source": "provider_runtime_narration",
+      "turn_index": 2,
+      "worker_ms": 7725.54
+    },
+    {
+      "payload_error": null,
+      "payload_original_error": null,
+      "provider_shape": {
+        "has_chat_completion": true,
+        "has_complete": false,
+        "module": "app.providers.lmstudio_provider",
+        "present": true,
+        "provider_display_name": "LM Studio",
+        "provider_name": "lmstudio",
+        "type": "LMStudioProvider"
+      },
+      "source": "provider_runtime_narration",
+      "turn_index": 3,
+      "worker_ms": 13765.59
+    }
+  ],
+  "errors": {},
+  "failed_jobs": 0,
+  "max_worker_ms": 17267.652,
+  "ok_jobs": 100,
+  "provider_missing": 0,
+  "provider_present": 100,
+  "sources": {
+    "provider_runtime_narration": 100
+  },
+  "turns": 100
+}

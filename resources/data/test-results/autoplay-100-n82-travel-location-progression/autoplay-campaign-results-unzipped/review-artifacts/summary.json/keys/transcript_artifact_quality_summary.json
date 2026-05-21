@@ -1,0 +1,13 @@
+{
+  "by_source": {
+    "in_memory_transcript": 100
+  },
+  "empty_row_count": 0,
+  "format_version": "transcript_artifact_quality_v2",
+  "has_full_rows": true,
+  "null_row_count": 0,
+  "ok": true,
+  "reconstructed_minimal_count": 0,
+  "row_count": 100,
+  "rows_with_turn_identity": 100
+}

@@ -1,0 +1,52 @@
+{
+  "artifact_name": "slim-transcript.json",
+  "format_version": "n1176_review_json_row_artifact_index_v1",
+  "max_part_bytes": 850000,
+  "note": "",
+  "omitted_monolithic": false,
+  "original_size_bytes": 3731236,
+  "oversized_row_count": 0,
+  "oversized_row_indexes": [],
+  "part_count": 5,
+  "parts": [
+    "review-artifacts/slim-transcript.json/rows_0001_0001_0022.json",
+    "review-artifacts/slim-transcript.json/rows_0002_0023_0044.json",
+    "review-artifacts/slim-transcript.json/rows_0003_0045_0065.json",
+    "review-artifacts/slim-transcript.json/rows_0004_0066_0086.json",
+    "review-artifacts/slim-transcript.json/rows_0005_0087_0100.json"
+  ],
+  "row_count": 100,
+  "row_ranges": [
+    {
+      "count": 22,
+      "end_index": 21,
+      "part": "review-artifacts/slim-transcript.json/rows_0001_0001_0022.json",
+      "start_index": 0
+    },
+    {
+      "count": 22,
+      "end_index": 43,
+      "part": "review-artifacts/slim-transcript.json/rows_0002_0023_0044.json",
+      "start_index": 22
+    },
+    {
+      "count": 21,
+      "end_index": 64,
+      "part": "review-artifacts/slim-transcript.json/rows_0003_0045_0065.json",
+      "start_index": 44
+    },
+    {
+      "count": 21,
+      "end_index": 85,
+      "part": "review-artifacts/slim-transcript.json/rows_0004_0066_0086.json",
+      "start_index": 65
+    },
+    {
+      "count": 14,
+      "end_index": 99,
+      "part": "review-artifacts/slim-transcript.json/rows_0005_0087_0100.json",
+      "start_index": 86
+    }
+  ],
+  "split_kind": "json_row_chunks"
+}

@@ -1,0 +1,13 @@
+{
+  "by_faction": {},
+  "by_kind": {
+    "direct_graph_pressure": 190
+  },
+  "direct_graph_pressure_count": 190,
+  "events": [],
+  "format_version": "faction_pressure_summary_v1",
+  "ok": true,
+  "pressure_event_count": 190,
+  "world_signal_count": 190,
+  "world_signals": []
+}

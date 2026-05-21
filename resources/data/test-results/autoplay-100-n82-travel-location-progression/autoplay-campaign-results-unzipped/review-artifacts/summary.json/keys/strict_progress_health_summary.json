@@ -1,0 +1,11 @@
+{
+  "graph_progress_ok": true,
+  "metrics": {},
+  "no_completed_without_next_objective_violations": [],
+  "objective_progression_present": true,
+  "ok": true,
+  "progression_changed_count": 100,
+  "quest_count": 12,
+  "scenario_arc_complete": false,
+  "unique_progression_node_count": 100
+}

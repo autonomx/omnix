@@ -1,0 +1,1569 @@
+{
+  "format_version": "combat_lifecycle_summary_v1",
+  "ok": true,
+  "encounter_count": 1,
+  "event_count": 4,
+  "world_signal_count": 0,
+  "memory_event_count": 0,
+  "injury_count": 0,
+  "consequence_event_count": 1,
+  "economy_hint_count": 0,
+  "total_round_events": 0,
+  "by_outcome": {
+    "direct_graph_resolved": 2
+  },
+  "player_state": {
+    "hp": 20,
+    "max_hp": 20
+  },
+  "combat_state": {
+    "active_encounter_count": 0,
+    "resolved_encounter_count": 0,
+    "last_combat_turn": null
+  },
+  "encounters": [],
+  "events": [],
+  "injuries": [],
+  "consequence_events": [],
+  "economy_pressure_hints": [],
+  "world_signals": [],
+  "memory_events": [],
+  "direct_graph_combat_count": 4,
+  "n118_real_lifecycle": {
+    "format_version": "n118_real_combat_lifecycle_summary_v1",
+    "ok": true,
+    "real_combat_lifecycle_ok": true,
+    "direct_graph_combat_count": 4,
+    "direct_graph_combat_turns": [
+      19
+    ],
+    "combat_text_turns": [
+      8,
+      11,
+      16,
+      18,
+      19,
+      20,
+      21,
+      22,
+      38,
+      87
+    ],
+    "real_round_event_count": 58,
+    "real_attack_event_count": 813,
+    "real_damage_event_count": 242,
+    "real_resolution_event_count": 45,
+    "direct_graph_only": false,
+    "missing_real_lifecycle_parts": [],
+    "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
+    "round_events": [
+      {
+        "turn": 63,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"Initiative established; action pending.\", \"combat_narration_accepted\": true, \"combat_narration_attempted\": true, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], \"facts\": {\"actor_id\": \"\", \"actor_name\": \"\", \"attack_roll\": null, \"attack_total\": null, \"combat_ended\": false, \"damage_applied\": null, \"defeated\": false, \"hit\": null, \"next_actor_id\": \"player\", \"party_defeated\": false, \"reason\": \"combat_started\", \"round\": 1, \"target_defense\": null, \"target"
+      },
+      {
+        "turn": 63,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"Initiative established; action pending.\", \"followup_hooks\": [\"player_turn_start\", \"enemy:bandit_1_turn_pending\"], \"format_version\": \"rpg_narration_v2\", \"narration\": \"Combat has officially begun! The ambush is sprung, and the bandit stands ready for confrontation. You have initiative priority over the aggressive foe. It is your turn to act first in this opening round of battle.\", \"npc\": {\"line\": \"\", \"speaker\": \"Bandit\"}, \"reward\": \"\"}"
+      },
+      {
+        "turn": 82,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 82,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 83,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 83,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 83,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 84,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 84,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 84,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 85,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 85,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 85,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 86,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 86,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 86,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 87,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 87,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 87,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 88,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 88,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 88,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 89,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 89,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 89,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 90,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 90,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 90,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 91,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 91,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 91,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 92,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 92,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 92,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 93,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 93,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 93,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 94,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 94,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 94,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 95,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 95,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 95,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 96,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 96,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 96,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 97,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      },
+      {
+        "turn": 97,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 97,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"axis\": \"trust\", \"delta\": 0.1, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 98,
+        "type": "relationship_delta",
+        "summary": "Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 83, \"created_at\": \"2026-05-21T06:56:14.836266+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:82:relationship_delta:ac4b4ccf064a605d\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:b6c5641f7e52006a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Your timely arrival demonstrates foresight and initiative regarding the threat posed by Handler Veska's forces.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 83}"
+      }
+    ],
+    "attack_events": [
+      {
+        "turn": 20,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}"
+      },
+      {
+        "turn": 20,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}"
+      },
+      {
+        "turn": 20,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"Bandit provides initial answers regarding the hiring party and motive for attacking Garran's wagon.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The bandit must immediately answer who hired them and why they attacked Garran's wagon.\", \"required_focus\": []}, \"followup_hooks\": [{\"hook_id\": \"vorlag_cargo_lead\", \"kind\": \"Investigation Deepening\", \"summary\": \"The bandit mentioned 'Vorlag' and 'shiny things,' suggesting a specific employer and valuable cargo were involved. (New lead)\"}], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The captured bandit shifts slightly against the restraints, his eyes darting around before settling back onto yours. He spits a piece of dried grit onto the dirt floor near your boots, clearly hesitant to give up information freely. Despite his bravado, there's a flicker of genuine fear in his gaze when you press him about the employer behind the attack on Gar"
+      },
+      {
+        "turn": 20,
+        "type": null,
+        "summary": "The bandit must immediately answer who hired them and why they attacked Garran's wagon.",
+        "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The bandit must immediately answer who hired them and why they attacked Garran's wagon.\", \"required_focus\": []}"
+      },
+      {
+        "turn": 21,
+        "type": null,
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 21,
+        "type": null,
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 21,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 21,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 21,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 21,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 21,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}"
+      },
+      {
+        "turn": 21,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}"
+      },
+      {
+        "turn": 22,
+        "type": null,
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 22,
+        "type": null,
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 22,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 22,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 22,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 22,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 22,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}"
+      },
+      {
+        "turn": 22,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}"
+      },
+      {
+        "turn": 23,
+        "type": null,
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 23,
+        "type": null,
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 23,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 23,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 23,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 23,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 23,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}"
+      },
+      {
+        "turn": 23,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}"
+      },
+      {
+        "turn": 24,
+        "type": null,
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 24,
+        "type": null,
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 24,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 24,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 24,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 24,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 24,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}"
+      },
+      {
+        "turn": 24,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}"
+      },
+      {
+        "turn": 25,
+        "type": null,
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 25,
+        "type": null,
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 25,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 25,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 25,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 25,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 25,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\"}"
+      },
+      {
+        "turn": 25,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\"}"
+      },
+      {
+        "turn": 26,
+        "type": null,
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 26,
+        "type": null,
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 26,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622360+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:25edd1479e268074\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:2bf2760d9a098838\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 26,
+        "type": "semantic_intent",
+        "summary": "Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.",
+        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Gathering intelligence from a captive regarding the instigator and objective of the attack on Garran's transport.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 26,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-21T06:56:07.622274+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:255a329546df3580\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:49eb14326a1d12f0\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}"
+      },
+      {
+        "turn": 26,
+        "type": "semantic_intent",
+        "summary": "The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The captured bandit provides information on the hiring party ('Vorlag') and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}"
+      }
+    ],
+    "damage_events": [
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+        "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}"
+      },
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 63,
+        "type": null,
+        "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+        "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}"
+      },
+      {
+        "turn": 63,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 63,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 71,
+        "type": null,
+        "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+        "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}"
+      },
+      {
+        "turn": 71,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 71,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 72,
+        "type": null,
+        "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+        "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}"
+      },
+      {
+        "turn": 72,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 72,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 73,
+        "type": null,
+        "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+        "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}"
+      },
+      {
+        "turn": 73,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 73,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 89,
+        "type": null,
+        "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 89,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}"
+      },
+      {
+        "turn": 89,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: travel_to_old_north_watchpost",
+        "raw_preview": "{\"action_id\": \"travel_to_old_north_watchpost\", \"changed_parts\": [\"travel\"], \"effects\": {\"flags\": {\"mechanic:travel\": true}}, \"graph_action_id\": \"travel_to_old_north_watchpost\", \"hook_id\": \"hook:graph_direct:travel_to_old_north_watchpost\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"travel\", \"mechanics\": [\"travel\"], \"summary\": \"Graph action completed: travel_to_old_north_watchpost\"}"
+      },
+      {
+        "turn": 89,
+        "type": null,
+        "summary": "Reach the old north watchpost.",
+        "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}"
+      },
+      {
+        "turn": 89,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"changed\": false, \"original_action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"action_type\": \"investigate\", \"activity_label\": \"investigate\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_c257dcd6718c3173\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"tags\": [\"investigate\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"npc\": {\"line\": \"That points somewhere useful. The next step is finding what confirms it.\", \"speaker\": \"Handler Veska\"}}"
+      },
+      {
+        "turn": 90,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: inspect_watchpost_courier_signs",
+        "raw_preview": "{\"action_id\": \"inspect_watchpost_courier_signs\", \"changed_parts\": [\"inspect\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"inspect_watchpost_courier_signs\", \"hook_id\": \"hook:graph_direct:inspect_watchpost_courier_signs\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"inspect\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: inspect_watchpost_courier_signs\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "Reach the old north watchpost.",
+        "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "Inspect the watchpost for courier signs.",
+        "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 90,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"changed\": false, \"original_action\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "I intercept Veska's courier before the message can leave the old north watchpost.",
+        "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_5936090ed879c548\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 91,
+        "type": "Route/Movement Status",
+        "summary": "The message route from the watchpost is halted; the document is secured at this point.",
+        "raw_preview": "{\"kind\": \"Route/Movement Status\", \"summary\": \"The message route from the watchpost is halted; the document is secured at this point.\"}"
+      },
+      {
+        "turn": 91,
+        "type": "memory",
+        "summary": "You successfully confirmed the courier carrying Veska's dispatch before it could depart the old north watchpost.",
+        "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"You successfully confirmed the courier carrying Veska's dispatch before it could depart the old north watchpost.\"}"
+      },
+      {
+        "turn": 91,
+        "type": "semantic_intent",
+        "summary": "The courier has been successfully intercepted just as they reached the old north watchpost, preventing the message from leaving.",
+        "raw_preview": "{\"intent\": \"observation\", \"kind\": \"semantic_intent\", \"summary\": \"The courier has been successfully intercepted just as they reached the old north watchpost, preventing the message from leaving.\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "The courier's message was successfully intercepted before it could leave the watchpost.",
+        "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The courier's message was successfully intercepted before it could leave the watchpost.\", \"required_focus\": [\"reflect_the_route_or_movement_result_first\", \"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:36cea8e8f2de773b\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}"
+      },
+      {
+        "turn": 91,
+        "type": "semantic_intent",
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 91, \"created_at\": \"2026-05-21T06:56:16.289913+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.45, \"deterministic_fallback\": true, \"grounded_target\": \"Bran\", \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:90:semantic_intent:5ea533d24bfca91a\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:36cea8e8f2de773b\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 91}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"grounded_target\": \"Bran\", \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"confidence\": 0.45, \"deterministic_fallback\": true, \"intent\": \"observation\", \"summary\": \"Fast deterministic interpretation of player input: I travel to the old north watchpost to follow Veska's courier trail.\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Inspect the watchpost for courier signs.",
+        "raw_preview": "{\"summary\": \"Inspect the watchpost for courier signs.\", \"unlock_objective\": \"objective:inspect_watchpost_courier_signs\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "Reach the old north watchpost.",
+        "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"action_type\": \"investigate\", \"activity_label\": \"investigate\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_c257dcd6718c3173\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"tags\": [\"investigate\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+        "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}"
+      },
+      {
+        "turn": 91,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"changed\": false, \"original_action\": \"I intercept Veska's courier before the message can leave the old north watchpost.\", \"reason\": \"\"}"
+      },
+      {
+        "turn": 92,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:36cea8e8f2de773b\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}"
+      },
+      {
+        "turn": 92,
+        "type": null,
+        "summary": "The courier has been successfully intercepted just as they reached the old north watchpost, preventing the message from leaving.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:69f3a50b67d7cfa3\", \"summary\": \"The courier has been successfully intercepted just as they reached the old north watchpost, preventing the message from leaving.\", \"turn_index\": 92}"
+      },
+      {
+        "turn": 92,
+        "type": "Route/Movement Status",
+        "summary": "The message route from the watchpost is halted; the document is secured at this point.",
+        "raw_preview": "{\"kind\": \"Route/Movement Status\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:241fa313bae467c8\", \"summary\": \"The message route from the watchpost is halted; the document is secured at this point.\", \"turn_index\": 92}"
+      },
+      {
+        "turn": 92,
+        "type": null,
+        "summary": "You successfully confirmed the courier carrying Veska's dispatch before it could depart the old north watchpost.",
+        "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0ad763d768287ad6\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"You successfully confirmed the courier carrying Veska's dispatch before it could depart the old north watchpost.\", \"turn_index\": 92}"
+      },
+      {
+        "turn": 92,
+        "type": "future_hook",
+        "summary": "The message route from the watchpost is halted; the document is secured at this point.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 92, \"created_at\": \"2026-05-21T06:56:16.435937+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Route/Movement Status\", \"summary\": \"The message route from the watchpost is halted; the document is secured at this point.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:91:future_hook:0d801af82e5472f4\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:241fa313bae467c8\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The message route from the watchpost is halted; the document is secured at this point.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 92}"
+      },
+      {
+        "turn": 92,
+        "type": "Route/Movement Status",
+        "summary": "The message route from the watchpost is halted; the document is secured at this point.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Route/Movement Status\", \"summary\": \"The message route from the watchpost is halted; the document is secured at this point.\", \"target\": \"Bran\"}"
+      }
+    ],
+    "resolution_events": [
+      {
+        "turn": 8,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 8,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: report_findings_to_bran",
+        "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:report\": true}}, \"graph_action_id\": \"report_findings_to_bran\", \"hook_id\": \"hook:graph_direct:report_findings_to_bran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"summary\": \"Graph action completed: report_findings_to_bran\"}"
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"completed\": true, \"completed_parts\": [\"action:warn_garran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:warn\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 11,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: warn_garran",
+        "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:warn\": true}}, \"graph_action_id\": \"warn_garran\", \"hook_id\": \"hook:graph_direct:warn_garran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"summary\": \"Graph action completed: warn_garran\"}"
+      },
+      {
+        "turn": 16,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:scout_quarry_road\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 16,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: scout_quarry_road",
+        "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"scout_quarry_road\", \"hook_id\": \"hook:graph_direct:scout_quarry_road\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: scout_quarry_road\"}"
+      },
+      {
+        "turn": 17,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"spot_bridge_watchers\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:spot_bridge_watchers\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 17,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: spot_bridge_watchers",
+        "raw_preview": "{\"action_id\": \"spot_bridge_watchers\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"spot_bridge_watchers\", \"hook_id\": \"hook:graph_direct:spot_bridge_watchers\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: spot_bridge_watchers\"}"
+      },
+      {
+        "turn": 18,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"choose_ambush_response\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"tell\"], \"completed\": true, \"completed_parts\": [\"action:choose_ambush_response\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:tell\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"tell\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 18,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: choose_ambush_response",
+        "raw_preview": "{\"action_id\": \"choose_ambush_response\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"tell\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:tell\": true}}, \"graph_action_id\": \"choose_ambush_response\", \"hook_id\": \"hook:graph_direct:choose_ambush_response\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"tell\"], \"summary\": \"Graph action completed: choose_ambush_response\"}"
+      },
+      {
+        "turn": 18,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}"
+      },
+      {
+        "turn": 19,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"Resolved the combat beat.\", \"action_diversity_before_turn\": {\"action_count\": 12, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i choose how to respond to the ambush signs.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 12, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 0, \"actual_sent_action\": \"I check in with Garran and focus on the active wagon-road objective.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"available_mechanics\": [{\"command\": \"I confront the bandit scou"
+      },
+      {
+        "turn": 19,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"changed_parts\": [\"combat_resolved\", \"combat_started\", \"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"completed\": true, \"completed_parts\": [\"action:protect_wagon_or_lure_bandits\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:prepare\", \"mechanic:xp_gain\"], \"execution_applied\": true, \"execution_kind\": \"protect_wagon_or_lure_bandits\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"combat_resolved\", \"combat_started\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"xp_delta\": 5, \"xp_execution_applied\": true}"
+      },
+      {
+        "turn": 19,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"Resolved the combat beat.\", \"combat_result\": {\"ok\": true, \"outcome\": \"direct_graph_resolved\", \"summary\": \"The combat beat resolves through the scenario graph.\", \"xp_delta\": 5}, \"dialogue\": \"\", \"dialogue_source\": \"direct_graph_execution\", \"display_narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"display_source\": \"direct_graph_execution\", \"meaningful_progress\": true, \"mechanic\": \"combat_resolved\", \"narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"npc\": {}, \"npc_line\": \"\", \"npc_speaker\": \"\", \"progress_category\": \"direct_graph_execution\", \"selected_narration\": {\"action\": \"Resolved the combat beat.\", \"dialogue_source\": \"direct_graph_execution\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"npc\": {}, \""
+      },
+      {
+        "turn": 19,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"Resolved the combat beat.\", \"dialogue_source\": \"direct_graph_execution\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.\", \"npc\": {}, \"reward\": {\"xp_delta\": 5}, \"source\": \"direct_graph_explicit_combat_xp_execution\"}"
+      },
+      {
+        "turn": 19,
+        "type": null,
+        "summary": "The combat beat resolves through the scenario graph.",
+        "raw_preview": "{\"ok\": true, \"outcome\": \"direct_graph_resolved\", \"summary\": \"The combat beat resolves through the scenario graph.\", \"xp_delta\": 5}"
+      },
+      {
+        "turn": 19,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: protect_wagon_or_lure_bandits",
+        "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"changed_parts\": [\"combat_resolved\", \"combat_started\", \"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:prepare\": true, \"mechanic:xp_gain\": true}}, \"graph_action_id\": \"protect_wagon_or_lure_bandits\", \"hook_id\": \"hook:graph_direct:protect_wagon_or_lure_bandits\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"combat_resolved\", \"combat_started\", \"party_recruitment\", \"party_setup\", \"prepare\", \"xp_gain\"], \"summary\": \"Graph action completed: protect_wagon_or_lure_bandits\"}"
+      },
+      {
+        "turn": 19,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}"
+      },
+      {
+        "turn": 19,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": {\"action_type\": \"observe\", \"canonical_text\": \"I protect the wagon and fight the bandits.\", \"display_text\": \"I protect the wagon and fight the bandits.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I check in with Garran and focus on the active wagon-road objective.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3f795334d0511212\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I check in with Garran and focus on the active wagon-road objective.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 1, \"source\": \"direct_graph_execution\", \"target_id\": \"\", \"text\": \"I protect the wagon and fight the bandits.\"}, \"contract_source\": \"runtime_fallback_bridge\", \"mechanic\": \"co"
+      },
+      {
+        "turn": 21,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"search_bandit_satchel\", \"changed_parts\": [\"faction_consequence\", \"inspect\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:search_bandit_satchel\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:inspect\", \"mechanic:npc_reaction\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"inspect\", \"npc_reaction\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 21,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: search_bandit_satchel",
+        "raw_preview": "{\"action_id\": \"search_bandit_satchel\", \"changed_parts\": [\"faction_consequence\", \"inspect\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:inspect\": true, \"mechanic:npc_reaction\": true}}, \"graph_action_id\": \"search_bandit_satchel\", \"hook_id\": \"hook:graph_direct:search_bandit_satchel\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"inspect\", \"npc_reaction\"], \"summary\": \"Graph action completed: search_bandit_satchel\"}"
+      },
+      {
+        "turn": 22,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"return_to_bran_with_proof\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"travel\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:return_to_bran_with_proof\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:travel\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"travel\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 22,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: return_to_bran_with_proof",
+        "raw_preview": "{\"action_id\": \"return_to_bran_with_proof\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"travel\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:travel\": true}}, \"graph_action_id\": \"return_to_bran_with_proof\", \"hook_id\": \"hook:graph_direct:return_to_bran_with_proof\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"travel\"], \"summary\": \"Graph action completed: return_to_bran_with_proof\"}"
+      },
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"return_to_allies_with_voss_proof\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:return_to_allies_with_voss_proof\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:travel\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 38,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: return_to_allies_with_voss_proof",
+        "raw_preview": "{\"action_id\": \"return_to_allies_with_voss_proof\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:travel\": true}}, \"graph_action_id\": \"return_to_allies_with_voss_proof\", \"hook_id\": \"hook:graph_direct:return_to_allies_with_voss_proof\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\"], \"summary\": \"Graph action completed: return_to_allies_with_voss_proof\"}"
+      },
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 44,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"counter_voss_intimidation\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:counter_voss_intimidation\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:protect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 44,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: counter_voss_intimidation",
+        "raw_preview": "{\"action_id\": \"counter_voss_intimidation\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:protect\": true}}, \"graph_action_id\": \"counter_voss_intimidation\", \"hook_id\": \"hook:graph_direct:counter_voss_intimidation\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"protect\"], \"summary\": \"Graph action completed: counter_voss_intimidation\"}"
+      },
+      {
+        "turn": 63,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 63,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 65,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"detect_safehouse_watchers\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"completed\": true, \"completed_parts\": [\"action:detect_safehouse_watchers\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:scout\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 65,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: detect_safehouse_watchers",
+        "raw_preview": "{\"action_id\": \"detect_safehouse_watchers\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"effects\": {\"flags\": {\"mechanic:scout\": true}}, \"graph_action_id\": \"detect_safehouse_watchers\", \"hook_id\": \"hook:graph_direct:detect_safehouse_watchers\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"summary\": \"Graph action completed: detect_safehouse_watchers\"}"
+      },
+      {
+        "turn": 71,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"prepare_safehouse_defense\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\"], \"completed\": true, \"completed_parts\": [\"action:prepare_safehouse_defense\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:prepare\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"prepare\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 71,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: prepare_safehouse_defense",
+        "raw_preview": "{\"action_id\": \"prepare_safehouse_defense\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"prepare\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:prepare\": true}}, \"graph_action_id\": \"prepare_safehouse_defense\", \"hook_id\": \"hook:graph_direct:prepare_safehouse_defense\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"prepare\"], \"summary\": \"Graph action completed: prepare_safehouse_defense\"}"
+      },
+      {
+        "turn": 71,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 71,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 72,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 72,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 73,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p"
+      },
+      {
+        "turn": 73,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}"
+      },
+      {
+        "turn": 78,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"scout_east_road_pressure_points\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"completed\": true, \"completed_parts\": [\"action:scout_east_road_pressure_points\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:scout\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 78,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: scout_east_road_pressure_points",
+        "raw_preview": "{\"action_id\": \"scout_east_road_pressure_points\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"effects\": {\"flags\": {\"mechanic:scout\": true}}, \"graph_action_id\": \"scout_east_road_pressure_points\", \"hook_id\": \"hook:graph_direct:scout_east_road_pressure_points\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"summary\": \"Graph action completed: scout_east_road_pressure_points\"}"
+      },
+      {
+        "turn": 95,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"scout_ridge_hideout\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"completed\": true, \"completed_parts\": [\"action:scout_ridge_hideout\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:scout\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"xp_delta\": null, \"xp_execution_applied\": false}"
+      },
+      {
+        "turn": 95,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: scout_ridge_hideout",
+        "raw_preview": "{\"action_id\": \"scout_ridge_hideout\", \"changed_parts\": [\"mechanic_completed\", \"scout\"], \"effects\": {\"flags\": {\"mechanic:scout\": true}}, \"graph_action_id\": \"scout_ridge_hideout\", \"hook_id\": \"hook:graph_direct:scout_ridge_hideout\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"scout\"], \"summary\": \"Graph action completed: scout_ridge_hideout\"}"
+      }
+    ],
+    "examples": [
+      {
+        "turn": 8,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 7, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i approach the local patron and quietly ask what he knows about the mill bridge.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 7, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 2, \"actual_sent_action\": \"I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 8,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 8,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"Good. Proof narrows the road; show me which direction it leaves open.\", \"speaker\": \"Bran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 8,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: report_findings_to_bran",
+        "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:report\": true}}, \"graph_action_id\": \"report_findings_to_bran\", \"hook_id\": \"hook:graph_direct:report_findings_to_bran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"summary\": \"Graph action completed: report_findings_to_bran\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 10, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave the tavern and travel toward garran's wagon yard.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 10, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 0, \"actual_sent_action\": \"I tell Garran the mill bridge may be an ambush and show him the evidence.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"available_m",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"completed\": true, \"completed_parts\": [\"action:warn_garran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:warn\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"That is useful because it can be tested. Tell me the next verifiable step.\", \"speaker\": \"Garran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 11,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: warn_garran",
+        "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:warn\": true}}, \"graph_action_id\": \"warn_garran\", \"hook_id\": \"hook:graph_direct:warn_garran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"summary\": \"Graph action completed: warn_garran\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 12,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 12,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 13,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 14,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 15,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 15,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 16,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 12, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave garran's wagon yard with the wagon and take the quarry road.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 12, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 2, \"actual_sent_action\": \"I scout ahead on the quarry road for tracks, hiding places, and ambush signs.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 16,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:scout_quarry_road\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 16,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_action_relevance_fallback\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"You examine the scene for concrete signs, narrowing the search to details that can be acted on.\", \"npc\": {}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 16,
+        "type": null,
+        "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+        "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 16,
+        "type": "mechanic",
+        "summary": "",
+        "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 16,
+        "type": "graph_direct_completion",
+        "summary": "Graph action completed: scout_quarry_road",
+        "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"scout_quarry_road\", \"hook_id\": \"hook:graph_direct:scout_quarry_road\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: scout_quarry_road\"}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 17,
+        "type": null,
+        "summary": "",
+        "raw_preview": "{\"action_id\": \"spot_bridge_watchers\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:spot_bridge_watchers\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+        "flags": {
+          "round": false,
+          "damage": false,
+          "resolution": true,
+          "attack": false,
+          "combat": true
+        }
+      }
+    ]
+  },
+  "real_combat_lifecycle_ok": true,
+  "real_round_event_count": 58,
+  "real_damage_event_count": 242,
+  "real_resolution_event_count": 45
+}

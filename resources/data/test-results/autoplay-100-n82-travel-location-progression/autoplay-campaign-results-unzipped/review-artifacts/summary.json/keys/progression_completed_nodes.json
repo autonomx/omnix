@@ -1,0 +1,602 @@
+{
+  "answer_voss_accusation": {
+    "node_id": "answer_voss_accusation",
+    "player_action": "I answer Captain Voss's accusation by tying the manifest, the marked coin, and the witnesses together.",
+    "title": "Answer Voss's accusation.",
+    "turn": 46
+  },
+  "ask_alternate_route": {
+    "node_id": "ask_alternate_route",
+    "player_action": "I ask Garran if there is another route around the bridge.",
+    "title": "Ask Garran about another route.",
+    "turn": 12
+  },
+  "ask_bran_about_old_mill": {
+    "node_id": "ask_bran_about_old_mill",
+    "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+    "title": "Ask Bran about the old mill.",
+    "turn": 23
+  },
+  "ask_bran_about_silver_crow": {
+    "node_id": "ask_bran_about_silver_crow",
+    "player_action": "I ask Bran what he knows about the Silver Crow cipher on Voss's payment marks.",
+    "title": "Ask Bran about the Silver Crow.",
+    "turn": 53
+  },
+  "ask_bran_about_tension": {
+    "node_id": "ask_bran_about_tension",
+    "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+    "title": "Ask the innkeeper why the tavern feels tense.",
+    "turn": 1
+  },
+  "ask_bran_bridge": {
+    "node_id": "ask_bran_bridge",
+    "player_action": "I ask Bran if the old east road leads to a bridge.",
+    "title": "Ask Bran whether the old east road leads to a bridge.",
+    "turn": 6
+  },
+  "ask_bran_direction": {
+    "node_id": "ask_bran_direction",
+    "player_action": "I ask Bran what direction the cloaked traveler went after leaving.",
+    "title": "Ask Bran which direction the traveler went.",
+    "turn": 3
+  },
+  "ask_bran_garran": {
+    "node_id": "ask_bran_garran",
+    "player_action": "I ask Bran who is most likely to travel the road before dawn.",
+    "title": "Ask Bran who will travel the road before dawn.",
+    "turn": 9
+  },
+  "ask_bran_who_left_side_door": {
+    "node_id": "ask_bran_who_left_side_door",
+    "player_action": "I ask Bran who left through the side door and why they were afraid.",
+    "title": "Ask Bran who left through the side door.",
+    "turn": 2
+  },
+  "ask_mira_side_door": {
+    "node_id": "ask_mira_side_door",
+    "player_action": "I turn to Mira and ask what she saw near the side door.",
+    "title": "Ask Mira what she saw near the side door.",
+    "turn": 4
+  },
+  "ask_patron_bridge": {
+    "node_id": "ask_patron_bridge",
+    "player_action": "I approach the local patron and quietly ask what he knows about the mill bridge.",
+    "title": "Ask the local patron about the mill bridge.",
+    "turn": 7
+  },
+  "attend_public_hearing": {
+    "node_id": "attend_public_hearing",
+    "player_action": "I attend the public hearing and stand with Bran and Garran as the evidence against Captain Voss is heard.",
+    "title": "Attend the public hearing.",
+    "turn": 45
+  },
+  "capture_sable_chain_orders": {
+    "node_id": "capture_sable_chain_orders",
+    "player_action": "I capture the strike team's sealed orders before they can destroy them.",
+    "title": "Capture the strike team's sealed orders.",
+    "turn": 73
+  },
+  "choose_ambush_response": {
+    "node_id": "choose_ambush_response",
+    "player_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+    "title": "Choose how to respond to the ambush threat.",
+    "turn": 18
+  },
+  "choose_voss_outcome": {
+    "node_id": "choose_voss_outcome",
+    "player_action": "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction.",
+    "title": "Choose the outcome for Captain Voss.",
+    "turn": 48
+  },
+  "close_voss_consequence_arc": {
+    "node_id": "close_voss_consequence_arc",
+    "player_action": "I report back to Bran and Garran that Voss is exposed, then plan to investigate which faction backed him.",
+    "title": "Close the Captain Voss consequence arc.",
+    "turn": 50
+  },
+  "confront_agent_marlowe": {
+    "node_id": "confront_agent_marlowe",
+    "player_action": "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain.",
+    "title": "Confront Agent Marlowe.",
+    "turn": 61
+  },
+  "confront_black_briar_contact": {
+    "node_id": "confront_black_briar_contact",
+    "player_action": "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss.",
+    "title": "Confront the Black Briar contact.",
+    "turn": 37
+  },
+  "confront_handler_veska": {
+    "node_id": "confront_handler_veska",
+    "player_action": "I confront Handler Veska at the ridge hideout with the proof linking her to the Sable Chain route pressure.",
+    "title": "Confront Handler Veska.",
+    "turn": 96
+  },
+  "confront_route_pressure_agents": {
+    "node_id": "confront_route_pressure_agents",
+    "player_action": "I confront the Sable Chain route pressure agents at Black Ford and order them to stand down.",
+    "title": "Confront the route pressure agents.",
+    "turn": 83
+  },
+  "counter_voss_intimidation": {
+    "node_id": "counter_voss_intimidation",
+    "player_action": "I protect Bran and Garran from Voss's watchmen and warn the guards that the magistrate has accepted the evidence.",
+    "title": "Counter Voss's intimidation attempt.",
+    "turn": 44
+  },
+  "decide_mill_next_step": {
+    "node_id": "decide_mill_next_step",
+    "player_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
+    "title": "Decide the next move after reading the order.",
+    "turn": 28
+  },
+  "decode_handler_route_cipher": {
+    "node_id": "decode_handler_route_cipher",
+    "player_action": "I decode the handler's route cipher from the sealed orders.",
+    "title": "Decode the handler's route cipher.",
+    "turn": 76
+  },
+  "decode_veska_coded_message": {
+    "node_id": "decode_veska_coded_message",
+    "player_action": "I decode Veska's coded message to learn where the Sable Chain leadership is moving.",
+    "title": "Decode Veska's coded message.",
+    "turn": 93
+  },
+  "detect_safehouse_watchers": {
+    "node_id": "detect_safehouse_watchers",
+    "player_action": "I scout the streets around the River Gate safehouse for Sable Chain watchers.",
+    "title": "Detect watchers near the safehouse.",
+    "turn": 65
+  },
+  "disable_false_toll_markers": {
+    "node_id": "disable_false_toll_markers",
+    "player_action": "I disable the false toll markers the Sable Chain placed along the east road.",
+    "title": "Disable the false toll markers.",
+    "turn": 79
+  },
+  "eavesdrop_tollhouse_meeting": {
+    "node_id": "eavesdrop_tollhouse_meeting",
+    "player_action": "I eavesdrop on the meeting at the ruined tollhouse to learn who the contact serves.",
+    "title": "Eavesdrop on the tollhouse meeting.",
+    "turn": 35
+  },
+  "find_countermove_orders": {
+    "node_id": "find_countermove_orders",
+    "player_action": "I search the warehouse office for Sable Chain countermove orders.",
+    "title": "Find the Sable Chain countermove orders.",
+    "turn": 69
+  },
+  "find_handler_dead_drop": {
+    "node_id": "find_handler_dead_drop",
+    "player_action": "I search the old milepost for the Sable Chain handler's dead drop.",
+    "title": "Find the handler's dead drop.",
+    "turn": 80
+  },
+  "find_shrine_token": {
+    "node_id": "find_shrine_token",
+    "player_action": "I search the shrine stones and offering bowl for the hidden Black Briar contact token.",
+    "title": "Find the hidden contact token.",
+    "turn": 31
+  },
+  "find_smuggler_cache": {
+    "node_id": "find_smuggler_cache",
+    "player_action": "I search behind the loose cellar stones for the smuggler cache.",
+    "title": "Find the hidden smuggler cache.",
+    "turn": 26
+  },
+  "follow_safehouse_watchers": {
+    "node_id": "follow_safehouse_watchers",
+    "player_action": "I shadow the Sable Chain watchers from the safehouse to learn where they report.",
+    "title": "Follow the Sable Chain watchers.",
+    "turn": 66
+  },
+  "force_voss_response": {
+    "node_id": "force_voss_response",
+    "player_action": "I press Captain Voss to explain why his initials appear on the tollhouse manifest.",
+    "title": "Force Voss to respond to the evidence.",
+    "turn": 47
+  },
+  "identify_handler_signature": {
+    "node_id": "identify_handler_signature",
+    "player_action": "I study the captured route papers to identify the Sable Chain handler's signature.",
+    "title": "Identify the handler's signature.",
+    "turn": 85
+  },
+  "identify_hidden_paymaster": {
+    "node_id": "identify_hidden_paymaster",
+    "player_action": "I study the ledger entries to identify the hidden Sable Chain paymaster.",
+    "title": "Identify the hidden Sable Chain paymaster.",
+    "turn": 100
+  },
+  "identify_sable_chain_agent": {
+    "node_id": "identify_sable_chain_agent",
+    "player_action": "I compare the ledger names and seals to identify the Sable Chain agent funding the Silver Crow.",
+    "title": "Identify the Sable Chain agent.",
+    "turn": 59
+  },
+  "identify_voss_allies": {
+    "node_id": "identify_voss_allies",
+    "player_action": "I ask Bran and Garran who in town still supports Captain Voss.",
+    "title": "Identify Captain Voss's local allies.",
+    "turn": 40
+  },
+  "inspect_cooperage_cellar": {
+    "node_id": "inspect_cooperage_cellar",
+    "player_action": "I inspect the cooperage cellar for hidden doors, cargo marks, or the Silver Crow cache.",
+    "title": "Inspect the cooperage cellar.",
+    "turn": 56
+  },
+  "inspect_mill_cellar": {
+    "node_id": "inspect_mill_cellar",
+    "player_action": "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use.",
+    "title": "Inspect the old mill cellar.",
+    "turn": 25
+  },
+  "inspect_shrine_tracks": {
+    "node_id": "inspect_shrine_tracks",
+    "player_action": "I inspect the shrine grounds for fresh tracks, ash, hidden marks, or signs of the Black Briar contact.",
+    "title": "Inspect tracks and signs around the shrine.",
+    "turn": 30
+  },
+  "inspect_side_door": {
+    "node_id": "inspect_side_door",
+    "player_action": "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+    "title": "Inspect the side door for physical evidence.",
+    "turn": 5
+  },
+  "inspect_warehouse_marks": {
+    "node_id": "inspect_warehouse_marks",
+    "player_action": "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes.",
+    "title": "Inspect the warehouse marks.",
+    "turn": 68
+  },
+  "inspect_watchpost_courier_signs": {
+    "node_id": "inspect_watchpost_courier_signs",
+    "player_action": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+    "title": "Inspect courier signs at the watchpost.",
+    "turn": 90
+  },
+  "intercept_sable_chain_strike_team": {
+    "node_id": "intercept_sable_chain_strike_team",
+    "player_action": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
+    "title": "Intercept the Sable Chain strike team.",
+    "turn": 72
+  },
+  "intercept_veska_courier": {
+    "node_id": "intercept_veska_courier",
+    "player_action": "I intercept Veska's courier before the message can leave the old north watchpost.",
+    "title": "Intercept Veska's courier.",
+    "turn": 91
+  },
+  "leave_by_quarry_road": {
+    "node_id": "leave_by_quarry_road",
+    "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
+    "title": "Leave the wagon yard by the quarry road.",
+    "turn": 15
+  },
+  "locate_agent_marlowe": {
+    "node_id": "locate_agent_marlowe",
+    "player_action": "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence.",
+    "title": "Locate Agent Marlowe.",
+    "turn": 60
+  },
+  "milestone:prepare_for_mill_road": {
+    "node_id": "milestone:prepare_for_mill_road",
+    "player_action": "I buy two rations from Bran.",
+    "title": "Prepare for the mill road",
+    "turn": 13
+  },
+  "open_silver_crow_cache": {
+    "node_id": "open_silver_crow_cache",
+    "player_action": "I open the hidden Silver Crow cache beneath the cooperage cellar.",
+    "title": "Open the Silver Crow cache.",
+    "turn": 57
+  },
+  "plan_against_captain_voss": {
+    "node_id": "plan_against_captain_voss",
+    "player_action": "I gather Bran and Garran to plan how to use the proof against Captain Voss.",
+    "title": "Plan the next move against Captain Voss.",
+    "turn": 39
+  },
+  "plan_against_sable_chain": {
+    "node_id": "plan_against_sable_chain",
+    "player_action": "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
+    "title": "Plan how to move against the Sable Chain.",
+    "turn": 63
+  },
+  "plan_pursuit_of_handler_veska": {
+    "node_id": "plan_pursuit_of_handler_veska",
+    "player_action": "I meet with Bran and Garran to plan how to pursue Handler Veska before the Sable Chain relocates.",
+    "title": "Plan the pursuit of Handler Veska.",
+    "turn": 87
+  },
+  "prepare_quarry_road": {
+    "node_id": "prepare_quarry_road",
+    "player_action": "I help Garran prepare the wagon for the safer route and get ready to leave.",
+    "title": "Prepare to take the safer route.",
+    "turn": 14
+  },
+  "prepare_safehouse_defense": {
+    "node_id": "prepare_safehouse_defense",
+    "player_action": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
+    "title": "Prepare the safehouse defense.",
+    "turn": 71
+  },
+  "present_manifest_to_magistrate": {
+    "node_id": "present_manifest_to_magistrate",
+    "player_action": "I present the tollhouse manifest and marked evidence to the magistrate.",
+    "title": "Present the manifest to the magistrate.",
+    "turn": 42
+  },
+  "protect_wagon_or_lure_bandits": {
+    "node_id": "protect_wagon_or_lure_bandits",
+    "player_action": "I check in with Garran and focus on the active wagon-road objective.",
+    "title": "Protect the wagon and draw out the ambushers.",
+    "turn": 19
+  },
+  "question_captured_bandit": {
+    "node_id": "question_captured_bandit",
+    "player_action": "I question the captured bandit about who hired them and why they targeted Garran's wagon.",
+    "title": "Question the captured bandit about who hired them.",
+    "turn": 20
+  },
+  "question_old_teamster": {
+    "node_id": "question_old_teamster",
+    "player_action": "I question the old teamster at the wagon yard about the Silver Crow cargo routes.",
+    "title": "Question the old teamster.",
+    "turn": 54
+  },
+  "reach_ruined_tollhouse": {
+    "node_id": "reach_ruined_tollhouse",
+    "player_action": "I follow the Black Briar contact to the ruined tollhouse.",
+    "title": "Reach the ruined tollhouse.",
+    "turn": 34
+  },
+  "read_route_pressure_instructions": {
+    "node_id": "read_route_pressure_instructions",
+    "player_action": "I read the route pressure instructions from the handler's dead drop.",
+    "title": "Read the route pressure instructions.",
+    "turn": 81
+  },
+  "read_silver_crow_ledger": {
+    "node_id": "read_silver_crow_ledger",
+    "player_action": "I read and decipher the coded Silver Crow ledger from the hidden cache.",
+    "title": "Read the Silver Crow ledger.",
+    "turn": 58
+  },
+  "read_wax_sealed_order": {
+    "node_id": "read_wax_sealed_order",
+    "player_action": "I read the wax-sealed order from the hidden smuggler cache.",
+    "title": "Read the wax-sealed order.",
+    "turn": 27
+  },
+  "recover_tollhouse_manifest": {
+    "node_id": "recover_tollhouse_manifest",
+    "player_action": "I recover the tollhouse manifest before the Black Briar contact can remove it.",
+    "title": "Recover the tollhouse manifest.",
+    "turn": 36
+  },
+  "recover_veska_coded_message": {
+    "node_id": "recover_veska_coded_message",
+    "player_action": "I recover Veska's coded message from the intercepted courier.",
+    "title": "Recover Veska's coded message.",
+    "turn": 92
+  },
+  "report_findings_to_bran": {
+    "node_id": "report_findings_to_bran",
+    "player_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+    "title": "Report the witness and bridge evidence to Bran.",
+    "turn": 8
+  },
+  "report_sable_chain_countermove": {
+    "node_id": "report_sable_chain_countermove",
+    "player_action": "I report to Bran and Garran that the Sable Chain countermove failed and the sealed orders point to a higher handler.",
+    "title": "Report the thwarted Sable Chain countermove.",
+    "turn": 74
+  },
+  "return_to_allies_with_voss_proof": {
+    "node_id": "return_to_allies_with_voss_proof",
+    "player_action": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
+    "title": "Return to Bran and Garran with proof against Voss.",
+    "turn": 38
+  },
+  "return_to_bran_with_proof": {
+    "node_id": "return_to_bran_with_proof",
+    "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+    "title": "Return to Bran with the proof.",
+    "turn": 22
+  },
+  "return_with_sable_chain_proof": {
+    "node_id": "return_with_sable_chain_proof",
+    "player_action": "I return to Bran and Garran with proof that the Sable Chain backed Captain Voss through the Silver Crow.",
+    "title": "Return with proof of the Sable Chain connection.",
+    "turn": 62
+  },
+  "return_with_veska_ledgers": {
+    "node_id": "return_with_veska_ledgers",
+    "player_action": "I return to Bran and Garran with Veska's leadership ledgers and proof of the Sable Chain command structure.",
+    "title": "Return with Veska's leadership ledgers.",
+    "turn": 98
+  },
+  "return_with_veska_name": {
+    "node_id": "return_with_veska_name",
+    "player_action": "I return to Bran and Garran with the name of the Sable Chain handler: Veska.",
+    "title": "Return with Handler Veska's name.",
+    "turn": 86
+  },
+  "review_handler_orders": {
+    "node_id": "review_handler_orders",
+    "player_action": "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler.",
+    "title": "Review the sealed orders naming the Sable Chain handler.",
+    "turn": 75
+  },
+  "review_veska_ledgers_for_command_structure": {
+    "node_id": "review_veska_ledgers_for_command_structure",
+    "player_action": "I review Veska's ledgers with Bran and Garran to map the Sable Chain command structure.",
+    "title": "Review Veska's ledgers for the Sable Chain command structure.",
+    "turn": 99
+  },
+  "review_voss_backer_leads": {
+    "node_id": "review_voss_backer_leads",
+    "player_action": "I review the evidence with Bran and Garran to decide how to identify the faction that backed Captain Voss.",
+    "title": "Review the leads on Voss's backers.",
+    "turn": 51
+  },
+  "scout_east_road_pressure_points": {
+    "node_id": "scout_east_road_pressure_points",
+    "player_action": "I scout the east road for roadblocks, chokepoints, and Sable Chain pressure points.",
+    "title": "Scout the east road pressure points.",
+    "turn": 78
+  },
+  "scout_quarry_road": {
+    "node_id": "scout_quarry_road",
+    "player_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+    "title": "Scout the quarry road.",
+    "turn": 16
+  },
+  "scout_ridge_hideout": {
+    "node_id": "scout_ridge_hideout",
+    "player_action": "I scout the ridge hideout for guards, exits, and signs of Handler Veska.",
+    "title": "Scout the ridge hideout.",
+    "turn": 95
+  },
+  "search_bandit_satchel": {
+    "node_id": "search_bandit_satchel",
+    "player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+    "title": "Search the bandit satchel for proof.",
+    "turn": 21
+  },
+  "secure_black_ford_crossing": {
+    "node_id": "secure_black_ford_crossing",
+    "player_action": "I secure the Black Ford crossing so the teamsters can keep the east road open.",
+    "title": "Secure Black Ford crossing.",
+    "turn": 84
+  },
+  "secure_public_witnesses": {
+    "node_id": "secure_public_witnesses",
+    "player_action": "I ask Bran and Garran to stand as public witnesses at the hearing against Captain Voss.",
+    "title": "Secure public witnesses.",
+    "turn": 43
+  },
+  "secure_sable_chain_evidence": {
+    "node_id": "secure_sable_chain_evidence",
+    "player_action": "I secure the Silver Crow ledger, the manifest, and Marlowe's proof before the Sable Chain can steal them.",
+    "title": "Secure the Sable Chain evidence.",
+    "turn": 64
+  },
+  "secure_veska_ledgers": {
+    "node_id": "secure_veska_ledgers",
+    "player_action": "I secure Veska's leadership ledgers before the Sable Chain can destroy or move them.",
+    "title": "Secure Veska's leadership ledgers.",
+    "turn": 97
+  },
+  "seek_magistrate_hearing": {
+    "node_id": "seek_magistrate_hearing",
+    "player_action": "I go to the magistrate hall and request a public hearing against Captain Voss.",
+    "title": "Seek a magistrate hearing.",
+    "turn": 41
+  },
+  "shadow_black_briar_contact": {
+    "node_id": "shadow_black_briar_contact",
+    "player_action": "I shadow the hooded Black Briar contact from the shrine without revealing myself.",
+    "title": "Shadow the Black Briar contact.",
+    "turn": 33
+  },
+  "spot_bridge_watchers": {
+    "node_id": "spot_bridge_watchers",
+    "player_action": "I scan the rock shelf for watchers or scouts watching the quarry road.",
+    "title": "Spot the watchers near the quarry road.",
+    "turn": 17
+  },
+  "stabilize_town_after_voss": {
+    "node_id": "stabilize_town_after_voss",
+    "player_action": "I help Bran and Garran stabilize the town and reopen the wagon routes after Voss is exposed.",
+    "title": "Stabilize the town after Voss is exposed.",
+    "turn": 49
+  },
+  "trace_veska_courier_route": {
+    "node_id": "trace_veska_courier_route",
+    "player_action": "I trace Veska's courier route from the captured route papers and sealed orders.",
+    "title": "Trace Veska's courier route.",
+    "turn": 88
+  },
+  "trace_voss_payment_marks": {
+    "node_id": "trace_voss_payment_marks",
+    "player_action": "I study the manifest payment marks to trace who funded Captain Voss.",
+    "title": "Trace the payment marks from the manifest.",
+    "turn": 52
+  },
+  "travel_to_abandoned_cooperage": {
+    "node_id": "travel_to_abandoned_cooperage",
+    "player_action": "I travel to the abandoned cooperage to search for the Silver Crow cache.",
+    "title": "Travel to the abandoned cooperage.",
+    "turn": 55
+  },
+  "travel_to_black_ford": {
+    "node_id": "travel_to_black_ford",
+    "player_action": "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
+    "title": "Travel to Black Ford.",
+    "turn": 82
+  },
+  "travel_to_north_road_shrine": {
+    "node_id": "travel_to_north_road_shrine",
+    "player_action": "I travel to the north road shrine to follow the Black Briar contact lead.",
+    "title": "Travel to the north road shrine.",
+    "turn": 29
+  },
+  "travel_to_old_mill": {
+    "node_id": "travel_to_old_mill",
+    "player_action": "I travel to the old mill ruins to follow the marked coin lead.",
+    "title": "Travel to the old mill ruins.",
+    "turn": 24
+  },
+  "travel_to_old_north_watchpost": {
+    "node_id": "travel_to_old_north_watchpost",
+    "player_action": "I travel to the old north watchpost to follow Veska's courier trail.",
+    "title": "Travel to the old north watchpost.",
+    "turn": 89
+  },
+  "travel_to_ridge_hideout": {
+    "node_id": "travel_to_ridge_hideout",
+    "player_action": "I travel to the ridge hideout before Veska's leadership cell can relocate.",
+    "title": "Travel to the ridge hideout.",
+    "turn": 94
+  },
+  "travel_to_river_gate_warehouses": {
+    "node_id": "travel_to_river_gate_warehouses",
+    "player_action": "I follow the watchers to the River Gate warehouses.",
+    "title": "Travel to the River Gate warehouses.",
+    "turn": 67
+  },
+  "travel_to_wagon_yard": {
+    "node_id": "travel_to_wagon_yard",
+    "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+    "title": "Travel to Garran's wagon yard.",
+    "turn": 10
+  },
+  "wait_for_contact_signal": {
+    "node_id": "wait_for_contact_signal",
+    "player_action": "I hide near the north road shrine and watch for the Black Briar contact signal.",
+    "title": "Wait for the contact signal.",
+    "turn": 32
+  },
+  "warn_allies_of_sable_chain_strike": {
+    "node_id": "warn_allies_of_sable_chain_strike",
+    "player_action": "I rush back to warn Bran and Garran that the Sable Chain plans to burn the evidence and silence witnesses.",
+    "title": "Warn allies about the Sable Chain strike.",
+    "turn": 70
+  },
+  "warn_east_road_teamsters": {
+    "node_id": "warn_east_road_teamsters",
+    "player_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+    "title": "Warn the east road teamsters.",
+    "turn": 77
+  },
+  "warn_garran": {
+    "node_id": "warn_garran",
+    "player_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+    "title": "Warn Garran about the bridge ambush.",
+    "turn": 11
+  }
+}

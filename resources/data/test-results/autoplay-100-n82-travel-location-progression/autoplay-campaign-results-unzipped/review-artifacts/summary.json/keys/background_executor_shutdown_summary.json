@@ -1,0 +1,25 @@
+{
+  "alive_background_thread_count": 1,
+  "alive_provider_thread_count": 2,
+  "background_threads": [
+    {
+      "alive": true,
+      "daemon": false,
+      "name": "rpg-autoplay-bg_0"
+    }
+  ],
+  "pending_job_count": 0,
+  "pending_job_ids": [],
+  "provider_threads": [
+    {
+      "alive": true,
+      "daemon": false,
+      "name": "rpg-autoplay-provider_1"
+    },
+    {
+      "alive": true,
+      "daemon": false,
+      "name": "rpg-autoplay-provider_0"
+    }
+  ]
+}

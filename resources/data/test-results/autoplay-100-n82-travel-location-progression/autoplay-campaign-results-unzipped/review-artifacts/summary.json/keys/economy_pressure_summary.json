@@ -1,0 +1,419 @@
+{
+  "by_kind": {
+    "food_supply_upkeep": 5,
+    "lodging_upkeep": 4,
+    "travel_surcharge": 3
+  },
+  "currency_delta_count": 12,
+  "currency_deltas": [
+    {
+      "currency": "copper",
+      "delta": -5,
+      "reason": "food_supply_upkeep",
+      "turn": 18
+    },
+    {
+      "currency": "gold",
+      "delta": -1,
+      "reason": "lodging_upkeep",
+      "turn": 24
+    },
+    {
+      "currency": "gold",
+      "delta": -1,
+      "reason": "travel_surcharge",
+      "turn": 30
+    },
+    {
+      "currency": "copper",
+      "delta": -5,
+      "reason": "food_supply_upkeep",
+      "turn": 36
+    },
+    {
+      "currency": "gold",
+      "delta": -1,
+      "reason": "lodging_upkeep",
+      "turn": 48
+    },
+    {
+      "currency": "copper",
+      "delta": -5,
+      "reason": "food_supply_upkeep",
+      "turn": 54
+    },
+    {
+      "currency": "gold",
+      "delta": -1,
+      "reason": "travel_surcharge",
+      "turn": 60
+    },
+    {
+      "currency": "gold",
+      "delta": -1,
+      "reason": "lodging_upkeep",
+      "turn": 72
+    },
+    {
+      "currency": "copper",
+      "delta": -5,
+      "reason": "food_supply_upkeep",
+      "turn": 72
+    },
+    {
+      "currency": "copper",
+      "delta": -5,
+      "reason": "food_supply_upkeep",
+      "turn": 90
+    },
+    {
+      "currency": "gold",
+      "delta": -1,
+      "reason": "travel_surcharge",
+      "turn": 90
+    },
+    {
+      "currency": "gold",
+      "delta": -1,
+      "reason": "lodging_upkeep",
+      "turn": 96
+    }
+  ],
+  "ending_currency": {
+    "copper": 5,
+    "gold": 3,
+    "silver": 0
+  },
+  "event_count": 12,
+  "events": [
+    {
+      "cost_amount": 5,
+      "currency_after": 25,
+      "currency_before": 30,
+      "currency_key": "copper",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:food_and_supplies",
+      "subtype": "food_supply_upkeep",
+      "summary": "Food, candles, and small supplies drain coin.",
+      "turn": 18,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 1,
+      "currency_after": 9,
+      "currency_before": 10,
+      "currency_key": "gold",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:daily_lodging",
+      "subtype": "lodging_upkeep",
+      "summary": "Daily lodging upkeep comes due at the Rusty Flagon.",
+      "turn": 24,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 1,
+      "currency_after": 8,
+      "currency_before": 9,
+      "currency_key": "gold",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:road_risk_surcharge",
+      "subtype": "travel_surcharge",
+      "summary": "Road risk raises the cost of travel and resupply.",
+      "turn": 30,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 5,
+      "currency_after": 20,
+      "currency_before": 25,
+      "currency_key": "copper",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:food_and_supplies",
+      "subtype": "food_supply_upkeep",
+      "summary": "Food, candles, and small supplies drain coin.",
+      "turn": 36,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 1,
+      "currency_after": 7,
+      "currency_before": 8,
+      "currency_key": "gold",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:daily_lodging",
+      "subtype": "lodging_upkeep",
+      "summary": "Daily lodging upkeep comes due at the Rusty Flagon.",
+      "turn": 48,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 5,
+      "currency_after": 15,
+      "currency_before": 20,
+      "currency_key": "copper",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:food_and_supplies",
+      "subtype": "food_supply_upkeep",
+      "summary": "Food, candles, and small supplies drain coin.",
+      "turn": 54,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 1,
+      "currency_after": 6,
+      "currency_before": 7,
+      "currency_key": "gold",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:road_risk_surcharge",
+      "subtype": "travel_surcharge",
+      "summary": "Road risk raises the cost of travel and resupply.",
+      "turn": 60,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 1,
+      "currency_after": 5,
+      "currency_before": 6,
+      "currency_key": "gold",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:daily_lodging",
+      "subtype": "lodging_upkeep",
+      "summary": "Daily lodging upkeep comes due at the Rusty Flagon.",
+      "turn": 72,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 5,
+      "currency_after": 10,
+      "currency_before": 15,
+      "currency_key": "copper",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:food_and_supplies",
+      "subtype": "food_supply_upkeep",
+      "summary": "Food, candles, and small supplies drain coin.",
+      "turn": 72,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 5,
+      "currency_after": 5,
+      "currency_before": 10,
+      "currency_key": "copper",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:food_and_supplies",
+      "subtype": "food_supply_upkeep",
+      "summary": "Food, candles, and small supplies drain coin.",
+      "turn": 90,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 1,
+      "currency_after": 4,
+      "currency_before": 5,
+      "currency_key": "gold",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:road_risk_surcharge",
+      "subtype": "travel_surcharge",
+      "summary": "Road risk raises the cost of travel and resupply.",
+      "turn": 90,
+      "type": "economy_pressure"
+    },
+    {
+      "cost_amount": 1,
+      "currency_after": 3,
+      "currency_before": 4,
+      "currency_key": "gold",
+      "meaningful_progress": false,
+      "paid": true,
+      "progress_category": "economy_pressure",
+      "rule_id": "economy:daily_lodging",
+      "subtype": "lodging_upkeep",
+      "summary": "Daily lodging upkeep comes due at the Rusty Flagon.",
+      "turn": 96,
+      "type": "economy_pressure"
+    }
+  ],
+  "format_version": "economy_pressure_summary_v1",
+  "ok": true,
+  "paid_count": 12,
+  "total_spent": {
+    "copper": 25,
+    "gold": 7
+  },
+  "unpaid_count": 0,
+  "warning_count": 3,
+  "warnings": [
+    {
+      "available": 10,
+      "currency": "copper",
+      "rule_id": "economy:food_and_supplies",
+      "subtype": "low_currency",
+      "threshold": 10,
+      "turn": 72,
+      "type": "economy_warning"
+    },
+    {
+      "available": 5,
+      "currency": "copper",
+      "rule_id": "economy:food_and_supplies",
+      "subtype": "low_currency",
+      "threshold": 10,
+      "turn": 90,
+      "type": "economy_warning"
+    },
+    {
+      "available": 3,
+      "currency": "gold",
+      "rule_id": "economy:daily_lodging",
+      "subtype": "low_currency",
+      "threshold": 3,
+      "turn": 96,
+      "type": "economy_warning"
+    }
+  ],
+  "world_signal_count": 12,
+  "world_signals": [
+    {
+      "created_turn": 18,
+      "id": "signal:economy_supplies_drain",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Small supplies are being consumed as the days pass.",
+      "ttl_turns": 40,
+      "turn": 18
+    },
+    {
+      "created_turn": 24,
+      "id": "signal:economy_lodging_due",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Lodging costs continue to matter during the investigation.",
+      "ttl_turns": 40,
+      "turn": 24
+    },
+    {
+      "created_turn": 30,
+      "id": "signal:economy_road_surcharge",
+      "intensity": 2,
+      "kind": "economy_pressure",
+      "scope": "region:mill_road",
+      "summary": "Merchants raise prices while road pressure remains high.",
+      "ttl_turns": 40,
+      "turn": 30
+    },
+    {
+      "created_turn": 36,
+      "id": "signal:economy_supplies_drain",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Small supplies are being consumed as the days pass.",
+      "ttl_turns": 40,
+      "turn": 36
+    },
+    {
+      "created_turn": 48,
+      "id": "signal:economy_lodging_due",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Lodging costs continue to matter during the investigation.",
+      "ttl_turns": 40,
+      "turn": 48
+    },
+    {
+      "created_turn": 54,
+      "id": "signal:economy_supplies_drain",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Small supplies are being consumed as the days pass.",
+      "ttl_turns": 40,
+      "turn": 54
+    },
+    {
+      "created_turn": 60,
+      "id": "signal:economy_road_surcharge",
+      "intensity": 2,
+      "kind": "economy_pressure",
+      "scope": "region:mill_road",
+      "summary": "Merchants raise prices while road pressure remains high.",
+      "ttl_turns": 40,
+      "turn": 60
+    },
+    {
+      "created_turn": 72,
+      "id": "signal:economy_lodging_due",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Lodging costs continue to matter during the investigation.",
+      "ttl_turns": 40,
+      "turn": 72
+    },
+    {
+      "created_turn": 72,
+      "id": "signal:economy_supplies_drain",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Small supplies are being consumed as the days pass.",
+      "ttl_turns": 40,
+      "turn": 72
+    },
+    {
+      "created_turn": 90,
+      "id": "signal:economy_supplies_drain",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Small supplies are being consumed as the days pass.",
+      "ttl_turns": 40,
+      "turn": 90
+    },
+    {
+      "created_turn": 90,
+      "id": "signal:economy_road_surcharge",
+      "intensity": 2,
+      "kind": "economy_pressure",
+      "scope": "region:mill_road",
+      "summary": "Merchants raise prices while road pressure remains high.",
+      "ttl_turns": 40,
+      "turn": 90
+    },
+    {
+      "created_turn": 96,
+      "id": "signal:economy_lodging_due",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Lodging costs continue to matter during the investigation.",
+      "ttl_turns": 40,
+      "turn": 96
+    }
+  ]
+}

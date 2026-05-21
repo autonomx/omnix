@@ -1,0 +1,9 @@
+{
+  "artifact_completeness_ok": true,
+  "evaluation_logic_ok": true,
+  "gameplay_progress_ok": false,
+  "notes": [
+    "N79/N81 report hardening is functioning when artifacts are complete.",
+    "A failed hundred_turn_evaluation can be a valid result if it identifies real gameplay problems."
+  ]
+}

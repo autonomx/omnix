@@ -1,0 +1,1051 @@
+{
+  "compressed_state_preview": {
+    "faction_count": 2,
+    "npc_memory_event_count": 0,
+    "story_arc_count": 2,
+    "world_signal_count": 5
+  },
+  "compression_event_count": 100,
+  "events": [
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 1,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 2,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 3,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 4,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 5,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 6,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 7,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 8,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 9,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 10,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 11,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 12,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 13,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 14,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 15,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 16,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 17,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 18,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 19,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 20,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 21,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 22,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 23,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 24,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 25,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 26,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 27,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 28,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 29,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 30,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 31,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 32,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 33,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 34,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 35,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 36,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 37,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 38,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 39,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 40,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 41,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 42,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 43,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 44,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 45,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 46,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 47,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 48,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 49,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 50,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 51,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 52,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 53,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 54,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 55,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 56,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 57,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 1,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 58,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 59,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 60,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 61,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 62,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 63,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 1,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 64,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 65,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 66,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 67,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 68,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 69,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 1,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 70,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 71,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 72,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 73,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 74,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 75,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 1,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 76,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 77,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 78,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 79,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 80,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 81,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 82,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 83,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 84,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 85,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 86,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 87,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 1,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 88,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 89,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 90,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 91,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 92,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 93,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 1,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 94,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 95,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 96,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 97,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 98,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 0,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 99,
+      "type": "world_state_compression"
+    },
+    {
+      "summary": {
+        "compacted_arc_count": 0,
+        "compacted_faction_count": 0,
+        "expired_world_signal_count": 1,
+        "npc_memory_dropped_count": 0
+      },
+      "turn": 100,
+      "type": "world_state_compression"
+    }
+  ],
+  "format_version": "world_state_compression_summary_v1",
+  "latest_state_budget": {
+    "budgets": {
+      "faction_state_bytes": 100000,
+      "npc_memory_events_bytes": 150000,
+      "story_arcs_bytes": 250000,
+      "summary_bytes": 2000000,
+      "world_signals_bytes": 200000
+    },
+    "format_version": "state_budget_summary_v1",
+    "ok": true,
+    "sections": {
+      "faction_state": {
+        "budget_bytes": 100000,
+        "bytes": 242,
+        "ok": true
+      },
+      "npc_memory_events": {
+        "budget_bytes": 150000,
+        "bytes": 2,
+        "ok": true
+      },
+      "story_arcs": {
+        "budget_bytes": 250000,
+        "bytes": 1529,
+        "ok": true
+      },
+      "summary": {
+        "budget_bytes": 2000000,
+        "bytes": 3021,
+        "ok": true
+      },
+      "world_signals": {
+        "budget_bytes": 200000,
+        "bytes": 1166,
+        "ok": true
+      }
+    }
+  },
+  "ok": true
+}

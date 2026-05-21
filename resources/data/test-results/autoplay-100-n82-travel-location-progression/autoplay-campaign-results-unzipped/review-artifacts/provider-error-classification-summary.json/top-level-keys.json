@@ -1,0 +1,90 @@
+{
+  "artifact_name": "provider-error-classification-summary.json",
+  "format_version": "n1176_review_dict_key_index_v1",
+  "keys": [
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/background_provider_error_count.json",
+      "key": "background_provider_error_count",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/by_phase.json",
+      "key": "by_phase",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/by_provider_failure_kind.json",
+      "key": "by_provider_failure_kind",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/by_status_code.json",
+      "key": "by_status_code",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/classification_note.json",
+      "key": "classification_note",
+      "size_bytes": 103
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/deterministic_turn_error_count.json",
+      "key": "deterministic_turn_error_count",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/deterministic_turn_errors.json",
+      "key": "deterministic_turn_errors",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/first_turn.json",
+      "key": "first_turn",
+      "size_bytes": 4
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/format_version.json",
+      "key": "format_version",
+      "size_bytes": 48
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/last_turn.json",
+      "key": "last_turn",
+      "size_bytes": 4
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/ok.json",
+      "key": "ok",
+      "size_bytes": 4
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/provider_errors.json",
+      "key": "provider_errors",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/provider_errors_are_runtime_errors.json",
+      "key": "provider_errors_are_runtime_errors",
+      "size_bytes": 5
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/raw_console_turn_error_count.json",
+      "key": "raw_console_turn_error_count",
+      "size_bytes": 1
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/turns.json",
+      "key": "turns",
+      "size_bytes": 2
+    },
+    {
+      "file": "review-artifacts/provider-error-classification-summary.json/keys/unknown_retained_turn_error_count.json",
+      "key": "unknown_retained_turn_error_count",
+      "size_bytes": 1
+    }
+  ],
+  "note": "",
+  "omitted_monolithic": false,
+  "original_size_bytes": 615,
+  "top_level_key_count": 16
+}

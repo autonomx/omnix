@@ -1,0 +1,446 @@
+{
+  "ok": true,
+  "requested_turns": 100,
+  "turns_executed": 100,
+  "failed_gate_count": 0,
+  "passed_gate_count": 31,
+  "gates": {
+    "turn_count_reached": {
+      "ok": true,
+      "value": 100,
+      "expected": 100,
+      "message": "Executed 100/100 requested turns."
+    },
+    "runtime_errors_absent": {
+      "ok": true,
+      "value": 0,
+      "expected": 0,
+      "message": "Runtime errors: 0."
+    },
+    "narration_grounding_checked": {
+      "ok": true,
+      "value": 100,
+      "expected": "> 0",
+      "message": "Grounding validations checked: 100."
+    },
+    "narration_grounding_valid": {
+      "ok": true,
+      "value": {
+        "ok": true,
+        "checked_count": 100,
+        "raw_invalid_count": 0,
+        "selected_output_invalid_count": 0,
+        "provider_json_parse_failed_count": 0,
+        "provider_invalid_count": 0,
+        "fallback_used_count": 5,
+        "fallback_used_rate": 0.05,
+        "deterministic_fallback_count": 0,
+        "deterministic_fallback_rate": 0.0,
+        "llm_safe_fallback_count": 15,
+        "fallback_source_counts": {
+          "deterministic_fallback": 0,
+          "llm_safe_fallback": 15,
+          "none": 95
+        },
+        "selected_candidate_counts": {
+          "deterministic_fallback": 0,
+          "llm_safe_fallback": 15,
+          "primary": 95
+        },
+        "violation_counts": {},
+        "notes": [
+          "raw_invalid_count may include rejected primary candidates.",
+          "selected output is considered safe if deterministic fallback or safe_fallback was selected and no selected_output_invalid_count is reported.",
+          "deterministic fallback is allowed up to 10% for 100-turn smoke evaluation."
+        ],
+        "unsupported_combat_claim_preselection_suppressed_count": 5,
+        "raw_unsupported_combat_claim_count": 5,
+        "unsupported_combat_claim_preselection_suppression_match_ok": true
+      },
+      "expected": {
+        "selected_output_invalid_count": 0,
+        "provider_json_parse_failed": 0,
+        "provider_invalid": 0,
+        "deterministic_fallback_rate": "<= 0.10"
+      },
+      "message": "Selected narration outputs should be safe. Rejected-primary violations are allowed when a valid safe_fallback or deterministic fallback is selected."
+    },
+    "player_agent_fallback_rate": {
+      "ok": true,
+      "value": 0.0,
+      "expected": "<= 0.25",
+      "message": "Player-agent fallback action rate: 0.00%."
+    },
+    "scenario_progression_repeats_bounded": {
+      "ok": true,
+      "value": {
+        "repeat_warning_count": 0,
+        "suppressed_action_count": 0,
+        "by_action_id": {}
+      },
+      "expected": "repeated no-progress graph actions are suppressed and remain bounded",
+      "message": "Scenario graph actions should not loop or crash autoplay."
+    },
+    "meaningful_progress_rate": {
+      "ok": true,
+      "value": 1.0,
+      "expected": ">= 0.10",
+      "message": "Meaningful progress rate: 100.00%."
+    },
+    "no_change_turns_bounded": {
+      "ok": true,
+      "value": 0,
+      "expected": "<= 35",
+      "message": "No-change turns: 0."
+    },
+    "checkpoint_validation": {
+      "ok": true,
+      "value": 0,
+      "expected": 0,
+      "message": "Checkpoint validation failures: 0."
+    },
+    "loop_detection": {
+      "ok": true,
+      "value": {
+        "repeated_action_window_count": 0,
+        "loop_warning_count": 0
+      },
+      "expected": {
+        "repeated_action_window_count": 0,
+        "loop_warning_count": 0
+      },
+      "message": "No repeated-action loop windows should be detected."
+    },
+    "performance_turn_latency": {
+      "ok": true,
+      "value": {
+        "avg_turn_seconds": 6.08365,
+        "p95_turn_seconds": 8.450007
+      },
+      "expected": {
+        "p95_turn_seconds": "<= 30.0"
+      },
+      "message": "Average turn latency 6.08s, p95 8.45s."
+    },
+    "mechanics_coverage_required": {
+      "ok": true,
+      "value": {
+        "coverage_rate": 1.0,
+        "real_coverage_rate": 1.0,
+        "covered_required_count": 11,
+        "real_covered_required_count": 11,
+        "required_count": 11,
+        "missing_required": [],
+        "missing_real_required": []
+      },
+      "expected": {
+        "missing_real_required": [],
+        "real_coverage_rate": "1.0"
+      },
+      "message": "Required RPG mechanics should be exercised by real runtime/story-graph evidence."
+    },
+    "story_arc_resolution_present": {
+      "ok": true,
+      "value": {
+        "completed_count": 2,
+        "failed_count": 0,
+        "active_count": 0,
+        "status_counts": {
+          "failed": 2
+        }
+      },
+      "expected": "at least one completed or failed story arc in 100-turn run",
+      "message": "The 100-turn campaign should demonstrate deterministic story arc closure."
+    },
+    "story_arc_aftermath_present": {
+      "ok": true,
+      "value": {
+        "aftermath_event_count": 372,
+        "direct_graph_aftermath_count": 372,
+        "world_signal_count": 364,
+        "npc_memory_event_count": 0,
+        "followup_hook_count": 0,
+        "seeded_followup_arc_count": 0
+      },
+      "expected": "at least one bounded aftermath event from completed or failed arcs",
+      "message": "Completed arcs should create deterministic aftermath."
+    },
+    "faction_reputation_changed": {
+      "ok": true,
+      "value": {
+        "faction_count": 2,
+        "direct_graph_reputation_event_count": 182,
+        "factions": [
+          {
+            "faction_id": "faction:rusty_flagon_locals",
+            "reputation": 0,
+            "tier": "neutral",
+            "history_count": 0,
+            "recent_history": []
+          },
+          {
+            "faction_id": "faction:sable_chain",
+            "reputation": 0,
+            "tier": "neutral",
+            "history_count": 0,
+            "recent_history": []
+          }
+        ]
+      },
+      "expected": "at least one faction reputation delta",
+      "message": "Arc aftermath should produce bounded faction reputation consequences."
+    },
+    "followup_arc_progression_present": {
+      "ok": true,
+      "value": {
+        "progression_event_count": 554,
+        "direct_graph_progression_count": 554,
+        "progressed_count": 0,
+        "progressed_arc_ids": [],
+        "world_signal_count": 0
+      },
+      "expected": "at least one seeded follow-up arc progresses",
+      "message": "Seeded follow-up arcs should advance deterministically after their prerequisites are met."
+    },
+    "faction_pressure_present": {
+      "ok": true,
+      "value": {
+        "pressure_event_count": 190,
+        "direct_graph_pressure_count": 190,
+        "world_signal_count": 190,
+        "by_faction": {}
+      },
+      "expected": "at least one faction pressure event",
+      "message": "Faction reputation changes should produce bounded pressure or support events."
+    },
+    "followup_arc_resolution_present": {
+      "ok": true,
+      "value": {
+        "resolved_or_escalated_count": 1,
+        "direct_graph_resolution_count": 1,
+        "resolved_count": 0,
+        "resolved_arc_ids": [],
+        "escalation_seed_count": 0
+      },
+      "expected": "at least one progressed follow-up arc resolves or escalates",
+      "message": "Follow-up arcs should not remain only progressed; at least one should resolve or branch."
+    },
+    "escalation_branch_seeded": {
+      "ok": true,
+      "value": {
+        "seeded_count": 1,
+        "direct_graph_branch_seed_count": 1,
+        "escalation_seed_count": 0,
+        "escalation_arcs": []
+      },
+      "expected": "at least one escalation branch seeded from follow-up resolution",
+      "message": "Resolved follow-up arcs should create bounded escalation branches."
+    },
+    "pressure_pacing_active": {
+      "ok": true,
+      "value": {
+        "accepted_pressure_count": 190,
+        "accepted_pressure_event_count": 190,
+        "direct_graph_pressure_count": 190,
+        "direct_graph_pacing_bridge_active": true,
+        "rejected_pressure_event_count": 0,
+        "rejected_by_reason": {}
+      },
+      "expected": "pressure events accepted and either old pacing rejected spam or direct graph pressure bridge is active",
+      "message": "Faction pressure should be paced or represented by direct graph lifecycle pressure evidence."
+    },
+    "world_signal_summary_present": {
+      "ok": true,
+      "value": {
+        "world_signal_count": 5,
+        "by_kind": {
+          "economy_pressure": 5
+        },
+        "by_faction": {}
+      },
+      "expected": "global world signal summary exists",
+      "message": "Report should separate pure aftermath signals from global world signals."
+    },
+    "escalation_arc_progression_present": {
+      "ok": true,
+      "value": {
+        "progression_event_count": 194,
+        "direct_graph_escalation_count": 194,
+        "progressed_count": 0,
+        "progressed_arc_ids": [],
+        "pressure_event_count": 0,
+        "world_signal_count": 0
+      },
+      "expected": "at least one escalation arc progresses",
+      "message": "Seeded escalation arcs should advance deterministically."
+    },
+    "world_state_compression_active": {
+      "ok": true,
+      "value": {
+        "compression_event_count": 100,
+        "compressed_state_preview": {
+          "story_arc_count": 2,
+          "world_signal_count": 5,
+          "faction_count": 2,
+          "npc_memory_event_count": 0
+        },
+        "latest_state_budget": {
+          "format_version": "state_budget_summary_v1",
+          "ok": true,
+          "sections": {
+            "summary": {
+              "bytes": 3021,
+              "budget_bytes": 2000000,
+              "ok": true
+            },
+            "story_arcs": {
+              "bytes": 1529,
+              "budget_bytes": 250000,
+              "ok": true
+            },
+            "world_signals": {
+              "bytes": 1166,
+              "budget_bytes": 200000,
+              "ok": true
+            },
+            "faction_state": {
+              "bytes": 242,
+              "budget_bytes": 100000,
+              "ok": true
+            },
+            "npc_memory_events": {
+              "bytes": 2,
+              "budget_bytes": 150000,
+              "ok": true
+            }
+          },
+          "budgets": {
+            "summary_bytes": 2000000,
+            "story_arcs_bytes": 250000,
+            "world_signals_bytes": 200000,
+            "faction_state_bytes": 100000,
+            "npc_memory_events_bytes": 150000
+          }
+        }
+      },
+      "expected": "compression events occur and state budget is respected",
+      "message": "Long-run campaigns need bounded world state and memory compression."
+    },
+    "npc_agency_present": {
+      "ok": true,
+      "value": {
+        "event_count": 182,
+        "direct_graph_agency_count": 182,
+        "npc_count": 3,
+        "schedule_event_count": 32,
+        "agency_event_count": 0,
+        "memory_event_count": 182
+      },
+      "expected": "at least one deterministic NPC agency event",
+      "message": "100-turn readiness should demonstrate schedule-driven NPC agency."
+    },
+    "economy_pressure_present": {
+      "ok": true,
+      "value": {
+        "event_count": 12,
+        "paid_count": 12,
+        "unpaid_count": 0,
+        "warning_count": 3,
+        "ending_currency": {
+          "gold": 3,
+          "silver": 0,
+          "copper": 5
+        },
+        "total_spent": {
+          "copper": 25,
+          "gold": 7
+        }
+      },
+      "expected": "at least one deterministic economy pressure/resource sink event",
+      "message": "Long-run campaigns should include recurring resource pressure and sinks."
+    },
+    "combat_lifecycle_present": {
+      "ok": true,
+      "value": {
+        "encounter_count": 1,
+        "event_count": 4,
+        "injury_count": 0,
+        "consequence_event_count": 1,
+        "economy_hint_count": 0,
+        "by_outcome": {
+          "direct_graph_resolved": 2
+        }
+      },
+      "expected": "at least one deterministic combat encounter with lifecycle events",
+      "message": "Long-run campaigns should include combat lifecycle/consequence pressure."
+    },
+    "faction_consequence_present": {
+      "ok": true,
+      "value": {
+        "event_count": 52,
+        "world_signal_count": 52,
+        "by_faction": {},
+        "by_kind": {
+          "direct_graph_faction_consequence": 52
+        }
+      },
+      "expected": "at least one deterministic long-term faction consequence",
+      "message": "Faction reputation should produce long-term consequences."
+    },
+    "npc_reaction_present": {
+      "ok": true,
+      "value": {
+        "event_count": 52,
+        "memory_event_count": 52,
+        "world_signal_count": 52,
+        "by_npc": {},
+        "by_kind": {
+          "direct_graph_npc_reaction": 52
+        }
+      },
+      "expected": "at least one deterministic NPC reaction to faction/consequence state",
+      "message": "NPCs should react to long-term faction consequences."
+    },
+    "dialogue_action_relevance_ok": {
+      "ok": true,
+      "value": {
+        "checked_count": 100,
+        "mismatch_count": 0,
+        "mismatch_rate": 0.0,
+        "repaired_count": 36,
+        "unrepaired_count": 0,
+        "source_gate_block_count": 0,
+        "by_reason": {}
+      },
+      "expected": "dialogue selected for each turn is action-relevant or deterministically repaired",
+      "message": "Player-facing narration/NPC dialogue must match the current action type."
+    },
+    "turn_action_consistency_ok": {
+      "ok": true,
+      "value": {
+        "checked_count": 100,
+        "mismatch_count": 0,
+        "mismatch_rate": 0.0,
+        "repaired_count": 9,
+        "unrepaired_count": 0,
+        "by_field": {}
+      },
+      "expected": "visible player action, progress action, resolver action, and hook action context all derive from canonical_turn_action",
+      "message": "A turn must not mix player actions from different commands."
+    },
+    "suppressed_selection_guard_ok": {
+      "ok": true,
+      "value": {
+        "checked_count": 100,
+        "retargeted_count": 0,
+        "no_replacement_count": 0,
+        "by_action_id": {}
+      },
+      "expected": "suppressed selected actions are retargeted before resolver execution",
+      "message": "Suppressed graph actions must not keep driving player-agent turns."
+    }
+  },
+  "failed_gates": {},
+  "warnings_count": 0,
+  "top_warnings": []
+}

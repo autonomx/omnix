@@ -1,0 +1,817 @@
+{
+  "commit_sequence": 105,
+  "current_turn": 0,
+  "evidence_count": 10,
+  "handoff_progress_summary": {
+    "changed": false,
+    "reason": "no_action"
+  },
+  "handoff_summary": {
+    "active_objective_count": 0,
+    "active_quest_count": 0,
+    "changed": false,
+    "completed_objective_count": 16,
+    "completed_quest_count": 12,
+    "ok": true,
+    "reason": "suppressed_by_scenario_progression_graph"
+  },
+  "lead_summary": {
+    "count": 25,
+    "recent": [
+      {
+        "hook_id": "hook:travel:location:mill_bridge_road",
+        "id": "lead:autoplay_story_hook_state:a26447c562",
+        "kind": "hook",
+        "name": "ward the Mill Bridge road",
+        "priority": 195,
+        "rank_index": 25,
+        "source": "autoplay_story_hook_state"
+      },
+      {
+        "hook_id": "hook:travel:location:mill_bridge_road",
+        "id": "lead:autoplay_story_hook_state:e1d9b1ce93",
+        "kind": "hook",
+        "name": "the Mill Bridge road",
+        "priority": 183,
+        "rank_index": 26,
+        "source": "autoplay_story_hook_state"
+      },
+      {
+        "hook_id": "hook:travel:location:mill_bridge_road",
+        "id": "lead:autoplay_story_hook_state:c110ad81c8",
+        "kind": "hook",
+        "name": "Mill Bridge",
+        "priority": 179,
+        "rank_index": 27,
+        "source": "autoplay_story_hook_state"
+      },
+      {
+        "id": "lead:objective_progression_log:180862e0ac",
+        "kind": "summary",
+        "name": "Report the witness findings to Bran.",
+        "priority": 162,
+        "rank_index": 20,
+        "source": "objective_progression_log"
+      },
+      {
+        "hook_id": "hook:witness:inspect_tavern",
+        "id": "lead:autoplay_story_hook_state:1be1d0b1b3",
+        "kind": "hook",
+        "name": "side-door clues were inspected",
+        "priority": 158,
+        "rank_index": 23,
+        "source": "autoplay_story_hook_state"
+      },
+      {
+        "hook_id": "hook:travel:location:east_road_outside_tavern",
+        "id": "lead:autoplay_story_hook_state:23d83ecfb3",
+        "kind": "hook",
+        "name": "player left tavern followed",
+        "priority": 158,
+        "rank_index": 25,
+        "source": "autoplay_story_hook_state"
+      },
+      {
+        "id": "lead:objective_progression_log:887ecab508",
+        "kind": "summary",
+        "name": "Find the witness near the tavern.",
+        "priority": 152,
+        "rank_index": 17,
+        "source": "objective_progression_log"
+      },
+      {
+        "id": "lead:objective_evidence:cac5ff7e61",
+        "kind": "location",
+        "name": "Rusty Flagon Tavern",
+        "priority": 151,
+        "rank_index": 16,
+        "source": "objective_evidence"
+      },
+      {
+        "hook_id": "hook:witness:pursue_bandit_trail",
+        "id": "lead:autoplay_story_hook_state:e78d8bd12b",
+        "kind": "hook",
+        "name": "witness pursue bandit",
+        "priority": 146,
+        "rank_index": 25,
+        "source": "autoplay_story_hook_state"
+      },
+      {
+        "id": "lead:scene:a138b8cf52",
+        "kind": "location",
+        "name": "Road to the Mill Bridge",
+        "priority": 145,
+        "rank_index": 35,
+        "source": "scene"
+      }
+    ]
+  },
+  "objective_evidence": [
+    {
+      "completed": true,
+      "event": {
+        "location": "The Rusty Flagon Tavern",
+        "location_name": "The Rusty Flagon Tavern",
+        "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "semantic_action": "ask",
+        "semantic_family": "",
+        "target": "",
+        "target_name": "",
+        "topics": [
+          "bran",
+          "room",
+          "but",
+          "also",
+          "why",
+          "tavern",
+          "feels",
+          "tense",
+          "tonight",
+          "bran room",
+          "room but",
+          "but also",
+          "also why",
+          "why tavern",
+          "tavern feels",
+          "feels tense",
+          "tense tonight",
+          "bran room but",
+          "room but also",
+          "but also why",
+          "also why tavern",
+          "why tavern feels",
+          "tavern feels tense",
+          "feels tense tonight"
+        ]
+      },
+      "generation": 0,
+      "objective_id": "milestone:find_witness",
+      "partial": false,
+      "quest_id": "arc:witness_search",
+      "raw": {
+        "completed": true,
+        "completed_count": 2,
+        "evaluated_count": 2,
+        "event": {
+          "location": "The Rusty Flagon Tavern",
+          "location_name": "The Rusty Flagon Tavern",
+          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+          "semantic_action": "ask",
+          "semantic_family": "",
+          "target": "",
+          "target_name": "",
+          "topics": [
+            "bran",
+            "room",
+            "but",
+            "also",
+            "why",
+            "tavern",
+            "feels",
+            "tense",
+            "tonight",
+            "bran room",
+            "room but",
+            "but also",
+            "also why",
+            "why tavern",
+            "tavern feels",
+            "feels tense",
+            "tense tonight",
+            "bran room but",
+            "room but also",
+            "but also why",
+            "also why tavern",
+            "why tavern feels",
+            "tavern feels tense",
+            "feels tense tonight"
+          ]
+        },
+        "matched": true,
+        "matched_count": 2,
+        "objective_id": "milestone:find_witness",
+        "ok": true,
+        "partial": false,
+        "partial_count": 0,
+        "quest_id": "arc:witness_search",
+        "source": "story_arc_milestone_state",
+        "summary": "Find the witness near the tavern.",
+        "unmatched_count": 0
+      },
+      "source": "objective_progression_log",
+      "summary": "Find the witness near the tavern.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "event": {
+        "location": "The Rusty Flagon Tavern",
+        "location_name": "The Rusty Flagon Tavern",
+        "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+        "semantic_action": "ask",
+        "semantic_family": "",
+        "target": "",
+        "target_name": "",
+        "topics": [
+          "bran",
+          "room",
+          "but",
+          "also",
+          "why",
+          "tavern",
+          "feels",
+          "tense",
+          "tonight",
+          "bran room",
+          "room but",
+          "but also",
+          "also why",
+          "why tavern",
+          "tavern feels",
+          "feels tense",
+          "tense tonight",
+          "bran room but",
+          "room but also",
+          "but also why",
+          "also why tavern",
+          "why tavern feels",
+          "tavern feels tense",
+          "feels tense tonight"
+        ]
+      },
+      "generation": 0,
+      "objective_id": "milestone:report_findings_to_bran",
+      "partial": false,
+      "quest_id": "arc:witness_search",
+      "raw": {
+        "completed": true,
+        "completed_count": 2,
+        "evaluated_count": 2,
+        "event": {
+          "location": "The Rusty Flagon Tavern",
+          "location_name": "The Rusty Flagon Tavern",
+          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+          "semantic_action": "ask",
+          "semantic_family": "",
+          "target": "",
+          "target_name": "",
+          "topics": [
+            "bran",
+            "room",
+            "but",
+            "also",
+            "why",
+            "tavern",
+            "feels",
+            "tense",
+            "tonight",
+            "bran room",
+            "room but",
+            "but also",
+            "also why",
+            "why tavern",
+            "tavern feels",
+            "feels tense",
+            "tense tonight",
+            "bran room but",
+            "room but also",
+            "but also why",
+            "also why tavern",
+            "why tavern feels",
+            "tavern feels tense",
+            "feels tense tonight"
+          ]
+        },
+        "matched": true,
+        "matched_count": 2,
+        "objective_id": "milestone:report_findings_to_bran",
+        "ok": true,
+        "partial": false,
+        "partial_count": 0,
+        "quest_id": "arc:witness_search",
+        "source": "story_arc_milestone_state",
+        "summary": "Report the witness findings to Bran.",
+        "unmatched_count": 0
+      },
+      "source": "objective_progression_log",
+      "summary": "Report the witness findings to Bran.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:milestone:find_witness",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:milestone:find_witness",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: Find the witness near the tavern.",
+        "turn_index": 1
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: Find the witness near the tavern.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:milestone:report_findings_to_bran",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:milestone:report_findings_to_bran",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: Report the witness findings to Bran.",
+        "turn_index": 1
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: Report the witness findings to Bran.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:objective:travel_to_wagon_yard",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:objective:travel_to_wagon_yard",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: Travel to Garran's wagon yard.",
+        "turn_index": 10
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: Travel to Garran's wagon yard.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:objective:warn_garran",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:objective:warn_garran",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: warn garran",
+        "turn_index": 10
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: warn garran",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:objective:leave_by_quarry_road",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:objective:leave_by_quarry_road",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: Leave the wagon yard by the quarry road.",
+        "turn_index": 15
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: Leave the wagon yard by the quarry road.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:objective:scout_quarry_road",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:objective:scout_quarry_road",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: Scout the quarry road for ambush signs.",
+        "turn_index": 15
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: Scout the quarry road for ambush signs.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:objective:spot_bridge_watchers",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:objective:spot_bridge_watchers",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: Identify any watchers or scouts near the route.",
+        "turn_index": 18
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: Identify any watchers or scouts near the route.",
+      "turn": null
+    },
+    {
+      "completed": true,
+      "generation": 0,
+      "hook_id": "hook:objective:objective:choose_ambush_response",
+      "objective_id": "",
+      "partial": false,
+      "quest_id": "",
+      "raw": {
+        "hook_id": "hook:objective:objective:choose_ambush_response",
+        "source": "generic_objective_progression",
+        "summary": "Objective completed: Choose how to handle the ambush threat.",
+        "turn_index": 18
+      },
+      "source": "autoplay_story_hook_state",
+      "summary": "Objective completed: Choose how to handle the ambush threat.",
+      "turn": null
+    }
+  ],
+  "ok": true,
+  "performance": {
+    "budget_ms": 1000,
+    "elapsed_ms": 5,
+    "ok": true,
+    "phase": "final"
+  },
+  "phase": "final",
+  "quest_progress_summary": {
+    "active_count": 0,
+    "completed_count": 12,
+    "completed_objective_count": 16,
+    "objective_count": 16,
+    "quest_count": 12,
+    "quests": [
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:find_witness",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "find witness"
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:witness_search",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Witness Search"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 2,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 2,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:travel_to_wagon_yard",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Travel to Garran's wagon yard."
+          },
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:warn_garran",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "warn garran"
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:warn_wagon",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Warn the Wagon"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:prepare_for_mill_road",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Prepare for the mill road by gathering supplies, resting, and securing help."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:scenario_progression",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Scenario Progression"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 4,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 4,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:leave_by_quarry_road",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Leave the wagon yard by the quarry road."
+          },
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:scout_quarry_road",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Scout the quarry road for ambush signs."
+          },
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:spot_bridge_watchers",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Identify any watchers or scouts near the route."
+          },
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:choose_ambush_response",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Choose how to handle the ambush threat."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:quarry_road_ambush",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Quarry Road Ambush"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:identify_bandit_employer",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Identify who hired the ambushers."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:mill_ruins_lead",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Mill Ruins Lead"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:reach_north_road_shrine",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Reach the north road shrine."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:north_road_shrine_contact",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "North Road Shrine Contact"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:plan_against_voss",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Plan how to use the evidence against Captain Voss."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:captain_voss_consequence",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Captain Voss Consequence"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:review_voss_backer_leads",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Review the evidence pointing beyond Captain Voss."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:voss_backers_investigation",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Voss Backers Investigation"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:plan_against_sable_chain",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Plan the next move against the Sable Chain."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:sable_chain_countermove",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Sable Chain Countermove"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:review_handler_orders",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Review the sealed orders naming the Sable Chain handler."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:sable_chain_handler_route_pressure",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Sable Chain Handler"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:plan_pursuit_of_veska",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Plan how to pursue Handler Veska."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:handler_veska_leadership_pursuit",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Handler Veska Pursuit"
+      },
+      {
+        "completed": true,
+        "completed_objective_count": 1,
+        "handoff_quest": false,
+        "lead": {},
+        "objective_count": 1,
+        "objectives": [
+          {
+            "affordance_priority": 0,
+            "completed": true,
+            "handoff_objective": false,
+            "objective_id": "objective:review_veska_ledgers",
+            "status": "completed",
+            "subject": "",
+            "suggested_actions": [],
+            "summary": "Review Veska's ledgers to map the Sable Chain command structure."
+          }
+        ],
+        "priority": 0,
+        "quest_id": "quest:sable_chain_endgame_opener",
+        "source": "scenario_progression_graph",
+        "status": "completed",
+        "title": "Sable Chain Endgame Opener"
+      }
+    ],
+    "source": "campaign_state_authority_commit.quest_progress"
+  },
+  "quest_reconciliation_after_handoff_summary": {
+    "completed_objective_updates": 0,
+    "evidence_count": 10,
+    "guarded_handoff_evidence_count": 0,
+    "matched_evidence_count": 10,
+    "ok": true,
+    "partial_objective_updates": 0,
+    "quest_promotions": 0,
+    "quests_completed": 0
+  },
+  "quest_reconciliation_summary": {
+    "completed_objective_updates": 0,
+    "evidence_count": 10,
+    "guarded_handoff_evidence_count": 0,
+    "matched_evidence_count": 10,
+    "ok": true,
+    "partial_objective_updates": 0,
+    "quest_promotions": 0,
+    "quests_completed": 0
+  },
+  "stale_state_summary": {
+    "active_graph_quest_count": 0,
+    "active_objective_count": 0,
+    "active_quest_count": 0,
+    "completed_evidence_count": 10,
+    "completed_objective_count": 16,
+    "completed_quest_count": 12,
+    "completed_without_next_objective": false,
+    "graph_arc_end_state": true,
+    "graph_completed_node_count": 100,
+    "graph_quest_count": 12,
+    "ok": true,
+    "stale_active_objectives": []
+  }
+}

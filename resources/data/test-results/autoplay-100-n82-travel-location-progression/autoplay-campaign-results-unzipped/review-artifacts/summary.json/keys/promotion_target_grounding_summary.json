@@ -1,0 +1,78 @@
+{
+  "by_reason": {
+    "explicit_known_target": 19
+  },
+  "dedup": {
+    "accepted_relationship_candidate_ids": 50,
+    "grounding_candidate_ids": 19,
+    "rejected_relationship_candidate_ids": 5
+  },
+  "examples": [
+    {
+      "candidate_id": "adv:17:relationship_delta:c866291282e9f141",
+      "reason": "accepted_by_deterministic_gate",
+      "status": "accepted",
+      "target_grounding": {
+        "grounded": true,
+        "npc_id": "Bran",
+        "original_target": "Bran",
+        "reason": "explicit_known_target"
+      },
+      "turn_index": 18
+    },
+    {
+      "candidate_id": "adv:21:relationship_delta:13d34e2f466611bb",
+      "reason": "accepted_by_deterministic_gate",
+      "status": "accepted",
+      "target_grounding": {
+        "grounded": true,
+        "npc_id": "Bran",
+        "original_target": "Bran",
+        "reason": "explicit_known_target"
+      },
+      "turn_index": 22
+    },
+    {
+      "candidate_id": "adv:27:relationship_delta:eb6e3dc83556d6cb",
+      "reason": "accepted_by_deterministic_gate",
+      "status": "accepted",
+      "target_grounding": {
+        "grounded": true,
+        "npc_id": "Bran",
+        "original_target": "Bran",
+        "reason": "explicit_known_target"
+      },
+      "turn_index": 28
+    },
+    {
+      "candidate_id": "adv:31:relationship_delta:e8ab8c8c825865fd",
+      "reason": "accepted_by_deterministic_gate",
+      "status": "accepted",
+      "target_grounding": {
+        "grounded": true,
+        "npc_id": "Bran",
+        "original_target": "Bran",
+        "reason": "explicit_known_target"
+      },
+      "turn_index": 32
+    },
+    {
+      "candidate_id": "adv:41:relationship_delta:39c7ffd101c3babe",
+      "reason": "accepted_by_deterministic_gate",
+      "status": "accepted",
+      "target_grounding": {
+        "grounded": true,
+        "npc_id": "Bran",
+        "original_target": "Bran",
+        "reason": "explicit_known_target"
+      },
+      "turn_index": 42
+    }
+  ],
+  "grounded": 19,
+  "relationship_accepted": 50,
+  "relationship_rejected": 5,
+  "ungrounded": 0,
+  "unique_relationship_accepted": 50,
+  "unique_relationship_rejected": 5
+}

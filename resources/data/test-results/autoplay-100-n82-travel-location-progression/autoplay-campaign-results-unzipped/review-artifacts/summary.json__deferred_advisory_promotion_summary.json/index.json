@@ -1,0 +1,14 @@
+{
+  "artifact_name": "summary.json::deferred_advisory_promotion_summary.json",
+  "format_version": "n1176_review_text_artifact_index_v1",
+  "max_part_bytes": 850000,
+  "note": "Oversized top-level key from summary.json",
+  "omitted_monolithic": false,
+  "original_size_bytes": 1637765,
+  "part_count": 2,
+  "parts": [
+    "review-artifacts/summary.json__deferred_advisory_promotion_summary.json/part_0001.json",
+    "review-artifacts/summary.json__deferred_advisory_promotion_summary.json/part_0002.json"
+  ],
+  "split_kind": "text_chunks"
+}

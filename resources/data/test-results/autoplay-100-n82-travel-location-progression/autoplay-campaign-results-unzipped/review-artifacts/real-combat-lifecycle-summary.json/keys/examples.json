@@ -1,0 +1,327 @@
+[
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 7, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i approach the local patron and quietly ask what he knows about the mill bridge.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 7, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 2, \"actual_sent_action\": \"I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0",
+    "summary": "",
+    "turn": 8,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": true,
+      "round": false
+    },
+    "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+    "summary": "",
+    "turn": 8,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"Good. Proof narrows the road; show me which direction it leaves open.\", \"speaker\": \"Bran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+    "summary": "",
+    "turn": 8,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": true,
+      "round": false
+    },
+    "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"effects\": {\"flags\": {\"mechanic:faction_consequence\": true, \"mechanic:npc_reaction\": true, \"mechanic:report\": true}}, \"graph_action_id\": \"report_findings_to_bran\", \"hook_id\": \"hook:graph_direct:report_findings_to_bran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"summary\": \"Graph action completed: report_findings_to_bran\"}",
+    "summary": "Graph action completed: report_findings_to_bran",
+    "turn": 8,
+    "type": "graph_direct_completion"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 10, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave the tavern and travel toward garran's wagon yard.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 10, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 0, \"actual_sent_action\": \"I tell Garran the mill bridge may be an ambush and show him the evidence.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"available_m",
+    "summary": "",
+    "turn": 11,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": true,
+      "round": false
+    },
+    "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"completed\": true, \"completed_parts\": [\"action:warn_garran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:warn\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+    "summary": "",
+    "turn": 11,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_social_graph_line\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.\", \"npc\": {\"line\": \"That is useful because it can be tested. Tell me the next verifiable step.\", \"speaker\": \"Garran\"}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+    "summary": "",
+    "turn": 11,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+    "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+    "turn": 11,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+    "summary": "",
+    "turn": 11,
+    "type": "mechanic"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": true,
+      "round": false
+    },
+    "raw_preview": "{\"action_id\": \"warn_garran\", \"changed_parts\": [\"companion_added\", \"mechanic_completed\", \"party_recruitment\", \"party_setup\", \"warn\"], \"effects\": {\"flags\": {\"mechanic:party_recruitment\": true, \"mechanic:party_setup\": true, \"mechanic:warn\": true}}, \"graph_action_id\": \"warn_garran\", \"hook_id\": \"hook:graph_direct:warn_garran\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"party_recruitment\", \"party_setup\", \"warn\"], \"summary\": \"Graph action completed: warn_garran\"}",
+    "summary": "Graph action completed: warn_garran",
+    "turn": 11,
+    "type": "graph_direct_completion"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+    "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+    "turn": 12,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+    "summary": "",
+    "turn": 12,
+    "type": "mechanic"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+    "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+    "turn": 13,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+    "summary": "",
+    "turn": 13,
+    "type": "mechanic"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+    "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+    "turn": 14,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+    "summary": "",
+    "turn": 14,
+    "type": "mechanic"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+    "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+    "turn": 15,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+    "summary": "",
+    "turn": 15,
+    "type": "mechanic"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_diversity_before_turn\": {\"action_count\": 12, \"action_diversity_rate\": 1.0, \"category_counts\": {}, \"category_diversity_rate\": 1.0, \"last_action\": \"i leave garran's wagon yard with the wagon and take the quarry road.\", \"last_category\": \"\", \"repeated_actions\": {}, \"unique_action_count\": 12, \"unique_category_count\": 0, \"window\": 12}, \"active_graph_objective_count\": 2, \"actual_sent_action\": \"I scout ahead on the quarry road for tracks, hiding places, and ambush signs.\", \"after_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302}, \"arc_complete_graph_action_available\": false, \"authoritative_blocking_ms\": 0.0, \"authoritative_state_digest\": {\"counts\": {\"arcs\": 1, \"journal_entries\": 0, \"milestone_arcs\": 1, \"queued_events\": 0}, \"hash\": \"0b3381de8711cda2becae2a6062ca67f0e8b52df\", \"size_bytes\": 2302",
+    "summary": "",
+    "turn": 16,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": true,
+      "round": false
+    },
+    "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:scout_quarry_road\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+    "summary": "",
+    "turn": 16,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"action\": \"The combat action resolves according to the turn contract.\", \"action_kind\": \"combat\", \"dialogue_source\": \"deterministic_action_relevance_fallback\", \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"You examine the scene for concrete signs, narrowing the search to details that can be acted on.\", \"npc\": {}, \"reward\": {}, \"source\": \"deterministic_category_fallback\"}",
+    "summary": "",
+    "turn": 16,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"candidate_action\": \"I confront the bandit scouts blocking the mill road.\", \"disabled\": true, \"forced\": false, \"mechanic\": \"combat_started\", \"mode\": \"diagnostic_only\", \"opportunity_id\": \"mechanic:combat:start_mill_bandits\", \"reason\": \"mechanics coverage must be achieved through story graph objectives, not command override\"}",
+    "summary": "mechanics coverage must be achieved through story graph objectives, not command override",
+    "turn": 16,
+    "type": null
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": false,
+      "round": false
+    },
+    "raw_preview": "{\"command\": \"I confront the bandit scouts blocking the mill road.\", \"effects_preview\": {\"combat_result\": {\"encounter_id\": \"encounter:mill_bandit_scouts\", \"started\": true}}, \"id\": \"mechanic:combat:start_mill_bandits\", \"label\": \"Confront the bandit scouts\", \"location_aliases\": [\"location:old_mill\", \"location:wagon_yard\"], \"location_id\": \"location:mill_bridge_road\", \"mechanic\": \"combat_started\", \"metadata\": {\"encounter_id\": \"encounter:mill_bandit_scouts\"}, \"npc_id\": \"\", \"resolver\": \"combat_start\", \"type\": \"mechanic\"}",
+    "summary": "",
+    "turn": 16,
+    "type": "mechanic"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": true,
+      "round": false
+    },
+    "raw_preview": "{\"action_id\": \"scout_quarry_road\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"effects\": {\"flags\": {\"mechanic:inspect\": true}}, \"graph_action_id\": \"scout_quarry_road\", \"hook_id\": \"hook:graph_direct:scout_quarry_road\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"summary\": \"Graph action completed: scout_quarry_road\"}",
+    "summary": "Graph action completed: scout_quarry_road",
+    "turn": 16,
+    "type": "graph_direct_completion"
+  },
+  {
+    "flags": {
+      "attack": false,
+      "combat": true,
+      "damage": false,
+      "resolution": true,
+      "round": false
+    },
+    "raw_preview": "{\"action_id\": \"spot_bridge_watchers\", \"changed_parts\": [\"inspect\", \"mechanic_completed\"], \"completed\": true, \"completed_parts\": [\"action:spot_bridge_watchers\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:inspect\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"inspect\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
+    "summary": "",
+    "turn": 17,
+    "type": null
+  }
+]

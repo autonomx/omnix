@@ -1,0 +1,5 @@
+{
+  "action_diversity_window": 12,
+  "min_action_diversity_rate": 0.0,
+  "min_category_diversity_rate": 0.0
+}

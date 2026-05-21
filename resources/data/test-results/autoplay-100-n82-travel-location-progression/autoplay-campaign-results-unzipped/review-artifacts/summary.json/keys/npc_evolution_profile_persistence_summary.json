@@ -1,0 +1,26 @@
+{
+  "errors": [],
+  "ok": true,
+  "root": "resources\\data\\rpg_npc_profiles",
+  "written": [
+    {
+      "arc_stage": "trusting",
+      "future_hook_count": 20,
+      "memory_count": 30,
+      "npc_id": "Bran",
+      "path": "resources\\data\\rpg_npc_profiles\\bran.json",
+      "removed_legacy_paths": [],
+      "signal_count": 100
+    },
+    {
+      "arc_stage": "stable",
+      "future_hook_count": 20,
+      "memory_count": 13,
+      "npc_id": "Mira",
+      "path": "resources\\data\\rpg_npc_profiles\\mira.json",
+      "removed_legacy_paths": [],
+      "signal_count": 100
+    }
+  ],
+  "written_count": 2
+}

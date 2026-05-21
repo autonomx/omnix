@@ -1,0 +1,167 @@
+{
+  "max_same_action_streak": {
+    "streak": 1,
+    "value": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight."
+  },
+  "max_same_semantic_action_streak": {
+    "streak": 8,
+    "value": "social"
+  },
+  "max_same_semantic_target_streak": {
+    "streak": 5,
+    "value": "observe:none"
+  },
+  "max_same_target_streak": {
+    "streak": 10,
+    "value": "unknown"
+  },
+  "missing_target_count": 66,
+  "missing_target_rate": 0.66,
+  "top_actions": [
+    [
+      "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+      1
+    ],
+    [
+      "I ask Bran who left through the side door and why they were afraid.",
+      1
+    ],
+    [
+      "I ask Bran what direction the cloaked traveler went after leaving.",
+      1
+    ],
+    [
+      "I turn to Mira and ask what she saw near the side door.",
+      1
+    ],
+    [
+      "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+      1
+    ],
+    [
+      "I ask Bran if the old east road leads to a bridge.",
+      1
+    ],
+    [
+      "I approach the local patron and quietly ask what he knows about the mill bridge.",
+      1
+    ],
+    [
+      "I report the ambush evidence to Bran.",
+      1
+    ],
+    [
+      "I ask Bran who is most likely to travel the road before dawn.",
+      1
+    ],
+    [
+      "I leave the tavern and travel toward Garran's wagon yard.",
+      1
+    ]
+  ],
+  "top_semantic_actions": [
+    [
+      "observe",
+      42
+    ],
+    [
+      "social",
+      21
+    ],
+    [
+      "use_item",
+      11
+    ],
+    [
+      "investigate",
+      7
+    ],
+    [
+      "unknown",
+      5
+    ],
+    [
+      "sneak",
+      4
+    ],
+    [
+      "attack_melee",
+      4
+    ],
+    [
+      "threat",
+      2
+    ],
+    [
+      "service_inquiry",
+      1
+    ],
+    [
+      "service_purchase",
+      1
+    ]
+  ],
+  "top_semantic_targets": [
+    [
+      "observe:none",
+      35
+    ],
+    [
+      "social:Bran",
+      19
+    ],
+    [
+      "use_item:none",
+      11
+    ],
+    [
+      "investigate:none",
+      7
+    ],
+    [
+      "observe:Bran",
+      7
+    ],
+    [
+      "unknown:none",
+      4
+    ],
+    [
+      "sneak:none",
+      4
+    ],
+    [
+      "attack_melee:Bran",
+      2
+    ],
+    [
+      "attack_melee:none",
+      2
+    ],
+    [
+      "service_inquiry:Bran",
+      1
+    ]
+  ],
+  "top_targets": [
+    [
+      "Bran",
+      32
+    ],
+    [
+      "Mira",
+      1
+    ],
+    [
+      "local_patron",
+      1
+    ]
+  ],
+  "turns": 100,
+  "unique_action_count": 100,
+  "unique_semantic_action_count": 12,
+  "unique_semantic_target_count": 18,
+  "unique_target_count": 3,
+  "unknown_semantic_count": 5,
+  "unknown_semantic_rate": 0.05
+}

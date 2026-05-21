@@ -1,0 +1,1383 @@
+{
+  "approximate_size_bytes": 7042114,
+  "artifact_name": "full-transcript.json",
+  "field_count": 171,
+  "fields": [
+    {
+      "key": "action_diversity_before_turn",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/action_diversity_before_turn.json"
+      ],
+      "size_bytes": 344
+    },
+    {
+      "key": "active_graph_objective_count",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/active_graph_objective_count.json"
+      ],
+      "size_bytes": 1
+    },
+    {
+      "key": "actual_sent_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/actual_sent_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "after_state_digest",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/after_state_digest.json"
+      ],
+      "size_bytes": 186
+    },
+    {
+      "key": "arc_complete_graph_action_available",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/arc_complete_graph_action_available.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "authoritative_blocking_ms",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/authoritative_blocking_ms.json"
+      ],
+      "size_bytes": 3
+    },
+    {
+      "key": "authoritative_state_digest",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/authoritative_state_digest.json"
+      ],
+      "size_bytes": 186
+    },
+    {
+      "key": "available_mechanics",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/available_mechanics.json"
+      ],
+      "size_bytes": 639
+    },
+    {
+      "key": "available_mechanics_before",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/available_mechanics_before.json"
+      ],
+      "size_bytes": 639
+    },
+    {
+      "key": "background_llm_mode",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/background_llm_mode.json"
+      ],
+      "size_bytes": 10
+    },
+    {
+      "key": "background_presentation_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/background_presentation_result.json"
+      ],
+      "size_bytes": 376
+    },
+    {
+      "key": "background_result_attach_pending",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/background_result_attach_pending.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "background_semantic_reviewer",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/background_semantic_reviewer.json"
+      ],
+      "size_bytes": 302
+    },
+    {
+      "key": "base_response_payload",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/base_response_payload.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "before_state",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/before_state.json"
+      ],
+      "size_bytes": 599434
+    },
+    {
+      "key": "before_state_digest",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/before_state_digest.json"
+      ],
+      "size_bytes": 186
+    },
+    {
+      "key": "blocking_narration_source",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/blocking_narration_source.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "blocking_provider_call_suppressed_after_the_fact",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/blocking_provider_call_suppressed_after_the_fact.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "canonical_turn_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/canonical_turn_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "classification_policy",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/classification_policy.json"
+      ],
+      "size_bytes": 326
+    },
+    {
+      "key": "combined_background_llm_attach",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/combined_background_llm_attach.json"
+      ],
+      "size_bytes": 213
+    },
+    {
+      "key": "combined_background_llm_job_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/combined_background_llm_job_id.json"
+      ],
+      "size_bytes": 50
+    },
+    {
+      "key": "combined_background_llm_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/combined_background_llm_result.json"
+      ],
+      "size_bytes": 54353
+    },
+    {
+      "key": "committed_next_turn_digest",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/committed_next_turn_digest.json"
+      ],
+      "size_bytes": 186
+    },
+    {
+      "key": "current_action_response",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/current_action_response.json"
+      ],
+      "size_bytes": 2311
+    },
+    {
+      "key": "deferred_advisory_ingest_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_advisory_ingest_result.json"
+      ],
+      "size_bytes": 529
+    },
+    {
+      "key": "deferred_advisory_job_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_advisory_job_id.json"
+      ],
+      "size_bytes": 50
+    },
+    {
+      "key": "deferred_advisory_promotion_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_advisory_promotion_result.json"
+      ],
+      "size_bytes": 1556
+    },
+    {
+      "key": "deferred_advisory_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_advisory_result.json"
+      ],
+      "size_bytes": 31259
+    },
+    {
+      "key": "deferred_advisory_runtime_summary",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_advisory_runtime_summary.json"
+      ],
+      "size_bytes": 6536
+    },
+    {
+      "key": "deferred_advisory_status",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_advisory_status.json"
+      ],
+      "size_bytes": 7
+    },
+    {
+      "key": "deferred_blocking_provider_violation",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_blocking_provider_violation.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "deferred_narration_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/deferred_narration_result.json"
+      ],
+      "size_bytes": 26211
+    },
+    {
+      "key": "dialogue_action_relevance",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/dialogue_action_relevance.json"
+      ],
+      "size_bytes": 1486
+    },
+    {
+      "key": "dialogue_display_source_gate",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/dialogue_display_source_gate.json"
+      ],
+      "size_bytes": 93
+    },
+    {
+      "key": "dialogue_presentation_compatibility",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/dialogue_presentation_compatibility.json"
+      ],
+      "size_bytes": 1117
+    },
+    {
+      "key": "direct_graph_action_completion",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/direct_graph_action_completion.json"
+      ],
+      "size_bytes": 771
+    },
+    {
+      "key": "direct_graph_canonical_action_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/direct_graph_canonical_action_id.json"
+      ],
+      "size_bytes": 27
+    },
+    {
+      "key": "direct_graph_canonical_action_synced",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/direct_graph_canonical_action_synced.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "direct_graph_changed_parts",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/direct_graph_changed_parts.json"
+      ],
+      "size_bytes": 176
+    },
+    {
+      "key": "direct_graph_noncombat_mechanics_cleanup_action_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/direct_graph_noncombat_mechanics_cleanup_action_id.json"
+      ],
+      "size_bytes": 27
+    },
+    {
+      "key": "direct_graph_noncombat_mechanics_cleanup_applied",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/direct_graph_noncombat_mechanics_cleanup_applied.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "display_player_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/display_player_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "executable_action_repair",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/executable_action_repair.json"
+      ],
+      "size_bytes": 293
+    },
+    {
+      "key": "faction_pressure_pacing",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/faction_pressure_pacing.json"
+      ],
+      "size_bytes": 203
+    },
+    {
+      "key": "final_authoritative_state",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/final_authoritative_state.json"
+      ],
+      "size_bytes": 568195
+    },
+    {
+      "key": "fired_hooks",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/fired_hooks.json"
+      ],
+      "size_bytes": 2545
+    },
+    {
+      "key": "followup_progression_probe",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/followup_progression_probe.json"
+      ],
+      "size_bytes": 161
+    },
+    {
+      "key": "goal_pressure",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/goal_pressure.json"
+      ],
+      "size_bytes": 8478
+    },
+    {
+      "key": "graph_action_selection_diagnostic",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/graph_action_selection_diagnostic.json"
+      ],
+      "size_bytes": 414
+    },
+    {
+      "key": "handoff_semantic",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/handoff_semantic.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "hard_grounding_repair",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/hard_grounding_repair.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "human_playable_blocking_metric_mode",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/human_playable_blocking_metric_mode.json"
+      ],
+      "size_bytes": 34
+    },
+    {
+      "key": "latency_profile",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/latency_profile.json"
+      ],
+      "size_bytes": 10
+    },
+    {
+      "key": "llm_fallback_diagnostics",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/llm_fallback_diagnostics.json"
+      ],
+      "size_bytes": 190
+    },
+    {
+      "key": "llm_presentation_category",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/llm_presentation_category.json"
+      ],
+      "size_bytes": 10
+    },
+    {
+      "key": "llm_prompt_contract",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/llm_prompt_contract.json"
+      ],
+      "size_bytes": 6056
+    },
+    {
+      "key": "llm_prompt_debug",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/llm_prompt_debug.json"
+      ],
+      "size_bytes": 11696
+    },
+    {
+      "key": "manual_harness_trace",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/manual_harness_trace.json"
+      ],
+      "size_bytes": 12834
+    },
+    {
+      "key": "manual_harness_trace_summary",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/manual_harness_trace_summary.json"
+      ],
+      "size_bytes": 2454
+    },
+    {
+      "key": "manual_stage_trace",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/manual_stage_trace.json"
+      ],
+      "size_bytes": 355
+    },
+    {
+      "key": "mechanic_opportunity_diagnostics",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/mechanic_opportunity_diagnostics.json"
+      ],
+      "size_bytes": 838
+    },
+    {
+      "key": "mechanic_resolution_input",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/mechanic_resolution_input.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "mechanics_covered_this_turn",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/mechanics_covered_this_turn.json"
+      ],
+      "size_bytes": 97
+    },
+    {
+      "key": "mechanics_forced_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/mechanics_forced_action.json"
+      ],
+      "size_bytes": 342
+    },
+    {
+      "key": "narration",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration.json"
+      ],
+      "size_bytes": 381
+    },
+    {
+      "key": "narration_grounding_fallback_source",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_grounding_fallback_source.json"
+      ],
+      "size_bytes": 6
+    },
+    {
+      "key": "narration_grounding_fallback_used",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_grounding_fallback_used.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "narration_grounding_ok",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_grounding_ok.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "narration_grounding_primary_violation_codes",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_grounding_primary_violation_codes.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "narration_grounding_selected_candidate",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_grounding_selected_candidate.json"
+      ],
+      "size_bytes": 9
+    },
+    {
+      "key": "narration_grounding_validation",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_grounding_validation.json"
+      ],
+      "size_bytes": 122
+    },
+    {
+      "key": "narration_grounding_violation_codes",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_grounding_violation_codes.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "narration_job_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_job_id.json"
+      ],
+      "size_bytes": 50
+    },
+    {
+      "key": "narration_mode",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_mode.json"
+      ],
+      "size_bytes": 10
+    },
+    {
+      "key": "narration_payload",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_payload.json"
+      ],
+      "size_bytes": 305
+    },
+    {
+      "key": "narration_status",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_status.json"
+      ],
+      "size_bytes": 7
+    },
+    {
+      "key": "narration_trace",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/narration_trace.json"
+      ],
+      "size_bytes": 3080
+    },
+    {
+      "key": "npc",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc.json"
+      ],
+      "size_bytes": 107
+    },
+    {
+      "key": "npc_evolution_consumption_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_evolution_consumption_result.json"
+      ],
+      "size_bytes": 8774
+    },
+    {
+      "key": "npc_evolution_profile_persist_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_evolution_profile_persist_result.json"
+      ],
+      "size_bytes": 610
+    },
+    {
+      "key": "npc_evolution_summary",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_evolution_summary.json"
+      ],
+      "size_bytes": 871
+    },
+    {
+      "key": "npc_line",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line.json"
+      ],
+      "size_bytes": 72
+    },
+    {
+      "key": "npc_line_addresses_current_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line_addresses_current_action.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "npc_line_current_action_relevance",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line_current_action_relevance.json"
+      ],
+      "size_bytes": 551
+    },
+    {
+      "key": "npc_line_fallback_applied",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line_fallback_applied.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "npc_line_fallback_source",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line_fallback_source.json"
+      ],
+      "size_bytes": 33
+    },
+    {
+      "key": "npc_line_repaired",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line_repaired.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "npc_line_source",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line_source.json"
+      ],
+      "size_bytes": 34
+    },
+    {
+      "key": "npc_line_validation_passed",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_line_validation_passed.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "npc_presence",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_presence.json"
+      ],
+      "size_bytes": 542
+    },
+    {
+      "key": "npc_profile_load_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_profile_load_result.json"
+      ],
+      "size_bytes": 12575
+    },
+    {
+      "key": "npc_response_architecture",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_response_architecture.json"
+      ],
+      "size_bytes": 3338
+    },
+    {
+      "key": "npc_response_architecture_persisted",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_response_architecture_persisted.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "npc_response_variant_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_response_variant_id.json"
+      ],
+      "size_bytes": 39
+    },
+    {
+      "key": "npc_response_variation",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_response_variation.json"
+      ],
+      "size_bytes": 324
+    },
+    {
+      "key": "npc_speaker",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/npc_speaker.json"
+      ],
+      "size_bytes": 6
+    },
+    {
+      "key": "original_player_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/original_player_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "performance",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/performance.json"
+      ],
+      "size_bytes": 362
+    },
+    {
+      "key": "player_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/player_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "player_action_context",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/player_action_context.json"
+      ],
+      "size_bytes": 125305
+    },
+    {
+      "key": "player_agent_anti_loop_context",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/player_agent_anti_loop_context.json"
+      ],
+      "size_bytes": 13085
+    },
+    {
+      "key": "player_agent_selection_source",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/player_agent_selection_source.json"
+      ],
+      "size_bytes": 28
+    },
+    {
+      "key": "player_reasoning_plan",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/player_reasoning_plan.json"
+      ],
+      "size_bytes": 237
+    },
+    {
+      "key": "prebackground_profile_load_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/prebackground_profile_load_result.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "presentation_attached_from",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/presentation_attached_from.json"
+      ],
+      "size_bytes": 7
+    },
+    {
+      "key": "presentation_hard_grounding",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/presentation_hard_grounding.json"
+      ],
+      "size_bytes": 541
+    },
+    {
+      "key": "presentation_intent",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/presentation_intent.json"
+      ],
+      "size_bytes": 330
+    },
+    {
+      "key": "presentation_intent_parse_source",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/presentation_intent_parse_source.json"
+      ],
+      "size_bytes": 9
+    },
+    {
+      "key": "presentation_meta_leakage_repaired",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/presentation_meta_leakage_repaired.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "presentation_soft_classification",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/presentation_soft_classification.json"
+      ],
+      "size_bytes": 1441
+    },
+    {
+      "key": "presentation_status",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/presentation_status.json"
+      ],
+      "size_bytes": 10
+    },
+    {
+      "key": "progress_delta",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progress_delta.json"
+      ],
+      "size_bytes": 765
+    },
+    {
+      "key": "progress_quality",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progress_quality.json"
+      ],
+      "size_bytes": 436
+    },
+    {
+      "key": "progress_quality_before_turn",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progress_quality_before_turn.json"
+      ],
+      "size_bytes": 764
+    },
+    {
+      "key": "progression_authority_sidecar_summary",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progression_authority_sidecar_summary.json"
+      ],
+      "size_bytes": 157
+    },
+    {
+      "key": "progression_runtime_completed_node_count",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progression_runtime_completed_node_count.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "progression_runtime_revision",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progression_runtime_revision.json"
+      ],
+      "size_bytes": 6
+    },
+    {
+      "key": "progression_sidecar_completed_node_count",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progression_sidecar_completed_node_count.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "progression_sidecar_revision",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/progression_sidecar_revision.json"
+      ],
+      "size_bytes": 6
+    },
+    {
+      "key": "prompt_contract_ack",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/prompt_contract_ack.json"
+      ],
+      "size_bytes": 228
+    },
+    {
+      "key": "prompt_contract_service_veto_focus_resynced",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/prompt_contract_service_veto_focus_resynced.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "prompt_contract_service_veto_synced",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/prompt_contract_service_veto_synced.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "provider_trace",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/provider_trace.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "resolved_narration",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/resolved_narration.json"
+      ],
+      "size_bytes": 381
+    },
+    {
+      "key": "resolved_narration_payload",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/resolved_narration_payload.json"
+      ],
+      "size_bytes": 1886
+    },
+    {
+      "key": "resolver_input_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/resolver_input_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "runtime_error",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/runtime_error.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "runtime_state",
+      "part_count": 4,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/runtime_state/part_0001.json",
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/runtime_state/part_0002.json",
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/runtime_state/part_0003.json",
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/runtime_state/part_0004.json"
+      ],
+      "size_bytes": 2906824
+    },
+    {
+      "key": "save_load_checkpoint",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/save_load_checkpoint.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "scenario_arc_complete",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_arc_complete.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "scenario_progression_actions",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_progression_actions.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "scenario_progression_actions_all",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_progression_actions_all.json"
+      ],
+      "size_bytes": 702
+    },
+    {
+      "key": "scenario_progression_actions_empty_with_active_objectives",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_progression_actions_empty_with_active_objectives.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "scenario_progression_completed_action_ids",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_progression_completed_action_ids.json"
+      ],
+      "size_bytes": 8209
+    },
+    {
+      "key": "scenario_progression_completed_mechanics",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_progression_completed_mechanics.json"
+      ],
+      "size_bytes": 544
+    },
+    {
+      "key": "scenario_progression_summary",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_progression_summary.json"
+      ],
+      "size_bytes": 2441
+    },
+    {
+      "key": "scenario_progression_suppressed_actions",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/scenario_progression_suppressed_actions.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "selected_action_reason",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/selected_action_reason.json"
+      ],
+      "size_bytes": 147
+    },
+    {
+      "key": "selected_command_before_suppression_guard",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/selected_command_before_suppression_guard.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "selected_narration",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/selected_narration.json"
+      ],
+      "size_bytes": 305
+    },
+    {
+      "key": "selected_output",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/selected_output.json"
+      ],
+      "size_bytes": 305
+    },
+    {
+      "key": "selected_player_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/selected_player_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "service_false_positive_vetoed",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/service_false_positive_vetoed.json"
+      ],
+      "size_bytes": 4
+    },
+    {
+      "key": "service_resolver_veto",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/service_resolver_veto.json"
+      ],
+      "size_bytes": 878
+    },
+    {
+      "key": "session_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/session_id.json"
+      ],
+      "size_bytes": 23
+    },
+    {
+      "key": "soft_classification_repair",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/soft_classification_repair.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "state_bounds",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/state_bounds.json"
+      ],
+      "size_bytes": 2436
+    },
+    {
+      "key": "state_budget_summary",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/state_budget_summary.json"
+      ],
+      "size_bytes": 755
+    },
+    {
+      "key": "state_preservation_debug",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/state_preservation_debug.json"
+      ],
+      "size_bytes": 864
+    },
+    {
+      "key": "story_hook_action_consistency",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/story_hook_action_consistency.json"
+      ],
+      "size_bytes": 1743
+    },
+    {
+      "key": "story_hook_result",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/story_hook_result.json"
+      ],
+      "size_bytes": 641086
+    },
+    {
+      "key": "strategy_guidance",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/strategy_guidance.json"
+      ],
+      "size_bytes": 2826
+    },
+    {
+      "key": "structured_narration",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/structured_narration.json"
+      ],
+      "size_bytes": 305
+    },
+    {
+      "key": "suppressed_selected_action_guard",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/suppressed_selected_action_guard.json"
+      ],
+      "size_bytes": 219
+    },
+    {
+      "key": "top_scenario_progression_action_id",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/top_scenario_progression_action_id.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "top_scenario_progression_command",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/top_scenario_progression_command.json"
+      ],
+      "size_bytes": 89
+    },
+    {
+      "key": "transcript_artifact_source",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/transcript_artifact_source.json"
+      ],
+      "size_bytes": 22
+    },
+    {
+      "key": "turn_action_consistency",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_action_consistency.json"
+      ],
+      "size_bytes": 664
+    },
+    {
+      "key": "turn_contract",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_contract.json"
+      ],
+      "size_bytes": 28166
+    },
+    {
+      "key": "turn_index",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_index.json"
+      ],
+      "size_bytes": 2
+    },
+    {
+      "key": "turn_perf_trace",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_perf_trace.json"
+      ],
+      "size_bytes": 17438
+    },
+    {
+      "key": "turn_perf_trace_summary",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_perf_trace_summary.json"
+      ],
+      "size_bytes": 1241
+    },
+    {
+      "key": "turn_presentation_identity",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_presentation_identity.json"
+      ],
+      "size_bytes": 418
+    },
+    {
+      "key": "turn_result",
+      "part_count": 2,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_result/part_0001.json",
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/turn_result/part_0002.json"
+      ],
+      "size_bytes": 1502888
+    },
+    {
+      "key": "unsupported_combat_claim_suppressed",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/unsupported_combat_claim_suppressed.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "validated_presentation_category",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/validated_presentation_category.json"
+      ],
+      "size_bytes": 10
+    },
+    {
+      "key": "validated_presentation_intent",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/validated_presentation_intent.json"
+      ],
+      "size_bytes": 893
+    },
+    {
+      "key": "visible_player_action",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/visible_player_action.json"
+      ],
+      "size_bytes": 109
+    },
+    {
+      "key": "visible_text_replaced",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/visible_text_replaced.json"
+      ],
+      "size_bytes": 5
+    },
+    {
+      "key": "world_state_compression",
+      "part_count": 1,
+      "parts": [
+        "review-artifacts/full-transcript.json/oversized-rows/row_0098/fields/world_state_compression.json"
+      ],
+      "size_bytes": 208
+    }
+  ],
+  "format_version": "n1177_oversized_review_row_index_v1",
+  "max_part_bytes": 850000,
+  "row_index": 97,
+  "row_number": 98
+}

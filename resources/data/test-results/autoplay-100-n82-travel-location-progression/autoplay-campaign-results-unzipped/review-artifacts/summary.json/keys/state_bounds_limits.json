@@ -1,0 +1,6 @@
+{
+  "max_roots": 80,
+  "max_state_bytes": 2000000,
+  "max_state_dict_keys": 500,
+  "max_state_list_length": 500
+}

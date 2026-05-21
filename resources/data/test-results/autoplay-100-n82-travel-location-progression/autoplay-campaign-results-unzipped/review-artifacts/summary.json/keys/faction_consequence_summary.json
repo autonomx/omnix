@@ -1,0 +1,27 @@
+{
+  "by_faction": {},
+  "by_kind": {
+    "direct_graph_faction_consequence": 52
+  },
+  "direct_graph_faction_consequence_count": 52,
+  "event_count": 52,
+  "events": [],
+  "faction_reputation": {
+    "faction:rusty_flagon_locals": {
+      "faction_id": "faction:rusty_flagon_locals",
+      "history": [],
+      "reputation": 0,
+      "tier": "neutral"
+    },
+    "faction:sable_chain": {
+      "faction_id": "faction:sable_chain",
+      "history": [],
+      "reputation": 0,
+      "tier": "neutral"
+    }
+  },
+  "format_version": "faction_consequence_summary_v1",
+  "ok": true,
+  "world_signal_count": 52,
+  "world_signals": []
+}

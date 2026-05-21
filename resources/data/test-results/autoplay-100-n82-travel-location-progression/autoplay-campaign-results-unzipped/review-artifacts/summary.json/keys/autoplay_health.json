@@ -1,0 +1,26 @@
+{
+  "failed_evaluation_gates": [],
+  "failed_gate_count": 0,
+  "failed_readiness_gates": [],
+  "format_version": "autoplay_health_v2",
+  "hundred_turn_evaluation_ok": true,
+  "hundred_turn_readiness_ok": true,
+  "ok": false,
+  "quality_gate_summary_advisory": false,
+  "quality_gate_summary_ok": false,
+  "raw_unsupported_combat_claim_count": 5,
+  "requested_turns": 100,
+  "runtime_error_count": 0,
+  "service_resolver_veto_count": 0,
+  "service_resolver_veto_rate_high": false,
+  "service_resolver_veto_threshold": 10,
+  "summary_ok": false,
+  "turns_executed": 100,
+  "unsupported_combat_claim_preselection_suppressed_count": 5,
+  "unsupported_combat_claim_preselection_suppression_match_ok": true,
+  "unsupported_combat_claim_suppressed_count": 0,
+  "warning_count": 0,
+  "warnings": [
+    "quality_gate_summary_failed"
+  ]
+}

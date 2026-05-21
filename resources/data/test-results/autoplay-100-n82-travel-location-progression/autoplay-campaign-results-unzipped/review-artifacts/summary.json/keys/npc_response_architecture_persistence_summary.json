@@ -1,0 +1,17 @@
+{
+  "addresses_current_action_row_count": 100,
+  "architecture_focus_missing_from_current_action_response_count": 0,
+  "architecture_focus_missing_from_current_action_response_turns": [],
+  "architecture_required_focus_row_count": 92,
+  "architecture_row_count": 100,
+  "current_action_response_architecture_sync_count": 0,
+  "current_action_response_row_count": 100,
+  "format_version": "npc_response_architecture_persistence_v2",
+  "missing_architecture_row_count": 0,
+  "missing_architecture_turns": [],
+  "ok": true,
+  "required_focus_row_count": 92,
+  "row_count": 100,
+  "transaction_addressed_row_count": 1,
+  "transaction_focus_row_count": 1
+}

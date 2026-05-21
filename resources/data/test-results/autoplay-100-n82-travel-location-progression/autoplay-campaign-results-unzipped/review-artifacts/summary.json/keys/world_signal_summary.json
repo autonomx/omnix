@@ -1,0 +1,65 @@
+{
+  "by_faction": {},
+  "by_kind": {
+    "economy_pressure": 5
+  },
+  "by_scope": {
+    "region:mill_road": 1,
+    "scene:rusty_flagon": 4
+  },
+  "format_version": "world_signal_summary_v1",
+  "ok": true,
+  "signals": [
+    {
+      "created_turn": 72,
+      "id": "signal:economy_lodging_due",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Lodging costs continue to matter during the investigation.",
+      "ttl_turns": 40,
+      "turn": 72
+    },
+    {
+      "created_turn": 72,
+      "id": "signal:economy_supplies_drain",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Small supplies are being consumed as the days pass.",
+      "ttl_turns": 40,
+      "turn": 72
+    },
+    {
+      "created_turn": 90,
+      "id": "signal:economy_supplies_drain",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Small supplies are being consumed as the days pass.",
+      "ttl_turns": 40,
+      "turn": 90
+    },
+    {
+      "created_turn": 90,
+      "id": "signal:economy_road_surcharge",
+      "intensity": 2,
+      "kind": "economy_pressure",
+      "scope": "region:mill_road",
+      "summary": "Merchants raise prices while road pressure remains high.",
+      "ttl_turns": 40,
+      "turn": 90
+    },
+    {
+      "created_turn": 96,
+      "id": "signal:economy_lodging_due",
+      "intensity": 1,
+      "kind": "economy_pressure",
+      "scope": "scene:rusty_flagon",
+      "summary": "Lodging costs continue to matter during the investigation.",
+      "ttl_turns": 40,
+      "turn": 96
+    }
+  ],
+  "world_signal_count": 5
+}

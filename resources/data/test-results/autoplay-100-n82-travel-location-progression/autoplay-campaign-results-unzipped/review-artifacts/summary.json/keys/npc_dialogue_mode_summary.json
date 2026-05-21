@@ -1,0 +1,6 @@
+{
+  "fallback_used_turns": 100,
+  "mode": "deterministic_fallback_only",
+  "note": "NPC dialogue is currently deterministic fallback only; intelligence should come from dialogue_state and grounded fallback rules.",
+  "provider_attempt_count": 0
+}

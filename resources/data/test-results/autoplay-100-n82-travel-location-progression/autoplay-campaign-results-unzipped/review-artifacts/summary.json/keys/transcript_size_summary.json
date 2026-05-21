@@ -1,0 +1,15 @@
+{
+  "avg_bounded_row_bytes": 30276.36,
+  "bounded_rows_extreme_truncated_count": 0,
+  "bounded_rows_truncated_count": 0,
+  "bounded_transcript_json_bytes_estimate": 3027836,
+  "bounded_transcript_null_count": 0,
+  "format_version": "transcript_size_summary_v1",
+  "full_transcript_json_bytes_estimate": 296998158,
+  "max_bounded_row_bytes": 37991,
+  "ok": true,
+  "row_count": 100,
+  "slim_transcript_json_bytes_estimate": 3027836,
+  "slim_transcript_null_count": 0,
+  "wrote_full_transcript": false
+}
