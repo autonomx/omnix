@@ -1,0 +1,242 @@
+
+# N119.3 -- Strict NPC goal agency + essential mirror metadata fix
+#
+# The first N119 pass scanned broad transcript rows and therefore treated
+# player-directed dialogue/action text as autonomous NPC goal agency. This pass
+# makes the evidence gate strict: real NPC goal agency comes from explicit
+# npc_agency_summary.agency_events, not passive schedule movement, world
+# signals, dialogue text, or player actions.
+_N1193_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N1193_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+
+
+def _n1193_has_any_explicit_goal(value: Dict[str, Any]) -> bool:
+    value = _safe_dict(value)
+    return any(_safe_str(value.get(key)).strip() for key in ("goal", "goal_id", "intent", "intention", "objective", "motivation", "purpose", "agenda", "plan_id"))
+
+
+def _n1193_has_any_explicit_action(value: Dict[str, Any]) -> bool:
+    value = _safe_dict(value)
+    return any(_safe_str(value.get(key)).strip() for key in ("action", "action_id", "npc_action", "operation", "decision", "scheduled_action", "executed_action"))
+
+
+def _n1193_has_any_explicit_consequence(value: Dict[str, Any]) -> bool:
+    value = _safe_dict(value)
+    if _safe_list(value.get("effects")) or _safe_list(value.get("changed_parts")):
+        return True
+    if _safe_dict(value.get("state_delta")) or _safe_dict(value.get("consequence")):
+        return True
+    return any(_safe_str(value.get(key)).strip() for key in ("effect", "outcome", "result", "consequence_summary", "state_change", "world_signal_id", "memory_event_id", "faction_event_id", "quest_event_id"))
+
+
+def _n1193_event_is_autonomous(value: Dict[str, Any]) -> bool:
+    value = _safe_dict(value)
+    if bool(value.get("player_directed") or value.get("from_player_action")):
+        return False
+    source = _safe_str(value.get("source") or value.get("trigger") or value.get("mode")).lower()
+    event_type = _safe_str(value.get("type") or value.get("kind") or value.get("subtype")).lower()
+    return any(token in source for token in ("npc_agency", "autonomous", "offscreen", "schedule_tick", "director")) or any(token in event_type for token in ("npc_agency", "autonomous", "npc_goal", "npc_decision"))
+
+
+def _n1193_explicit_agency_events(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    npc_agency = _safe_dict(_safe_dict(summary).get("npc_agency_summary"))
+    events: List[Dict[str, Any]] = []
+    for key in ("agency_events", "npc_goal_events", "autonomous_npc_events", "npc_decision_events"):
+        for item in _safe_list(npc_agency.get(key)):
+            item = _safe_dict(item)
+            if item:
+                events.append(item)
+    return events
+
+
+def _n119_build_npc_goal_agency_summary(summary: Dict[str, Any], transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    npc_agency = _safe_dict(summary.get("npc_agency_summary"))
+    schedule_events = [_safe_dict(item) for item in _safe_list(npc_agency.get("schedule_events"))]
+    agency_events = _n1193_explicit_agency_events(summary)
+    by_npc: Dict[str, Dict[str, Any]] = {}
+    real_events: List[Dict[str, Any]] = []
+    partial_events: List[Dict[str, Any]] = []
+    for event in agency_events:
+        npc_id = _safe_str(event.get("npc_id") or event.get("npc") or event.get("actor") or "unknown") or "unknown"
+        has_goal = _n1193_has_any_explicit_goal(event)
+        has_action = _n1193_has_any_explicit_action(event)
+        has_consequence = _n1193_has_any_explicit_consequence(event)
+        autonomous = _n1193_event_is_autonomous(event)
+        turn = int(event.get("turn") or event.get("turn_index") or 0)
+        record = by_npc.setdefault(npc_id, {"npc": npc_id, "real_goal_agency": False, "partial_goal_agency": False, "goal_turns": [], "action_turns": [], "consequence_turns": [], "autonomous_turns": [], "events": []})
+        if has_goal:
+            record["goal_turns"].append(turn)
+        if has_action:
+            record["action_turns"].append(turn)
+        if has_consequence:
+            record["consequence_turns"].append(turn)
+        if autonomous:
+            record["autonomous_turns"].append(turn)
+        event_out = {"turn": turn, "npc": npc_id, "flags": {"has_goal": has_goal, "has_action": has_action, "has_consequence": has_consequence, "has_autonomous_marker": autonomous}, "type": event.get("type") or event.get("kind") or event.get("subtype"), "source": event.get("source") or event.get("trigger") or event.get("mode"), "summary": event.get("summary") or event.get("message") or event.get("reason") or ""}
+        record["events"].append(event_out)
+        if has_goal and has_action and has_consequence and autonomous:
+            record["real_goal_agency"] = True
+            real_events.append(event_out)
+        elif (has_goal and has_action) or (has_action and has_consequence) or (has_goal and has_consequence):
+            record["partial_goal_agency"] = True
+            partial_events.append(event_out)
+    npc_rows = []
+    for npc_id, record in sorted(by_npc.items()):
+        for key in ("goal_turns", "action_turns", "consequence_turns", "autonomous_turns"):
+            record[key] = sorted({int(v or 0) for v in _safe_list(record.get(key)) if int(v or 0)})[:50]
+        record["events"] = _safe_list(record.get("events"))[:20]
+        npc_rows.append(record)
+    fully_agentic_npcs = [row["npc"] for row in npc_rows if bool(row.get("real_goal_agency"))]
+    partial_agentic_npcs = [row["npc"] for row in npc_rows if bool(row.get("partial_goal_agency")) and not bool(row.get("real_goal_agency"))]
+    ok = bool(fully_agentic_npcs)
+    return {"format_version": "n1193_npc_goal_agency_summary_v2", "ok": ok, "real_npc_goal_agency_ok": ok, "policy": "Strict evidence mode: real NPC goal agency requires explicit npc_agency_summary.agency_events with goal/intent, action, autonomous marker, and consequence. Passive schedule movement, dialogue, and player-directed actions do not satisfy this gate.", "existing_agency_event_count": int(npc_agency.get("agency_event_count") or len(agency_events) or 0), "explicit_agency_event_count": len(agency_events), "schedule_event_count": int(npc_agency.get("schedule_event_count") or len(schedule_events) or 0), "candidate_event_count": len(agency_events), "real_agency_event_count": len(real_events), "partial_agency_event_count": len(partial_events), "fully_agentic_npc_count": len(fully_agentic_npcs), "partial_agentic_npc_count": len(partial_agentic_npcs), "fully_agentic_npcs": fully_agentic_npcs[:50], "partial_agentic_npcs": partial_agentic_npcs[:50], "missing_real_agency_parts": [] if ok else ["explicit_npc_agency_events", "goal_or_intent", "autonomous_npc_action", "consequence_or_state_change"], "npcs": npc_rows[:100], "real_events": real_events[:100], "partial_events": partial_events[:100], "schedule_events_are_not_goal_agency": True}
+
+
+def _n1193_apply_rollup_consistency(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    agency = _safe_dict(summary.get("npc_goal_agency_summary"))
+    gap = dict(_safe_dict(summary.get("one_thousand_turn_readiness_gap_report")))
+    gates = dict(_safe_dict(gap.get("gates")))
+    if gates and agency:
+        gate = dict(_safe_dict(gates.get("npc_goal_agency_real")))
+        gate["ok"] = bool(agency.get("ok"))
+        gate["source"] = "npc-goal-agency-summary.json"
+        gate["source_artifact"] = "npc-goal-agency-summary.json"
+        gate["message"] = "Real NPC goal agency requires explicit autonomous NPC agency events with goal, action, and consequence evidence." if not agency.get("ok") else "Real NPC goal agency evidence is present."
+        gate["value"] = {"explicit_agency_event_count": agency.get("explicit_agency_event_count"), "real_agency_event_count": agency.get("real_agency_event_count"), "fully_agentic_npc_count": agency.get("fully_agentic_npc_count"), "partial_agentic_npc_count": agency.get("partial_agentic_npc_count"), "schedule_event_count": agency.get("schedule_event_count"), "missing_real_agency_parts": agency.get("missing_real_agency_parts")}
+        gates["npc_goal_agency_real"] = gate
+        gap["gates"] = gates
+        blocked = [name for name, item in gates.items() if not bool(_safe_dict(item).get("ok"))]
+        gap["one_thousand_turn_blocked_reasons"] = blocked
+        gap["one_thousand_turn_candidate"] = not blocked
+        rollup = dict(_safe_dict(gap.get("rollup")))
+        rollup["npc_goal_agency_real"] = bool(agency.get("ok"))
+        rollup["combat_rounds_real"] = bool(_safe_dict(gates.get("combat_rounds_real")).get("ok"))
+        rollup["transcript_growth_budget_ok"] = bool(_safe_dict(gates.get("transcript_growth_budget_projected_1000")).get("ok"))
+        gap["rollup"] = rollup
+        source_map = dict(_safe_dict(gap.get("source_map")))
+        source_map["npc_goal_agency_real"] = "npc-goal-agency-summary.json"
+        source_map["combat_rounds_real"] = "real-combat-lifecycle-summary.json"
+        source_map["transcript_growth_budget_projected_1000"] = "transcript-size-summary.json + review-artifacts/index.json"
+        gap["source_map"] = source_map
+        gap["n1193_strict_npc_goal_agency_applied"] = True
+        summary["one_thousand_turn_readiness_gap_report"] = gap
+        readiness = dict(_safe_dict(summary.get("hundred_turn_readiness_summary")))
+        if readiness:
+            readiness["one_thousand_turn_readiness_gap_report"] = gap
+            readiness["one_thousand_turn_candidate"] = bool(gap.get("one_thousand_turn_candidate"))
+            readiness["one_thousand_turn_blocked_reasons"] = _safe_list(gap.get("one_thousand_turn_blocked_reasons"))
+            readiness["readiness_grades"] = {"hundred_turn_ready": bool(readiness.get("ok")), "one_thousand_turn_candidate": bool(gap.get("one_thousand_turn_candidate")), "one_thousand_turn_blocked_reasons": _safe_list(gap.get("one_thousand_turn_blocked_reasons"))}
+            summary["hundred_turn_readiness_summary"] = readiness
+    return summary
+
+
+def _n119_apply_npc_goal_agency(summary: Dict[str, Any], transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    agency = _n119_build_npc_goal_agency_summary(summary, transcript)
+    summary["npc_goal_agency_summary"] = agency
+    npc_agency = dict(_safe_dict(summary.get("npc_agency_summary")))
+    npc_agency["n119_goal_agency"] = agency
+    npc_agency["real_npc_goal_agency_ok"] = bool(agency.get("ok"))
+    npc_agency["fully_agentic_npc_count"] = agency.get("fully_agentic_npc_count")
+    npc_agency["strict_goal_agency_evidence"] = True
+    summary["npc_agency_summary"] = npc_agency
+    return _n1193_apply_rollup_consistency(summary)
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N1193_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N1193_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    transcript = _safe_list(args[1]) if len(args) > 1 else _safe_list(kwargs.get("transcript") or kwargs.get("final_transcript_rows"))
+    summary = _n119_apply_npc_goal_agency(summary, transcript)
+    return _n1193_apply_rollup_consistency(summary)
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N1193_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N1193_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    strict_summary = _n1193_apply_rollup_consistency(value)
+    agency = _safe_dict(strict_summary.get("npc_goal_agency_summary"))
+    artifact_name = "npc-goal-agency-summary.json"
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    if agency and artifact_name not in generated_files:
+        serialized = json.dumps(agency, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N1193_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N1193_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(zip_handle, artifact_manifest, artifact_name, agency, serialized_text=serialized, force=True)
+    return result
+
+
+def _n1193_path_display(path: Any, *, root: Any = None) -> str:
+    try:
+        p = Path(path)
+        if root is not None:
+            try:
+                return str(p.relative_to(Path(root))).replace("\\", "/")
+            except Exception:
+                pass
+        return str(p).replace("\\", "/")
+    except Exception:
+        return str(path)
+
+
+def _n1181_mirror_autoplay_results_zip(args: Any) -> Dict[str, Any]:
+    output_dir = Path(getattr(args, "output_dir", "") or "")
+    zip_path = output_dir / "autoplay-campaign-results.zip"
+    mirror_dir = output_dir / "autoplay-campaign-results-unzipped"
+    summary: Dict[str, Any] = {"format_version": "n1193_essential_unzipped_result_artifact_mirror_v2", "ok": False, "zip_path": _n1193_path_display(zip_path), "mirror_dir": _n1193_path_display(mirror_dir), "essential_mirror": True, "full_unzipped_results": _n1192_full_unzipped_results_enabled() if "_n1192_full_unzipped_results_enabled" in globals() else False, "include_review_artifacts": _n1192_extract_review_artifacts_enabled() if "_n1192_extract_review_artifacts_enabled" in globals() else False, "include_html": _n1192_extract_report_html_enabled() if "_n1192_extract_report_html_enabled" in globals() else False, "extracted_file_count": 0, "skipped_member_count": 0, "extracted_files": [], "skipped_members_preview": [], "stale_files_deleted_before_write": True, "note": "Essential Git-review mirror with stable non-empty path metadata."}
+    if not zip_path.exists():
+        summary["reason"] = "zip_not_found"
+        return summary
+    if "_n1192_reset_generated_mirror_dir" in globals() and callable(globals().get("_n1192_reset_generated_mirror_dir")):
+        _n1192_reset_generated_mirror_dir(mirror_dir)
+    else:
+        if mirror_dir.exists():
+            shutil.rmtree(mirror_dir)
+        mirror_dir.mkdir(parents=True, exist_ok=True)
+    extracted: List[str] = []
+    skipped: List[str] = []
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_handle:
+            for member in zip_handle.infolist():
+                normalized = str(getattr(member, "filename", "") or "").replace("\\", "/").lstrip("/")
+                should_extract = _n1192_should_extract_member(normalized) if "_n1192_should_extract_member" in globals() else True
+                if not should_extract:
+                    if normalized:
+                        skipped.append(normalized)
+                    continue
+                target = _n1181_safe_extract_zip_member(zip_handle, member, mirror_dir)
+                if target is None:
+                    skipped.append(normalized)
+                    continue
+                extracted.append(_n1193_path_display(target, root=mirror_dir))
+    except Exception as exc:
+        summary["reason"] = f"extract_failed:{type(exc).__name__}:{exc}"
+        try:
+            (mirror_dir / "unzipped-artifact-index.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
+        except Exception:
+            pass
+        return summary
+    summary["ok"] = True
+    summary["extracted_file_count"] = len(extracted)
+    summary["skipped_member_count"] = len(skipped)
+    summary["extracted_files"] = extracted[:1000]
+    summary["skipped_members_preview"] = skipped[:200]
+    summary["excluded_by_default"] = {"review_artifacts": not bool(summary.get("include_review_artifacts")), "html_reports": not bool(summary.get("include_html")), "transcripts": True, "code_diff": True, "console_log": True, "zip_copy": True}
+    summary["recommended_git_path"] = _n1193_path_display(mirror_dir)
+    index_path = mirror_dir / "unzipped-artifact-index.json"
+    index_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    _timestamped_print("Wrote essential unzipped autoplay result artifact mirror to: " f"{mirror_dir} files={len(extracted)} skipped={len(skipped)}")
+    return summary
