@@ -1,0 +1,211 @@
+
+# N119.2 -- Essential-only result artifact filesystem mirror
+#
+# The unzipped result folder is meant for GitHub/ChatGPT review, not as a full
+# copy of autoplay-campaign-results.zip.  Keep it small and focused: no
+# review-artifacts tree, no report HTML, no full transcripts, no code-diff, and
+# no ZIP copy.  The full ZIP and standalone HTML remain available in the output
+# directory for local inspection.
+
+_N1192_ESSENTIAL_MIRROR_TRUE_VALUES = {"1", "true", "yes", "on"}
+_N1192_ESSENTIAL_MIRROR_FALSE_VALUES = {"0", "false", "no", "off"}
+
+_N1192_EXACT_ESSENTIAL_ARTIFACTS = {
+    "summary.json",
+    "artifact-manifest.json",
+    "autoplay-health.json",
+    "hundred-turn-evaluation.json",
+    "hundred-turn-readiness-summary.json",
+    "one-thousand-turn-readiness-gap-report.json",
+    "one-thousand-turn-readiness-source-consistency.json",
+    "provider-error-classification-summary.json",
+    "real-combat-lifecycle-summary.json",
+    "npc-goal-agency-summary.json",
+    "transcript-size-summary.json",
+    "performance-seconds-summary.json",
+    "background-presentation-attachment-summary.json",
+    "llm-prompt-and-fallback-summary.json",
+    "dialogue-action-relevance-summary.json",
+    "turn-action-consistency-summary.json",
+    "selected-output-grounding-health.json",
+    "narration-grounding-summary.json",
+    "canonical-progress-quality.json",
+    "mechanics-coverage-summary.json",
+    "location-progression-summary.json",
+    "quest-progress-summary.json",
+    "story-arc-lifecycle-summary.json",
+    "story-arc-aftermath-summary.json",
+    "arc-completion-quality-summary.json",
+    "faction-reputation-summary.json",
+    "faction-pressure-summary.json",
+    "faction-consequence-summary.json",
+    "npc-agency-summary.json",
+    "npc-reaction-summary.json",
+    "world-signal-summary.json",
+    "world-state-compression-summary.json",
+    "economy-pressure-summary.json",
+    "combat-lifecycle-summary.json",
+    "followup-arc-progression-summary.json",
+    "followup-arc-resolution-summary.json",
+    "pressure-pacing-summary.json",
+    "escalation-arc-progression-summary.json",
+    "scenario-progression-action-repeat-summary.json",
+    "suppressed-selection-guard-summary.json",
+}
+
+_N1192_PREFIX_ESSENTIAL_ARTIFACTS = (
+    "checkpoints/",  # compact checkpoint files are useful for state review.
+)
+
+_N1192_EXCLUDED_ARTIFACTS = {
+    "autoplay-campaign-report.html",
+    "autoplay-campaign-report-rich.html",
+    "autoplay-campaign-report.json",
+    "autoplay-transcript.json",
+    "autoplay-progress-metrics.json",
+    "autoplay-performance.json",
+    "autoplay-story-variety.json",
+    "transcript.json",
+    "slim-transcript.json",
+    "full-transcript.json",
+    "code-diff.txt",
+    "console-log.txt",
+}
+
+
+def _n1192_essential_mirror_enabled() -> bool:
+    flag = _safe_str(os.environ.get("RPG_AUTOPLAY_ESSENTIAL_UNZIPPED_RESULTS", "1")).lower()
+    return flag not in _N1192_ESSENTIAL_MIRROR_FALSE_VALUES
+
+
+def _n1192_full_unzipped_results_enabled() -> bool:
+    flag = _safe_str(os.environ.get("RPG_AUTOPLAY_FULL_UNZIPPED_RESULTS", "")).lower()
+    return flag in _N1192_ESSENTIAL_MIRROR_TRUE_VALUES
+
+
+def _n1192_extract_report_html_enabled() -> bool:
+    flag = _safe_str(os.environ.get("RPG_AUTOPLAY_UNZIPPED_INCLUDE_HTML", "")).lower()
+    return flag in _N1192_ESSENTIAL_MIRROR_TRUE_VALUES
+
+
+def _n1192_extract_review_artifacts_enabled() -> bool:
+    flag = _safe_str(os.environ.get("RPG_AUTOPLAY_UNZIPPED_INCLUDE_REVIEW_ARTIFACTS", "")).lower()
+    return flag in _N1192_ESSENTIAL_MIRROR_TRUE_VALUES
+
+
+def _n1192_should_extract_member(name: str) -> bool:
+    normalized = _safe_str(name).replace("\\", "/").lstrip("/")
+    if not normalized or normalized.endswith("/"):
+        return False
+    if _n1192_full_unzipped_results_enabled():
+        return True
+    if normalized.startswith("review-artifacts/"):
+        return _n1192_extract_review_artifacts_enabled()
+    if normalized.endswith(".zip"):
+        return False
+    if normalized in {"autoplay-campaign-report.html", "autoplay-campaign-report-rich.html"}:
+        return _n1192_extract_report_html_enabled()
+    if normalized in _N1192_EXCLUDED_ARTIFACTS:
+        return False
+    if normalized in _N1192_EXACT_ESSENTIAL_ARTIFACTS:
+        return True
+    return any(normalized.startswith(prefix) for prefix in _N1192_PREFIX_ESSENTIAL_ARTIFACTS)
+
+
+def _n1192_reset_generated_mirror_dir(mirror_dir: Path) -> None:
+    keep_stale = _safe_str(os.environ.get("RPG_AUTOPLAY_KEEP_STALE_UNZIPPED_RESULTS", "")).lower()
+    if keep_stale in _N1192_ESSENTIAL_MIRROR_TRUE_VALUES:
+        mirror_dir.mkdir(parents=True, exist_ok=True)
+        return
+    if mirror_dir.exists():
+        shutil.rmtree(mirror_dir)
+    mirror_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _n1181_mirror_autoplay_results_zip(args: Any) -> Dict[str, Any]:
+    output_dir = Path(getattr(args, "output_dir", "") or "")
+    zip_path = output_dir / "autoplay-campaign-results.zip"
+    mirror_dir = output_dir / "autoplay-campaign-results-unzipped"
+    summary: Dict[str, Any] = {
+        "format_version": "n1192_essential_unzipped_result_artifact_mirror_v1",
+        "ok": False,
+        "zip_path": _safe_str(zip_path),
+        "mirror_dir": _safe_str(mirror_dir),
+        "essential_mirror": _n1192_essential_mirror_enabled(),
+        "full_unzipped_results": _n1192_full_unzipped_results_enabled(),
+        "include_review_artifacts": _n1192_extract_review_artifacts_enabled(),
+        "include_html": _n1192_extract_report_html_enabled(),
+        "extracted_file_count": 0,
+        "skipped_member_count": 0,
+        "extracted_files": [],
+        "skipped_members_preview": [],
+        "stale_files_deleted_before_write": _safe_str(os.environ.get("RPG_AUTOPLAY_KEEP_STALE_UNZIPPED_RESULTS", "")).lower() not in _N1192_ESSENTIAL_MIRROR_TRUE_VALUES,
+        "note": (
+            "Essential Git-review mirror. Full ZIP, report HTML, transcripts, code-diff, console-log, "
+            "and review-artifacts are intentionally excluded by default. Use the environment flags "
+            "RPG_AUTOPLAY_FULL_UNZIPPED_RESULTS=1, RPG_AUTOPLAY_UNZIPPED_INCLUDE_HTML=1, or "
+            "RPG_AUTOPLAY_UNZIPPED_INCLUDE_REVIEW_ARTIFACTS=1 for local deep debugging."
+        ),
+    }
+    if not zip_path.exists():
+        summary["reason"] = "zip_not_found"
+        return summary
+    if not _n1192_essential_mirror_enabled() and not _n1192_full_unzipped_results_enabled():
+        summary["reason"] = "essential_mirror_disabled"
+        return summary
+
+    _n1192_reset_generated_mirror_dir(mirror_dir)
+    extracted: List[str] = []
+    skipped: List[str] = []
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_handle:
+            for member in zip_handle.infolist():
+                member_name = _safe_str(getattr(member, "filename", ""))
+                normalized = member_name.replace("\\", "/").lstrip("/")
+                if not _n1192_should_extract_member(normalized):
+                    if normalized:
+                        skipped.append(normalized)
+                    continue
+                target = _n1181_safe_extract_zip_member(zip_handle, member, mirror_dir)
+                if target is None:
+                    skipped.append(normalized)
+                    continue
+                try:
+                    extracted.append(_safe_str(target.relative_to(mirror_dir)).replace("\\", "/"))
+                except Exception:
+                    extracted.append(_safe_str(target))
+    except Exception as exc:
+        summary["reason"] = f"extract_failed:{type(exc).__name__}:{exc}"
+        try:
+            (mirror_dir / "unzipped-artifact-index.json").write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        return summary
+
+    summary["ok"] = True
+    summary["extracted_file_count"] = len(extracted)
+    summary["skipped_member_count"] = len(skipped)
+    summary["extracted_files"] = extracted[:1000]
+    summary["skipped_members_preview"] = skipped[:200]
+    summary["excluded_by_default"] = {
+        "review_artifacts": not _n1192_extract_review_artifacts_enabled(),
+        "html_reports": not _n1192_extract_report_html_enabled(),
+        "transcripts": True,
+        "code_diff": True,
+        "console_log": True,
+        "zip_copy": True,
+    }
+    summary["recommended_git_path"] = _safe_str(mirror_dir)
+    index_path = mirror_dir / "unzipped-artifact-index.json"
+    index_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+    _timestamped_print(
+        "Wrote essential unzipped autoplay result artifact mirror to: "
+        f"{mirror_dir} files={len(extracted)} skipped={len(skipped)}"
+    )
+    return summary
