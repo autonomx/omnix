@@ -181,4 +181,5 @@ def test_n1232_buy_lodging_reduces_fatigue() -> None:
     assert result["applied"] is True
     assert result["action_kind"] == "buy_lodging"
     assert state["player_state"]["resources"]["fatigue"] == 30
-    assert state["player_state"]["inventory_state"]["currency"] == {"gold": 1, "silver": 10, "copper": 10}
+    # Currency is canonicalized by the shared currency helper: 2g 10s 10c - 1g = 210c = 2g 1s 0c.
+    assert state["player_state"]["inventory_state"]["currency"] == {"gold": 2, "silver": 1, "copper": 0}
