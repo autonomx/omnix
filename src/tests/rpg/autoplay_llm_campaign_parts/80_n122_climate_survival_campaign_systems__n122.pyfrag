@@ -1,0 +1,314 @@
+
+# N122 -- Climate + survival campaign systems
+#
+# Adds deterministic campaign-level climate/time/survival tracking for autoplay
+# and endurance reports.  The runtime UI exposes matching settings through the
+# existing RPG conversation/settings panel.  This fragment keeps the simulation
+# bounded: one compact summary artifact, no transcript scanning, no freeform LLM
+# authority.
+_N122_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N122_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+_N122_PREVIOUS_N1172_INJECT_1000_SECTION = globals().get("_n1172_inject_1000_turn_gap_section")
+
+try:
+    _N1192_EXACT_ESSENTIAL_ARTIFACTS.add("climate-survival-campaign-summary.json")
+except Exception:
+    pass
+
+
+def _n122_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _n122_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _n122_bool(value: Any, default: bool = True) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = _safe_str(value).strip().lower()
+    if text in {"0", "false", "no", "off", "disabled"}:
+        return False
+    if text in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    return default
+
+
+def _n122_settings(summary: Dict[str, Any]) -> Dict[str, Any]:
+    runtime = _safe_dict(_safe_dict(summary).get("runtime_settings"))
+    climate = _safe_dict(runtime.get("climate_survival_settings"))
+    conversation = _safe_dict(_safe_dict(runtime.get("conversation_settings")))
+    source = dict(conversation)
+    source.update(climate)
+    return {
+        "climate_time_enabled": _n122_bool(source.get("climate_time_enabled"), True),
+        "day_night_cycle_enabled": _n122_bool(source.get("day_night_cycle_enabled"), True),
+        "seasons_enabled": _n122_bool(source.get("seasons_enabled"), True),
+        "weather_enabled": _n122_bool(source.get("weather_enabled"), True),
+        "temperature_enabled": _n122_bool(source.get("temperature_enabled"), True),
+        "survival_enabled": _n122_bool(source.get("survival_enabled"), True),
+        "hunger_enabled": _n122_bool(source.get("hunger_enabled", source.get("survival_hunger_enabled")), True),
+        "thirst_enabled": _n122_bool(source.get("thirst_enabled", source.get("survival_thirst_enabled")), True),
+        "sleep_enabled": _n122_bool(source.get("sleep_enabled", source.get("survival_sleep_enabled")), True),
+        "auto_care_enabled": _n122_bool(source.get("auto_care_enabled", source.get("survival_auto_care_enabled")), True),
+        "hunger_per_day": _n122_float(source.get("hunger_per_day", source.get("survival_hunger_per_day")), 28.0),
+        "thirst_per_day": _n122_float(source.get("thirst_per_day", source.get("survival_thirst_per_day")), 40.0),
+        "fatigue_per_day": _n122_float(source.get("fatigue_per_day", source.get("survival_fatigue_per_day")), 32.0),
+        "hungry_threshold": _n122_float(source.get("hungry_threshold", source.get("survival_hungry_threshold")), 55.0),
+        "thirsty_threshold": _n122_float(source.get("thirsty_threshold", source.get("survival_thirsty_threshold")), 50.0),
+        "tired_threshold": _n122_float(source.get("tired_threshold", source.get("survival_tired_threshold")), 60.0),
+        "sleep_start_hour": _n122_int(source.get("sleep_start_hour", source.get("survival_sleep_start_hour")), 22),
+        "wake_hour": _n122_int(source.get("wake_hour", source.get("survival_wake_hour")), 6),
+        "season_start": _safe_str(source.get("season_start", source.get("climate_season_start")) or "spring"),
+        "weather_volatility": _safe_str(source.get("weather_volatility") or "normal"),
+    }
+
+
+def _n122_weather_for_day(day_index: int, season: str, volatility: str) -> str:
+    season = _safe_str(season).lower()
+    volatility = _safe_str(volatility).lower()
+    patterns = {
+        "spring": ["clear", "cloudy", "rain", "mist"],
+        "summer": ["clear", "hot", "dry", "storm"],
+        "autumn": ["cloudy", "rain", "wind", "clear"],
+        "winter": ["cold", "snow", "cloudy", "clear"],
+    }
+    values = patterns.get(season, patterns["spring"])
+    step = 2 if volatility == "harsh" else 1
+    index = (day_index * step + len(season)) % len(values)
+    return values[index]
+
+
+def _n122_temperature_for(season: str, weather: str, hour: int) -> int:
+    base_by_season = {"spring": 13, "summer": 24, "autumn": 10, "winter": -2}
+    weather_delta = {"hot": 7, "dry": 4, "clear": 2, "cloudy": 0, "mist": -1, "rain": -3, "wind": -4, "storm": -5, "cold": -8, "snow": -10}
+    day_delta = 4 if 10 <= hour <= 16 else (-5 if hour <= 5 or hour >= 22 else 0)
+    return int(base_by_season.get(_safe_str(season).lower(), 13) + weather_delta.get(_safe_str(weather).lower(), 0) + day_delta)
+
+
+def _n122_season_for_day(day_index: int, start: str) -> str:
+    seasons = ["spring", "summer", "autumn", "winter"]
+    start = _safe_str(start).lower()
+    offset = seasons.index(start) if start in seasons else 0
+    return seasons[(offset + (day_index // 30)) % 4]
+
+
+def _n122_campaign_minutes(summary: Dict[str, Any]) -> int:
+    return max(1, _n122_int(_safe_dict(summary).get("campaign_minutes_per_turn"), 60))
+
+
+def _n122_turn_count(summary: Dict[str, Any]) -> int:
+    return max(0, _n122_int(_safe_dict(summary).get("turns_executed") or _safe_dict(summary).get("effective_turns") or _safe_dict(summary).get("requested_turns"), 0))
+
+
+def _n122_action(turn: int, kind: str, before: float, after: float, hour: int) -> Dict[str, Any]:
+    return {
+        "turn": turn,
+        "kind": kind,
+        "hour": hour,
+        "before": round(before, 2),
+        "after": round(after, 2),
+        "source": "deterministic_survival_auto_care",
+    }
+
+
+def _n122_build_climate_survival_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    settings = _n122_settings(summary)
+    turns = _n122_turn_count(summary)
+    minutes_per_turn = _n122_campaign_minutes(summary)
+    total_minutes = turns * minutes_per_turn
+    days_elapsed = total_minutes // 1440
+    final_hour = int((total_minutes // 60) % 24)
+    final_day_index = int(days_elapsed)
+    season = _n122_season_for_day(final_day_index, settings["season_start"])
+    weather = _n122_weather_for_day(final_day_index, season, settings["weather_volatility"])
+    temperature_c = _n122_temperature_for(season, weather, final_hour)
+    day_ticks = 0
+    night_ticks = 0
+    weather_samples: List[Dict[str, Any]] = []
+    survival_actions: List[Dict[str, Any]] = []
+    hunger = 0.0
+    thirst = 0.0
+    fatigue = 0.0
+    hunger_gain = settings["hunger_per_day"] * (minutes_per_turn / 1440.0)
+    thirst_gain = settings["thirst_per_day"] * (minutes_per_turn / 1440.0)
+    fatigue_gain = settings["fatigue_per_day"] * (minutes_per_turn / 1440.0)
+    slept_last_night = False
+
+    for turn in range(1, turns + 1):
+        elapsed = turn * minutes_per_turn
+        day_index = int(elapsed // 1440)
+        hour = int((elapsed // 60) % 24)
+        if 6 <= hour < 20:
+            day_ticks += 1
+        else:
+            night_ticks += 1
+        current_season = _n122_season_for_day(day_index, settings["season_start"])
+        current_weather = _n122_weather_for_day(day_index, current_season, settings["weather_volatility"])
+        current_temp = _n122_temperature_for(current_season, current_weather, hour)
+        if turn == 1 or turn == turns or hour in {0, 6, 12, 18}:
+            weather_samples.append({
+                "turn": turn,
+                "day": day_index + 1,
+                "hour": hour,
+                "season": current_season,
+                "weather": current_weather,
+                "temperature_c": current_temp,
+            })
+        if settings["survival_enabled"]:
+            if settings["hunger_enabled"]:
+                hunger = min(100.0, hunger + hunger_gain)
+            if settings["thirst_enabled"]:
+                thirst = min(100.0, thirst + thirst_gain)
+            if settings["sleep_enabled"]:
+                fatigue = min(100.0, fatigue + fatigue_gain)
+            if settings["auto_care_enabled"]:
+                if settings["hunger_enabled"] and hunger >= settings["hungry_threshold"]:
+                    before = hunger
+                    hunger = max(0.0, hunger - 65.0)
+                    survival_actions.append(_n122_action(turn, "eat_when_hungry", before, hunger, hour))
+                if settings["thirst_enabled"] and thirst >= settings["thirsty_threshold"]:
+                    before = thirst
+                    thirst = max(0.0, thirst - 70.0)
+                    survival_actions.append(_n122_action(turn, "drink_when_thirsty", before, thirst, hour))
+                sleep_hour = hour >= settings["sleep_start_hour"] or hour < settings["wake_hour"]
+                if settings["sleep_enabled"] and fatigue >= settings["tired_threshold"] and sleep_hour and not slept_last_night:
+                    before = fatigue
+                    fatigue = max(0.0, fatigue - 80.0)
+                    survival_actions.append(_n122_action(turn, "sleep_when_tired_at_night", before, fatigue, hour))
+                    slept_last_night = True
+                if 8 <= hour <= 12:
+                    slept_last_night = False
+
+    action_counts: Dict[str, int] = {}
+    for action in survival_actions:
+        action_counts[_safe_str(action.get("kind"))] = action_counts.get(_safe_str(action.get("kind")), 0) + 1
+    ok = bool(settings["climate_time_enabled"] and settings["survival_enabled"])
+    return {
+        "format_version": "n122_climate_survival_campaign_summary_v1",
+        "ok": ok,
+        "settings": settings,
+        "turns": turns,
+        "minutes_per_turn": minutes_per_turn,
+        "total_minutes": total_minutes,
+        "days_elapsed": int(days_elapsed),
+        "final_time": {
+            "day": final_day_index + 1,
+            "hour": final_hour,
+            "phase": "day" if 6 <= final_hour < 20 else "night",
+            "season": season,
+            "weather": weather,
+            "temperature_c": temperature_c,
+        },
+        "day_tick_count": day_ticks,
+        "night_tick_count": night_ticks,
+        "weather_sample_count": len(weather_samples),
+        "weather_samples": weather_samples[:120],
+        "survival": {
+            "hunger": round(hunger, 2),
+            "thirst": round(thirst, 2),
+            "fatigue": round(fatigue, 2),
+            "action_count": len(survival_actions),
+            "action_counts": action_counts,
+            "actions": survival_actions[:120],
+        },
+        "campaign_tracking_enabled": True,
+        "player_auto_care_enabled": bool(settings["auto_care_enabled"]),
+        "policy": "Deterministic climate and survival pressure are derived from campaign minutes per turn. Auto-care emits bounded eat/drink/sleep actions when thresholds are crossed.",
+    }
+
+
+def _n122_apply_climate_survival(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    climate = _n122_build_climate_survival_summary(summary)
+    summary["climate_survival_campaign_summary"] = climate
+    calendar = dict(_safe_dict(summary.get("campaign_calendar_summary")))
+    calendar["n122_climate_survival"] = {
+        "final_time": climate.get("final_time"),
+        "day_tick_count": climate.get("day_tick_count"),
+        "night_tick_count": climate.get("night_tick_count"),
+        "weather_sample_count": climate.get("weather_sample_count"),
+    }
+    summary["campaign_calendar_summary"] = calendar
+    survival = dict(_safe_dict(summary.get("survival_summary")))
+    survival.update(_safe_dict(climate.get("survival")))
+    survival["format_version"] = "n122_survival_summary_v1"
+    survival["ok"] = bool(climate.get("ok"))
+    summary["survival_summary"] = survival
+    return summary
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N122_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N122_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    return _n122_apply_climate_survival(summary)
+
+
+def _n122_html_escape(value: Any) -> str:
+    if "_n1178_html_escape" in globals() and callable(globals().get("_n1178_html_escape")):
+        return globals()["_n1178_html_escape"](value)
+    return _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _n122_climate_survival_html_section(summary: Dict[str, Any]) -> str:
+    climate = _safe_dict(_safe_dict(summary).get("climate_survival_campaign_summary"))
+    final_time = _safe_dict(climate.get("final_time"))
+    survival = _safe_dict(climate.get("survival"))
+    return (
+        "<section id=\"n122-climate-survival\" class=\"card\">"
+        "<h2>N122 Climate + Survival</h2>"
+        "<ul>"
+        f"<li>Final time: Day {_n122_html_escape(final_time.get('day'))}, hour {_n122_html_escape(final_time.get('hour'))}, {_n122_html_escape(final_time.get('phase'))}</li>"
+        f"<li>Season/weather/temp: {_n122_html_escape(final_time.get('season'))} / {_n122_html_escape(final_time.get('weather'))} / {_n122_html_escape(final_time.get('temperature_c'))}°C</li>"
+        f"<li>Day/night ticks: {_n122_html_escape(climate.get('day_tick_count'))} / {_n122_html_escape(climate.get('night_tick_count'))}</li>"
+        f"<li>Survival actions: {_n122_html_escape(survival.get('action_count'))}</li>"
+        f"<li>Needs: hunger {_n122_html_escape(survival.get('hunger'))}, thirst {_n122_html_escape(survival.get('thirst'))}, fatigue {_n122_html_escape(survival.get('fatigue'))}</li>"
+        "</ul>"
+        "</section>"
+    )
+
+
+def _n1172_inject_1000_turn_gap_section(html_report: str, final_summary: Dict[str, Any]) -> str:
+    if callable(_N122_PREVIOUS_N1172_INJECT_1000_SECTION):
+        html_report = _N122_PREVIOUS_N1172_INJECT_1000_SECTION(html_report, final_summary)
+    html_text = _safe_str(html_report)
+    if "id=\"n122-climate-survival\"" in html_text:
+        return html_text
+    section = _n122_climate_survival_html_section(final_summary)
+    index = html_text.lower().rfind("</body>")
+    if index >= 0:
+        return html_text[:index] + section + html_text[index:]
+    return html_text + section
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N122_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N122_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    value = _n122_apply_climate_survival(value)
+    climate = _safe_dict(value.get("climate_survival_campaign_summary"))
+    artifact_name = "climate-survival-campaign-summary.json"
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    if climate and artifact_name not in generated_files:
+        serialized = json.dumps(climate, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N122_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N122_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(zip_handle, artifact_manifest, artifact_name, climate, serialized_text=serialized, force=True)
+    return result
