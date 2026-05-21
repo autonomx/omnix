@@ -81,13 +81,16 @@ def _n1223_patch_readiness(result, summary, transcript, requested_turns, turns_e
     changed = _n1223_int(metrics.get("progression_changed_count"), counted_changed) or counted_changed
     unique = _n1223_int(metrics.get("unique_progression_node_count"), counted_unique) or counted_unique
     graph_count = _n1223_int(arc.get("graph_count"), 0)
+    completed_graph_count = _n1223_int(arc.get("completed_graph_count"), 0)
     waiting = bool(arc.get("waiting_for_next_graph_pack"))
+    arc_complete = bool(arc.get("arc_complete"))
     campaign_complete = bool(arc.get("campaign_graphs_complete"))
+    completed_graph_pack = graph_count > 0 and completed_graph_count >= graph_count
     min_progress = max(1, int((requested_turns or 100) * 0.10))
     gates = dict(_n1223_dict(result.get("gates")))
     gates["graph_progression_density_ok"] = changed >= min_progress
     gates["unique_progression_nodes_ok"] = unique >= min_progress
-    needs_more = waiting and campaign_complete and graph_count < 9
+    needs_more = waiting and (campaign_complete or arc_complete or completed_graph_pack) and graph_count < 9
     gates["needs_more_graph_content_ok"] = not needs_more
     synthetic = requested_turns == 100 and turns_executed >= 100 and graph_count >= 4
     enough = (not waiting) and (not campaign_complete) and changed >= requested_turns and turns_executed >= requested_turns
