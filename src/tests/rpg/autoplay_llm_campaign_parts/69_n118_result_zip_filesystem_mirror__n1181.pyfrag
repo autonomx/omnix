@@ -1,0 +1,119 @@
+
+# N118.1 -- Mirror autoplay-campaign-results.zip into a reviewable folder
+#
+# The GitHub connector can read committed JSON/text files far better than it can
+# retrieve a committed ZIP blob.  Keep the ZIP for local convenience, but also
+# extract a safe filesystem mirror beside it so result artifacts can be uploaded
+# to GitHub as ordinary files.
+_N1181_PREVIOUS_FORCE_EXIT_IF_BACKGROUND_THREADS_REMAIN = globals().get("_force_exit_if_background_threads_remain")
+
+
+def _n1181_safe_extract_zip_member(zip_handle: Any, member: Any, output_root: Path) -> Optional[Path]:
+    info_name = _safe_str(getattr(member, "filename", ""))
+    if not info_name or info_name.endswith("/"):
+        return None
+    normalized = info_name.replace("\\", "/").lstrip("/")
+    if not normalized or normalized.startswith("../") or "/../" in normalized:
+        return None
+    target = output_root / normalized
+    try:
+        resolved_root = output_root.resolve()
+        resolved_target_parent = target.parent.resolve()
+        if resolved_root not in (resolved_target_parent, *resolved_target_parent.parents):
+            return None
+    except Exception:
+        # Fall back to the normalized ../ guard above on platforms where resolve
+        # may fail for not-yet-created parents.
+        pass
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with zip_handle.open(member, "r") as src, target.open("wb") as dst:
+        shutil.copyfileobj(src, dst)
+    return target
+
+
+def _n1181_mirror_autoplay_results_zip(args: Any) -> Dict[str, Any]:
+    output_dir = Path(getattr(args, "output_dir", "") or "")
+    zip_path = output_dir / "autoplay-campaign-results.zip"
+    mirror_dir = output_dir / "autoplay-campaign-results-unzipped"
+    summary: Dict[str, Any] = {
+        "format_version": "n1181_unzipped_result_artifact_mirror_v1",
+        "ok": False,
+        "zip_path": _safe_str(zip_path),
+        "mirror_dir": _safe_str(mirror_dir),
+        "extracted_file_count": 0,
+        "skipped_member_count": 0,
+        "extracted_files": [],
+        "skipped_members": [],
+        "stale_files_not_deleted": True,
+        "note": (
+            "This folder mirrors autoplay-campaign-results.zip for GitHub/ChatGPT review. "
+            "Existing files are overwritten, but stale files from older runs are not deleted."
+        ),
+    }
+    if not zip_path.exists():
+        summary["reason"] = "zip_not_found"
+        return summary
+
+    mirror_dir.mkdir(parents=True, exist_ok=True)
+    extracted: List[str] = []
+    skipped: List[str] = []
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_handle:
+            for member in zip_handle.infolist():
+                target = _n1181_safe_extract_zip_member(zip_handle, member, mirror_dir)
+                if target is None:
+                    skipped.append(_safe_str(getattr(member, "filename", "")))
+                    continue
+                try:
+                    extracted.append(_safe_str(target.relative_to(mirror_dir)).replace("\\", "/"))
+                except Exception:
+                    extracted.append(_safe_str(target))
+    except Exception as exc:
+        summary["reason"] = f"extract_failed:{type(exc).__name__}:{exc}"
+        try:
+            (mirror_dir / "unzipped-artifact-index.json").write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        return summary
+
+    summary["ok"] = True
+    summary["extracted_file_count"] = len(extracted)
+    summary["skipped_member_count"] = len(skipped)
+    summary["extracted_files"] = extracted[:5000]
+    summary["skipped_members"] = skipped[:200]
+    summary["review_artifacts_index"] = (
+        "review-artifacts/index.json"
+        if (mirror_dir / "review-artifacts" / "index.json").exists()
+        else ""
+    )
+    summary["recommended_git_path"] = _safe_str(mirror_dir)
+    index_path = mirror_dir / "unzipped-artifact-index.json"
+    index_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+    _timestamped_print(
+        "Wrote unzipped autoplay result artifact mirror to: "
+        f"{mirror_dir} files={len(extracted)} skipped={len(skipped)}"
+    )
+    return summary
+
+
+def _force_exit_if_background_threads_remain(*args: Any, **kwargs: Any) -> Any:
+    call_args = kwargs.get("args")
+    if call_args is None and args:
+        call_args = args[0]
+    try:
+        if call_args is not None:
+            _n1181_mirror_autoplay_results_zip(call_args)
+    except Exception as exc:
+        _timestamped_print(
+            "Warning: failed to mirror autoplay result ZIP to unzipped folder: "
+            f"{type(exc).__name__}: {exc}"
+        )
+    if callable(_N1181_PREVIOUS_FORCE_EXIT_IF_BACKGROUND_THREADS_REMAIN):
+        return _N1181_PREVIOUS_FORCE_EXIT_IF_BACKGROUND_THREADS_REMAIN(*args, **kwargs)
+    return None
