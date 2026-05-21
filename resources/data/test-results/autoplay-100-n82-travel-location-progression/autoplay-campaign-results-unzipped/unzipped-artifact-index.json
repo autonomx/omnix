@@ -58,7 +58,7 @@
   "note": "Essential Git-review mirror with stable non-empty path metadata.",
   "ok": true,
   "recommended_git_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results-unzipped",
-  "skipped_member_count": 17943,
+  "skipped_member_count": 17969,
   "skipped_members_preview": [
     "review-artifacts/summary.json/keys/action_diversity_summary.json",
     "review-artifacts/summary.json/keys/action_diversity_thresholds.json",
@@ -90,6 +90,7 @@
     "review-artifacts/summary.json/keys/checkpoint_mode.json",
     "review-artifacts/summary.json/keys/checkpoint_validation_summary.json",
     "review-artifacts/summary.json/keys/combat_lifecycle_summary.json",
+    "review-artifacts/summary.json/keys/combined_endurance_systems_summary.json",
     "review-artifacts/summary.json/keys/combined_quality_shape_summary.json",
     "review-artifacts/summary.json/keys/console_log_summary.json",
     "review-artifacts/summary.json__deferred_advisory_promotion_summary.json/part_0001.json",
@@ -102,6 +103,7 @@
     "review-artifacts/summary.json/keys/dialogue_stale_source_summary.json",
     "review-artifacts/summary.json/keys/direct_graph_lifecycle_evidence.json",
     "review-artifacts/summary.json/keys/duration_seconds.json",
+    "review-artifacts/summary.json/keys/economy_long_term_sinks_summary.json",
     "review-artifacts/summary.json/keys/economy_pressure_summary.json",
     "review-artifacts/summary.json/keys/effective_turns.json",
     "review-artifacts/summary.json/keys/escalation_arc_progression_summary.json",
@@ -257,9 +259,7 @@
     "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_combat_turns.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/direct_graph_only.json",
     "review-artifacts/real-combat-lifecycle-summary.json/keys/examples.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/format_version.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/missing_real_lifecycle_parts.json",
-    "review-artifacts/real-combat-lifecycle-summary.json/keys/ok.json"
+    "review-artifacts/real-combat-lifecycle-summary.json/keys/format_version.json"
   ],
   "stale_files_deleted_before_write": true,
   "zip_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results.zip"

@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.534988,
-        "p95_turn_seconds": 8.883543
+        "avg_turn_seconds": 6.34455,
+        "p95_turn_seconds": 8.893012
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.53s, p95 8.88s."
+      "message": "Average turn latency 6.34s, p95 8.89s."
     },
     "mechanics_coverage_required": {
       "ok": true,

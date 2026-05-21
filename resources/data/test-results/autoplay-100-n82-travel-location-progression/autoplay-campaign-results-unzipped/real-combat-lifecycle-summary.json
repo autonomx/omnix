@@ -1,304 +1,304 @@
 {
   "attack_events": [
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 38,
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 8,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 8,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 9,
       "type": null
     },
     {
-      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"fallback_source\": \"llm_safe_fallback\", \"narration\": \"Bran immediately straightens up as you approach, his expression shifting from mild concern to sharp focus upon seeing the rolled parchment. Garran nods slowly, taking in the weight of your arrival alongside the damning evidence. The sealed document confirming Captain Voss's involvement is clearly visible, lending immediate gravity to this return journey. That proof gives us a name to push on. Now we make sure it cannot disappear.\", \"npc\": {\"line\": \"That proof gives us a name to push on. Now we make sure it cannot disappear.\", \"speaker\": \"Captain Voss\"}, \"source\": \"llm_safe_fallback\", \"unsupported_combat_claim_preselection_suppressed\": true, \"unsupported_combat_claim_sanitizer\": {\"dropped_sentence_count\": 0, \"dropped_sentence_preview\": [], \"format_version\": \"n11621_unsupported_c",
-      "summary": "",
-      "turn": 38,
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 9,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 9,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 9,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 9,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 9,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 9,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 9,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 10,
       "type": null
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"canonical_text\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"display_text\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9, \"source\": \"direct_graph_",
-      "summary": "",
-      "turn": 38,
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 10,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 10,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 10,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 10,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 10,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 10,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 10,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 11,
       "type": null
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9}",
-      "summary": "",
-      "turn": 38,
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 11,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 11,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 11,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 11,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 11,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 11,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 11,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 12,
       "type": null
     },
     {
-      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"changed\": false, \"original_action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\"}",
-      "summary": "",
-      "turn": 38,
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 12,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 12,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 12,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 12,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 12,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 13,
       "type": null
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 39,
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 13,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 13,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 13,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 13,
+      "type": "Local Tension Escalation"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 13,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 14,
       "type": null
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 40,
-      "type": null
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 14,
+      "type": "Local Tension Escalation"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 41,
-      "type": null
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.353215+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:future_hook:fd1c7085ec1bd948\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b4888c2dc82c657c\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 14,
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 42,
-      "type": null
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\", \"target\": \"Bran\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 14,
+      "type": "Local Tension Escalation"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 43,
-      "type": null
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 9, \"created_at\": \"2026-05-21T18:58:49.352997+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:8:semantic_intent:8a805613853e1e42\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:57962ed1863d9592\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 9}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 14,
+      "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 44,
-      "type": null
+      "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\", \"target\": \"Bran\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 14,
+      "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 45,
-      "type": null
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
+      "turn": 14,
+      "type": "Local Tension Escalation"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 46,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 47,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 48,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 49,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 50,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"actor_id\": \"player\", \"confidence\": \"high\", \"kind\": \"attack\", \"raw_input\": \"I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.\", \"resolved\": true, \"source\": \"deterministic_semantic_action_resolver_v2\", \"target_ref\": \"back\"}",
-      "summary": "",
-      "turn": 63,
-      "type": "attack"
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"canonical_text\": \"I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.\", \"display_text\": \"I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"social\", \"activity_label\": \"ask\", \"intensity\": 1, \"interaction_mode\": \"dialogue\", \"player_input\": \"I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.\", \"reason\": \"dialogue_semantic_action_from_player_input\", \"scene_impact\": \"dialogue\", \"secondary_actor_ids\": [\"npc:bran\"], \"semantic_family\": \"social\", \"stakes\": 2, \"summary\": \"I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.\", \"tags\": [\"social\", \"dialogue\", \"npc\", \"ask\"], \"target_id\": \"npc:bran\", \"target_name\": \"Bran\", \"visibility\": \"local\"}}, \"priority\": 9, \"source\": \"direct_graph_execution\", \"text\": \"I meet with Bran and Garran to pla",
-      "summary": "",
-      "turn": 63,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"metadata\": {\"semantic_action\": {\"action_type\": \"social\", \"activity_label\": \"ask\", \"intensity\": 1, \"interaction_mode\": \"dialogue\", \"player_input\": \"I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.\", \"reason\": \"dialogue_semantic_action_from_player_input\", \"scene_impact\": \"dialogue\", \"secondary_actor_ids\": [\"npc:bran\"], \"semantic_family\": \"social\", \"stakes\": 2, \"summary\": \"I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.\", \"tags\": [\"social\", \"dialogue\", \"npc\", \"ask\"], \"target_id\": \"npc:bran\", \"target_name\": \"Bran\", \"visibility\": \"local\"}}, \"priority\": 9}",
-      "summary": "",
-      "turn": 63,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"Result: combat_started\", \"action_metadata\": {\"price_source\": \"\", \"provider_id\": \"\", \"provider_name\": \"\", \"transaction_kind\": \"\"}, \"action_result\": \"combat_started\", \"action_type\": \"attack_melee\", \"attack_roll\": 14, \"blocked\": false, \"blocked_reason\": \"\", \"character_cards_summary\": {\"cards\": [], \"count\": 0, \"missing_profile_npc_ids\": [], \"ok\": true, \"source\": \"deterministic_character_card_service\"}, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], ",
-      "summary": "combat_started",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"actor_id\": \"player\", \"confidence\": \"low\", \"kind\": \"attack\", \"raw_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"resolved\": true, \"source\": \"deterministic_semantic_action_resolver_v2\", \"target_ref\": \"\"}",
-      "summary": "",
-      "turn": 71,
-      "type": "attack"
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"count\": 0, \"current_tick\": 1, \"excluded_memory_ids\": [], \"location_id\": \"\", \"memory_ids\": [], \"selected_offer_id\": \"\", \"service_kind\": \"\", \"source\": \"deterministic_npc_memory_recall\", \"target_id\": \"\", \"target_name\": \"\"}",
-      "summary": "",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"canonical_text\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"display_text\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target",
-      "summary": "",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9}",
-      "summary": "",
-      "turn": 71,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3ab6a2335aeaa732\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"Result: combat_started\", \"action_metadata\": {\"price_source\": \"\", \"provider_id\": \"\", \"provider_name\": \"\", \"transaction_kind\": \"\"}, \"action_result\": \"combat_started\", \"action_type\": \"attack_melee\", \"attack_roll\": 18, \"blocked\": false, \"blocked_reason\": \"\", \"character_cards_summary\": {\"cards\": [], \"count\": 0, \"missing_profile_npc_ids\": [], \"ok\": true, \"source\": \"deterministic_character_card_service\"}, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], ",
-      "summary": "combat_started",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"actor_id\": \"player\", \"confidence\": \"high\", \"kind\": \"attack\", \"raw_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"resolved\": true, \"source\": \"deterministic_semantic_action_resolver_v2\", \"target_ref\": \"team before they can burn the safehouse evidence\"}",
-      "summary": "",
-      "turn": 72,
-      "type": "attack"
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"count\": 0, \"current_tick\": 1, \"excluded_memory_ids\": [], \"location_id\": \"\", \"memory_ids\": [], \"selected_offer_id\": \"\", \"service_kind\": \"\", \"source\": \"deterministic_npc_memory_recall\", \"target_id\": \"\", \"target_name\": \"\"}",
-      "summary": "",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"canonical_text\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"display_text\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3ab6a2335aeaa732\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9, \"source\": \"direct_graph_execution\", \"text\": ",
-      "summary": "",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3ab6a2335aeaa732\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9}",
-      "summary": "",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
-      "turn": 72,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I capture the strike team's sealed orders before they can destroy them.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_b7421d7c5b851973\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I capture the strike team's sealed orders before they can destroy them.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I capture the strike team's sealed orders before they can destroy them.",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"Result: combat_started\", \"action_metadata\": {\"price_source\": \"\", \"provider_id\": \"\", \"provider_name\": \"\", \"transaction_kind\": \"\"}, \"action_result\": \"combat_started\", \"action_type\": \"attack_melee\", \"attack_roll\": 5, \"blocked\": false, \"blocked_reason\": \"\", \"character_cards_summary\": {\"cards\": [], \"count\": 0, \"missing_profile_npc_ids\": [], \"ok\": true, \"source\": \"deterministic_character_card_service\"}, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], \"",
-      "summary": "combat_started",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"actor_id\": \"player\", \"confidence\": \"high\", \"kind\": \"attack\", \"raw_input\": \"I capture the strike team's sealed orders before they can destroy them.\", \"resolved\": true, \"source\": \"deterministic_semantic_action_resolver_v2\", \"target_ref\": \"team's sealed orders before they can destroy them\"}",
-      "summary": "",
-      "turn": 73,
-      "type": "attack"
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"count\": 0, \"current_tick\": 1, \"excluded_memory_ids\": [], \"location_id\": \"\", \"memory_ids\": [], \"selected_offer_id\": \"\", \"service_kind\": \"\", \"source\": \"deterministic_npc_memory_recall\", \"target_id\": \"\", \"target_name\": \"\"}",
-      "summary": "",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"canonical_text\": \"I capture the strike team's sealed orders before they can destroy them.\", \"display_text\": \"I capture the strike team's sealed orders before they can destroy them.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I capture the strike team's sealed orders before they can destroy them.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_b7421d7c5b851973\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I capture the strike team's sealed orders before they can destroy them.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9, \"source\": \"direct_graph_execution\", \"text\": \"I capture the strike team's sealed orders before th",
-      "summary": "",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I capture the strike team's sealed orders before they can destroy them.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_b7421d7c5b851973\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I capture the strike team's sealed orders before they can destroy them.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9}",
-      "summary": "",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3ab6a2335aeaa732\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
-      "turn": 73,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I capture the strike team's sealed orders before they can destroy them.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_b7421d7c5b851973\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I capture the strike team's sealed orders before they can destroy them.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I capture the strike team's sealed orders before they can destroy them.",
-      "turn": 74,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3ab6a2335aeaa732\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
-      "turn": 74,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
-      "turn": 74,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I capture the strike team's sealed orders before they can destroy them.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_b7421d7c5b851973\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I capture the strike team's sealed orders before they can destroy them.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I capture the strike team's sealed orders before they can destroy them.",
-      "turn": 75,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3ab6a2335aeaa732\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
-      "turn": 75,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
-      "turn": 75,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I capture the strike team's sealed orders before they can destroy them.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_b7421d7c5b851973\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I capture the strike team's sealed orders before they can destroy them.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I capture the strike team's sealed orders before they can destroy them.",
-      "turn": 76,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_3ab6a2335aeaa732\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I intercept the Sable Chain strike team before they can burn the safehouse evidence.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
-      "turn": 76,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_089c17f0efe66834\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
-      "turn": 76,
-      "type": null
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 14,
+      "type": "semantic_intent"
     }
   ],
   "combat_text_turns": [
@@ -311,307 +311,307 @@
     21,
     22,
     38,
-    63
+    71
   ],
   "damage_events": [
     {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:562f17043bfb6924\", \"summary\": \"Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.\", \"turn_index\": 92}",
-      "summary": "Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.",
-      "turn": 1,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:bcb1f1de9f49dd29\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}",
-      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
-      "turn": 1,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 1,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:562f17043bfb6924\", \"summary\": \"Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.\", \"turn_index\": 92}",
-      "summary": "Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.",
-      "turn": 2,
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 1,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:bcb1f1de9f49dd29\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}",
-      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
-      "turn": 2,
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 1,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 2,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:562f17043bfb6924\", \"summary\": \"Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.\", \"turn_index\": 92}",
-      "summary": "Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.",
-      "turn": 3,
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 2,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 2,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 3,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 4,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 4,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 4,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 5,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 5,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 5,
-      "type": "memory"
+      "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 6,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 6,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 6,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 6,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 6,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 6,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 7,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
       "turn": 7,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 7,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 7,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 7,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 8,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
       "turn": 8,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 8,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 8,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 8,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 9,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 9,
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 38,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 9,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 9,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 9,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 10,
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 38,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 10,
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 38,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 10,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 10,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 10,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 11,
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 63,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 11,
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 63,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 11,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 11,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 11,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 12,
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 63,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 12,
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 71,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (T92 context reinforces Garran's local knowledge).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (T92 context reinforces Garran's local knowledge).",
-      "turn": 12,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 12,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 12,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 12,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 13,
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 71,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 13,
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 71,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:f50ebfa3c4026adf\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (T92 context reinforces Garran's local knowledge).\", \"turn_index\": 13}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (T92 context reinforces Garran's local knowledge).",
-      "turn": 13,
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 72,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}",
+      "summary": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"deferred\": true, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"grounding_fallback\": true, \"grounding_fallback_reason\": \"grounding_validation_failed\", \"grounding_fallback_source\": \"deterministic_fallback\", \"grounding_selected_candidate\": \"deterministic_fallback\", \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"narration_status\": \"pending\", \"npc\": {\"line\": \"Careful. This does not need to become violence.\", \"speaker\": \"NPC\"}, \"reward\": null, \"runtime_narration_diagnostics\": {\"fallback_used\": true, \"p",
+      "summary": "",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
+      "summary": "",
+      "turn": 73,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"observe\", \"activity_label\": \"observe\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_f0aa73aefe8eb1b4\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"tags\": [\"observation\", \"observe\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I travel to the old north watchpost to follow Veska's courier trail.",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"location_significance\", \"summary\": \"The old north watchpost has been confirmed as a key point along Veska's active courier route.\"}",
+      "summary": "The old north watchpost has been confirmed as a key point along Veska's active courier route.",
+      "turn": 89,
+      "type": "location_significance"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.95, \"intent\": \"travel\", \"kind\": \"semantic_intent\", \"summary\": \"Successfully traversed to the old north watchpost, confirming the path follows Veska's known courier trail.\"}",
+      "summary": "Successfully traversed to the old north watchpost, confirming the path follows Veska's known courier trail.",
+      "turn": 89,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"action\": \"Arrived at the old north watchpost following the courier trail.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The NPC response must confirm the successful journey to the watchpost and acknowledge the purpose of following Veska's trail.\", \"required_focus\": [\"reflect_the_route_or_movement_result_first\", \"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}, \"followup_hooks\": [{\"kind\": \"local_tension_escalation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:ce61ad68259ce81c\", \"summary\": \"The direct confrontation with a high-ranking operative has raised immediate social stakes in the ridge hideout.\"}], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The journey to the old north watchpost proved swift, the rugged path marked clearly by recent boot prints and disturbed earth. Upon arrival, you find the structure weathered and quiet,",
+      "summary": "",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The NPC response must confirm the successful journey to the watchpost and acknowledge the purpose of following Veska's trail.\", \"required_focus\": [\"reflect_the_route_or_movement_result_first\", \"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}",
+      "summary": "The NPC response must confirm the successful journey to the watchpost and acknowledge the purpose of following Veska's trail.",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"travel_to_old_north_watchpost\", \"changed_parts\": [\"travel\"], \"effects\": {\"flags\": {\"mechanic:travel\": true}}, \"graph_action_id\": \"travel_to_old_north_watchpost\", \"hook_id\": \"hook:graph_direct:travel_to_old_north_watchpost\", \"kind\": \"graph_direct_completion\", \"mechanic\": \"travel\", \"mechanics\": [\"travel\"], \"summary\": \"Graph action completed: travel_to_old_north_watchpost\"}",
+      "summary": "Graph action completed: travel_to_old_north_watchpost",
+      "turn": 89,
+      "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"summary\": \"Reach the old north watchpost.\", \"unlock_objective\": \"objective:reach_old_north_watchpost\"}",
+      "summary": "Reach the old north watchpost.",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"changed\": false, \"original_action\": \"I travel to the old north watchpost to follow Veska's courier trail.\", \"reason\": \"\"}",
+      "summary": "",
+      "turn": 89,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_type\": \"investigate\", \"activity_label\": \"investigate\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_c257dcd6718c3173\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"tags\": [\"investigate\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
+      "summary": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+      "turn": 90,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Presence of Activity\", \"summary\": \"The watchpost has recently been used by organized parties—couriers and Sable Chain members.\"}",
+      "summary": "The watchpost has recently been used by organized parties—couriers and Sable Chain members.",
+      "turn": 90,
+      "type": "Presence of Activity"
+    },
+    {
+      "raw_preview": "{\"confidence\": 0.95, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The inspection revealed specific evidence: courier signs, Sable Chain marks, and Veska's trail were all confirmed at the watchpost.\"}",
+      "summary": "The inspection revealed specific evidence: courier signs, Sable Chain marks, and Veska's trail were all confirmed at the watchpost.",
+      "turn": 90,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"action\": \"Evidence found: Courier signs, Sable Chain marks, and Veska's trail confirmed at the North Watchpost.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The narration will confirm the findings, which directly answers the inspection.\", \"required_focus\": [\"answer_the_current_player_action_before_old_context\", \"state_only_the_resolved_result_from_turn_contract\"]}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The crumbling stone of the north watchpost yields its secrets under your careful scrutiny. Faint but distinct signs of a swift courier passage are etched into the weathered wood near the main gate, alongside several undeniable markings belonging to the Sable Chain guild. Furthermore, you clearly trace Veska's distinctive boot prints leading away from the post toward the northern ridge.\\n\\n\", \"npc\": {\"line\": \"(No NPC present to speak; findings are observed.)\", \"spea",
+      "summary": "",
+      "turn": 90,
       "type": null
     }
   ],
@@ -629,33 +629,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:562f17043bfb6924\", \"summary\": \"Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.\", \"turn_index\": 92}",
-      "summary": "Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.",
-      "turn": 1,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:bcb1f1de9f49dd29\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}",
-      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
-      "turn": 1,
-      "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 1,
       "type": null
@@ -668,9 +642,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:562f17043bfb6924\", \"summary\": \"Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.\", \"turn_index\": 92}",
-      "summary": "Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.",
-      "turn": 2,
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 1,
       "type": null
     },
     {
@@ -681,9 +655,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:bcb1f1de9f49dd29\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 91}",
-      "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
-      "turn": 2,
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 1,
       "type": null
     },
     {
@@ -694,7 +668,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 2,
       "type": null
@@ -707,9 +681,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:562f17043bfb6924\", \"summary\": \"Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.\", \"turn_index\": 92}",
-      "summary": "Successfully observed and halted Veska's courier exactly at the old north watchpost exit point.",
-      "turn": 3,
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 2,
       "type": null
     },
     {
@@ -720,7 +694,20 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 2,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 3,
       "type": null
@@ -733,7 +720,33 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 4,
       "type": null
@@ -746,7 +759,33 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 4,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
+      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "turn": 4,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 5,
       "type": null
@@ -759,10 +798,23 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 5,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 5,
-      "type": "memory"
+      "type": null
     },
     {
       "flags": {
@@ -772,7 +824,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 6,
       "type": null
@@ -785,7 +837,20 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
+      "turn": 6,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:0a25a6219c4bf1ff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 90}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 6,
       "type": null
@@ -798,46 +863,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 6,
-      "type": "memory"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 6,
-      "type": "memory"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 6,
-      "type": "memory"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 7,
       "type": null
@@ -850,49 +876,10 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
       "turn": 7,
       "type": null
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T18:37:05.901694+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:memory:15a1471004d6cb50\", \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 7,
-      "type": "memory"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"target\": \"Bran\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 7,
-      "type": "memory"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\"}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
-      "turn": 7,
-      "type": "memory"
     },
     {
       "flags": {
@@ -915,7 +902,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:95ac8ec7d69c8337\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 6}",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3e5a8b496505eaff\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
       "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
       "turn": 8,
       "type": null
@@ -928,23 +915,36 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:6bfcecf0a186a6cb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).\", \"turn_index\": 92}",
-      "summary": "Confirmation: Active courier from Veska was intercepted right at the old north watchpost entrance (reinforces T97 context).",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:3f1e8109b3906070\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.\", \"turn_index\": 91}",
+      "summary": "The finding confirms recent activity at the North Watchpost, reinforcing the memory that Handler Veska is actively moving through this region.",
       "turn": 8,
       "type": null
     },
     {
       "flags": {
-        "attack": false,
+        "attack": true,
         "combat": true,
         "damage": false,
-        "resolution": true,
+        "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
-      "summary": "",
+      "raw_preview": "{\"kind\": \"Local Tension Escalation\", \"summary\": \"The immediate threat level in the local area has risen due to strong evidence of premeditated attack.\"}",
+      "summary": "The immediate threat level in the local area has risen due to strong evidence of premeditated attack.",
       "turn": 8,
-      "type": null
+      "type": "Local Tension Escalation"
+    },
+    {
+      "flags": {
+        "attack": true,
+        "combat": true,
+        "damage": false,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"The gathered clues point toward a pre-planned attack rather than random misfortune.\"}",
+      "summary": "The gathered clues point toward a pre-planned attack rather than random misfortune.",
+      "turn": 8,
+      "type": "semantic_intent"
     }
   ],
   "format_version": "n118_real_combat_lifecycle_summary_v1",
@@ -953,9 +953,9 @@
   ],
   "ok": false,
   "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
-  "real_attack_event_count": 74,
+  "real_attack_event_count": 889,
   "real_combat_lifecycle_ok": false,
-  "real_damage_event_count": 2707,
+  "real_damage_event_count": 256,
   "real_resolution_event_count": 45,
   "real_round_event_count": 0,
   "resolution_events": [

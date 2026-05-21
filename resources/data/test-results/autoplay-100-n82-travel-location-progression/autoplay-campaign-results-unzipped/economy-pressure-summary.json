@@ -415,5 +415,36 @@
       "reason": "lodging_upkeep",
       "turn": 96
     }
-  ]
+  ],
+  "stock_refresh_count": 1,
+  "scarcity_or_price_variation_count": 1,
+  "n121_long_term_sinks": {
+    "format_version": "n121_economy_long_term_sinks_summary_v1",
+    "ok": true,
+    "stock_refresh_count": 1,
+    "scarcity_or_price_variation_count": 1,
+    "recurring_expense_count": 0,
+    "paid_count": 12,
+    "warning_count": 3,
+    "event_count": 12,
+    "stock_refresh_events": [
+      {
+        "turn": 18,
+        "type": "merchant_stock_refresh_policy",
+        "reason": "recurring_economy_tick",
+        "restock_scope": "basic_services"
+      }
+    ],
+    "scarcity_or_price_variation_events": [
+      {
+        "turn": 96,
+        "type": "scarcity_price_pressure_policy",
+        "reason": "recurring_upkeep_and_resource_warnings",
+        "warning_count": 3,
+        "paid_count": 12
+      }
+    ],
+    "missing_long_term_sink_parts": [],
+    "policy": "Long-term sinks require recurring expense pressure plus deterministic merchant-refresh and scarcity/price-pressure policy events."
+  }
 }

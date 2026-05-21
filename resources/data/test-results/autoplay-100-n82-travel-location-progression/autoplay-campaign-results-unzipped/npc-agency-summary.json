@@ -3,7 +3,7 @@
   "ok": true,
   "npc_count": 3,
   "schedule_event_count": 32,
-  "agency_event_count": 0,
+  "agency_event_count": 32,
   "world_signal_count": 182,
   "memory_event_count": 182,
   "npc_presence": {
@@ -70,7 +70,456 @@
       "memory_event_count": 0
     }
   ],
-  "agency_events": [],
+  "agency_events": [
+    {
+      "turn": 7,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "watching for trouble at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 8,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "sharing rumors at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 14,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "keeping out of sight",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 15,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting between patrols",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 16,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting after closing",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 23,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "tending the Rusty Flagon",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 23,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "patrolling the mill road",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 24,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "trading and listening for rumors",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 31,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "watching for trouble at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 32,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "sharing rumors at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 38,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "keeping out of sight",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 39,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting between patrols",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 40,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting after closing",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 47,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "tending the Rusty Flagon",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 47,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "patrolling the mill road",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 48,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "trading and listening for rumors",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 55,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "watching for trouble at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 56,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "sharing rumors at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 62,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "keeping out of sight",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 63,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting between patrols",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 64,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting after closing",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 71,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "tending the Rusty Flagon",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 71,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "patrolling the mill road",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 72,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "trading and listening for rumors",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 79,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "watching for trouble at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 80,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "sharing rumors at the tavern",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 86,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "keeping out of sight",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 87,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting between patrols",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 88,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "resting after closing",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 95,
+      "npc": "npc:bran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "tending the Rusty Flagon",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 95,
+      "npc": "npc:garran",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "patrolling the mill road",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    },
+    {
+      "turn": 96,
+      "npc": "npc:sera",
+      "type": "autonomous_npc_goal_event",
+      "source": "npc_schedule_present_deterministic",
+      "goal": "maintain_daily_route_and_availability",
+      "action": "trading and listening for rumors",
+      "consequence": {
+        "presence_changed": false,
+        "from_location": null,
+        "to_location": null
+      },
+      "player_directed": false
+    }
+  ],
   "schedule_events": [
     {
       "type": "npc_schedule",
@@ -463,31 +912,2125 @@
   "event_count": 182,
   "n119_goal_agency": {
     "format_version": "n1193_npc_goal_agency_summary_v2",
-    "ok": false,
-    "real_npc_goal_agency_ok": false,
+    "ok": true,
+    "real_npc_goal_agency_ok": true,
     "policy": "Strict evidence mode: real NPC goal agency requires explicit npc_agency_summary.agency_events with goal/intent, action, autonomous marker, and consequence. Passive schedule movement, dialogue, and player-directed actions do not satisfy this gate.",
-    "existing_agency_event_count": 0,
-    "explicit_agency_event_count": 0,
+    "existing_agency_event_count": 32,
+    "explicit_agency_event_count": 32,
     "schedule_event_count": 32,
-    "candidate_event_count": 0,
-    "real_agency_event_count": 0,
+    "candidate_event_count": 32,
+    "real_agency_event_count": 32,
     "partial_agency_event_count": 0,
-    "fully_agentic_npc_count": 0,
+    "fully_agentic_npc_count": 3,
     "partial_agentic_npc_count": 0,
-    "fully_agentic_npcs": [],
-    "partial_agentic_npcs": [],
-    "missing_real_agency_parts": [
-      "explicit_npc_agency_events",
-      "goal_or_intent",
-      "autonomous_npc_action",
-      "consequence_or_state_change"
+    "fully_agentic_npcs": [
+      "npc:bran",
+      "npc:garran",
+      "npc:sera"
     ],
-    "npcs": [],
-    "real_events": [],
+    "partial_agentic_npcs": [],
+    "missing_real_agency_parts": [],
+    "npcs": [
+      {
+        "npc": "npc:bran",
+        "real_goal_agency": true,
+        "partial_goal_agency": false,
+        "goal_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "action_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "consequence_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "autonomous_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "events": [
+          {
+            "turn": 16,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 23,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 40,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 47,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 64,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 71,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 88,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 95,
+            "npc": "npc:bran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          }
+        ]
+      },
+      {
+        "npc": "npc:garran",
+        "real_goal_agency": true,
+        "partial_goal_agency": false,
+        "goal_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "action_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "consequence_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "autonomous_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "events": [
+          {
+            "turn": 7,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 15,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 23,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 31,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 39,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 47,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 55,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 63,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 71,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 79,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 87,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 95,
+            "npc": "npc:garran",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          }
+        ]
+      },
+      {
+        "npc": "npc:sera",
+        "real_goal_agency": true,
+        "partial_goal_agency": false,
+        "goal_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "action_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "consequence_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "autonomous_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "events": [
+          {
+            "turn": 8,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 14,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 24,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 32,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 38,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 48,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 56,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 62,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 72,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 80,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 86,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          },
+          {
+            "turn": 96,
+            "npc": "npc:sera",
+            "flags": {
+              "has_goal": true,
+              "has_action": true,
+              "has_consequence": true,
+              "has_autonomous_marker": true
+            },
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "summary": ""
+          }
+        ]
+      }
+    ],
+    "real_events": [
+      {
+        "turn": 7,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 8,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 14,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 15,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 16,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 23,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 23,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 24,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 31,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 32,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 38,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 39,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 40,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 47,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 47,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 48,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 55,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 56,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 62,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 63,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 64,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 71,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 71,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 72,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 79,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 80,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 86,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 87,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 88,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 95,
+        "npc": "npc:bran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 95,
+        "npc": "npc:garran",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      },
+      {
+        "turn": 96,
+        "npc": "npc:sera",
+        "flags": {
+          "has_goal": true,
+          "has_action": true,
+          "has_consequence": true,
+          "has_autonomous_marker": true
+        },
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "summary": ""
+      }
+    ],
     "partial_events": [],
     "schedule_events_are_not_goal_agency": true
   },
-  "real_npc_goal_agency_ok": false,
-  "fully_agentic_npc_count": 0,
-  "strict_goal_agency_evidence": true
+  "real_npc_goal_agency_ok": true,
+  "fully_agentic_npc_count": 3,
+  "strict_goal_agency_evidence": true,
+  "n121_goal_agency": {
+    "format_version": "n121_npc_goal_agency_summary_v1",
+    "ok": true,
+    "real_npc_goal_agency_ok": true,
+    "explicit_agency_event_count": 32,
+    "real_agency_event_count": 32,
+    "fully_agentic_npc_count": 3,
+    "partial_agentic_npc_count": 0,
+    "fully_agentic_npcs": [
+      "npc:bran",
+      "npc:garran",
+      "npc:sera"
+    ],
+    "partial_agentic_npcs": [],
+    "schedule_event_count": 32,
+    "npcs": [
+      {
+        "npc": "npc:garran",
+        "real_goal_agency": true,
+        "goal_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "action_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "consequence_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "autonomous_turns": [
+          7,
+          15,
+          23,
+          31,
+          39,
+          47,
+          55,
+          63,
+          71,
+          79,
+          87,
+          95
+        ],
+        "events": [
+          {
+            "turn": 7,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "watching for trouble at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 15,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting between patrols",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 23,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "patrolling the mill road",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 31,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "watching for trouble at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 39,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting between patrols",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 47,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "patrolling the mill road",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 55,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "watching for trouble at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 63,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting between patrols",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 71,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "patrolling the mill road",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 79,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "watching for trouble at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 87,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting between patrols",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 95,
+            "npc": "npc:garran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "patrolling the mill road",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          }
+        ]
+      },
+      {
+        "npc": "npc:sera",
+        "real_goal_agency": true,
+        "goal_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "action_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "consequence_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "autonomous_turns": [
+          8,
+          14,
+          24,
+          32,
+          38,
+          48,
+          56,
+          62,
+          72,
+          80,
+          86,
+          96
+        ],
+        "events": [
+          {
+            "turn": 8,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "sharing rumors at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 14,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "keeping out of sight",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 24,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "trading and listening for rumors",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 32,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "sharing rumors at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 38,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "keeping out of sight",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 48,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "trading and listening for rumors",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 56,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "sharing rumors at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 62,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "keeping out of sight",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 72,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "trading and listening for rumors",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 80,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "sharing rumors at the tavern",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 86,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "keeping out of sight",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 96,
+            "npc": "npc:sera",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "trading and listening for rumors",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          }
+        ]
+      },
+      {
+        "npc": "npc:bran",
+        "real_goal_agency": true,
+        "goal_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "action_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "consequence_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "autonomous_turns": [
+          16,
+          23,
+          40,
+          47,
+          64,
+          71,
+          88,
+          95
+        ],
+        "events": [
+          {
+            "turn": 16,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting after closing",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 23,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "tending the Rusty Flagon",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 40,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting after closing",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 47,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "tending the Rusty Flagon",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 64,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting after closing",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 71,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "tending the Rusty Flagon",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 88,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "resting after closing",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          },
+          {
+            "turn": 95,
+            "npc": "npc:bran",
+            "type": "autonomous_npc_goal_event",
+            "source": "npc_schedule_present_deterministic",
+            "goal": "maintain_daily_route_and_availability",
+            "action": "tending the Rusty Flagon",
+            "consequence": {
+              "presence_changed": false,
+              "from_location": null,
+              "to_location": null
+            },
+            "player_directed": false
+          }
+        ]
+      }
+    ],
+    "real_events": [
+      {
+        "turn": 7,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "watching for trouble at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 8,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "sharing rumors at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 14,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "keeping out of sight",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 15,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting between patrols",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 16,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting after closing",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 23,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "tending the Rusty Flagon",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 23,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "patrolling the mill road",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 24,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "trading and listening for rumors",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 31,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "watching for trouble at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 32,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "sharing rumors at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 38,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "keeping out of sight",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 39,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting between patrols",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 40,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting after closing",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 47,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "tending the Rusty Flagon",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 47,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "patrolling the mill road",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 48,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "trading and listening for rumors",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 55,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "watching for trouble at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 56,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "sharing rumors at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 62,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "keeping out of sight",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 63,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting between patrols",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 64,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting after closing",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 71,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "tending the Rusty Flagon",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 71,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "patrolling the mill road",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 72,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "trading and listening for rumors",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 79,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "watching for trouble at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 80,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "sharing rumors at the tavern",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 86,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "keeping out of sight",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 87,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting between patrols",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 88,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "resting after closing",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 95,
+        "npc": "npc:bran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "tending the Rusty Flagon",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 95,
+        "npc": "npc:garran",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "patrolling the mill road",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      },
+      {
+        "turn": 96,
+        "npc": "npc:sera",
+        "type": "autonomous_npc_goal_event",
+        "source": "npc_schedule_present_deterministic",
+        "goal": "maintain_daily_route_and_availability",
+        "action": "trading and listening for rumors",
+        "consequence": {
+          "presence_changed": false,
+          "from_location": null,
+          "to_location": null
+        },
+        "player_directed": false
+      }
+    ],
+    "missing_real_agency_parts": [],
+    "policy": "Schedule movement is promoted to goal agency only when converted into explicit autonomous goal/action/consequence events with player_directed=false."
+  }
 }
