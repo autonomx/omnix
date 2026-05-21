@@ -27,9 +27,57 @@ function pushBoundedEvent(target, entry, maxItems = 24) {
   return list.slice(-maxItems);
 }
 
+function ensureN1222RuntimePromotionPanelLoaded() {
+  if (window.RpgRuntimePromotionPanel) return;
+  if (document.getElementById("rpg-runtime-promotion-panel-loader")) return;
+
+  const script = document.createElement("script");
+  script.id = "rpg-runtime-promotion-panel-loader";
+  script.src = "/static/rpg/runtime-promotion-panel.js";
+  script.defer = true;
+  script.dataset.feature = "n1222-runtime-promotion-panel";
+  document.head.appendChild(script);
+}
+
+function installN1222RuntimePromotionInspectorBridge() {
+  ensureN1222RuntimePromotionPanelLoaded();
+
+  let attempts = 0;
+  const maxAttempts = 80;
+  const timer = window.setInterval(() => {
+    attempts += 1;
+
+    const inspector = window.RpgLivingWorldInspector;
+    const panel = window.RpgRuntimePromotionPanel;
+    if (inspector && typeof inspector.render === "function" && panel && typeof panel.render === "function") {
+      if (!inspector.__n1222RuntimePromotionBridge) {
+        const originalRender = inspector.render.bind(inspector);
+        inspector.render = function renderWithRuntimePromotion(payload) {
+          const rendered = originalRender(payload);
+          try {
+            panel.render(payload || {});
+            window.dispatchEvent(new CustomEvent("rpg:climate-survival-update", { detail: payload || {} }));
+          } catch (err) {
+            console.warn("[RPG][N122.2] runtime promotion panel render failed", err);
+          }
+          return rendered;
+        };
+        inspector.__n1222RuntimePromotionBridge = true;
+      }
+      window.clearInterval(timer);
+      return;
+    }
+
+    if (attempts >= maxAttempts) {
+      window.clearInterval(timer);
+    }
+  }, 250);
+}
+
 // Auto-initialize inspector when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
   console.log("DOM Ready - initializing RPG Inspector");
+  installN1222RuntimePromotionInspectorBridge();
   
   // Wait for RPG module to initialize first
   setTimeout(() => {
