@@ -1,0 +1,335 @@
+
+# N119 -- NPC Goal Agency Evidence + 1000-Turn Gate Wiring
+#
+# This is a report/evidence phase, not a freeform NPC-autonomy engine rewrite.
+# It separates passive NPC presence/dialogue from real goal agency evidence:
+# an NPC must have a goal/intent, perform or schedule an action, and produce a
+# consequence/state change across turns before the 1000-turn gate is satisfied.
+_N119_PREVIOUS_N11721_REFRESH_READINESS_SOURCES = globals().get("_n11721_refresh_1000_turn_readiness_gap_report_sources")
+_N119_PREVIOUS_N1172_INJECT_1000_SECTION = globals().get("_n1172_inject_1000_turn_gap_section")
+_N119_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT = globals().get("_n1176_write_review_json_artifact")
+
+
+def _n119_lower_text(value: Any) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).lower()
+    except Exception:
+        return _safe_str(value).lower()
+
+
+def _n119_row_turn(row: Dict[str, Any]) -> int:
+    row = _safe_dict(row)
+    return int(row.get("turn_index") or row.get("turn") or 0)
+
+
+def _n119_known_npc_names(summary: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[str]:
+    names = set()
+    for row in _safe_list(transcript):
+        row = _safe_dict(row)
+        for key in ("npc", "npc_speaker", "speaker", "target", "npc_id"):
+            value = row.get(key)
+            if isinstance(value, dict):
+                value = value.get("speaker") or value.get("npc_id") or value.get("name")
+            text = _safe_str(value).strip()
+            if text and text.lower() not in {"none", "unknown", "environment"}:
+                names.add(text)
+        npc_payload = _safe_dict(row.get("npc")) or _safe_dict(_safe_dict(row.get("turn_result")).get("npc"))
+        for key in ("speaker", "npc_id", "name"):
+            text = _safe_str(npc_payload.get(key)).strip()
+            if text and text.lower() not in {"none", "unknown", "environment"}:
+                names.add(text)
+    for key in ("npc_profile_load_summary", "npc_arc_progression_summary", "npc_evolution_profile_persistence_summary"):
+        payload = _safe_dict(_safe_dict(summary).get(key))
+        for value in _safe_list(payload.get("npc_ids")) + _safe_list(payload.get("npcs")):
+            text = _safe_str(value).strip()
+            if text:
+                names.add(text)
+    return sorted(names)[:100]
+
+
+def _n119_extract_npc_name(row: Dict[str, Any], known_names: List[str]) -> str:
+    row = _safe_dict(row)
+    candidates: List[str] = []
+    for key in ("npc_speaker", "speaker", "target", "npc_id"):
+        candidates.append(_safe_str(row.get(key)))
+    npc_payloads = [
+        _safe_dict(row.get("npc")),
+        _safe_dict(_safe_dict(row.get("turn_result")).get("npc")),
+        _safe_dict(_safe_dict(row.get("resolved_narration_payload")).get("npc")),
+    ]
+    for payload in npc_payloads:
+        for key in ("speaker", "npc_id", "name"):
+            candidates.append(_safe_str(payload.get(key)))
+    text = _n119_lower_text(row)
+    for name in known_names:
+        if name and name.lower() in text:
+            candidates.append(name)
+    for candidate in candidates:
+        candidate = _safe_str(candidate).strip()
+        if candidate and candidate.lower() not in {"none", "unknown", "environment"}:
+            return candidate
+    return "unknown"
+
+
+def _n119_agency_flags(row: Dict[str, Any]) -> Dict[str, bool]:
+    text = _n119_lower_text(row)
+    goal_tokens = (
+        "npc_goal", "goal", "intent", "intention", "motive", "agenda",
+        "objective", "wants", "plans", "decides", "vows", "seeks",
+    )
+    action_tokens = (
+        "npc_action", "agency_event", "acts", "moves", "travels", "warns",
+        "prepares", "guards", "reports", "pursues", "investigates", "joins",
+        "sends", "meets", "ambush", "defends", "protects",
+    )
+    schedule_tokens = (
+        "schedule", "scheduled", "next_tick", "future_turn", "deadline",
+        "cooldown", "at dawn", "before dawn", "later", "afterward",
+    )
+    consequence_tokens = (
+        "consequence", "state_change", "changed_parts", "memory", "relationship",
+        "reputation", "world_signal", "quest", "arc", "faction", "pressure",
+        "followup", "evolution", "trust", "fear", "opinion",
+    )
+    autonomous_tokens = (
+        "autonomous", "background", "offscreen", "ambient", "npc agency",
+        "without player", "while the player", "independently",
+    )
+    return {
+        "has_goal": any(token in text for token in goal_tokens),
+        "has_action": any(token in text for token in action_tokens),
+        "has_schedule": any(token in text for token in schedule_tokens),
+        "has_consequence": any(token in text for token in consequence_tokens),
+        "has_autonomous_marker": any(token in text for token in autonomous_tokens),
+    }
+
+
+def _n119_build_npc_goal_agency_summary(summary: Dict[str, Any], transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    rows = [_safe_dict(row) for row in _safe_list(transcript)]
+    known_names = _n119_known_npc_names(summary, rows)
+    npc_records: Dict[str, Dict[str, Any]] = {}
+    events: List[Dict[str, Any]] = []
+
+    for row in rows:
+        turn = _n119_row_turn(row)
+        flags = _n119_agency_flags(row)
+        if not any(flags.values()):
+            continue
+        npc_name = _n119_extract_npc_name(row, known_names)
+        rec = npc_records.setdefault(
+            npc_name,
+            {
+                "npc": npc_name,
+                "turns": [],
+                "goal_turns": [],
+                "action_turns": [],
+                "schedule_turns": [],
+                "consequence_turns": [],
+                "autonomous_turns": [],
+            },
+        )
+        rec["turns"].append(turn)
+        if flags.get("has_goal"):
+            rec["goal_turns"].append(turn)
+        if flags.get("has_action"):
+            rec["action_turns"].append(turn)
+        if flags.get("has_schedule"):
+            rec["schedule_turns"].append(turn)
+        if flags.get("has_consequence"):
+            rec["consequence_turns"].append(turn)
+        if flags.get("has_autonomous_marker"):
+            rec["autonomous_turns"].append(turn)
+        if len(events) < 100:
+            events.append(
+                {
+                    "turn": turn,
+                    "npc": npc_name,
+                    "flags": flags,
+                    "player_action": _safe_str(row.get("player_action"))[:240],
+                    "canonical_turn_action": _safe_str(row.get("canonical_turn_action"))[:240],
+                }
+            )
+
+    npc_rows: List[Dict[str, Any]] = []
+    fully_agentic_npcs: List[str] = []
+    partial_agentic_npcs: List[str] = []
+    for npc, rec in sorted(npc_records.items()):
+        goal = bool(rec["goal_turns"])
+        action = bool(rec["action_turns"])
+        consequence = bool(rec["consequence_turns"])
+        schedule_or_autonomous = bool(rec["schedule_turns"] or rec["autonomous_turns"])
+        real_agency = goal and action and consequence and schedule_or_autonomous
+        partial = (goal and action) or (action and consequence) or (goal and consequence)
+        out = {
+            "npc": npc,
+            "real_goal_agency": real_agency,
+            "partial_goal_agency": partial,
+            "turn_count": len(set(rec["turns"])),
+            "goal_turns": sorted(set(rec["goal_turns"]))[:50],
+            "action_turns": sorted(set(rec["action_turns"]))[:50],
+            "schedule_turns": sorted(set(rec["schedule_turns"]))[:50],
+            "consequence_turns": sorted(set(rec["consequence_turns"]))[:50],
+            "autonomous_turns": sorted(set(rec["autonomous_turns"]))[:50],
+        }
+        npc_rows.append(out)
+        if real_agency:
+            fully_agentic_npcs.append(npc)
+        elif partial:
+            partial_agentic_npcs.append(npc)
+
+    existing = _safe_dict(summary.get("npc_agency_summary"))
+    existing_count = int(existing.get("agency_event_count") or existing.get("event_count") or 0)
+    ok = bool(fully_agentic_npcs)
+    return {
+        "format_version": "n119_npc_goal_agency_summary_v1",
+        "ok": ok,
+        "real_npc_goal_agency_ok": ok,
+        "policy": "NPC goal agency requires goal/intent, action, scheduled/autonomous marker, and consequence evidence. Passive dialogue/presence alone is not enough.",
+        "known_npc_count": len(known_names),
+        "known_npcs": known_names,
+        "existing_agency_event_count": existing_count,
+        "candidate_event_count": len(events),
+        "npc_with_any_agency_signal_count": len(npc_rows),
+        "fully_agentic_npc_count": len(fully_agentic_npcs),
+        "partial_agentic_npc_count": len(partial_agentic_npcs),
+        "fully_agentic_npcs": fully_agentic_npcs[:50],
+        "partial_agentic_npcs": partial_agentic_npcs[:50],
+        "missing_real_agency_parts": [] if ok else [
+            "goal_or_intent",
+            "scheduled_or_autonomous_action",
+            "consequence_or_state_change",
+        ],
+        "npcs": npc_rows[:100],
+        "events": events,
+    }
+
+
+def _n119_apply_npc_goal_agency(summary: Dict[str, Any], transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    agency = _n119_build_npc_goal_agency_summary(summary, transcript)
+    summary["npc_goal_agency_summary"] = agency
+    npc_agency = dict(_safe_dict(summary.get("npc_agency_summary")))
+    npc_agency["n119_goal_agency"] = agency
+    npc_agency["real_npc_goal_agency_ok"] = bool(agency.get("ok"))
+    npc_agency["fully_agentic_npc_count"] = agency.get("fully_agentic_npc_count")
+    summary["npc_agency_summary"] = npc_agency
+
+    gap = dict(_safe_dict(summary.get("one_thousand_turn_readiness_gap_report")))
+    gates = dict(_safe_dict(gap.get("gates")))
+    if gates:
+        gate = dict(_safe_dict(gates.get("npc_goal_agency_real")))
+        gate["ok"] = bool(agency.get("ok"))
+        gate["source"] = "npc-goal-agency-summary.json"
+        gate["source_artifact"] = "npc-goal-agency-summary.json"
+        gate["message"] = (
+            "Real NPC goal agency requires goal/intent, scheduled/autonomous action, and consequence evidence."
+            if not agency.get("ok") else
+            "Real NPC goal agency evidence is present."
+        )
+        gate["value"] = {
+            "fully_agentic_npc_count": agency.get("fully_agentic_npc_count"),
+            "partial_agentic_npc_count": agency.get("partial_agentic_npc_count"),
+            "candidate_event_count": agency.get("candidate_event_count"),
+            "missing_real_agency_parts": agency.get("missing_real_agency_parts"),
+        }
+        gates["npc_goal_agency_real"] = gate
+        gap["gates"] = gates
+        blocked = [name for name, item in gates.items() if not bool(_safe_dict(item).get("ok"))]
+        gap["one_thousand_turn_blocked_reasons"] = blocked
+        gap["one_thousand_turn_candidate"] = not blocked
+        gap["n119_npc_goal_agency_applied"] = True
+        summary["one_thousand_turn_readiness_gap_report"] = gap
+    return summary
+
+
+def _n11721_refresh_1000_turn_readiness_gap_report_sources(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    if callable(_N119_PREVIOUS_N11721_REFRESH_READINESS_SOURCES):
+        summary = _N119_PREVIOUS_N11721_REFRESH_READINESS_SOURCES(*args, **kwargs)
+    elif args:
+        summary = _safe_dict(args[0])
+    else:
+        summary = _safe_dict(kwargs.get("summary"))
+    transcript = _safe_list(args[1]) if len(args) > 1 else _safe_list(kwargs.get("transcript") or kwargs.get("final_transcript_rows"))
+    return _n119_apply_npc_goal_agency(summary, transcript)
+
+
+def _n119_html_escape(value: Any) -> str:
+    if "_n1178_html_escape" in globals() and callable(globals().get("_n1178_html_escape")):
+        return globals()["_n1178_html_escape"](value)
+    return _safe_str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _n119_npc_goal_agency_html_section(summary: Dict[str, Any]) -> str:
+    agency = _safe_dict(_safe_dict(summary).get("npc_goal_agency_summary"))
+    rows = []
+    for npc in _safe_list(agency.get("npcs"))[:20]:
+        npc = _safe_dict(npc)
+        rows.append(
+            "<tr>"
+            f"<td>{_n119_html_escape(npc.get('npc'))}</td>"
+            f"<td>{_n119_html_escape(npc.get('real_goal_agency'))}</td>"
+            f"<td>{_n119_html_escape(npc.get('goal_turns'))}</td>"
+            f"<td>{_n119_html_escape(npc.get('action_turns'))}</td>"
+            f"<td>{_n119_html_escape(npc.get('consequence_turns'))}</td>"
+            "</tr>"
+        )
+    body = "".join(rows) or "<tr><td colspan=\"5\">No NPC goal agency evidence classified.</td></tr>"
+    missing = ", ".join(_safe_str(v) for v in _safe_list(agency.get("missing_real_agency_parts"))) or "none"
+    return (
+        "<section id=\"n119-npc-goal-agency\" class=\"card\">"
+        "<h2>N119 NPC Goal Agency</h2>"
+        "<p>Passive NPC dialogue is separated from real goal-driven NPC action and consequence evidence.</p>"
+        "<ul>"
+        f"<li>Real NPC goal agency OK: {_n119_html_escape(agency.get('ok'))}</li>"
+        f"<li>Fully agentic NPCs: {_n119_html_escape(agency.get('fully_agentic_npc_count'))}</li>"
+        f"<li>Partial agentic NPCs: {_n119_html_escape(agency.get('partial_agentic_npc_count'))}</li>"
+        f"<li>Candidate events: {_n119_html_escape(agency.get('candidate_event_count'))}</li>"
+        f"<li>Missing: {_n119_html_escape(missing)}</li>"
+        "</ul>"
+        "<table><thead><tr><th>NPC</th><th>Real agency</th><th>Goal turns</th><th>Action turns</th><th>Consequence turns</th></tr></thead>"
+        f"<tbody>{body}</tbody></table>"
+        "</section>"
+    )
+
+
+def _n1172_inject_1000_turn_gap_section(html_report: str, final_summary: Dict[str, Any]) -> str:
+    if callable(_N119_PREVIOUS_N1172_INJECT_1000_SECTION):
+        html_report = _N119_PREVIOUS_N1172_INJECT_1000_SECTION(html_report, final_summary)
+    html_text = _safe_str(html_report)
+    if "id=\"n119-npc-goal-agency\"" in html_text:
+        return html_text
+    section = _n119_npc_goal_agency_html_section(final_summary)
+    lower = html_text.lower()
+    index = lower.rfind("</body>")
+    if index >= 0:
+        return html_text[:index] + section + html_text[index:]
+    return html_text + section
+
+
+def _n1176_write_review_json_artifact(*args: Any, **kwargs: Any) -> Any:
+    result = None
+    if callable(_N119_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+        result = _N119_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(*args, **kwargs)
+    if len(args) < 4:
+        return result
+    zip_handle, artifact_manifest, name, value = args[:4]
+    if name != "summary.json" or not isinstance(value, dict):
+        return result
+    agency = _safe_dict(value.get("npc_goal_agency_summary"))
+    artifact_name = "npc-goal-agency-summary.json"
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    if agency and artifact_name not in generated_files:
+        serialized = json.dumps(agency, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        zip_handle.writestr(artifact_name, serialized)
+        generated_files.append(artifact_name)
+        if callable(_N119_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT):
+            _N119_PREVIOUS_N1176_WRITE_REVIEW_JSON_ARTIFACT(
+                zip_handle,
+                artifact_manifest,
+                artifact_name,
+                agency,
+                serialized_text=serialized,
+                force=True,
+            )
+    return result
