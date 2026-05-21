@@ -1,5 +1,5 @@
 {
-  "format_version": "n1175_autoplay_fragment_manifest_v1",
+  "format_version": "n1176_autoplay_fragment_manifest_v1",
   "fragments": [
     {
       "file": "00_bootstrap_imports_progression__progression_state_preserve_keys_to_transcript_keep_keys.pyfrag",
@@ -304,103 +304,109 @@
     {
       "file": "50_run_loop__run_autoplay_campaign_to_part_04.pyfrag",
       "source_start_line": 19884,
-      "source_end_line": 20363,
-      "line_count": 480
+      "source_end_line": 20362,
+      "line_count": 479
     },
     {
       "file": "51_run_loop__run_autoplay_campaign_to_part_05.pyfrag",
-      "source_start_line": 20364,
-      "source_end_line": 20843,
+      "source_start_line": 20363,
+      "source_end_line": 20842,
       "line_count": 480
     },
     {
       "file": "52_run_loop__run_autoplay_campaign_to_part_06.pyfrag",
-      "source_start_line": 20844,
-      "source_end_line": 21323,
+      "source_start_line": 20843,
+      "source_end_line": 21322,
       "line_count": 480
     },
     {
       "file": "53_run_loop__run_autoplay_campaign_to_part_07.pyfrag",
-      "source_start_line": 21324,
-      "source_end_line": 21803,
+      "source_start_line": 21323,
+      "source_end_line": 21802,
       "line_count": 480
     },
     {
       "file": "54_run_loop__run_autoplay_campaign_to_part_08.pyfrag",
-      "source_start_line": 21804,
-      "source_end_line": 22283,
-      "line_count": 480
+      "source_start_line": 21803,
+      "source_end_line": 22281,
+      "line_count": 479
+    },
+    {
+      "file": "46_result_artifacts_review_splitting__n1176.pyfrag",
+      "source_start_line": 22282,
+      "source_end_line": 22700,
+      "line_count": 419
     },
     {
       "file": "55_run_loop__run_autoplay_campaign_to_part_09.pyfrag",
-      "source_start_line": 22284,
-      "source_end_line": 22763,
+      "source_start_line": 22701,
+      "source_end_line": 23180,
       "line_count": 480
     },
     {
       "file": "56_run_loop__run_autoplay_campaign_to_part_10.pyfrag",
-      "source_start_line": 22764,
-      "source_end_line": 23243,
-      "line_count": 480
+      "source_start_line": 23181,
+      "source_end_line": 23672,
+      "line_count": 492
     },
     {
       "file": "57_run_loop__run_autoplay_campaign_to_part_11.pyfrag",
-      "source_start_line": 23244,
-      "source_end_line": 23614,
-      "line_count": 371
+      "source_start_line": 23673,
+      "source_end_line": 24087,
+      "line_count": 415
     },
     {
       "file": "58_cli_profile_and_entrypoint__apply_autoplay_profile_defaults_to_build_arg_parser.pyfrag",
-      "source_start_line": 23615,
-      "source_end_line": 24086,
+      "source_start_line": 24088,
+      "source_end_line": 24559,
       "line_count": 472
     },
     {
       "file": "59_n116_n117_hotfixes__n11617_previous_sync_current_action_response_artifact_rows_t.pyfrag",
-      "source_start_line": 24087,
-      "source_end_line": 24489,
+      "source_start_line": 24560,
+      "source_end_line": 24962,
       "line_count": 403
     },
     {
       "file": "60_n116_n117_hotfixes__n11618_deep_prompt_veto_to_n11618_prompt_sync_targets.pyfrag",
-      "source_start_line": 24490,
-      "source_end_line": 24969,
+      "source_start_line": 24963,
+      "source_end_line": 25442,
       "line_count": 480
     },
     {
       "file": "61_n116_n117_hotfixes__n11618_deep_prompt_veto_to_n11618_prompt_sync_targets.pyfrag",
-      "source_start_line": 24970,
-      "source_end_line": 25406,
+      "source_start_line": 25443,
+      "source_end_line": 25879,
       "line_count": 437
     },
     {
       "file": "62_n116_n117_hotfixes__n11618_prompt_contract_veto_regression_summary_to_n11619_pre.pyfrag",
-      "source_start_line": 25407,
-      "source_end_line": 25848,
+      "source_start_line": 25880,
+      "source_end_line": 26321,
       "line_count": 442
     },
     {
       "file": "63_n116_n117_hotfixes__n11620_repair_pressure_by_category_to_n11620_update_repair_p.pyfrag",
-      "source_start_line": 25849,
-      "source_end_line": 26248,
+      "source_start_line": 26322,
+      "source_end_line": 26721,
       "line_count": 400
     },
     {
       "file": "64_n116_n117_hotfixes__n11621_repair_pressure_by_category_from_summary_to_n11621_up.pyfrag",
-      "source_start_line": 26249,
-      "source_end_line": 26514,
+      "source_start_line": 26722,
+      "source_end_line": 26987,
       "line_count": 266
     },
     {
       "file": "65_n117_readiness_reports__n1172_build_1000_turn_readiness_gap_report_to_build_100_turn.pyfrag",
-      "source_start_line": 26515,
-      "source_end_line": 26951,
+      "source_start_line": 26988,
+      "source_end_line": 27424,
       "line_count": 437
     },
     {
       "file": "66_n117_readiness_reports__n11721_refresh_1000_turn_readiness_gap_report_sources_to_n11.pyfrag",
-      "source_start_line": 26952,
-      "source_end_line": 27061,
+      "source_start_line": 27425,
+      "source_end_line": 27534,
       "line_count": 110
     }
   ]

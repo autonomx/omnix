@@ -1,0 +1,193 @@
+# =============================================================================
+# N117.7 — Review Artifact Oversized Row + Operational Budget Fix
+# =============================================================================
+# Keep review-artifact chunks genuinely review-sized even when one transcript row
+# is larger than the target chunk budget.  Also align the 1000-turn transcript
+# growth gate with the N117.6 policy: monolithic full-transcript.json is opt-in
+# debug output, while bounded/slim review chunks are the operational artifacts.
+
+def _n1177_write_oversized_review_row_reference(
+    zip_handle: Any,
+    artifact_manifest: Dict[str, Any],
+    artifact_name: str,
+    row: Any,
+    *,
+    row_index: int,
+) -> Dict[str, Any]:
+    """Write an oversized review row as field-level artifacts and return a small pointer row.
+
+    N117.6 bounded the number of rows per chunk, but a single full transcript row can be
+    multiple MB by itself.  Keep review chunk files small by replacing oversized rows with
+    a pointer and writing the row's top-level fields as separate bounded artifacts.
+    """
+
+    slug = _n1176_review_slug(artifact_name)
+    row_number = int(row_index) + 1
+    row_dir = f"review-artifacts/{slug}/oversized-rows/row_{row_number:04d}"
+    row_value = row if isinstance(row, dict) else {"value": row}
+    field_entries: List[Dict[str, Any]] = []
+    approximate_size = _n1176_utf8_len(_n1176_json_dumps(row_value, sort_keys=True))
+
+    for raw_key in sorted(row_value.keys(), key=lambda item: _safe_str(item)):
+        key = _safe_str(raw_key)
+        value = row_value.get(raw_key)
+        field_text = _n1176_json_dumps(value, sort_keys=True)
+        field_size = _n1176_utf8_len(field_text)
+        field_slug = _n1176_review_slug(key) or "field"
+        field_dir = f"{row_dir}/fields/{field_slug}"
+        parts: List[str] = []
+
+        if field_size <= _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+            field_file = f"{field_dir}.json"
+            if _n1176_register_generated_file(artifact_manifest, field_file):
+                zip_handle.writestr(field_file, field_text)
+            parts.append(field_file)
+        else:
+            for part_index, chunk in enumerate(
+                _n1176_chunk_text_by_bytes(
+                    field_text,
+                    max_bytes=_N1176_REVIEW_ARTIFACT_MAX_BYTES,
+                ),
+                start=1,
+            ):
+                part_file = f"{field_dir}/part_{part_index:04d}.json"
+                if _n1176_register_generated_file(artifact_manifest, part_file):
+                    zip_handle.writestr(part_file, chunk)
+                parts.append(part_file)
+
+        field_entries.append(
+            {
+                "key": key,
+                "size_bytes": field_size,
+                "part_count": len(parts),
+                "parts": parts,
+            }
+        )
+
+    index_file = f"{row_dir}/index.json"
+    _n1176_write_json_direct(
+        zip_handle,
+        artifact_manifest,
+        index_file,
+        {
+            "format_version": "n1177_oversized_review_row_index_v1",
+            "artifact_name": artifact_name,
+            "row_index": row_index,
+            "row_number": row_number,
+            "approximate_size_bytes": approximate_size,
+            "max_part_bytes": _N1176_REVIEW_ARTIFACT_MAX_BYTES,
+            "field_count": len(field_entries),
+            "fields": field_entries,
+        },
+    )
+
+    return {
+        "format_version": "n1177_oversized_review_row_pointer_v1",
+        "oversized_row": True,
+        "row_index": row_index,
+        "row_number": row_number,
+        "approximate_size_bytes": approximate_size,
+        "index_file": index_file,
+        "field_count": len(field_entries),
+    }
+
+
+
+def _n1177_apply_review_artifact_budget_to_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    """Use the operational transcript artifact projection for the 1000-turn gate.
+
+    The old gate intentionally warned on the full debug transcript projection.  After
+    N117.6, long runs omit the monolithic full transcript by default and review chunks
+    are the operational artifact surface, so the 1000-turn gate should not remain blocked
+    by a disabled debug artifact.
+    """
+
+    summary = _safe_dict(summary)
+    transcript_size = _safe_dict(summary.get("transcript_size_summary"))
+    if bool(transcript_size.get("wrote_full_transcript")):
+        return summary
+
+    row_count = int(transcript_size.get("row_count") or 0)
+    if row_count <= 0:
+        return summary
+
+    bounded_bytes = int(transcript_size.get("bounded_transcript_json_bytes_estimate") or 0)
+    slim_bytes = int(transcript_size.get("slim_transcript_json_bytes_estimate") or 0)
+    effective_sample_bytes = max(bounded_bytes, slim_bytes)
+    if effective_sample_bytes <= 0:
+        return summary
+
+    projected_1000 = int((effective_sample_bytes / max(1, row_count)) * 1000)
+    budget_1000 = 786_432_000
+    gate_ok = projected_1000 <= budget_1000
+
+    gap = _safe_dict(summary.get("one_thousand_turn_readiness_gap_report"))
+    gates = _safe_dict(gap.get("gates"))
+    gate = _safe_dict(gates.get("transcript_growth_budget_projected_1000"))
+    if not gate:
+        return summary
+
+    gate["ok"] = bool(gate_ok)
+    gate["message"] = (
+        "Operational review transcript artifacts are within the 1000-turn budget."
+        if gate_ok
+        else "Operational review transcript artifacts may become too large for 1000-turn endurance runs."
+    )
+    gate["source"] = "transcript-size-summary.json + review-artifacts/index.json"
+    gate["source_artifact"] = "transcript-size-summary.json + review-artifacts/index.json"
+    gate["value"] = {
+        "ok": bool(gate_ok),
+        "budget_1000_turn_bytes": budget_1000,
+        "turns_sampled": row_count,
+        "operational_bytes_sampled": effective_sample_bytes,
+        "operational_bytes_per_turn": round(effective_sample_bytes / max(1, row_count), 3),
+        "operational_projected_1000_turn_bytes": projected_1000,
+        "full_debug_bytes_sampled": int(transcript_size.get("full_transcript_json_bytes_estimate") or 0),
+        "full_debug_projected_1000_turn_bytes": int(
+            (int(transcript_size.get("full_transcript_json_bytes_estimate") or 0) / max(1, row_count)) * 1000
+        ),
+        "monolithic_full_transcript_written": False,
+        "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output",
+    }
+    gates["transcript_growth_budget_projected_1000"] = gate
+    gap["gates"] = gates
+
+    reasons = [
+        _safe_str(reason)
+        for reason in _safe_list(gap.get("one_thousand_turn_blocked_reasons"))
+        if _safe_str(reason)
+    ]
+    hard = [
+        _safe_str(reason)
+        for reason in _safe_list(gap.get("one_thousand_turn_hard_blockers"))
+        if _safe_str(reason)
+    ]
+    if gate_ok:
+        reasons = [reason for reason in reasons if reason != "transcript_growth_budget_projected_1000"]
+        hard = [reason for reason in hard if reason != "transcript_growth_budget_projected_1000"]
+    elif "transcript_growth_budget_projected_1000" not in reasons:
+        reasons.append("transcript_growth_budget_projected_1000")
+
+    gap["one_thousand_turn_blocked_reasons"] = reasons
+    gap["one_thousand_turn_hard_blockers"] = hard
+    gap["one_thousand_turn_candidate"] = not reasons and not hard
+    gap["ok"] = bool(_safe_dict(summary.get("hundred_turn_readiness_summary")).get("ok", True))
+    summary["one_thousand_turn_readiness_gap_report"] = gap
+    return summary
+
+
+
+def _n1177_should_write_monolithic_text_artifact(artifact_name: str, artifact_path: Any) -> bool:
+    """Return whether an oversized text artifact should remain as a monolithic ZIP member."""
+
+    name = _safe_str(artifact_name)
+    try:
+        size = int(Path(artifact_path).stat().st_size)
+    except Exception:
+        return True
+    if size <= _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+        return True
+    if name == "code-diff.txt":
+        flag = _safe_str(os.environ.get("RPG_AUTOPLAY_WRITE_MONOLITHIC_CODE_DIFF", "")).lower()
+        return flag in _N1176_MONOLITHIC_TRUE_VALUES
+    return True

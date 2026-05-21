@@ -1,0 +1,451 @@
+
+# =============================================================================
+# N117.6 — Review-Sized Result Artifact Splitting
+# =============================================================================
+# Large autoplay ZIP artifacts are hard to inspect in ChatGPT/GitHub connector
+# workflows.  Keep the historical artifacts where practical, but always add a
+# review-artifacts/ tree with bounded chunks and indexes.  For very large debug
+# transcripts, default to split review chunks instead of a multi-hundred-MB
+# monolithic full-transcript.json.  Set RPG_AUTOPLAY_WRITE_MONOLITHIC_FULL_TRANSCRIPT=1
+# to restore the old monolithic full transcript behavior for local debugging.
+
+_N1176_REVIEW_ARTIFACT_MAX_BYTES = max(
+    100_000,
+    int(os.environ.get("RPG_AUTOPLAY_REVIEW_ARTIFACT_MAX_BYTES", "850000") or "850000"),
+)
+_N1176_MONOLITHIC_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _n1176_review_slug(name: str) -> str:
+    raw = _safe_str(name).strip().replace("\\", "/").strip("/")
+    if not raw:
+        raw = "artifact"
+    raw = raw.replace("/", "__")
+    cleaned = []
+    for ch in raw:
+        if ch.isalnum() or ch in {"-", "_", "."}:
+            cleaned.append(ch)
+        else:
+            cleaned.append("_")
+    slug = "".join(cleaned).strip("._-") or "artifact"
+    return slug[:120]
+
+
+def _n1176_json_dumps(value: Any, *, sort_keys: bool = False) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=sort_keys, default=str)
+
+
+def _n1176_utf8_len(text: Any) -> int:
+    return len(_safe_str(text).encode("utf-8", errors="replace"))
+
+
+def _n1176_register_generated_file(artifact_manifest: Dict[str, Any], name: str) -> bool:
+    generated_files = artifact_manifest.setdefault("generated_files", [])
+    if name in generated_files:
+        return False
+    generated_files.append(name)
+    return True
+
+
+def _n1176_append_review_index_entry(
+    artifact_manifest: Dict[str, Any],
+    *,
+    artifact_name: str,
+    original_size_bytes: int,
+    split_kind: str,
+    parts: List[str],
+    index_file: str,
+    omitted_monolithic: bool = False,
+    note: str = "",
+) -> None:
+    review_entries = artifact_manifest.setdefault("review_split_artifacts", [])
+    existing = {str(_safe_dict(entry).get("artifact_name")): entry for entry in review_entries}
+    existing[artifact_name] = {
+        "artifact_name": artifact_name,
+        "original_size_bytes": int(original_size_bytes or 0),
+        "max_part_bytes": int(_N1176_REVIEW_ARTIFACT_MAX_BYTES),
+        "split_kind": split_kind,
+        "part_count": len(parts),
+        "parts": parts,
+        "index_file": index_file,
+        "omitted_monolithic": bool(omitted_monolithic),
+        "note": note,
+    }
+    artifact_manifest["review_split_artifacts"] = list(existing.values())
+
+
+def _n1176_write_json_direct(zip_handle: Any, artifact_manifest: Dict[str, Any], name: str, value: Any) -> None:
+    if not _n1176_register_generated_file(artifact_manifest, name):
+        return
+    zip_handle.writestr(name, _n1176_json_dumps(value, sort_keys=True))
+
+
+def _n1176_chunk_text_by_bytes(text: str, *, max_bytes: int) -> List[str]:
+    text = _safe_str(text)
+    if not text:
+        return [""]
+    chunks: List[str] = []
+    current: List[str] = []
+    current_size = 0
+    for line in text.splitlines(keepends=True):
+        line_size = _n1176_utf8_len(line)
+        if current and current_size + line_size > max_bytes:
+            chunks.append("".join(current))
+            current = []
+            current_size = 0
+        if line_size > max_bytes:
+            if current:
+                chunks.append("".join(current))
+                current = []
+                current_size = 0
+            segment: List[str] = []
+            segment_size = 0
+            for ch in line:
+                ch_size = _n1176_utf8_len(ch)
+                if segment and segment_size + ch_size > max_bytes:
+                    chunks.append("".join(segment))
+                    segment = []
+                    segment_size = 0
+                segment.append(ch)
+                segment_size += ch_size
+            if segment:
+                chunks.append("".join(segment))
+            continue
+        current.append(line)
+        current_size += line_size
+    if current:
+        chunks.append("".join(current))
+    return chunks or [""]
+
+
+def _n1176_write_review_text_artifact(
+    zip_handle: Any,
+    artifact_manifest: Dict[str, Any],
+    artifact_name: str,
+    text: Any,
+    *,
+    omitted_monolithic: bool = False,
+    force: bool = False,
+    note: str = "",
+) -> None:
+    artifact_name = _safe_str(artifact_name)
+    if not artifact_name or artifact_name.startswith("review-artifacts/"):
+        return
+    text_value = _safe_str(text)
+    original_size = _n1176_utf8_len(text_value)
+    if not force and original_size <= _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+        return
+    slug = _n1176_review_slug(artifact_name)
+    base_dir = f"review-artifacts/{slug}"
+    chunks = _n1176_chunk_text_by_bytes(
+        text_value,
+        max_bytes=_N1176_REVIEW_ARTIFACT_MAX_BYTES,
+    )
+    parts: List[str] = []
+    suffix = "txt"
+    if artifact_name.endswith(".html"):
+        suffix = "html"
+    elif artifact_name.endswith(".json"):
+        suffix = "json"
+    for idx, chunk in enumerate(chunks, start=1):
+        part_name = f"{base_dir}/part_{idx:04d}.{suffix}"
+        if _n1176_register_generated_file(artifact_manifest, part_name):
+            zip_handle.writestr(part_name, chunk)
+        parts.append(part_name)
+    index_file = f"{base_dir}/index.json"
+    index_payload = {
+        "format_version": "n1176_review_text_artifact_index_v1",
+        "artifact_name": artifact_name,
+        "original_size_bytes": original_size,
+        "max_part_bytes": _N1176_REVIEW_ARTIFACT_MAX_BYTES,
+        "split_kind": "text_chunks",
+        "part_count": len(parts),
+        "parts": parts,
+        "omitted_monolithic": bool(omitted_monolithic),
+        "note": note,
+    }
+    _n1176_write_json_direct(zip_handle, artifact_manifest, index_file, index_payload)
+    _n1176_append_review_index_entry(
+        artifact_manifest,
+        artifact_name=artifact_name,
+        original_size_bytes=original_size,
+        split_kind="text_chunks",
+        parts=parts,
+        index_file=index_file,
+        omitted_monolithic=omitted_monolithic,
+        note=note,
+    )
+
+
+def _n1176_json_rows_to_chunk_payload(rows: List[Any], *, start_index: int, end_index: int) -> Dict[str, Any]:
+    return {
+        "format_version": "n1176_review_row_chunk_v1",
+        "start_index": start_index,
+        "end_index": end_index,
+        "count": max(0, end_index - start_index + 1),
+        "rows": rows,
+    }
+
+
+def _n1176_write_review_json_row_chunks(
+    zip_handle: Any,
+    artifact_manifest: Dict[str, Any],
+    artifact_name: str,
+    rows: List[Any],
+    *,
+    original_size_bytes: int,
+    omitted_monolithic: bool = False,
+    force: bool = False,
+    note: str = "",
+) -> bool:
+    rows = _safe_list(rows)
+    if not force and original_size_bytes <= _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+        return False
+    slug = _n1176_review_slug(artifact_name)
+    base_dir = f"review-artifacts/{slug}"
+    parts: List[str] = []
+    row_ranges: List[Dict[str, Any]] = []
+    current_rows: List[Any] = []
+    current_start = 0
+
+    def flush(end_index: int) -> None:
+        nonlocal current_rows, current_start
+        if not current_rows:
+            return
+        part_index = len(parts) + 1
+        payload = _n1176_json_rows_to_chunk_payload(
+            current_rows,
+            start_index=current_start,
+            end_index=end_index,
+        )
+        part_name = f"{base_dir}/rows_{part_index:04d}_{current_start + 1:04d}_{end_index + 1:04d}.json"
+        _n1176_write_json_direct(zip_handle, artifact_manifest, part_name, payload)
+        parts.append(part_name)
+        row_ranges.append(
+            {
+                "part": part_name,
+                "start_index": current_start,
+                "end_index": end_index,
+                "count": len(current_rows),
+            }
+        )
+        current_rows = []
+        current_start = end_index + 1
+
+    oversized_row_count = 0
+    oversized_row_indexes: List[int] = []
+
+    for idx, row in enumerate(rows):
+        single_row_size = _n1176_utf8_len(
+            _n1176_json_dumps(
+                _n1176_json_rows_to_chunk_payload(
+                    [row],
+                    start_index=idx,
+                    end_index=idx,
+                )
+            )
+        )
+        if single_row_size > _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+            if current_rows:
+                flush(idx - 1)
+            pointer_row = _n1177_write_oversized_review_row_reference(
+                zip_handle,
+                artifact_manifest,
+                artifact_name,
+                row,
+                row_index=idx,
+            )
+            current_start = idx
+            current_rows = [pointer_row]
+            oversized_row_count += 1
+            oversized_row_indexes.append(idx)
+            flush(idx)
+            current_start = idx + 1
+            continue
+
+        candidate_rows = current_rows + [row]
+        candidate_size = _n1176_utf8_len(
+            _n1176_json_dumps(
+                _n1176_json_rows_to_chunk_payload(
+                    candidate_rows,
+                    start_index=current_start,
+                    end_index=idx,
+                )
+            )
+        )
+        if current_rows and candidate_size > _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+            flush(idx - 1)
+            current_start = idx
+        current_rows.append(row)
+    flush(len(rows) - 1)
+
+    index_file = f"{base_dir}/index.json"
+    index_payload = {
+        "format_version": "n1176_review_json_row_artifact_index_v1",
+        "artifact_name": artifact_name,
+        "original_size_bytes": original_size_bytes,
+        "max_part_bytes": _N1176_REVIEW_ARTIFACT_MAX_BYTES,
+        "split_kind": "json_row_chunks",
+        "row_count": len(rows),
+        "part_count": len(parts),
+        "parts": parts,
+        "row_ranges": row_ranges,
+        "oversized_row_count": oversized_row_count,
+        "oversized_row_indexes": oversized_row_indexes,
+        "omitted_monolithic": bool(omitted_monolithic),
+        "note": note,
+    }
+    _n1176_write_json_direct(zip_handle, artifact_manifest, index_file, index_payload)
+    _n1176_append_review_index_entry(
+        artifact_manifest,
+        artifact_name=artifact_name,
+        original_size_bytes=original_size_bytes,
+        split_kind="json_row_chunks",
+        parts=parts,
+        index_file=index_file,
+        omitted_monolithic=omitted_monolithic,
+        note=note,
+    )
+    return True
+
+
+def _n1176_write_review_dict_key_index(
+    zip_handle: Any,
+    artifact_manifest: Dict[str, Any],
+    artifact_name: str,
+    value: Dict[str, Any],
+    *,
+    original_size_bytes: int,
+    omitted_monolithic: bool = False,
+    note: str = "",
+) -> None:
+    value = _safe_dict(value)
+    slug = _n1176_review_slug(artifact_name)
+    base_dir = f"review-artifacts/{slug}"
+    key_entries: List[Dict[str, Any]] = []
+    for key in sorted(value.keys(), key=lambda item: _safe_str(item)):
+        key_text = _n1176_json_dumps(value.get(key), sort_keys=True)
+        key_size = _n1176_utf8_len(key_text)
+        key_slug = _n1176_review_slug(_safe_str(key)) or "key"
+        key_file = f"{base_dir}/keys/{key_slug}.json"
+        if key_size <= _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+            _n1176_write_json_direct(zip_handle, artifact_manifest, key_file, value.get(key))
+        else:
+            _n1176_write_review_text_artifact(
+                zip_handle,
+                artifact_manifest,
+                f"{artifact_name}::{key_slug}.json",
+                key_text,
+                force=True,
+                note=f"Oversized top-level key from {artifact_name}",
+            )
+            key_file = f"review-artifacts/{_n1176_review_slug(f'{artifact_name}::{key_slug}.json')}/index.json"
+        key_entries.append(
+            {
+                "key": _safe_str(key),
+                "size_bytes": key_size,
+                "file": key_file,
+            }
+        )
+    index_file = f"{base_dir}/top-level-keys.json"
+    _n1176_write_json_direct(
+        zip_handle,
+        artifact_manifest,
+        index_file,
+        {
+            "format_version": "n1176_review_dict_key_index_v1",
+            "artifact_name": artifact_name,
+            "original_size_bytes": original_size_bytes,
+            "top_level_key_count": len(key_entries),
+            "keys": key_entries,
+            "omitted_monolithic": bool(omitted_monolithic),
+            "note": note,
+        },
+    )
+
+
+def _n1176_write_review_json_artifact(
+    zip_handle: Any,
+    artifact_manifest: Dict[str, Any],
+    artifact_name: str,
+    value: Any,
+    *,
+    serialized_text: Optional[str] = None,
+    omitted_monolithic: bool = False,
+    force: bool = False,
+    note: str = "",
+) -> None:
+    artifact_name = _safe_str(artifact_name)
+    if not artifact_name or artifact_name.startswith("review-artifacts/"):
+        return
+    text = serialized_text if serialized_text is not None else _n1176_json_dumps(value, sort_keys=True)
+    original_size = _n1176_utf8_len(text)
+    if not force and original_size <= _N1176_REVIEW_ARTIFACT_MAX_BYTES:
+        return
+    if isinstance(value, list):
+        _n1176_write_review_json_row_chunks(
+            zip_handle,
+            artifact_manifest,
+            artifact_name,
+            value,
+            original_size_bytes=original_size,
+            omitted_monolithic=omitted_monolithic,
+            force=True,
+            note=note,
+        )
+        return
+    if isinstance(value, dict):
+        _n1176_write_review_dict_key_index(
+            zip_handle,
+            artifact_manifest,
+            artifact_name,
+            value,
+            original_size_bytes=original_size,
+            omitted_monolithic=omitted_monolithic,
+            note=note,
+        )
+    _n1176_write_review_text_artifact(
+        zip_handle,
+        artifact_manifest,
+        artifact_name,
+        text,
+        omitted_monolithic=omitted_monolithic,
+        force=True,
+        note=note,
+    )
+
+
+def _n1176_should_write_monolithic_full_transcript(args: Any) -> bool:
+    if not _should_write_full_transcript(args):
+        return False
+    flag = _safe_str(os.environ.get("RPG_AUTOPLAY_WRITE_MONOLITHIC_FULL_TRANSCRIPT", "")).lower()
+    if flag in _N1176_MONOLITHIC_TRUE_VALUES:
+        return True
+    turns = int(getattr(args, "turns", 0) or 0)
+    return turns < 30
+
+
+def _n1176_finalize_review_artifact_index(
+    zip_handle: Any,
+    artifact_manifest: Dict[str, Any],
+) -> None:
+    review_entries = _safe_list(artifact_manifest.get("review_split_artifacts"))
+    if not review_entries:
+        return
+    review_entries = sorted(
+        (_safe_dict(entry) for entry in review_entries),
+        key=lambda entry: (-int(entry.get("original_size_bytes") or 0), _safe_str(entry.get("artifact_name"))),
+    )
+    artifact_manifest["review_split_artifacts"] = review_entries
+    _n1176_write_json_direct(
+        zip_handle,
+        artifact_manifest,
+        "review-artifacts/index.json",
+        {
+            "format_version": "n1176_review_artifact_root_index_v1",
+            "max_part_bytes": _N1176_REVIEW_ARTIFACT_MAX_BYTES,
+            "artifact_count": len(review_entries),
+            "artifacts": review_entries,
+            "monolithic_full_transcript_default": "omitted for runs with turns >= 30 unless RPG_AUTOPLAY_WRITE_MONOLITHIC_FULL_TRANSCRIPT=1",
+        },
+    )
