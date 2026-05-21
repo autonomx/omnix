@@ -1,0 +1,36 @@
+
+# N118.2 -- Mirror autoplay result ZIP after run completion as a second safety net.
+#
+# N118.1 mirrors through the background-thread exit hook.  Some runs complete
+# without that hook being the last observable path, so also wrap the CLI run
+# function and mirror in a finally block after _run_autoplay_campaign returns.
+_N1182_PREVIOUS_RUN_WITH_CONSOLE_CAPTURE = globals().get("_run_with_console_capture")
+
+
+def _n1182_mirror_results_after_run(args: Any) -> None:
+    mirror = globals().get("_n1181_mirror_autoplay_results_zip")
+    if not callable(mirror):
+        return
+    try:
+        mirror(args)
+    except Exception as exc:
+        _timestamped_print(
+            "Warning: failed to mirror autoplay result ZIP after run completion: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+
+def _run_with_console_capture(args: argparse.Namespace) -> int:
+    if callable(_N1182_PREVIOUS_RUN_WITH_CONSOLE_CAPTURE):
+        try:
+            return int(_N1182_PREVIOUS_RUN_WITH_CONSOLE_CAPTURE(args))
+        finally:
+            _n1182_mirror_results_after_run(args)
+
+    # Defensive fallback; the historical function should always exist before
+    # this late-loaded fragment, but keep the CLI usable if fragment order changes.
+    try:
+        summary = _run_autoplay_campaign(args)
+        return 0 if _safe_dict(summary).get("ok") else 1
+    finally:
+        _n1182_mirror_results_after_run(args)
