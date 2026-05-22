@@ -91,6 +91,18 @@ def _compacted_contract_climate_row(turn: int = 1):
     }
 
 
+def _compacted_final_transcript_climate_row(turn: int = 1):
+    return {
+        "turn_index": turn,
+        "player": "I wait.",
+        "result": {"ok": True, "turn_contract": {}},
+        "climate_survival": {
+            "tick": turn,
+            "survival": {"hunger": 4, "thirst": 6, "fatigue": 4, "warnings": []},
+        },
+    }
+
+
 def _value_only_row(turn: int = 1):
     return {
         "turn_index": turn,
@@ -124,6 +136,25 @@ def test_n1252_restores_source_for_compacted_nested_turn_contract_climate_rows()
     assert projected["climate_survival"]["source"] == "n1252_projected_turn_contract_climate_survival"
     assert projected["survival_evidence_projection"]["climate_survival_preserved"] is True
     assert projected["survival_evidence_projection"]["climate_source_restored"] is True
+    assert projected["survival_evidence_projection"]["restored_climate_source"] == "n1252_projected_turn_contract_climate_survival"
+    assert projected["survival_evidence_projection"]["resource_changes_preserved"] is False
+    assert projected["survival_evidence_projection"]["climate_tick_source_present"] is True
+    assert "hunger_delta" not in projected
+    assert "thirst_delta" not in projected
+    assert "fatigue_delta" not in projected
+
+
+def test_n1252_restores_source_for_compacted_final_transcript_climate_rows() -> None:
+    projected = persist_survival_evidence_into_transcript_row(_compacted_final_transcript_climate_row(12))
+
+    climate = projected["turn_contract"]["climate_survival"]
+    assert climate["format_version"] == "n1231_climate_survival_state_v1"
+    assert climate["runtime_enforced"] is True
+    assert climate["source"] == "n1252_projected_final_transcript_climate_survival"
+    assert projected["climate_survival"]["source"] == "n1252_projected_final_transcript_climate_survival"
+    assert projected["survival_evidence_projection"]["climate_survival_preserved"] is True
+    assert projected["survival_evidence_projection"]["climate_source_restored"] is True
+    assert projected["survival_evidence_projection"]["restored_climate_source"] == "n1252_projected_final_transcript_climate_survival"
     assert projected["survival_evidence_projection"]["resource_changes_preserved"] is False
     assert projected["survival_evidence_projection"]["climate_tick_source_present"] is True
     assert "hunger_delta" not in projected
@@ -136,6 +167,7 @@ def test_n1252_projection_does_not_fabricate_source_for_value_only_rows() -> Non
 
     assert projected["survival_evidence_projection"]["climate_survival_preserved"] is True
     assert projected["survival_evidence_projection"]["climate_source_restored"] is False
+    assert projected["survival_evidence_projection"]["restored_climate_source"] == ""
     assert projected["survival_evidence_projection"]["resource_changes_preserved"] is False
     assert projected["survival_evidence_projection"]["climate_tick_source_present"] is False
 
@@ -155,6 +187,22 @@ def test_n1252_projected_rows_are_visible_to_n1251_source_summary() -> None:
 def test_n1252_compacted_contract_climate_rows_are_visible_to_n1251_source_summary() -> None:
     rows = persist_survival_evidence_into_transcript_rows([
         _compacted_contract_climate_row(1),
+        _value_only_row(2),
+    ])
+    summary = build_survival_metric_source_summary(rows)
+
+    assert summary["coverage"]["row_count"] == 2
+    assert summary["coverage"]["climate_survival_rows"] == 2
+    assert summary["coverage"]["resource_change_rows"] == 0
+    assert summary["coverage"]["climate_tick_source_rows"] == 1
+    assert summary["coverage"]["survival_action_rows"] == 0
+    assert summary["coverage"]["survival_suggestion_rows"] == 0
+    assert summary["coverage"]["nonzero_delta_rows"] == 0
+
+
+def test_n1252_compacted_final_transcript_climate_rows_are_visible_to_n1251_source_summary() -> None:
+    rows = persist_survival_evidence_into_transcript_rows([
+        _compacted_final_transcript_climate_row(1),
         _value_only_row(2),
     ])
     summary = build_survival_metric_source_summary(rows)
@@ -196,6 +244,29 @@ def test_n1252_evaluation_summary_accepts_compacted_turn_contract_climate_source
         runtime_errors=[],
         warnings=[],
         transcript=[_compacted_contract_climate_row(1)],
+        performance_summary={"avg_turn_seconds": 1.0, "p95_turn_seconds": 2.0},
+        narration_grounding_summary={"checked_count": 100, "invalid_count": 0, "provider_json_parse_failed_count": 0, "provider_invalid_count": 0},
+        progress_quality_summary={"meaningful_progress_rate": 0.5, "fallback_player_action_rate": 0.0, "no_change_turns": 0},
+        checkpoint_summary={"failure_count": 0},
+        loop_detection_summary={"repeated_action_window_count": 0, "loop_warning_count": 0},
+    )
+
+    assert summary["survival_metric_source_gate"]["ok"] is True
+    assert summary["survival_metric_source_gate"]["reasons"] == []
+    assert summary["survival_metric_source_summary"]["coverage"]["climate_tick_source_rows"] == 1
+    assert summary["survival_metric_source_summary"]["coverage"]["nonzero_delta_rows"] == 0
+    assert summary["real_run_survival_metrics"]["pressure_turn_count"] == 1
+    assert summary["real_run_survival_metrics"]["relief_action_count"] == 0
+    assert summary["artifact_level_summaries"]["survival-metric-source-gate.json"]["ok"] is True
+
+
+def test_n1252_evaluation_summary_accepts_compacted_final_transcript_climate_source() -> None:
+    summary = _build_100_turn_evaluation_summary(
+        turns_executed=100,
+        requested_turns=100,
+        runtime_errors=[],
+        warnings=[],
+        transcript=[_compacted_final_transcript_climate_row(1)],
         performance_summary={"avg_turn_seconds": 1.0, "p95_turn_seconds": 2.0},
         narration_grounding_summary={"checked_count": 100, "invalid_count": 0, "provider_json_parse_failed_count": 0, "provider_invalid_count": 0},
         progress_quality_summary={"meaningful_progress_rate": 0.5, "fallback_player_action_rate": 0.0, "no_change_turns": 0},
