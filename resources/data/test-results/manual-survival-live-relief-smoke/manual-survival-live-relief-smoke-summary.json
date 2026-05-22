@@ -5,34 +5,35 @@
   },
   "errors": [],
   "final_needs": {
-    "fatigue": 2,
-    "hunger": 2,
-    "thirst": 3
+    "fatigue": 43,
+    "hunger": 80,
+    "thirst": 82
   },
-  "format_version": "n1263_manual_survival_live_relief_smoke_v2",
-  "inventory_consumed_count": 0,
-  "negative_delta_rows": 0,
+  "format_version": "n1263_manual_survival_live_relief_smoke_v3",
+  "inventory_consumed_count": 2,
+  "negative_delta_rows": 3,
   "ok": false,
-  "relief_applied_count": 0,
-  "relief_needs": [],
+  "relief_applied_count": 3,
+  "relief_needs": [
+    "fatigue",
+    "hunger",
+    "thirst"
+  ],
   "session_id": "manual_survival_live_relief_smoke",
   "source_gate": {
     "advisory_only": false,
     "coverage": {
-      "inventory_consumed_rows": 0,
-      "negative_delta_rows": 0,
-      "relief_applied_rows": 0,
+      "inventory_consumed_rows": 2,
+      "negative_delta_rows": 3,
+      "relief_applied_rows": 3,
       "row_count": 4,
-      "survival_suggestion_rows": 1
+      "survival_suggestion_rows": 4
     },
     "gate": "live_runtime_survival_suggestions_and_relief",
     "ok": false,
     "reasons": [
-      "missing_thirst_relief",
-      "missing_hunger_relief",
-      "missing_fatigue_relief",
-      "missing_inventory_consumption_for_food_and_water",
-      "missing_negative_survival_deltas"
+      "thirst_not_reduced",
+      "hunger_not_reduced"
     ],
     "source": "n1263_live_runtime_survival_repair"
   },
@@ -41,14 +42,11 @@
     "hunger": 80,
     "thirst": 82
   },
-  "survival_suggestion_rows": 1,
+  "survival_suggestion_rows": 4,
   "turns_executed": 4,
   "turns_requested": 4,
   "validation_failures": [
-    "missing_thirst_relief",
-    "missing_hunger_relief",
-    "missing_fatigue_relief",
-    "missing_inventory_consumption_for_food_and_water",
-    "missing_negative_survival_deltas"
+    "thirst_not_reduced",
+    "hunger_not_reduced"
   ]
 }
