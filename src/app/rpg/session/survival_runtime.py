@@ -134,22 +134,9 @@ def _sync_survival_state(
     simulation_state["player_state"] = player_state
     session["simulation_state"] = simulation_state
 
-    # The durable loader can hydrate from multiple roots depending on the call
-    # path. Mirror the authoritative survival mutation everywhere N126.2 seeded
-    # it so subsequent live turns do not reload stale high/default values.
-    state = _safe_dict(session.get("state"))
-    state["simulation_state"] = copy.deepcopy(simulation_state)
-    state["player_state"] = copy.deepcopy(player_state)
-    state["needs"] = dict(needs)
-    state["climate_survival"] = copy.deepcopy(climate_survival)
-    session["state"] = state
-
     setup_payload = _safe_dict(session.get("setup_payload"))
     metadata = _safe_dict(setup_payload.get("metadata"))
-    metadata["simulation_state"] = copy.deepcopy(simulation_state)
-    metadata["player_state"] = copy.deepcopy(player_state)
-    metadata["needs"] = dict(needs)
-    metadata["climate_survival"] = copy.deepcopy(climate_survival)
+    metadata["simulation_state"] = simulation_state
     setup_payload["metadata"] = metadata
     session["setup_payload"] = setup_payload
     return session
@@ -496,4 +483,100 @@ def attach_survival_runtime_payloads(
     resolved_result: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Project live survival suggestions and deterministic relief into turn output.
-    ...
+
+    This is deliberately response-path scoped: it sees the real session returned
+    by live ``apply_turn`` and mutates only bounded survival fields. The LLM may
+    narrate the outcome later, but hunger/thirst/fatigue, suggestions, item
+    consumption, and relief deltas are deterministic here.
+    """
+    authoritative_result = _safe_dict(authoritative_result)
+    session = _safe_dict(session)
+    turn_contract = _safe_dict(turn_contract)
+    result_payload = _safe_dict(result_payload)
+    resolved_result = _safe_dict(resolved_result)
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    if not _survival_state_present(simulation_state):
+        return {
+            "session": session,
+            "turn_contract": turn_contract,
+            "result_payload": result_payload,
+        }
+
+    before_needs = _extract_survival_needs(simulation_state)
+    player_input = _extract_player_input(
+        authoritative_result,
+        result_payload,
+        turn_contract,
+        resolved_result,
+    )
+
+    simulation_state, survival_action = _resolve_survival_relief(
+        simulation_state,
+        player_input,
+        before_needs,
+    )
+    after_needs = _safe_dict(survival_action.get("after")) or before_needs
+    session["simulation_state"] = simulation_state
+    session = _sync_survival_state(
+        session,
+        after_needs,
+        source=SURVIVAL_SOURCE_RELIEF if survival_action.get("applied") else SURVIVAL_SOURCE_PROJECTION,
+    )
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+
+    suggestions = _build_survival_suggestions(after_needs)
+    resource_changes = _build_resource_changes(survival_action)
+    climate_payload = _build_climate_payload(
+        needs=after_needs,
+        suggestions=suggestions,
+        survival_action=survival_action,
+        resource_changes=resource_changes,
+    )
+
+    turn_contract["climate_survival"] = climate_payload
+    if suggestions:
+        existing_suggested = _safe_list(turn_contract.get("suggested_actions"))
+        existing_suggested.extend(copy.deepcopy(suggestions))
+        turn_contract["suggested_actions"] = existing_suggested[:12]
+
+    resolved_result["climate_survival"] = climate_payload
+    resolved_result["resource_changes"] = _merge_resource_changes(
+        _safe_dict(resolved_result.get("resource_changes")),
+        resource_changes,
+    )
+    resolved_effect = _safe_dict(resolved_result.get("effect_result"))
+    resolved_effect["survival_action"] = survival_action
+    resolved_result["effect_result"] = resolved_effect
+
+    result_payload["resolved_result"] = resolved_result
+    result_payload["climate_survival"] = climate_payload
+    result_payload["survival_suggestions"] = copy.deepcopy(suggestions)
+    result_payload["resource_changes"] = _merge_resource_changes(
+        _safe_dict(result_payload.get("resource_changes")),
+        resource_changes,
+    )
+    result_effect = _safe_dict(result_payload.get("effect_result"))
+    result_effect["survival_action"] = survival_action
+    result_payload["effect_result"] = result_effect
+
+    runtime_last = _safe_dict(runtime_state.get("last_turn_result"))
+    runtime_last["climate_survival"] = climate_payload
+    runtime_last["resource_changes"] = _merge_resource_changes(
+        _safe_dict(runtime_last.get("resource_changes")),
+        resource_changes,
+    )
+    runtime_effect = _safe_dict(runtime_last.get("effect_result"))
+    runtime_effect["survival_action"] = survival_action
+    runtime_last["effect_result"] = runtime_effect
+    runtime_state["last_turn_result"] = runtime_last
+    runtime_state = _append_runtime_history(runtime_state, survival_action)
+    session["runtime_state"] = runtime_state
+
+    _persist_session_best_effort(session)
+
+    return {
+        "session": session,
+        "turn_contract": turn_contract,
+        "result_payload": result_payload,
+    }
