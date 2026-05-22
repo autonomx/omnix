@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-"""N125.1 real survival metric source repair helpers.
+"""N125.1/N125.2 real survival metric source repair helpers.
 
 The N123/N124 unit paths used idealized turn-contract rows, while real autoplay
 artifacts can project survival state through several nested result/presentation
 shapes.  This module normalizes those shapes, records source coverage, and
 builds an advisory evidence gate so reports distinguish real-run evidence from
 synthetic balance simulations.
+
+N125.2 accepts either explicit turn-contract resource-change source evidence or
+persisted authoritative climate state evidence.  It still does not fabricate
+resource deltas, survival actions, suggestions, or relief rows.
 """
 
 from typing import Any, Dict, Iterable, List
@@ -27,6 +31,10 @@ def safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except Exception:
         return default
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
 
 
 def _get_path(root: Dict[str, Any], path: Iterable[str]) -> Any:
@@ -217,7 +225,23 @@ def warning_types(row: Dict[str, Any]) -> List[str]:
     return sorted(set(warnings))
 
 
+def _climate_state_has_authoritative_tick_source(climate: Dict[str, Any]) -> bool:
+    climate = safe_dict(climate)
+    source = _safe_str(climate.get("source"))
+    format_version = _safe_str(climate.get("format_version"))
+    if source == "deterministic_authoritative_turn_tick":
+        return True
+    if format_version == "n1231_climate_survival_state_v1":
+        return True
+    if climate.get("runtime_enforced") is True and format_version.startswith("n1231_"):
+        return True
+    return False
+
+
 def has_climate_tick_source(row: Dict[str, Any]) -> bool:
+    climate = climate_survival(row)
+    if _climate_state_has_authoritative_tick_source(climate):
+        return True
     changes = resource_changes(row)
     if changes.get("source") == "n1231_climate_survival_tick":
         return True
@@ -288,7 +312,7 @@ def build_survival_metric_source_summary(transcript: List[Dict[str, Any]]) -> Di
         "example_missing_source_rows": example_missing,
         "notes": [
             "climate_survival_rows proves values are projected into transcript rows.",
-            "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+            "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
             "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable.",
         ],
     }
@@ -306,7 +330,7 @@ def build_survival_metric_source_gate(summary: Dict[str, Any]) -> Dict[str, Any]
         reasons.append("no_transcript_rows")
     if climate_rows <= 0:
         reasons.append("missing_climate_survival_rows")
-    if resource_rows <= 0:
+    if resource_rows <= 0 and source_rows <= 0:
         reasons.append("missing_resource_change_rows")
     if source_rows <= 0:
         reasons.append("missing_climate_tick_source_rows")
