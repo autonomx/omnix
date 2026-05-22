@@ -1,0 +1,99 @@
+# N127.2 autoplay player agent survival suggestion promotion.
+# Loaded after N127.1 so evidence gates can observe the promoted turns.
+
+_N1272_GLOBAL_APPLY_TURN_PREV = globals().get("apply_turn")
+
+from app.rpg.session.service import load_session as _n1272_load_session  # noqa: E402
+from app.rpg.session.survival_autoplay_player_agent import (  # noqa: E402
+    promote_survival_suggestion_for_autoplay as _n1272_promote_survival_suggestion_for_autoplay,
+)
+
+
+def _n1272_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _n1272_str(value):
+    return "" if value is None else str(value)
+
+
+def _n1272_attach_promotion(result, promotion):
+    result = _n1272_dict(result)
+    promotion = _n1272_dict(promotion)
+    if not promotion:
+        return result
+    result["survival_autoplay_promotion"] = promotion
+    result["survival_autoplay_player_agent"] = promotion
+    turn_contract = dict(_n1272_dict(result.get("turn_contract")))
+    if turn_contract:
+        turn_contract["survival_autoplay_promotion"] = promotion
+        turn_contract["survival_autoplay_player_agent"] = promotion
+        result["turn_contract"] = turn_contract
+    result_payload = dict(_n1272_dict(result.get("result")))
+    if result_payload:
+        result_payload["survival_autoplay_promotion"] = promotion
+        result_payload["survival_autoplay_player_agent"] = promotion
+        result["result"] = result_payload
+    session = dict(_n1272_dict(result.get("session")))
+    if session:
+        runtime_state = dict(_n1272_dict(session.get("runtime_state")))
+        history = list(runtime_state.get("survival_autoplay_promotion_history") or [])
+        history.append(promotion)
+        runtime_state["survival_autoplay_promotion_history"] = history[-32:]
+        runtime_state["last_survival_autoplay_promotion"] = promotion
+        session["runtime_state"] = runtime_state
+        result["session"] = session
+    return result
+
+
+def _n1272_apply_turn_wrapper(previous_apply_turn):
+    if not callable(previous_apply_turn):
+        return previous_apply_turn
+    if getattr(previous_apply_turn, "_n1272_survival_autoplay_wrapped", False):
+        return previous_apply_turn
+
+    def _wrapped_apply_turn(session_id, player_input, action=None, *, performance_override=None):
+        original_player_input = _n1272_str(player_input)
+        promotion = {"promoted": False, "reason": "not_evaluated", "source": "n1272_survival_autoplay_player_agent"}
+        promoted_player_input = original_player_input
+        try:
+            session = _n1272_load_session(session_id)
+            promoted_player_input, promotion = _n1272_promote_survival_suggestion_for_autoplay(session or {}, original_player_input)
+        except Exception as exc:
+            promotion = {
+                "promoted": False,
+                "reason": "promotion_exception",
+                "error": repr(exc),
+                "source": "n1272_survival_autoplay_player_agent",
+            }
+            promoted_player_input = original_player_input
+
+        if performance_override is None:
+            result = previous_apply_turn(session_id, promoted_player_input, action=action)
+        else:
+            result = previous_apply_turn(
+                session_id,
+                promoted_player_input,
+                action=action,
+                performance_override=performance_override,
+            )
+        promotion = dict(_n1272_dict(promotion))
+        promotion.setdefault("original_player_input", original_player_input)
+        promotion.setdefault("promoted_player_input", promoted_player_input)
+        promotion["effective_player_input"] = promoted_player_input
+        promotion["input_was_replaced"] = promoted_player_input != original_player_input
+        return _n1272_attach_promotion(result, promotion)
+
+    _wrapped_apply_turn._n1272_survival_autoplay_wrapped = True
+    _wrapped_apply_turn._n1272_previous_apply_turn = previous_apply_turn
+    return _wrapped_apply_turn
+
+
+try:
+    import app.rpg.session.runtime as _n1272_runtime_module  # noqa: E402
+    _n1272_runtime_module.apply_turn = _n1272_apply_turn_wrapper(_n1272_runtime_module.apply_turn)
+except Exception:
+    _n1272_runtime_module = None
+
+if callable(_N1272_GLOBAL_APPLY_TURN_PREV):
+    apply_turn = _n1272_apply_turn_wrapper(_N1272_GLOBAL_APPLY_TURN_PREV)
