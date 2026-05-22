@@ -5,14 +5,32 @@
       "hunger_delta": 0,
       "thirst_delta": 0
     },
-    "inventory_after": [],
+    "inventory_after": [
+      {
+        "item_id": "trail_ration",
+        "name": "Trail Ration",
+        "quantity": 1,
+        "tags": [
+          "food",
+          "ration"
+        ]
+      },
+      {
+        "item_id": "waterskin",
+        "name": "Waterskin",
+        "quantity": 1,
+        "tags": [
+          "drink",
+          "water"
+        ]
+      }
+    ],
     "inventory_consumed": [],
     "needs": {
-      "fatigue": 2,
-      "hunger": 2,
-      "thirst": 3
+      "fatigue": 78,
+      "hunger": 80,
+      "thirst": 82
     },
-    "ok": true,
     "player_input": "I pause and check what my body needs.",
     "raw_result_keys": [
       "character_cards_summary",
@@ -65,12 +83,61 @@
     ],
     "relief_applied": false,
     "relief_need": "",
-    "source_gate": {},
-    "suggestion_count": 0,
-    "suggestions": [],
-    "survival_action": {},
-    "turn_index": 1,
-    "warnings": []
+    "suggestion_count": 3,
+    "suggestions": [
+      {
+        "action": "drink waterskin",
+        "kind": "survival_relief",
+        "need": "thirst",
+        "priority": 82,
+        "reason": "thirst_high",
+        "source": "n1263_live_runtime_survival_suggestion",
+        "value": 82,
+        "warning": "thirst_high"
+      },
+      {
+        "action": "eat trail ration",
+        "kind": "survival_relief",
+        "need": "hunger",
+        "priority": 80,
+        "reason": "hunger_high",
+        "source": "n1263_live_runtime_survival_suggestion",
+        "value": 80,
+        "warning": "hunger_high"
+      },
+      {
+        "action": "rest",
+        "kind": "survival_relief",
+        "need": "fatigue",
+        "priority": 78,
+        "reason": "fatigue_high",
+        "source": "n1263_live_runtime_survival_suggestion",
+        "value": 78,
+        "warning": "fatigue_high"
+      }
+    ],
+    "survival_action": {
+      "after": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 82
+      },
+      "applied": false,
+      "before": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 82
+      },
+      "deltas": {
+        "fatigue_delta": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0
+      },
+      "inventory_consumed": [],
+      "reason": "no_survival_relief_intent",
+      "source": "n1263_live_runtime_survival_relief"
+    },
+    "turn_index": 1
   },
   {
     "deltas": {
@@ -85,7 +152,6 @@
       "hunger": 2,
       "thirst": 3
     },
-    "ok": true,
     "player_input": "I drink from the waterskin.",
     "raw_result_keys": [
       "character_cards_summary",
@@ -138,12 +204,10 @@
     ],
     "relief_applied": false,
     "relief_need": "",
-    "source_gate": {},
     "suggestion_count": 0,
     "suggestions": [],
     "survival_action": {},
-    "turn_index": 2,
-    "warnings": []
+    "turn_index": 2
   },
   {
     "deltas": {
@@ -158,7 +222,6 @@
       "hunger": 2,
       "thirst": 3
     },
-    "ok": true,
     "player_input": "I eat the trail ration.",
     "raw_result_keys": [
       "character_cards_summary",
@@ -211,12 +274,10 @@
     ],
     "relief_applied": false,
     "relief_need": "",
-    "source_gate": {},
     "suggestion_count": 0,
     "suggestions": [],
     "survival_action": {},
-    "turn_index": 3,
-    "warnings": []
+    "turn_index": 3
   },
   {
     "deltas": {
@@ -231,7 +292,6 @@
       "hunger": 2,
       "thirst": 3
     },
-    "ok": true,
     "player_input": "I rest for a while.",
     "raw_result_keys": [
       "character_cards_summary",
@@ -284,11 +344,9 @@
     ],
     "relief_applied": false,
     "relief_need": "",
-    "source_gate": {},
     "suggestion_count": 0,
     "suggestions": [],
     "survival_action": {},
-    "turn_index": 4,
-    "warnings": []
+    "turn_index": 4
   }
 ]
