@@ -31,6 +31,7 @@
     "dialogue_action_relevance_ok": true,
     "turn_action_consistency_ok": true,
     "suppressed_selection_guard_ok": true,
+    "survival_autoplay_evidence_ok": true,
     "survival_response_ok": true,
     "survival_metric_source_ok": true
   },
@@ -219,9 +220,9 @@
         "ok": true,
         "severity": "advisory",
         "value": {
-          "real_round_event_count": 2,
-          "real_attack_event_count": 491,
-          "real_damage_event_count": 6179,
+          "real_round_event_count": 142,
+          "real_attack_event_count": 285,
+          "real_damage_event_count": 5178,
           "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
           "abstract_round_event_count": 2,
@@ -265,11 +266,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 3043370,
-          "operational_bytes_per_turn": 30433.7,
-          "operational_projected_1000_turn_bytes": 30433700,
-          "full_debug_bytes_sampled": 324478113,
-          "full_debug_projected_1000_turn_bytes": 3244781130,
+          "operational_bytes_sampled": 3037063,
+          "operational_bytes_per_turn": 30370.63,
+          "operational_projected_1000_turn_bytes": 30370630,
+          "full_debug_bytes_sampled": 297200031,
+          "full_debug_projected_1000_turn_bytes": 2972000310,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -341,6 +342,623 @@
     "hundred_turn_ready": true,
     "one_thousand_turn_candidate": true,
     "one_thousand_turn_blocked_reasons": []
+  },
+  "advisory_gates": [
+    "survival_autoplay_evidence_ok",
+    "survival_response_ok",
+    "survival_metric_source_ok"
+  ],
+  "survival_autoplay_evidence_summary": {
+    "format_version": "n1271_survival_autoplay_evidence_summary_v1",
+    "source": "final_transcript_rows.turn_contract.runtime_survival_evidence",
+    "strict": false,
+    "ok": false,
+    "evidence_gate": {
+      "gate": "survival_autoplay_evidence_ok",
+      "ok": false,
+      "advisory_only": true,
+      "source": "n1271_survival_autoplay_evidence",
+      "reasons": [
+        "survival_suggestions_seen",
+        "survival_relief_actions_seen",
+        "survival_inventory_consumed_seen",
+        "survival_state_carry_forward_seen"
+      ],
+      "gates": {
+        "survival_pressure_seen": true,
+        "survival_suggestions_seen": false,
+        "survival_relief_actions_seen": false,
+        "survival_inventory_consumed_seen": false,
+        "survival_state_carry_forward_seen": false
+      }
+    },
+    "gates": {
+      "survival_pressure_seen": true,
+      "survival_suggestions_seen": false,
+      "survival_relief_actions_seen": false,
+      "survival_inventory_consumed_seen": false,
+      "survival_state_carry_forward_seen": false
+    },
+    "failed_gates": [
+      "survival_suggestions_seen",
+      "survival_relief_actions_seen",
+      "survival_inventory_consumed_seen",
+      "survival_state_carry_forward_seen"
+    ],
+    "turn_count": 100,
+    "pressure_turn_count": 83,
+    "survival_warning_count": 0,
+    "survival_suggestion_rows": 0,
+    "relief_action_count": 0,
+    "blocked_relief_count": 0,
+    "inventory_consumed_summary": [],
+    "service_relief_purchases_summary": [],
+    "carry_forward_evidence": {
+      "ok": false,
+      "example_count": 0,
+      "examples": []
+    },
+    "net_resource_deltas": {
+      "hunger_delta": 0,
+      "thirst_delta": 0,
+      "fatigue_delta": 0
+    },
+    "max_needs": {
+      "hunger": 4,
+      "thirst": 6,
+      "fatigue": 4
+    },
+    "final_needs": {
+      "hunger": 2,
+      "thirst": 3,
+      "fatigue": 2
+    },
+    "pressure_response_rows": [
+      {
+        "turn_index": 1,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 2,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 3,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 4,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 5,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 6,
+        "needs": {
+          "hunger": 4,
+          "thirst": 6,
+          "fatigue": 4
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 7,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 8,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 9,
+        "needs": {
+          "hunger": 4,
+          "thirst": 6,
+          "fatigue": 4
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 10,
+        "needs": {
+          "hunger": 4,
+          "thirst": 6,
+          "fatigue": 4
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 11,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 12,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 13,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 14,
+        "needs": {
+          "hunger": 4,
+          "thirst": 6,
+          "fatigue": 4
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 15,
+        "needs": {
+          "hunger": 0,
+          "thirst": 0,
+          "fatigue": 0
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 16,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 17,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 18,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 19,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 20,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 21,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 22,
+        "needs": {
+          "hunger": 4,
+          "thirst": 6,
+          "fatigue": 4
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 23,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 24,
+        "needs": {
+          "hunger": 4,
+          "thirst": 6,
+          "fatigue": 4
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 25,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      }
+    ],
+    "relief_action_rows": [],
+    "source_coverage_summary": {
+      "format_version": "n1251_survival_metric_source_summary_v1",
+      "source": "final_transcript_rows",
+      "coverage": {
+        "row_count": 100,
+        "climate_survival_rows": 100,
+        "resource_change_rows": 83,
+        "climate_tick_source_rows": 83,
+        "survival_action_rows": 0,
+        "survival_suggestion_rows": 0,
+        "relief_applied_rows": 0,
+        "warning_rows": 0,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 0
+      },
+      "source_coverage_rate": 0.83,
+      "example_missing_source_rows": [
+        {
+          "turn_index": 15,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 25,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 34,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 35,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 36,
+          "missing": "resource_changes"
+        }
+      ],
+      "notes": [
+        "climate_survival_rows proves values are projected into transcript rows.",
+        "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
+        "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
+      ]
+    },
+    "artifact_files": {
+      "summary": "survival-autoplay-evidence-summary.json",
+      "gate": "survival-autoplay-evidence-gate.json",
+      "pressure_response_rows": "survival-autoplay-pressure-response-rows.json"
+    }
+  },
+  "survival_autoplay_evidence_gate": {
+    "gate": "survival_autoplay_evidence_ok",
+    "ok": false,
+    "advisory_only": true,
+    "source": "n1271_survival_autoplay_evidence",
+    "reasons": [
+      "survival_suggestions_seen",
+      "survival_relief_actions_seen",
+      "survival_inventory_consumed_seen",
+      "survival_state_carry_forward_seen"
+    ],
+    "gates": {
+      "survival_pressure_seen": true,
+      "survival_suggestions_seen": false,
+      "survival_relief_actions_seen": false,
+      "survival_inventory_consumed_seen": false,
+      "survival_state_carry_forward_seen": false
+    }
   },
   "failed_gate_count": 0,
   "survival_autoplay_response_metrics": {
@@ -4956,10 +5574,6 @@
       "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
     }
   },
-  "advisory_gates": [
-    "survival_response_ok",
-    "survival_metric_source_ok"
-  ],
   "survival_pressure_relief_summary": {
     "format_version": "n1234_survival_pressure_relief_summary_v2_n1251",
     "source": "final_transcript_rows.turn_contract.climate_survival.resource_changes.effect_result.survival_action",

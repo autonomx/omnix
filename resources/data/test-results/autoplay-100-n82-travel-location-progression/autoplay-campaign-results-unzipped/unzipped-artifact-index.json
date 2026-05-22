@@ -77,7 +77,7 @@
   "note": "Essential Git-review mirror with stable non-empty path metadata.",
   "ok": true,
   "recommended_git_path": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results-unzipped",
-  "skipped_member_count": 18099,
+  "skipped_member_count": 18015,
   "skipped_members_preview": [
     "review-artifacts/summary.json/keys/action_diversity_summary.json",
     "review-artifacts/summary.json/keys/action_diversity_thresholds.json",
