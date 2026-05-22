@@ -3,25 +3,17 @@
   "turn_count": 100,
   "with_prompt_contract": 100,
   "with_prompt_debug": 100,
-  "with_prompt_contract_ack": 99,
+  "with_prompt_contract_ack": 100,
   "fallback_source_counts": {
-    "llm_valid": 99,
-    "provider_unavailable_or_invalid": 1
+    "llm_valid": 100
   },
   "fallback_reason_counts": {
-    "llm_valid": 99,
-    "final_drain_timeout": 1
+    "llm_valid": 100
   },
-  "invalid_fallback_reason_turns": [
-    {
-      "turn_index": 100,
-      "source": "provider_unavailable_or_invalid",
-      "reason": "final_drain_timeout"
-    }
-  ],
+  "invalid_fallback_reason_turns": [],
   "missing_prompt_contract_turns": [],
   "missing_prompt_debug_turns": [],
-  "ok": false,
+  "ok": true,
   "service_resolver_veto_summary": {
     "format_version": "n11619_service_veto_regression_summary_v1",
     "ok": true,
@@ -36,12 +28,12 @@
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 70,
+    "metadata_repaired_count": 69,
     "category_reclassified_count": 50,
     "dialogue_relevance_repaired_count": 36,
     "service_resolver_veto_count": 0,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 70,
+      "provider_metadata_or_shape_repair": 69,
       "provider_category_reclassification": 50,
       "dialogue_action_relevance_repair": 36,
       "service_resolver_veto": 0,
