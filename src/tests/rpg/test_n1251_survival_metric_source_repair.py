@@ -104,6 +104,18 @@ def _row_with_authoritative_climate_state(turn: int = 1):
     }
 
 
+def _compacted_final_transcript_climate_row(turn: int = 1):
+    return {
+        "turn_index": turn,
+        "player": "I wait.",
+        "result": {"ok": True, "turn_contract": {}},
+        "climate_survival": {
+            "tick": turn,
+            "survival": {"hunger": 4, "thirst": 6, "fatigue": 4, "warnings": []},
+        },
+    }
+
+
 def test_n1251_source_summary_detects_full_nested_turn_contract_evidence() -> None:
     summary = build_survival_metric_source_summary([_row_with_full_source(1)])
 
@@ -198,6 +210,28 @@ def test_n1251_autoplay_evaluation_summary_attaches_real_vs_synthetic_and_source
     assert result["artifact_level_summaries"]["survival-metric-source-summary.json"]["coverage"]["row_count"] == 1
     assert result["artifact_level_summaries"]["survival-metric-source-gate.json"]["ok"] is True
     assert any(section["id"] == "n1251-survival-source" for section in result["report_sections"])
+
+
+def test_n1251_source_repair_wrapper_projects_compacted_final_rows_before_summary() -> None:
+    result = _build_100_turn_evaluation_summary(
+        turns_executed=100,
+        requested_turns=100,
+        runtime_errors=[],
+        warnings=[],
+        transcript=[_compacted_final_transcript_climate_row(1)],
+        performance_summary={"avg_turn_seconds": 1.0, "p95_turn_seconds": 2.0},
+        narration_grounding_summary={"checked_count": 100, "invalid_count": 0, "provider_json_parse_failed_count": 0, "provider_invalid_count": 0},
+        progress_quality_summary={"meaningful_progress_rate": 0.5, "fallback_player_action_rate": 0.0, "no_change_turns": 0},
+        checkpoint_summary={"failure_count": 0},
+        loop_detection_summary={"repeated_action_window_count": 0, "loop_warning_count": 0},
+    )
+
+    assert result["survival_metric_source_gate"]["ok"] is True
+    assert result["survival_metric_source_gate"]["reasons"] == []
+    assert result["survival_metric_source_summary"]["coverage"]["climate_tick_source_rows"] == 1
+    assert result["survival_metric_source_summary"]["coverage"]["nonzero_delta_rows"] == 0
+    assert result["real_run_survival_metrics"]["pressure_turn_count"] == 1
+    assert result["real_run_survival_metrics"]["relief_action_count"] == 0
 
 
 def test_n1251_readiness_summary_exposes_advisory_survival_metric_source_gate() -> None:
