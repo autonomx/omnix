@@ -16,5 +16,12 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
 def _compact_json(value: Any) -> str:
     return json.dumps(value, indent=2, ensure_ascii=False, default=str)
