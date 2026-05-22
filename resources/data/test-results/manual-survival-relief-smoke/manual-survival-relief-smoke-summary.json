@@ -1,8 +1,9 @@
 {
   "errors": [],
-  "format_version": "n1261_manual_survival_relief_smoke_v1",
-  "llm_called_count": 4,
-  "ok": false,
+  "format_version": "n1261_manual_survival_relief_smoke_v2",
+  "live_turns_executed": 1,
+  "llm_called_count": 1,
+  "ok": true,
   "pressure_summary": {
     "artifact_files": {
       "source_summary": "survival-metric-source-summary.json",
@@ -12,47 +13,57 @@
     "blocked_counts_by_reason": {},
     "blocked_relief_count": 0,
     "final_needs": {
-      "fatigue": 2,
-      "hunger": 2,
-      "thirst": 3
+      "fatigue": 57,
+      "hunger": 54,
+      "thirst": 60
     },
     "format_version": "n1234_survival_pressure_relief_summary_v2_n1251",
-    "inventory_consumed_summary": [],
+    "inventory_consumed_summary": [
+      {
+        "item_id": "trail_ration",
+        "name": "Trail Ration",
+        "quantity": 1
+      },
+      {
+        "item_id": "waterskin",
+        "name": "Waterskin",
+        "quantity": 1
+      }
+    ],
     "max_needs": {
-      "fatigue": 2,
-      "hunger": 2,
-      "thirst": 3
+      "fatigue": 81,
+      "hunger": 82,
+      "thirst": 84
     },
     "net_resource_deltas": {
-      "fatigue_delta": 0,
-      "hunger_delta": 0,
-      "thirst_delta": 0
+      "fatigue_delta": -21,
+      "hunger_delta": -26,
+      "thirst_delta": -22
     },
-    "pressure_turn_count": 3,
-    "relief_action_count": 0,
-    "relief_counts_by_kind": {},
+    "pressure_turn_count": 4,
+    "relief_action_count": 3,
+    "relief_counts_by_kind": {
+      "drink_water": 1,
+      "eat_food": 1,
+      "rest": 1
+    },
     "report_section_title": "N125.1 Real Survival Metric Source Evidence",
     "service_relief_purchases_summary": [],
     "source": "final_transcript_rows.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
     "source_coverage_summary": {
       "coverage": {
         "climate_survival_rows": 4,
-        "climate_tick_source_rows": 3,
-        "nonzero_delta_rows": 0,
+        "climate_tick_source_rows": 4,
+        "nonzero_delta_rows": 4,
         "nonzero_need_rows": 4,
-        "relief_applied_rows": 0,
-        "resource_change_rows": 3,
+        "relief_applied_rows": 3,
+        "resource_change_rows": 4,
         "row_count": 4,
-        "survival_action_rows": 0,
-        "survival_suggestion_rows": 0,
-        "warning_rows": 0
+        "survival_action_rows": 4,
+        "survival_suggestion_rows": 4,
+        "warning_rows": 4
       },
-      "example_missing_source_rows": [
-        {
-          "missing": "resource_changes",
-          "turn_index": 3
-        }
-      ],
+      "example_missing_source_rows": [],
       "format_version": "n1251_survival_metric_source_summary_v1",
       "notes": [
         "climate_survival_rows proves values are projected into transcript rows.",
@@ -60,21 +71,21 @@
         "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
       ],
       "source": "final_transcript_rows",
-      "source_coverage_rate": 0.75
+      "source_coverage_rate": 1.0
     },
     "source_gate": {
       "advisory_only": true,
       "coverage": {
         "climate_survival_rows": 4,
-        "climate_tick_source_rows": 3,
-        "nonzero_delta_rows": 0,
+        "climate_tick_source_rows": 4,
+        "nonzero_delta_rows": 4,
         "nonzero_need_rows": 4,
-        "relief_applied_rows": 0,
-        "resource_change_rows": 3,
+        "relief_applied_rows": 3,
+        "resource_change_rows": 4,
         "row_count": 4,
-        "survival_action_rows": 0,
-        "survival_suggestion_rows": 0,
-        "warning_rows": 0
+        "survival_action_rows": 4,
+        "survival_suggestion_rows": 4,
+        "warning_rows": 4
       },
       "gate": "survival_metric_source_ok",
       "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation.",
@@ -82,26 +93,30 @@
       "reasons": [],
       "source": "n1251_survival_metric_source_repair"
     },
-    "survival_warning_count": 0,
+    "survival_warning_count": 9,
     "trend_row_count": 4,
     "turn_count": 4,
-    "warning_counts_by_type": {}
+    "warning_counts_by_type": {
+      "fatigue_high": 4,
+      "hunger_high": 3,
+      "thirst_high": 2
+    }
   },
   "require_llm": true,
-  "session_id": "manual_survival_relief_smoke_20260522T082048_097fad0b",
+  "session_id": "manual_survival_relief_smoke_20260522T082728_d57a5730",
   "source_gate": {
     "advisory_only": true,
     "coverage": {
       "climate_survival_rows": 4,
-      "climate_tick_source_rows": 3,
-      "nonzero_delta_rows": 0,
+      "climate_tick_source_rows": 4,
+      "nonzero_delta_rows": 4,
       "nonzero_need_rows": 4,
-      "relief_applied_rows": 0,
-      "resource_change_rows": 3,
+      "relief_applied_rows": 3,
+      "resource_change_rows": 4,
       "row_count": 4,
-      "survival_action_rows": 0,
-      "survival_suggestion_rows": 0,
-      "warning_rows": 0
+      "survival_action_rows": 4,
+      "survival_suggestion_rows": 4,
+      "warning_rows": 4
     },
     "gate": "survival_metric_source_ok",
     "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation.",
@@ -112,22 +127,17 @@
   "source_summary": {
     "coverage": {
       "climate_survival_rows": 4,
-      "climate_tick_source_rows": 3,
-      "nonzero_delta_rows": 0,
+      "climate_tick_source_rows": 4,
+      "nonzero_delta_rows": 4,
       "nonzero_need_rows": 4,
-      "relief_applied_rows": 0,
-      "resource_change_rows": 3,
+      "relief_applied_rows": 3,
+      "resource_change_rows": 4,
       "row_count": 4,
-      "survival_action_rows": 0,
-      "survival_suggestion_rows": 0,
-      "warning_rows": 0
+      "survival_action_rows": 4,
+      "survival_suggestion_rows": 4,
+      "warning_rows": 4
     },
-    "example_missing_source_rows": [
-      {
-        "missing": "resource_changes",
-        "turn_index": 3
-      }
-    ],
+    "example_missing_source_rows": [],
     "format_version": "n1251_survival_metric_source_summary_v1",
     "notes": [
       "climate_survival_rows proves values are projected into transcript rows.",
@@ -135,18 +145,9 @@
       "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
     ],
     "source": "final_transcript_rows",
-    "source_coverage_rate": 0.75
+    "source_coverage_rate": 1.0
   },
   "turns_executed": 4,
   "turns_requested": 4,
-  "validation_failures": [
-    "missing_survival_warnings",
-    "missing_survival_suggestions",
-    "missing_expected_relief_actions",
-    "missing_hunger_relief_delta",
-    "missing_thirst_relief_delta",
-    "missing_fatigue_relief_delta",
-    "trail_ration_not_consumed",
-    "waterskin_not_consumed"
-  ]
+  "validation_failures": []
 }
