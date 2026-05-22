@@ -1,0 +1,20 @@
+{
+  "advisory_only": true,
+  "coverage": {
+    "climate_survival_rows": 3,
+    "climate_tick_source_rows": 2,
+    "nonzero_delta_rows": 0,
+    "nonzero_need_rows": 3,
+    "relief_applied_rows": 0,
+    "resource_change_rows": 2,
+    "row_count": 3,
+    "survival_action_rows": 0,
+    "survival_suggestion_rows": 0,
+    "warning_rows": 0
+  },
+  "gate": "survival_metric_source_ok",
+  "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation.",
+  "ok": true,
+  "reasons": [],
+  "source": "n1251_survival_metric_source_repair"
+}
