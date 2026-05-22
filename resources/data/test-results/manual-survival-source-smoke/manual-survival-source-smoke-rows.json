@@ -286,7 +286,7 @@
       "llm_purpose": "",
       "loot_result": {},
       "merchant_result": {},
-      "narration": "You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.",
+      "narration": "You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.",
       "narration_context": {
         "narration_quality_context": {
           "recent_fingerprints": [],
@@ -303,7 +303,7 @@
         }
       },
       "narration_payload": {
-        "action": "Player attempts self-assessment of needs.",
+        "action": "Player checks personal status: Tiredness/Hunger/Thirst.",
         "followup_hooks": [],
         "format_version": "rpg_narration_v2",
         "grounding_fallback": false,
@@ -315,18 +315,18 @@
           "selected_candidate": "primary",
           "violations": []
         },
-        "narration": "You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.",
+        "narration": "You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.",
         "npc": {
           "line": "",
           "speaker": ""
         },
         "raw_narration_candidates": {
           "primary": {
-            "action": "Player attempts self-assessment of needs.",
+            "action": "Player checks personal status: Tiredness/Hunger/Thirst.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.",
+            "narration": "You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.",
             "npc": {
               "line": "",
               "speaker": ""
@@ -335,11 +335,11 @@
             "source": "provider_runtime_narration"
           },
           "safe_fallback": {
-            "action": "Player attempts self-assessment of needs.",
+            "action": "Player checks personal status: Tiredness/Hunger/Thirst.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You pause and check your own condition while you are in the tavern.",
+            "narration": "You pause and check your condition, taking a moment to gauge your needs.",
             "npc": {
               "line": "",
               "speaker": ""
@@ -348,7 +348,7 @@
             "source": "provider_runtime_narration"
           }
         },
-        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause and check your own condition while you are in the tavern.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+        "raw_provider_response": "{\"format_version\": \"rpg_narration_candidates_v1\", \"primary\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}, \"safe_fallback\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause and check your condition, taking a moment to gauge your needs.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}}",
         "reward": null,
         "runtime_narration_diagnostics": {
           "fallback_used": false,
@@ -395,7 +395,7 @@
             "parsed_json_ends_with_brace": true,
             "parsed_json_error": "",
             "parsed_json_ok": true,
-            "parsed_json_raw_length": 746,
+            "parsed_json_raw_length": 698,
             "parsed_json_strategy": "direct",
             "parsed_keys": [
               "format_version",
@@ -437,9 +437,9 @@
               "present": true,
               "type": "LMStudioProvider"
             },
-            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause and check your own condition while you are in the tavern.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
-            "raw_text_length": 746,
-            "raw_text_tail_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause and check your own condition while you are in the tavern.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+            "raw_text_excerpt": "{\"format_version\": \"rpg_narration_candidates_v1\", \"primary\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}, \"safe_fallback\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause and check your condition, taking a moment to gauge your needs.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}}",
+            "raw_text_length": 698,
+            "raw_text_tail_excerpt": "{\"format_version\": \"rpg_narration_candidates_v1\", \"primary\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}, \"safe_fallback\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause and check your condition, taking a moment to gauge your needs.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}}",
             "selected_method": "root.chat_completion"
           },
           "provider_errors": [],
@@ -941,8 +941,8 @@
           "selected_offer_id": "",
           "service_kind": "",
           "source": "deterministic_npc_memory_recall",
-          "target_id": "",
-          "target_name": ""
+          "target_id": "player",
+          "target_name": "Player Character"
         },
         "npc_profile_summary": {
           "count": 0,
@@ -1064,7 +1064,7 @@
                 "rows": [
                   {
                     "label": "Promoted",
-                    "value": "3 / 5"
+                    "value": "4 / 5"
                   },
                   {
                     "label": "Enforced",
@@ -1072,7 +1072,7 @@
                   },
                   {
                     "label": "Partial/Missing",
-                    "value": "2"
+                    "value": "1"
                   }
                 ],
                 "title": "Runtime Promotion"
@@ -1131,10 +1131,10 @@
               "advisory_only": true,
               "format_version": "n1222_runtime_promotion_summary_v1",
               "ok": false,
-              "partial_or_missing_count": 2,
+              "partial_or_missing_count": 1,
               "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
               "runtime_enforced_count": 0,
-              "runtime_promoted_count": 3,
+              "runtime_promoted_count": 4,
               "system_count": 5,
               "systems": [
                 {
@@ -1157,7 +1157,7 @@
                 },
                 {
                   "evidence": {
-                    "actor_activity_count": 0,
+                    "actor_activity_count": 1,
                     "nearby_npc_count": 0,
                     "npc_count": 0
                   },
@@ -1166,7 +1166,7 @@
                     "actor_activities"
                   ],
                   "source": "live runtime_state.actor_activities + npc presence",
-                  "status": "partial_runtime"
+                  "status": "runtime_promoted"
                 },
                 {
                   "evidence": {
@@ -1487,8 +1487,8 @@
             "selected_offer_id": "",
             "service_kind": "",
             "source": "deterministic_npc_memory_recall",
-            "target_id": "",
-            "target_name": ""
+            "target_id": "player",
+            "target_name": "Player Character"
           },
           "npc_profile_summary": {
             "count": 0,
@@ -1596,7 +1596,7 @@
               "rows": [
                 {
                   "label": "Promoted",
-                  "value": "3 / 5"
+                  "value": "4 / 5"
                 },
                 {
                   "label": "Enforced",
@@ -1604,7 +1604,7 @@
                 },
                 {
                   "label": "Partial/Missing",
-                  "value": "2"
+                  "value": "1"
                 }
               ],
               "title": "Runtime Promotion"
@@ -1663,10 +1663,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -1689,7 +1689,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 1,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -1698,7 +1698,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -1769,10 +1769,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -1795,7 +1795,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 1,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -1804,7 +1804,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -2173,7 +2173,7 @@
         "state": {}
       },
       "structured_narration": {
-        "action": "Player attempts self-assessment of needs.",
+        "action": "Player checks personal status: Tiredness/Hunger/Thirst.",
         "followup_hooks": [],
         "format_version": "rpg_narration_v2",
         "grounding_fallback": false,
@@ -2185,18 +2185,18 @@
           "selected_candidate": "primary",
           "violations": []
         },
-        "narration": "You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.",
+        "narration": "You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.",
         "npc": {
           "line": "",
           "speaker": ""
         },
         "raw_narration_candidates": {
           "primary": {
-            "action": "Player attempts self-assessment of needs.",
+            "action": "Player checks personal status: Tiredness/Hunger/Thirst.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.",
+            "narration": "You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.",
             "npc": {
               "line": "",
               "speaker": ""
@@ -2205,11 +2205,11 @@
             "source": "provider_runtime_narration"
           },
           "safe_fallback": {
-            "action": "Player attempts self-assessment of needs.",
+            "action": "Player checks personal status: Tiredness/Hunger/Thirst.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You pause and check your own condition while you are in the tavern.",
+            "narration": "You pause and check your condition, taking a moment to gauge your needs.",
             "npc": {
               "line": "",
               "speaker": ""
@@ -2218,7 +2218,7 @@
             "source": "provider_runtime_narration"
           }
         },
-        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause and check your own condition while you are in the tavern.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+        "raw_provider_response": "{\"format_version\": \"rpg_narration_candidates_v1\", \"primary\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}, \"safe_fallback\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause and check your condition, taking a moment to gauge your needs.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}}",
         "reward": null,
         "runtime_narration_diagnostics": {
           "fallback_used": false,
@@ -2265,7 +2265,7 @@
             "parsed_json_ends_with_brace": true,
             "parsed_json_error": "",
             "parsed_json_ok": true,
-            "parsed_json_raw_length": 746,
+            "parsed_json_raw_length": 698,
             "parsed_json_strategy": "direct",
             "parsed_keys": [
               "format_version",
@@ -2307,9 +2307,9 @@
               "present": true,
               "type": "LMStudioProvider"
             },
-            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause and check your own condition while you are in the tavern.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
-            "raw_text_length": 746,
-            "raw_text_tail_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause in the tavern, taking a moment to assess your current state. You mentally check how tired, hungry, and thirsty you feel.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You pause and check your own condition while you are in the tavern.\",\n    \"action\": \"Player attempts self-assessment of needs.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+            "raw_text_excerpt": "{\"format_version\": \"rpg_narration_candidates_v1\", \"primary\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}, \"safe_fallback\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause and check your condition, taking a moment to gauge your needs.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}}",
+            "raw_text_length": 698,
+            "raw_text_tail_excerpt": "{\"format_version\": \"rpg_narration_candidates_v1\", \"primary\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause your movements within the tavern, taking a moment to assess yourself. You silently check how tired, hungry, and thirsty you feel right now.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}, \"safe_fallback\": {\"format_version\": \"rpg_narration_v2\", \"narration\": \"You pause and check your condition, taking a moment to gauge your needs.\", \"action\": \"Player checks personal status: Tiredness/Hunger/Thirst.\", \"npc\": {\"speaker\": \"\", \"line\": \"\"}, \"reward\": null, \"followup_hooks\": []}}",
             "selected_method": "root.chat_completion"
           },
           "provider_errors": [],
@@ -2360,12 +2360,16 @@
       "turn_contract": {
         "action": {
           "action_type": "use_item",
-          "difficulty": "normal",
+          "difficulty": "trivial",
           "metadata": {
-            "intent_tags": [],
+            "intent_tags": [
+              "self_assessment",
+              "survival",
+              "awareness"
+            ],
             "llm_advisory": true,
-            "llm_reason": "",
-            "narrative_goal": "",
+            "llm_reason": "The action is an internal check/use of self, which fits 'use_item' (using one's body as a resource) and aligns with the investigation skill for deep self-assess",
+            "narrative_goal": "Determine the player's current physical state (tiredness, hunger, thirst).",
             "semantic_action": {
               "action_type": "use_item",
               "activity_label": "use_item",
@@ -2378,23 +2382,26 @@
               "scene_impact": "none",
               "secondary_actor_ids": [],
               "semantic_action": "use_item",
-              "semantic_action_id": "semantic_action_2cddbe5038b01ca6",
+              "semantic_action_id": "semantic_action_4b80ebb843d2e70f",
               "semantic_family": "item",
               "social_axes": [],
               "stakes": 1,
-              "summary": "use item",
+              "summary": "Player Character / use item",
               "tags": [
                 "item",
                 "player_action",
                 "use_item"
               ],
-              "target_id": "",
-              "target_name": "",
+              "target_id": "player",
+              "target_name": "Player Character",
               "tick": 1,
               "visibility": "local"
             }
           },
-          "priority": 9
+          "priority": 9,
+          "skill_id": "investigation",
+          "target_id": "player",
+          "target_name": "Player Character"
         },
         "climate_survival": {
           "display": {
@@ -2576,7 +2583,7 @@
                 "rows": [
                   {
                     "label": "Promoted",
-                    "value": "3 / 5"
+                    "value": "4 / 5"
                   },
                   {
                     "label": "Enforced",
@@ -2584,7 +2591,7 @@
                   },
                   {
                     "label": "Partial/Missing",
-                    "value": "2"
+                    "value": "1"
                   }
                 ],
                 "title": "Runtime Promotion"
@@ -2643,10 +2650,10 @@
               "advisory_only": true,
               "format_version": "n1222_runtime_promotion_summary_v1",
               "ok": false,
-              "partial_or_missing_count": 2,
+              "partial_or_missing_count": 1,
               "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
               "runtime_enforced_count": 0,
-              "runtime_promoted_count": 3,
+              "runtime_promoted_count": 4,
               "system_count": 5,
               "systems": [
                 {
@@ -2669,7 +2676,7 @@
                 },
                 {
                   "evidence": {
-                    "actor_activity_count": 0,
+                    "actor_activity_count": 1,
                     "nearby_npc_count": 0,
                     "npc_count": 0
                   },
@@ -2678,7 +2685,7 @@
                     "actor_activities"
                   ],
                   "source": "live runtime_state.actor_activities + npc presence",
-                  "status": "partial_runtime"
+                  "status": "runtime_promoted"
                 },
                 {
                   "evidence": {
@@ -2994,8 +3001,8 @@
             "selected_offer_id": "",
             "service_kind": "",
             "source": "deterministic_npc_memory_recall",
-            "target_id": "",
-            "target_name": ""
+            "target_id": "player",
+            "target_name": "Player Character"
           },
           "npc_profile_summary": {
             "count": 0,
@@ -3321,8 +3328,8 @@
             "selected_offer_id": "",
             "service_kind": "",
             "source": "deterministic_npc_memory_recall",
-            "target_id": "",
-            "target_name": ""
+            "target_id": "player",
+            "target_name": "Player Character"
           },
           "npc_profile_summary": {
             "count": 0,
@@ -3429,7 +3436,7 @@
               "rows": [
                 {
                   "label": "Promoted",
-                  "value": "3 / 5"
+                  "value": "4 / 5"
                 },
                 {
                   "label": "Enforced",
@@ -3437,7 +3444,7 @@
                 },
                 {
                   "label": "Partial/Missing",
-                  "value": "2"
+                  "value": "1"
                 }
               ],
               "title": "Runtime Promotion"
@@ -3496,10 +3503,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -3522,7 +3529,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 1,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -3531,7 +3538,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -3602,10 +3609,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -3628,7 +3635,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 1,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -3637,7 +3644,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -3756,10 +3763,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -3782,7 +3789,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 1,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -3791,7 +3798,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -3870,18 +3877,18 @@
           "scene_impact": "none",
           "secondary_actor_ids": [],
           "semantic_action": "use_item",
-          "semantic_action_id": "semantic_action_2cddbe5038b01ca6",
+          "semantic_action_id": "semantic_action_4b80ebb843d2e70f",
           "semantic_family": "item",
           "social_axes": [],
           "stakes": 1,
-          "summary": "use item",
+          "summary": "Player Character / use item",
           "tags": [
             "item",
             "player_action",
             "use_item"
           ],
-          "target_id": "",
-          "target_name": "",
+          "target_id": "player",
+          "target_name": "Player Character",
           "tick": 1,
           "visibility": "local"
         },
@@ -3918,12 +3925,16 @@
     "turn_contract": {
       "action": {
         "action_type": "use_item",
-        "difficulty": "normal",
+        "difficulty": "trivial",
         "metadata": {
-          "intent_tags": [],
+          "intent_tags": [
+            "self_assessment",
+            "survival",
+            "awareness"
+          ],
           "llm_advisory": true,
-          "llm_reason": "",
-          "narrative_goal": "",
+          "llm_reason": "The action is an internal check/use of self, which fits 'use_item' (using one's body as a resource) and aligns with the investigation skill for deep self-assess",
+          "narrative_goal": "Determine the player's current physical state (tiredness, hunger, thirst).",
           "semantic_action": {
             "action_type": "use_item",
             "activity_label": "use_item",
@@ -3936,23 +3947,26 @@
             "scene_impact": "none",
             "secondary_actor_ids": [],
             "semantic_action": "use_item",
-            "semantic_action_id": "semantic_action_2cddbe5038b01ca6",
+            "semantic_action_id": "semantic_action_4b80ebb843d2e70f",
             "semantic_family": "item",
             "social_axes": [],
             "stakes": 1,
-            "summary": "use item",
+            "summary": "Player Character / use item",
             "tags": [
               "item",
               "player_action",
               "use_item"
             ],
-            "target_id": "",
-            "target_name": "",
+            "target_id": "player",
+            "target_name": "Player Character",
             "tick": 1,
             "visibility": "local"
           }
         },
-        "priority": 9
+        "priority": 9,
+        "skill_id": "investigation",
+        "target_id": "player",
+        "target_name": "Player Character"
       },
       "climate_survival": {
         "display": {
@@ -4134,7 +4148,7 @@
               "rows": [
                 {
                   "label": "Promoted",
-                  "value": "3 / 5"
+                  "value": "4 / 5"
                 },
                 {
                   "label": "Enforced",
@@ -4142,7 +4156,7 @@
                 },
                 {
                   "label": "Partial/Missing",
-                  "value": "2"
+                  "value": "1"
                 }
               ],
               "title": "Runtime Promotion"
@@ -4201,10 +4215,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -4227,7 +4241,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 1,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -4236,7 +4250,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -4552,8 +4566,8 @@
           "selected_offer_id": "",
           "service_kind": "",
           "source": "deterministic_npc_memory_recall",
-          "target_id": "",
-          "target_name": ""
+          "target_id": "player",
+          "target_name": "Player Character"
         },
         "npc_profile_summary": {
           "count": 0,
@@ -4879,8 +4893,8 @@
           "selected_offer_id": "",
           "service_kind": "",
           "source": "deterministic_npc_memory_recall",
-          "target_id": "",
-          "target_name": ""
+          "target_id": "player",
+          "target_name": "Player Character"
         },
         "npc_profile_summary": {
           "count": 0,
@@ -4987,7 +5001,7 @@
             "rows": [
               {
                 "label": "Promoted",
-                "value": "3 / 5"
+                "value": "4 / 5"
               },
               {
                 "label": "Enforced",
@@ -4995,7 +5009,7 @@
               },
               {
                 "label": "Partial/Missing",
-                "value": "2"
+                "value": "1"
               }
             ],
             "title": "Runtime Promotion"
@@ -5054,10 +5068,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -5080,7 +5094,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 1,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -5089,7 +5103,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -5160,10 +5174,10 @@
         "advisory_only": true,
         "format_version": "n1222_runtime_promotion_summary_v1",
         "ok": false,
-        "partial_or_missing_count": 2,
+        "partial_or_missing_count": 1,
         "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
         "runtime_enforced_count": 0,
-        "runtime_promoted_count": 3,
+        "runtime_promoted_count": 4,
         "system_count": 5,
         "systems": [
           {
@@ -5186,7 +5200,7 @@
           },
           {
             "evidence": {
-              "actor_activity_count": 0,
+              "actor_activity_count": 1,
               "nearby_npc_count": 0,
               "npc_count": 0
             },
@@ -5195,7 +5209,7 @@
               "actor_activities"
             ],
             "source": "live runtime_state.actor_activities + npc presence",
-            "status": "partial_runtime"
+            "status": "runtime_promoted"
           },
           {
             "evidence": {
@@ -5314,10 +5328,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -5340,7 +5354,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 1,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -5349,7 +5363,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -5428,18 +5442,18 @@
         "scene_impact": "none",
         "secondary_actor_ids": [],
         "semantic_action": "use_item",
-        "semantic_action_id": "semantic_action_2cddbe5038b01ca6",
+        "semantic_action_id": "semantic_action_4b80ebb843d2e70f",
         "semantic_family": "item",
         "social_axes": [],
         "stakes": 1,
-        "summary": "use item",
+        "summary": "Player Character / use item",
         "tags": [
           "item",
           "player_action",
           "use_item"
         ],
-        "target_id": "",
-        "target_name": "",
+        "target_id": "player",
+        "target_name": "Player Character",
         "tick": 1,
         "visibility": "local"
       },
@@ -5734,7 +5748,7 @@
       "llm_purpose": "",
       "loot_result": {},
       "merchant_result": {},
-      "narration": "You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.",
+      "narration": "You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.",
       "narration_context": {
         "narration_quality_context": {
           "recent_fingerprints": [],
@@ -5751,7 +5765,7 @@
         }
       },
       "narration_payload": {
-        "action": "Ambient listening yields information from NPC:Bran.",
+        "action": "Ambient listening continues; Mira is addressed by Bran.",
         "followup_hooks": [],
         "format_version": "rpg_narration_v2",
         "grounding_fallback": false,
@@ -5763,18 +5777,18 @@
           "selected_candidate": "primary",
           "violations": []
         },
-        "narration": "You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.",
+        "narration": "You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.",
         "npc": {
           "line": "The room has been busier than usual tonight.",
           "speaker": "Bran"
         },
         "raw_narration_candidates": {
           "primary": {
-            "action": "Ambient listening yields information from NPC:Bran.",
+            "action": "Ambient listening continues; Mira is addressed by Bran.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.",
+            "narration": "You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.",
             "npc": {
               "line": "The room has been busier than usual tonight.",
               "speaker": "Bran"
@@ -5783,11 +5797,11 @@
             "source": "provider_runtime_narration"
           },
           "safe_fallback": {
-            "action": "Ambient listening is initiated, yielding no immediate change.",
+            "action": "Ambient waiting continues; Mira is addressed by Bran.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You wait and listen intently while remaining in the busy confines of The Rusty Flagon.",
+            "narration": "You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.",
             "npc": {
               "line": "The room has been busier than usual tonight.",
               "speaker": "Bran"
@@ -5796,7 +5810,7 @@
             "source": "provider_runtime_narration"
           }
         },
-        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.\",\n    \"action\": \"Ambient listening yields information from NPC:Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait and listen intently while remaining in the busy confines of The Rusty Flagon.\",\n    \"action\": \"Ambient listening is initiated, yielding no immediate change.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.\",\n    \"action\": \"Ambient listening continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.\",\n    \"action\": \"Ambient waiting continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
         "reward": null,
         "runtime_narration_diagnostics": {
           "fallback_used": false,
@@ -5843,7 +5857,7 @@
             "parsed_json_ends_with_brace": true,
             "parsed_json_error": "",
             "parsed_json_ok": true,
-            "parsed_json_raw_length": 893,
+            "parsed_json_raw_length": 962,
             "parsed_json_strategy": "direct",
             "parsed_keys": [
               "format_version",
@@ -5885,9 +5899,9 @@
               "present": true,
               "type": "LMStudioProvider"
             },
-            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.\",\n    \"action\": \"Ambient listening yields information from NPC:Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait and listen intently while remaining in the busy confines of The Rusty Flagon.\",\n    \"action\": \"Ambient listening is initiated, yielding no immediate change.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
-            "raw_text_length": 893,
-            "raw_text_tail_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.\",\n    \"action\": \"Ambient listening yields information from NPC:Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait and listen intently while remaining in the busy confines of The Rusty Flagon.\",\n    \"action\": \"Ambient listening is initiated, yielding no immediate change.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.\",\n    \"action\": \"Ambient listening continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.\",\n    \"action\": \"Ambient waiting continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+            "raw_text_length": 962,
+            "raw_text_tail_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.\",\n    \"action\": \"Ambient listening continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.\",\n    \"action\": \"Ambient waiting continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
             "selected_method": "root.chat_completion"
           },
           "provider_errors": [],
@@ -7026,7 +7040,13 @@
           "current_location_id": "loc_tavern"
         },
         "loot_result": {},
-        "memory_state": {},
+        "memory_state": {
+          "actor_memory": {},
+          "long_term": [],
+          "rumors": [],
+          "short_term": [],
+          "world_memory": []
+        },
         "merchant_result": {},
         "narration": "I wait and listen for a moment.",
         "narration_debug": {},
@@ -7059,7 +7079,7 @@
           "service_kind": "",
           "source": "deterministic_npc_memory_recall",
           "target_id": "",
-          "target_name": ""
+          "target_name": "The surroundings (General)"
         },
         "npc_profile_summary": {
           "count": 0,
@@ -7181,7 +7201,7 @@
                 "rows": [
                   {
                     "label": "Promoted",
-                    "value": "3 / 5"
+                    "value": "4 / 5"
                   },
                   {
                     "label": "Enforced",
@@ -7189,7 +7209,7 @@
                   },
                   {
                     "label": "Partial/Missing",
-                    "value": "2"
+                    "value": "1"
                   }
                 ],
                 "title": "Runtime Promotion"
@@ -7248,10 +7268,10 @@
               "advisory_only": true,
               "format_version": "n1222_runtime_promotion_summary_v1",
               "ok": false,
-              "partial_or_missing_count": 2,
+              "partial_or_missing_count": 1,
               "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
               "runtime_enforced_count": 0,
-              "runtime_promoted_count": 3,
+              "runtime_promoted_count": 4,
               "system_count": 5,
               "systems": [
                 {
@@ -7274,7 +7294,7 @@
                 },
                 {
                   "evidence": {
-                    "actor_activity_count": 0,
+                    "actor_activity_count": 3,
                     "nearby_npc_count": 0,
                     "npc_count": 0
                   },
@@ -7283,7 +7303,7 @@
                     "actor_activities"
                   ],
                   "source": "live runtime_state.actor_activities + npc presence",
-                  "status": "partial_runtime"
+                  "status": "runtime_promoted"
                 },
                 {
                   "evidence": {
@@ -8270,8 +8290,17 @@
             "current_location_id": "loc_tavern"
           },
           "loot_result": {},
-          "margin": 1,
+          "margin": -11,
+          "memory_entry": {},
+          "memory_state": {
+            "actor_memory": {},
+            "long_term": [],
+            "rumors": [],
+            "short_term": [],
+            "world_memory": []
+          },
           "merchant_result": {},
+          "npc_emotion_state": {},
           "npc_memory_recall_debug": {
             "action_type": "ambient_wait",
             "count": 0,
@@ -8283,14 +8312,14 @@
             "service_kind": "",
             "source": "deterministic_npc_memory_recall",
             "target_id": "",
-            "target_name": ""
+            "target_name": "The surroundings (General)"
           },
           "npc_profile_summary": {
             "count": 0,
             "profiles": {},
             "source": "deterministic_dynamic_npc_profile_store"
           },
-          "outcome": "success",
+          "outcome": "failure",
           "party_aware_turn_context": {
             "addressed_companion": {
               "matched": false,
@@ -8337,6 +8366,7 @@
           },
           "recalled_npc_memories": [],
           "recalled_service_memories": [],
+          "relationship_state": {},
           "repair_result": {},
           "resource_changes": {
             "currency": {
@@ -8347,7 +8377,7 @@
           },
           "result": "no_supported_semantic_action_detected",
           "result_summary": "no_supported_semantic_action_detected",
-          "roll": 11,
+          "roll": -1,
           "semantic_action": {},
           "semantic_action_type": "ambient_wait",
           "semantic_action_v2": {
@@ -8371,11 +8401,21 @@
           },
           "skill_id": "",
           "skill_modifier": 0,
+          "social_living_world_effects": {
+            "action_type": "observe",
+            "owner_id": "npc:The surroundings (General)",
+            "owner_name": "The surroundings (General)",
+            "reason": "ambient_non_npc_social_target",
+            "skipped": true,
+            "source": "deterministic_social_runtime",
+            "target_id": "",
+            "target_name": "The surroundings (General)"
+          },
           "stat_modifier": -3,
           "stat_used": "",
           "summary": "no_supported_semantic_action_detected",
           "target_id": "",
-          "target_name": "",
+          "target_name": "The surroundings (General)",
           "visible_interaction_reason": "no_supported_semantic_action_detected",
           "world_event_state": {
             "events": [
@@ -8423,7 +8463,7 @@
               "rows": [
                 {
                   "label": "Promoted",
-                  "value": "3 / 5"
+                  "value": "4 / 5"
                 },
                 {
                   "label": "Enforced",
@@ -8431,7 +8471,7 @@
                 },
                 {
                   "label": "Partial/Missing",
-                  "value": "2"
+                  "value": "1"
                 }
               ],
               "title": "Runtime Promotion"
@@ -8490,10 +8530,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -8516,7 +8556,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 3,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -8525,7 +8565,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -8596,10 +8636,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -8622,7 +8662,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 3,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -8631,7 +8671,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -8797,7 +8837,16 @@
         "skill_xp_result": {
           "awards": {}
         },
-        "social_living_world_effects": {},
+        "social_living_world_effects": {
+          "action_type": "observe",
+          "owner_id": "npc:The surroundings (General)",
+          "owner_name": "The surroundings (General)",
+          "reason": "ambient_non_npc_social_target",
+          "skipped": true,
+          "source": "deterministic_social_runtime",
+          "target_id": "",
+          "target_name": "The surroundings (General)"
+        },
         "summary": [],
         "tick": 1,
         "travel_result": {},
@@ -9010,7 +9059,7 @@
         "state": {}
       },
       "structured_narration": {
-        "action": "Ambient listening yields information from NPC:Bran.",
+        "action": "Ambient listening continues; Mira is addressed by Bran.",
         "followup_hooks": [],
         "format_version": "rpg_narration_v2",
         "grounding_fallback": false,
@@ -9022,18 +9071,18 @@
           "selected_candidate": "primary",
           "violations": []
         },
-        "narration": "You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.",
+        "narration": "You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.",
         "npc": {
           "line": "The room has been busier than usual tonight.",
           "speaker": "Bran"
         },
         "raw_narration_candidates": {
           "primary": {
-            "action": "Ambient listening yields information from NPC:Bran.",
+            "action": "Ambient listening continues; Mira is addressed by Bran.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.",
+            "narration": "You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.",
             "npc": {
               "line": "The room has been busier than usual tonight.",
               "speaker": "Bran"
@@ -9042,11 +9091,11 @@
             "source": "provider_runtime_narration"
           },
           "safe_fallback": {
-            "action": "Ambient listening is initiated, yielding no immediate change.",
+            "action": "Ambient waiting continues; Mira is addressed by Bran.",
             "authoritative_changes": false,
             "followup_hooks": [],
             "format_version": "rpg_narration_v2",
-            "narration": "You wait and listen intently while remaining in the busy confines of The Rusty Flagon.",
+            "narration": "You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.",
             "npc": {
               "line": "The room has been busier than usual tonight.",
               "speaker": "Bran"
@@ -9055,7 +9104,7 @@
             "source": "provider_runtime_narration"
           }
         },
-        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.\",\n    \"action\": \"Ambient listening yields information from NPC:Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait and listen intently while remaining in the busy confines of The Rusty Flagon.\",\n    \"action\": \"Ambient listening is initiated, yielding no immediate change.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.\",\n    \"action\": \"Ambient listening continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.\",\n    \"action\": \"Ambient waiting continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
         "reward": null,
         "runtime_narration_diagnostics": {
           "fallback_used": false,
@@ -9102,7 +9151,7 @@
             "parsed_json_ends_with_brace": true,
             "parsed_json_error": "",
             "parsed_json_ok": true,
-            "parsed_json_raw_length": 893,
+            "parsed_json_raw_length": 962,
             "parsed_json_strategy": "direct",
             "parsed_keys": [
               "format_version",
@@ -9144,9 +9193,9 @@
               "present": true,
               "type": "LMStudioProvider"
             },
-            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.\",\n    \"action\": \"Ambient listening yields information from NPC:Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait and listen intently while remaining in the busy confines of The Rusty Flagon.\",\n    \"action\": \"Ambient listening is initiated, yielding no immediate change.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
-            "raw_text_length": 893,
-            "raw_text_tail_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still, taking in the atmosphere of The Rusty Flagon. Bran offers a quiet observation regarding the tavern's current mood.\",\n    \"action\": \"Ambient listening yields information from NPC:Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait and listen intently while remaining in the busy confines of The Rusty Flagon.\",\n    \"action\": \"Ambient listening is initiated, yielding no immediate change.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.\",\n    \"action\": \"Ambient listening continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.\",\n    \"action\": \"Ambient waiting continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
+            "raw_text_length": 962,
+            "raw_text_tail_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You wait patiently, letting the sounds and chatter of the tavern wash over you. Bran speaks up, noting how unusually lively the Rusty Flagon feels tonight.\",\n    \"action\": \"Ambient listening continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You remain still and attentive as the atmosphere of the tavern settles around you. Bran breaks the quiet to comment on the current mood.\",\n    \"action\": \"Ambient waiting continues; Mira is addressed by Bran.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"The room has been busier than usual tonight.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": []\n  }\n}",
             "selected_method": "root.chat_completion"
           },
           "provider_errors": [],
@@ -9199,40 +9248,55 @@
           "action_type": "observe",
           "difficulty": "normal",
           "metadata": {
-            "intent_tags": [],
+            "intent_tags": [
+              "listening",
+              "waiting",
+              "gathering_information"
+            ],
             "llm_advisory": true,
-            "llm_reason": "",
-            "narrative_goal": "",
+            "llm_reason": "The player explicitly states, 'I wait and listen for a moment,' which translates directly to an observational action focused on ambient information.",
+            "narrative_goal": "To perceive the environment and potential threats/opportunities through careful observation and listening.",
             "semantic_action": {
               "action_type": "observe",
-              "activity_label": "observe",
-              "intensity": 1,
+              "activity_label": "waiting_and_listening",
+              "intensity": 3,
               "interaction_mode": "solo",
               "location_id": "",
-              "observer_hooks": [],
+              "observer_hooks": [
+                "conversation_seed",
+                "relationship_shift"
+              ],
               "player_input": "I wait and listen for a moment.",
-              "reason": "",
-              "scene_impact": "none",
+              "reason": "The player input 'I wait and listen for a moment' directly maps to the observe action type, focusing on passive perception.",
+              "scene_impact": "minor_focus_shift",
               "secondary_actor_ids": [],
-              "semantic_action": "observe",
-              "semantic_action_id": "semantic_action_9a58f5c0eaac6a94",
-              "semantic_family": "exploration",
-              "social_axes": [],
+              "semantic_action": "waiting_and_listening",
+              "semantic_action_id": "semantic_action_874de8eed12fce87",
+              "semantic_family": "observation",
+              "social_axes": [
+                {
+                  "axis": "curiosity",
+                  "delta": 1
+                }
+              ],
               "stakes": 1,
-              "summary": "observe",
+              "summary": "The surroundings (General) / waiting and listening",
               "tags": [
-                "exploration",
+                "observation",
                 "observe",
-                "player_action"
+                "player_action",
+                "waiting_and_listening"
               ],
               "target_id": "",
-              "target_name": "",
+              "target_name": "The surroundings (General)",
               "tick": 1,
               "visibility": "local"
             }
           },
           "priority": 1,
-          "target_id": ""
+          "skill_id": "investigation",
+          "target_id": "",
+          "target_name": "The surroundings (General)"
         },
         "climate_survival": {
           "display": {
@@ -9414,7 +9478,7 @@
                 "rows": [
                   {
                     "label": "Promoted",
-                    "value": "3 / 5"
+                    "value": "4 / 5"
                   },
                   {
                     "label": "Enforced",
@@ -9422,7 +9486,7 @@
                   },
                   {
                     "label": "Partial/Missing",
-                    "value": "2"
+                    "value": "1"
                   }
                 ],
                 "title": "Runtime Promotion"
@@ -9481,10 +9545,10 @@
               "advisory_only": true,
               "format_version": "n1222_runtime_promotion_summary_v1",
               "ok": false,
-              "partial_or_missing_count": 2,
+              "partial_or_missing_count": 1,
               "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
               "runtime_enforced_count": 0,
-              "runtime_promoted_count": 3,
+              "runtime_promoted_count": 4,
               "system_count": 5,
               "systems": [
                 {
@@ -9507,7 +9571,7 @@
                 },
                 {
                   "evidence": {
-                    "actor_activity_count": 0,
+                    "actor_activity_count": 3,
                     "nearby_npc_count": 0,
                     "npc_count": 0
                   },
@@ -9516,7 +9580,7 @@
                     "actor_activities"
                   ],
                   "source": "live runtime_state.actor_activities + npc presence",
-                  "status": "partial_runtime"
+                  "status": "runtime_promoted"
                 },
                 {
                   "evidence": {
@@ -10498,8 +10562,17 @@
             "current_location_id": "loc_tavern"
           },
           "loot_result": {},
-          "margin": 1,
+          "margin": -11,
+          "memory_entry": {},
+          "memory_state": {
+            "actor_memory": {},
+            "long_term": [],
+            "rumors": [],
+            "short_term": [],
+            "world_memory": []
+          },
           "merchant_result": {},
+          "npc_emotion_state": {},
           "npc_memory_recall_debug": {
             "action_type": "ambient_wait",
             "count": 0,
@@ -10511,14 +10584,14 @@
             "service_kind": "",
             "source": "deterministic_npc_memory_recall",
             "target_id": "",
-            "target_name": ""
+            "target_name": "The surroundings (General)"
           },
           "npc_profile_summary": {
             "count": 0,
             "profiles": {},
             "source": "deterministic_dynamic_npc_profile_store"
           },
-          "outcome": "success",
+          "outcome": "failure",
           "party_aware_turn_context": {
             "addressed_companion": {
               "matched": false,
@@ -10565,6 +10638,7 @@
           },
           "recalled_npc_memories": [],
           "recalled_service_memories": [],
+          "relationship_state": {},
           "repair_result": {},
           "resource_changes": {
             "currency": {
@@ -10575,7 +10649,7 @@
           },
           "result": "no_supported_semantic_action_detected",
           "result_summary": "no_supported_semantic_action_detected",
-          "roll": 11,
+          "roll": -1,
           "semantic_action": {},
           "semantic_action_type": "ambient_wait",
           "semantic_action_v2": {
@@ -10599,11 +10673,21 @@
           },
           "skill_id": "",
           "skill_modifier": 0,
+          "social_living_world_effects": {
+            "action_type": "observe",
+            "owner_id": "npc:The surroundings (General)",
+            "owner_name": "The surroundings (General)",
+            "reason": "ambient_non_npc_social_target",
+            "skipped": true,
+            "source": "deterministic_social_runtime",
+            "target_id": "",
+            "target_name": "The surroundings (General)"
+          },
           "stat_modifier": -3,
           "stat_used": "",
           "summary": "no_supported_semantic_action_detected",
           "target_id": "",
-          "target_name": "",
+          "target_name": "The surroundings (General)",
           "visible_interaction_reason": "no_supported_semantic_action_detected",
           "world_event_state": {
             "events": [
@@ -11535,8 +11619,17 @@
             "current_location_id": "loc_tavern"
           },
           "loot_result": {},
-          "margin": 1,
+          "margin": -11,
+          "memory_entry": {},
+          "memory_state": {
+            "actor_memory": {},
+            "long_term": [],
+            "rumors": [],
+            "short_term": [],
+            "world_memory": []
+          },
           "merchant_result": {},
+          "npc_emotion_state": {},
           "npc_memory_recall_debug": {
             "action_type": "ambient_wait",
             "count": 0,
@@ -11548,14 +11641,14 @@
             "service_kind": "",
             "source": "deterministic_npc_memory_recall",
             "target_id": "",
-            "target_name": ""
+            "target_name": "The surroundings (General)"
           },
           "npc_profile_summary": {
             "count": 0,
             "profiles": {},
             "source": "deterministic_dynamic_npc_profile_store"
           },
-          "outcome": "success",
+          "outcome": "failure",
           "party_aware_turn_context": {
             "addressed_companion": {
               "matched": false,
@@ -11602,6 +11695,7 @@
           },
           "recalled_npc_memories": [],
           "recalled_service_memories": [],
+          "relationship_state": {},
           "repair_result": {},
           "resource_changes": {
             "currency": {
@@ -11612,7 +11706,7 @@
           },
           "result": "no_supported_semantic_action_detected",
           "result_summary": "no_supported_semantic_action_detected",
-          "roll": 11,
+          "roll": -1,
           "semantic_action": {},
           "semantic_action_type": "ambient_wait",
           "semantic_action_v2": {
@@ -11636,11 +11730,21 @@
           },
           "skill_id": "",
           "skill_modifier": 0,
+          "social_living_world_effects": {
+            "action_type": "observe",
+            "owner_id": "npc:The surroundings (General)",
+            "owner_name": "The surroundings (General)",
+            "reason": "ambient_non_npc_social_target",
+            "skipped": true,
+            "source": "deterministic_social_runtime",
+            "target_id": "",
+            "target_name": "The surroundings (General)"
+          },
           "stat_modifier": -3,
           "stat_used": "",
           "summary": "no_supported_semantic_action_detected",
           "target_id": "",
-          "target_name": "",
+          "target_name": "The surroundings (General)",
           "visible_interaction_reason": "no_supported_semantic_action_detected",
           "world_event_state": {
             "events": [
@@ -11687,7 +11791,7 @@
               "rows": [
                 {
                   "label": "Promoted",
-                  "value": "3 / 5"
+                  "value": "4 / 5"
                 },
                 {
                   "label": "Enforced",
@@ -11695,7 +11799,7 @@
                 },
                 {
                   "label": "Partial/Missing",
-                  "value": "2"
+                  "value": "1"
                 }
               ],
               "title": "Runtime Promotion"
@@ -11754,10 +11858,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -11780,7 +11884,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 3,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -11789,7 +11893,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -11860,10 +11964,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -11886,7 +11990,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 3,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -11895,7 +11999,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -12014,10 +12118,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -12040,7 +12144,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 3,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -12049,7 +12153,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -12118,28 +12222,37 @@
         },
         "semantic_action": {
           "action_type": "observe",
-          "activity_label": "observe",
-          "intensity": 1,
+          "activity_label": "waiting_and_listening",
+          "intensity": 3,
           "interaction_mode": "solo",
           "location_id": "",
-          "observer_hooks": [],
+          "observer_hooks": [
+            "conversation_seed",
+            "relationship_shift"
+          ],
           "player_input": "I wait and listen for a moment.",
-          "reason": "",
-          "scene_impact": "none",
+          "reason": "The player input 'I wait and listen for a moment' directly maps to the observe action type, focusing on passive perception.",
+          "scene_impact": "minor_focus_shift",
           "secondary_actor_ids": [],
-          "semantic_action": "observe",
-          "semantic_action_id": "semantic_action_9a58f5c0eaac6a94",
-          "semantic_family": "exploration",
-          "social_axes": [],
+          "semantic_action": "waiting_and_listening",
+          "semantic_action_id": "semantic_action_874de8eed12fce87",
+          "semantic_family": "observation",
+          "social_axes": [
+            {
+              "axis": "curiosity",
+              "delta": 1
+            }
+          ],
           "stakes": 1,
-          "summary": "observe",
+          "summary": "The surroundings (General) / waiting and listening",
           "tags": [
-            "exploration",
+            "observation",
             "observe",
-            "player_action"
+            "player_action",
+            "waiting_and_listening"
           ],
           "target_id": "",
-          "target_name": "",
+          "target_name": "The surroundings (General)",
           "tick": 1,
           "visibility": "local"
         },
@@ -12174,40 +12287,55 @@
         "action_type": "observe",
         "difficulty": "normal",
         "metadata": {
-          "intent_tags": [],
+          "intent_tags": [
+            "listening",
+            "waiting",
+            "gathering_information"
+          ],
           "llm_advisory": true,
-          "llm_reason": "",
-          "narrative_goal": "",
+          "llm_reason": "The player explicitly states, 'I wait and listen for a moment,' which translates directly to an observational action focused on ambient information.",
+          "narrative_goal": "To perceive the environment and potential threats/opportunities through careful observation and listening.",
           "semantic_action": {
             "action_type": "observe",
-            "activity_label": "observe",
-            "intensity": 1,
+            "activity_label": "waiting_and_listening",
+            "intensity": 3,
             "interaction_mode": "solo",
             "location_id": "",
-            "observer_hooks": [],
+            "observer_hooks": [
+              "conversation_seed",
+              "relationship_shift"
+            ],
             "player_input": "I wait and listen for a moment.",
-            "reason": "",
-            "scene_impact": "none",
+            "reason": "The player input 'I wait and listen for a moment' directly maps to the observe action type, focusing on passive perception.",
+            "scene_impact": "minor_focus_shift",
             "secondary_actor_ids": [],
-            "semantic_action": "observe",
-            "semantic_action_id": "semantic_action_9a58f5c0eaac6a94",
-            "semantic_family": "exploration",
-            "social_axes": [],
+            "semantic_action": "waiting_and_listening",
+            "semantic_action_id": "semantic_action_874de8eed12fce87",
+            "semantic_family": "observation",
+            "social_axes": [
+              {
+                "axis": "curiosity",
+                "delta": 1
+              }
+            ],
             "stakes": 1,
-            "summary": "observe",
+            "summary": "The surroundings (General) / waiting and listening",
             "tags": [
-              "exploration",
+              "observation",
               "observe",
-              "player_action"
+              "player_action",
+              "waiting_and_listening"
             ],
             "target_id": "",
-            "target_name": "",
+            "target_name": "The surroundings (General)",
             "tick": 1,
             "visibility": "local"
           }
         },
         "priority": 1,
-        "target_id": ""
+        "skill_id": "investigation",
+        "target_id": "",
+        "target_name": "The surroundings (General)"
       },
       "climate_survival": {
         "display": {
@@ -12393,7 +12521,7 @@
               "rows": [
                 {
                   "label": "Promoted",
-                  "value": "3 / 5"
+                  "value": "4 / 5"
                 },
                 {
                   "label": "Enforced",
@@ -12401,7 +12529,7 @@
                 },
                 {
                   "label": "Partial/Missing",
-                  "value": "2"
+                  "value": "1"
                 }
               ],
               "title": "Runtime Promotion"
@@ -12460,10 +12588,10 @@
             "advisory_only": true,
             "format_version": "n1222_runtime_promotion_summary_v1",
             "ok": false,
-            "partial_or_missing_count": 2,
+            "partial_or_missing_count": 1,
             "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
             "runtime_enforced_count": 0,
-            "runtime_promoted_count": 3,
+            "runtime_promoted_count": 4,
             "system_count": 5,
             "systems": [
               {
@@ -12486,7 +12614,7 @@
               },
               {
                 "evidence": {
-                  "actor_activity_count": 0,
+                  "actor_activity_count": 3,
                   "nearby_npc_count": 0,
                   "npc_count": 0
                 },
@@ -12495,7 +12623,7 @@
                   "actor_activities"
                 ],
                 "source": "live runtime_state.actor_activities + npc presence",
-                "status": "partial_runtime"
+                "status": "runtime_promoted"
               },
               {
                 "evidence": {
@@ -13477,8 +13605,17 @@
           "current_location_id": "loc_tavern"
         },
         "loot_result": {},
-        "margin": 1,
+        "margin": -11,
+        "memory_entry": {},
+        "memory_state": {
+          "actor_memory": {},
+          "long_term": [],
+          "rumors": [],
+          "short_term": [],
+          "world_memory": []
+        },
         "merchant_result": {},
+        "npc_emotion_state": {},
         "npc_memory_recall_debug": {
           "action_type": "ambient_wait",
           "count": 0,
@@ -13490,14 +13627,14 @@
           "service_kind": "",
           "source": "deterministic_npc_memory_recall",
           "target_id": "",
-          "target_name": ""
+          "target_name": "The surroundings (General)"
         },
         "npc_profile_summary": {
           "count": 0,
           "profiles": {},
           "source": "deterministic_dynamic_npc_profile_store"
         },
-        "outcome": "success",
+        "outcome": "failure",
         "party_aware_turn_context": {
           "addressed_companion": {
             "matched": false,
@@ -13544,6 +13681,7 @@
         },
         "recalled_npc_memories": [],
         "recalled_service_memories": [],
+        "relationship_state": {},
         "repair_result": {},
         "resource_changes": {
           "currency": {
@@ -13554,7 +13692,7 @@
         },
         "result": "no_supported_semantic_action_detected",
         "result_summary": "no_supported_semantic_action_detected",
-        "roll": 11,
+        "roll": -1,
         "semantic_action": {},
         "semantic_action_type": "ambient_wait",
         "semantic_action_v2": {
@@ -13578,11 +13716,21 @@
         },
         "skill_id": "",
         "skill_modifier": 0,
+        "social_living_world_effects": {
+          "action_type": "observe",
+          "owner_id": "npc:The surroundings (General)",
+          "owner_name": "The surroundings (General)",
+          "reason": "ambient_non_npc_social_target",
+          "skipped": true,
+          "source": "deterministic_social_runtime",
+          "target_id": "",
+          "target_name": "The surroundings (General)"
+        },
         "stat_modifier": -3,
         "stat_used": "",
         "summary": "no_supported_semantic_action_detected",
         "target_id": "",
-        "target_name": "",
+        "target_name": "The surroundings (General)",
         "visible_interaction_reason": "no_supported_semantic_action_detected",
         "world_event_state": {
           "events": [
@@ -14514,8 +14662,17 @@
           "current_location_id": "loc_tavern"
         },
         "loot_result": {},
-        "margin": 1,
+        "margin": -11,
+        "memory_entry": {},
+        "memory_state": {
+          "actor_memory": {},
+          "long_term": [],
+          "rumors": [],
+          "short_term": [],
+          "world_memory": []
+        },
         "merchant_result": {},
+        "npc_emotion_state": {},
         "npc_memory_recall_debug": {
           "action_type": "ambient_wait",
           "count": 0,
@@ -14527,14 +14684,14 @@
           "service_kind": "",
           "source": "deterministic_npc_memory_recall",
           "target_id": "",
-          "target_name": ""
+          "target_name": "The surroundings (General)"
         },
         "npc_profile_summary": {
           "count": 0,
           "profiles": {},
           "source": "deterministic_dynamic_npc_profile_store"
         },
-        "outcome": "success",
+        "outcome": "failure",
         "party_aware_turn_context": {
           "addressed_companion": {
             "matched": false,
@@ -14581,6 +14738,7 @@
         },
         "recalled_npc_memories": [],
         "recalled_service_memories": [],
+        "relationship_state": {},
         "repair_result": {},
         "resource_changes": {
           "currency": {
@@ -14591,7 +14749,7 @@
         },
         "result": "no_supported_semantic_action_detected",
         "result_summary": "no_supported_semantic_action_detected",
-        "roll": 11,
+        "roll": -1,
         "semantic_action": {},
         "semantic_action_type": "ambient_wait",
         "semantic_action_v2": {
@@ -14615,11 +14773,21 @@
         },
         "skill_id": "",
         "skill_modifier": 0,
+        "social_living_world_effects": {
+          "action_type": "observe",
+          "owner_id": "npc:The surroundings (General)",
+          "owner_name": "The surroundings (General)",
+          "reason": "ambient_non_npc_social_target",
+          "skipped": true,
+          "source": "deterministic_social_runtime",
+          "target_id": "",
+          "target_name": "The surroundings (General)"
+        },
         "stat_modifier": -3,
         "stat_used": "",
         "summary": "no_supported_semantic_action_detected",
         "target_id": "",
-        "target_name": "",
+        "target_name": "The surroundings (General)",
         "visible_interaction_reason": "no_supported_semantic_action_detected",
         "world_event_state": {
           "events": [
@@ -14673,7 +14841,7 @@
             "rows": [
               {
                 "label": "Promoted",
-                "value": "3 / 5"
+                "value": "4 / 5"
               },
               {
                 "label": "Enforced",
@@ -14681,7 +14849,7 @@
               },
               {
                 "label": "Partial/Missing",
-                "value": "2"
+                "value": "1"
               }
             ],
             "title": "Runtime Promotion"
@@ -14740,10 +14908,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -14766,7 +14934,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 3,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -14775,7 +14943,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -14846,10 +15014,10 @@
         "advisory_only": true,
         "format_version": "n1222_runtime_promotion_summary_v1",
         "ok": false,
-        "partial_or_missing_count": 2,
+        "partial_or_missing_count": 1,
         "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
         "runtime_enforced_count": 0,
-        "runtime_promoted_count": 3,
+        "runtime_promoted_count": 4,
         "system_count": 5,
         "systems": [
           {
@@ -14872,7 +15040,7 @@
           },
           {
             "evidence": {
-              "actor_activity_count": 0,
+              "actor_activity_count": 3,
               "nearby_npc_count": 0,
               "npc_count": 0
             },
@@ -14881,7 +15049,7 @@
               "actor_activities"
             ],
             "source": "live runtime_state.actor_activities + npc presence",
-            "status": "partial_runtime"
+            "status": "runtime_promoted"
           },
           {
             "evidence": {
@@ -15000,10 +15168,10 @@
           "advisory_only": true,
           "format_version": "n1222_runtime_promotion_summary_v1",
           "ok": false,
-          "partial_or_missing_count": 2,
+          "partial_or_missing_count": 1,
           "policy": "Runtime promotion requires sourceable deterministic live session/turn-contract evidence, not report-only artifacts.",
           "runtime_enforced_count": 0,
-          "runtime_promoted_count": 3,
+          "runtime_promoted_count": 4,
           "system_count": 5,
           "systems": [
             {
@@ -15026,7 +15194,7 @@
             },
             {
               "evidence": {
-                "actor_activity_count": 0,
+                "actor_activity_count": 3,
                 "nearby_npc_count": 0,
                 "npc_count": 0
               },
@@ -15035,7 +15203,7 @@
                 "actor_activities"
               ],
               "source": "live runtime_state.actor_activities + npc presence",
-              "status": "partial_runtime"
+              "status": "runtime_promoted"
             },
             {
               "evidence": {
@@ -15104,28 +15272,37 @@
       },
       "semantic_action": {
         "action_type": "observe",
-        "activity_label": "observe",
-        "intensity": 1,
+        "activity_label": "waiting_and_listening",
+        "intensity": 3,
         "interaction_mode": "solo",
         "location_id": "",
-        "observer_hooks": [],
+        "observer_hooks": [
+          "conversation_seed",
+          "relationship_shift"
+        ],
         "player_input": "I wait and listen for a moment.",
-        "reason": "",
-        "scene_impact": "none",
+        "reason": "The player input 'I wait and listen for a moment' directly maps to the observe action type, focusing on passive perception.",
+        "scene_impact": "minor_focus_shift",
         "secondary_actor_ids": [],
-        "semantic_action": "observe",
-        "semantic_action_id": "semantic_action_9a58f5c0eaac6a94",
-        "semantic_family": "exploration",
-        "social_axes": [],
+        "semantic_action": "waiting_and_listening",
+        "semantic_action_id": "semantic_action_874de8eed12fce87",
+        "semantic_family": "observation",
+        "social_axes": [
+          {
+            "axis": "curiosity",
+            "delta": 1
+          }
+        ],
         "stakes": 1,
-        "summary": "observe",
+        "summary": "The surroundings (General) / waiting and listening",
         "tags": [
-          "exploration",
+          "observation",
           "observe",
-          "player_action"
+          "player_action",
+          "waiting_and_listening"
         ],
         "target_id": "",
-        "target_name": "",
+        "target_name": "The surroundings (General)",
         "tick": 1,
         "visibility": "local"
       },
@@ -15437,7 +15614,7 @@
       "llm_purpose": "",
       "loot_result": {},
       "merchant_result": {},
-      "narration": "You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.",
+      "narration": "Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.",
       "narration_context": {
         "narration_quality_context": {
           "recent_fingerprints": [],
@@ -15454,10 +15631,16 @@
         }
       },
       "narration_payload": {
-        "action": "Service inquiry resolved with available lodging options presented.",
+        "action": "Offers are presented to the player regarding lodging.",
         "followup_hooks": [
-          "service:purchase:bran_lodging_common_cot",
-          "service:purchase:bran_lodging_private_room"
+          {
+            "action_id": "service:purchase:bran_lodging_common_cot",
+            "description": "I buy Common room cot from Bran"
+          },
+          {
+            "action_id": "service:purchase:bran_lodging_private_room",
+            "description": "I buy Private room from Bran"
+          }
         ],
         "format_version": "rpg_narration_v2",
         "grounding_fallback": false,
@@ -15469,46 +15652,58 @@
           "selected_candidate": "primary",
           "violations": []
         },
-        "narration": "You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.",
+        "narration": "Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.",
         "npc": {
-          "line": "I have common cot rooms and private quarters ready to go.",
+          "line": "For rest, I have a common cot for 5 silver, or you can take a private room for one gold.",
           "speaker": "Bran"
         },
         "raw_narration_candidates": {
           "primary": {
-            "action": "Service inquiry resolved with available lodging options presented.",
+            "action": "Offers are presented to the player regarding lodging.",
             "authoritative_changes": false,
             "followup_hooks": [
-              "service:purchase:bran_lodging_common_cot",
-              "service:purchase:bran_lodging_private_room"
+              {
+                "action_id": "service:purchase:bran_lodging_common_cot",
+                "description": "I buy Common room cot from Bran"
+              },
+              {
+                "action_id": "service:purchase:bran_lodging_private_room",
+                "description": "I buy Private room from Bran"
+              }
             ],
             "format_version": "rpg_narration_v2",
-            "narration": "You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.",
+            "narration": "Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.",
             "npc": {
-              "line": "I have common cot rooms and private quarters ready to go.",
+              "line": "For rest, I have a common cot for 5 silver, or you can take a private room for one gold.",
               "speaker": "Bran"
             },
             "reward": null,
             "source": "provider_runtime_narration"
           },
           "safe_fallback": {
-            "action": "Service inquiry is noted and offers are displayed.",
+            "action": "The inquiry is acknowledged; services are available.",
             "authoritative_changes": false,
             "followup_hooks": [
-              "service:purchase:bran_lodging_common_cot",
-              "service:purchase:bran_lodging_private_room"
+              {
+                "action_id": "service:purchase:bran_lodging_common_cot",
+                "description": "I buy Common room cot from Bran"
+              },
+              {
+                "action_id": "service:purchase:bran_lodging_private_room",
+                "description": "I buy Private room from Bran"
+              }
             ],
             "format_version": "rpg_narration_v2",
-            "narration": "You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.",
+            "narration": "Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.",
             "npc": {
-              "line": "",
-              "speaker": ""
+              "line": "I can tell you what costs. Are you interested in a cot or a private room?",
+              "speaker": "Bran"
             },
             "reward": null,
             "source": "provider_runtime_narration"
           }
         },
-        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.\",\n    \"action\": \"Service inquiry resolved with available lodging options presented.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I have common cot rooms and private quarters ready to go.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.\",\n    \"action\": \"Service inquiry is noted and offers are displayed.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  }\n}",
+        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.\",\n    \"action\": \"Offers are presented to the player regarding lodging.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"For rest, I have a common cot for 5 silver, or you can take a private room for one gold.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.\",\n    \"action\": \"The inquiry is acknowledged; services are available.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I can tell you what costs. Are you interested in a cot or a private room?\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  }\n}",
         "reward": null,
         "runtime_narration_diagnostics": {
           "fallback_used": false,
@@ -15555,7 +15750,7 @@
             "parsed_json_ends_with_brace": true,
             "parsed_json_error": "",
             "parsed_json_ok": true,
-            "parsed_json_raw_length": 1093,
+            "parsed_json_raw_length": 1593,
             "parsed_json_strategy": "direct",
             "parsed_keys": [
               "format_version",
@@ -15597,9 +15792,9 @@
               "present": true,
               "type": "LMStudioProvider"
             },
-            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.\",\n    \"action\": \"Service inquiry resolved with available lodging options presented.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I have common cot rooms and private quarters ready to go.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.\",\n    \"action\": \"Service inquiry is noted and offers are displayed.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  }\n}",
-            "raw_text_length": 1093,
-            "raw_text_tail_excerpt": "g_narration_v2\",\n    \"narration\": \"You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.\",\n    \"action\": \"Service inquiry resolved with available lodging options presented.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I have common cot rooms and private quarters ready to go.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.\",\n    \"action\": \"Service inquiry is noted and offers are displayed.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  }\n}",
+            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.\",\n    \"action\": \"Offers are presented to the player regarding lodging.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"For rest, I have a common cot for 5 silver, or you can take a private room for one gold.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.\",\n    \"action\": \"The inquiry is acknowledged; services are available.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I can tell you what costs. Are you interested in a cot or a private room?\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  }\n}",
+            "raw_text_length": 1593,
+            "raw_text_tail_excerpt": "id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.\",\n    \"action\": \"The inquiry is acknowledged; services are available.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I can tell you what costs. Are you interested in a cot or a private room?\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  }\n}",
             "selected_method": "root.chat_completion"
           },
           "provider_errors": [],
@@ -15661,7 +15856,7 @@
         ]
       },
       "npc": {
-        "line": "I have common cot rooms and private quarters ready to go.",
+        "line": "For rest, I have a common cot for 5 silver, or you can take a private room for one gold.",
         "speaker": "Bran"
       },
       "npc_profile_summary": {
@@ -18094,10 +18289,16 @@
         "state": {}
       },
       "structured_narration": {
-        "action": "Service inquiry resolved with available lodging options presented.",
+        "action": "Offers are presented to the player regarding lodging.",
         "followup_hooks": [
-          "service:purchase:bran_lodging_common_cot",
-          "service:purchase:bran_lodging_private_room"
+          {
+            "action_id": "service:purchase:bran_lodging_common_cot",
+            "description": "I buy Common room cot from Bran"
+          },
+          {
+            "action_id": "service:purchase:bran_lodging_private_room",
+            "description": "I buy Private room from Bran"
+          }
         ],
         "format_version": "rpg_narration_v2",
         "grounding_fallback": false,
@@ -18109,46 +18310,58 @@
           "selected_candidate": "primary",
           "violations": []
         },
-        "narration": "You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.",
+        "narration": "Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.",
         "npc": {
-          "line": "I have common cot rooms and private quarters ready to go.",
+          "line": "For rest, I have a common cot for 5 silver, or you can take a private room for one gold.",
           "speaker": "Bran"
         },
         "raw_narration_candidates": {
           "primary": {
-            "action": "Service inquiry resolved with available lodging options presented.",
+            "action": "Offers are presented to the player regarding lodging.",
             "authoritative_changes": false,
             "followup_hooks": [
-              "service:purchase:bran_lodging_common_cot",
-              "service:purchase:bran_lodging_private_room"
+              {
+                "action_id": "service:purchase:bran_lodging_common_cot",
+                "description": "I buy Common room cot from Bran"
+              },
+              {
+                "action_id": "service:purchase:bran_lodging_private_room",
+                "description": "I buy Private room from Bran"
+              }
             ],
             "format_version": "rpg_narration_v2",
-            "narration": "You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.",
+            "narration": "Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.",
             "npc": {
-              "line": "I have common cot rooms and private quarters ready to go.",
+              "line": "For rest, I have a common cot for 5 silver, or you can take a private room for one gold.",
               "speaker": "Bran"
             },
             "reward": null,
             "source": "provider_runtime_narration"
           },
           "safe_fallback": {
-            "action": "Service inquiry is noted and offers are displayed.",
+            "action": "The inquiry is acknowledged; services are available.",
             "authoritative_changes": false,
             "followup_hooks": [
-              "service:purchase:bran_lodging_common_cot",
-              "service:purchase:bran_lodging_private_room"
+              {
+                "action_id": "service:purchase:bran_lodging_common_cot",
+                "description": "I buy Common room cot from Bran"
+              },
+              {
+                "action_id": "service:purchase:bran_lodging_private_room",
+                "description": "I buy Private room from Bran"
+              }
             ],
             "format_version": "rpg_narration_v2",
-            "narration": "You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.",
+            "narration": "Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.",
             "npc": {
-              "line": "",
-              "speaker": ""
+              "line": "I can tell you what costs. Are you interested in a cot or a private room?",
+              "speaker": "Bran"
             },
             "reward": null,
             "source": "provider_runtime_narration"
           }
         },
-        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.\",\n    \"action\": \"Service inquiry resolved with available lodging options presented.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I have common cot rooms and private quarters ready to go.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.\",\n    \"action\": \"Service inquiry is noted and offers are displayed.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  }\n}",
+        "raw_provider_response": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.\",\n    \"action\": \"Offers are presented to the player regarding lodging.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"For rest, I have a common cot for 5 silver, or you can take a private room for one gold.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.\",\n    \"action\": \"The inquiry is acknowledged; services are available.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I can tell you what costs. Are you interested in a cot or a private room?\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  }\n}",
         "reward": null,
         "runtime_narration_diagnostics": {
           "fallback_used": false,
@@ -18195,7 +18408,7 @@
             "parsed_json_ends_with_brace": true,
             "parsed_json_error": "",
             "parsed_json_ok": true,
-            "parsed_json_raw_length": 1093,
+            "parsed_json_raw_length": 1593,
             "parsed_json_strategy": "direct",
             "parsed_keys": [
               "format_version",
@@ -18237,9 +18450,9 @@
               "present": true,
               "type": "LMStudioProvider"
             },
-            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.\",\n    \"action\": \"Service inquiry resolved with available lodging options presented.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I have common cot rooms and private quarters ready to go.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.\",\n    \"action\": \"Service inquiry is noted and offers are displayed.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  }\n}",
-            "raw_text_length": 1093,
-            "raw_text_tail_excerpt": "g_narration_v2\",\n    \"narration\": \"You inquire of Bran regarding the costs for food, water, or a room. He gestures toward various signs detailing his offerings.\",\n    \"action\": \"Service inquiry resolved with available lodging options presented.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I have common cot rooms and private quarters ready to go.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"You ask Bran about the prices for food, water, or lodging. He confirms he has several services available to you.\",\n    \"action\": \"Service inquiry is noted and offers are displayed.\",\n    \"npc\": {\n      \"speaker\": \"\",\n      \"line\": \"\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      \"service:purchase:bran_lodging_common_cot\",\n      \"service:purchase:bran_lodging_private_room\"\n    ]\n  }\n}",
+            "raw_text_excerpt": "{\n  \"format_version\": \"rpg_narration_candidates_v1\",\n  \"primary\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran considers your inquiry about sustenance and shelter, then lists his available services for the night. He offers a simple cot in the common room or a more private space.\",\n    \"action\": \"Offers are presented to the player regarding lodging.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"For rest, I have a common cot for 5 silver, or you can take a private room for one gold.\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.\",\n    \"action\": \"The inquiry is acknowledged; services are available.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I can tell you what costs. Are you interested in a cot or a private room?\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  }\n}",
+            "raw_text_length": 1593,
+            "raw_text_tail_excerpt": "id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  },\n  \"safe_fallback\": {\n    \"format_version\": \"rpg_narration_v2\",\n    \"narration\": \"Bran does not immediately have a specific service to list for your broad query, but he is ready to detail his prices.\",\n    \"action\": \"The inquiry is acknowledged; services are available.\",\n    \"npc\": {\n      \"speaker\": \"Bran\",\n      \"line\": \"I can tell you what costs. Are you interested in a cot or a private room?\"\n    },\n    \"reward\": null,\n    \"followup_hooks\": [\n      {\n        \"action_id\": \"service:purchase:bran_lodging_common_cot\",\n        \"description\": \"I buy Common room cot from Bran\"\n      },\n      {\n        \"action_id\": \"service:purchase:bran_lodging_private_room\",\n        \"description\": \"I buy Private room from Bran\"\n      }\n    ]\n  }\n}",
             "selected_method": "root.chat_completion"
           },
           "provider_errors": [],
@@ -18293,13 +18506,10 @@
           "confidence": 0.82,
           "difficulty": "normal",
           "metadata": {
-            "intent_tags": [
-              "information_gathering",
-              "transaction_setup"
-            ],
+            "intent_tags": [],
             "llm_advisory": true,
-            "llm_reason": "The player is explicitly asking NPC Bran for pricing information regarding sustenance and shelter.",
-            "narrative_goal": "Determine the costs associated with basic services (food, water, lodging) from Bran.",
+            "llm_reason": "",
+            "narrative_goal": "",
             "player_input": "I ask Bran what food, water, or a room would cost if I need rest.",
             "semantic_action": {
               "action_type": "service_inquiry",
@@ -18540,7 +18750,6 @@
           "provider_id": "npc:Bran",
           "provider_name": "Bran",
           "service_kind": "lodging",
-          "skill_id": "persuasion",
           "source": "deterministic_service_resolver",
           "target": "inn",
           "target_id": "npc:Bran",
@@ -21449,13 +21658,10 @@
         "confidence": 0.82,
         "difficulty": "normal",
         "metadata": {
-          "intent_tags": [
-            "information_gathering",
-            "transaction_setup"
-          ],
+          "intent_tags": [],
           "llm_advisory": true,
-          "llm_reason": "The player is explicitly asking NPC Bran for pricing information regarding sustenance and shelter.",
-          "narrative_goal": "Determine the costs associated with basic services (food, water, lodging) from Bran.",
+          "llm_reason": "",
+          "narrative_goal": "",
           "player_input": "I ask Bran what food, water, or a room would cost if I need rest.",
           "semantic_action": {
             "action_type": "service_inquiry",
@@ -21696,7 +21902,6 @@
         "provider_id": "npc:Bran",
         "provider_name": "Bran",
         "service_kind": "lodging",
-        "skill_id": "persuasion",
         "source": "deterministic_service_resolver",
         "target": "inn",
         "target_id": "npc:Bran",
