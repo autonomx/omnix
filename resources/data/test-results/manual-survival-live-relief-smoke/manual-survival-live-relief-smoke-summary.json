@@ -1,0 +1,56 @@
+{
+  "artifact_files": {
+    "rows": "manual-survival-live-relief-smoke-rows.json",
+    "summary": "manual-survival-live-relief-smoke-summary.json"
+  },
+  "errors": [],
+  "final_needs": {
+    "fatigue": 2,
+    "hunger": 2,
+    "thirst": 3
+  },
+  "format_version": "n1263_manual_survival_live_relief_smoke_v1",
+  "inventory_consumed_count": 0,
+  "negative_delta_rows": 0,
+  "ok": false,
+  "relief_applied_count": 0,
+  "relief_needs": [],
+  "session_id": "manual_survival_live_relief_smoke",
+  "source_gate": {
+    "advisory_only": false,
+    "coverage": {
+      "inventory_consumed_rows": 0,
+      "negative_delta_rows": 0,
+      "relief_applied_rows": 0,
+      "row_count": 4,
+      "survival_suggestion_rows": 0
+    },
+    "gate": "live_runtime_survival_suggestions_and_relief",
+    "ok": false,
+    "reasons": [
+      "missing_survival_suggestion_rows",
+      "missing_thirst_relief",
+      "missing_hunger_relief",
+      "missing_fatigue_relief",
+      "missing_inventory_consumption_for_food_and_water",
+      "missing_negative_survival_deltas"
+    ],
+    "source": "n1263_live_runtime_survival_repair"
+  },
+  "starting_needs": {
+    "fatigue": 78,
+    "hunger": 80,
+    "thirst": 82
+  },
+  "survival_suggestion_rows": 0,
+  "turns_executed": 4,
+  "turns_requested": 4,
+  "validation_failures": [
+    "missing_survival_suggestion_rows",
+    "missing_thirst_relief",
+    "missing_hunger_relief",
+    "missing_fatigue_relief",
+    "missing_inventory_consumption_for_food_and_water",
+    "missing_negative_survival_deltas"
+  ]
+}
