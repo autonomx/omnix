@@ -12,14 +12,14 @@ try:
         build_survival_metric_source_summary,
         build_survival_pressure_relief_summary as _n1251_build_survival_summary,
     )
-except Exception:  # pragma: no cover - defensive import for generated harness contexts
+except Exception:  # pragma: no cover - defensive for generated harness contexts
     build_survival_metric_source_gate = None
     build_survival_metric_source_summary = None
     _n1251_build_survival_summary = None
 
 try:
-    from app.rpg.session.survival_transcript import persist_survival_evidence_into_transcript_rows as _n1251_project_survival_rows
-except Exception:  # pragma: no cover - defensive import for generated harness contexts
+    from app.rpg.session.survival_transcript_projector import persist_survival_evidence_into_transcript_rows as _n1251_project_survival_rows
+except Exception:  # pragma: no cover - defensive for generated harness contexts
     _n1251_project_survival_rows = None
 
 
@@ -59,10 +59,7 @@ def _n1251_render_source_section(source_summary, gate):
     source_summary = _n1251_dict(source_summary)
     gate = _n1251_dict(gate)
     coverage = _n1251_dict(source_summary.get("coverage"))
-    rows = "".join(
-        f"<tr><td>{key}</td><td>{value}</td></tr>"
-        for key, value in coverage.items()
-    ) or "<tr><td colspan='2'>No coverage rows.</td></tr>"
+    rows = "".join(f"<tr><td>{key}</td><td>{value}</td></tr>" for key, value in coverage.items()) or "<tr><td colspan='2'>No coverage rows.</td></tr>"
     reasons = ", ".join(str(item) for item in _n1251_list(gate.get("reasons"))) or "none"
     return f"""
 <section id="n1251-survival-source" class="report-section n1251-survival-source">
@@ -75,12 +72,7 @@ def _n1251_render_source_section(source_summary, gate):
 
 
 def _n1251_insert_source_section(sections, source_section):
-    """Insert N125.1 before N123.4 so legacy tests keep N123.4 as the final section."""
-
-    clean_sections = [
-        section for section in _n1251_list(sections)
-        if _n1251_dict(section).get("id") != "n1251-survival-source"
-    ]
+    clean_sections = [section for section in _n1251_list(sections) if _n1251_dict(section).get("id") != "n1251-survival-source"]
     insert_at = len(clean_sections)
     for index, section in enumerate(clean_sections):
         if _n1251_dict(section).get("id") == "n1234-survival-pressure":
