@@ -1,0 +1,123 @@
+# N127.1 survival autoplay evidence gates. Lexically late on purpose.
+
+_N1271_READY_PREV = globals().get("_build_100_turn_readiness_summary")
+_N1271_EVAL_PREV = globals().get("_build_100_turn_evaluation_summary")
+_N1271_ATTACH_PREV = globals().get("_attach_survival_report_metrics")
+
+from app.rpg.session.survival_autoplay_evidence import (  # noqa: E402
+    build_survival_autoplay_evidence_summary as _n1271_build_survival_autoplay_evidence_summary,
+    render_survival_autoplay_evidence_report_section as _n1271_render_survival_autoplay_evidence_report_section,
+)
+
+
+def _n1271_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _n1271_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _n1271_bool_env(name):
+    try:
+        import os
+        return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+    except Exception:
+        return False
+
+
+def _n1271_strict_survival_gates(kwargs=None):
+    kwargs = _n1271_dict(kwargs)
+    return bool(
+        kwargs.get("strict_survival_evidence")
+        or kwargs.get("survival_evidence_strict")
+        or _n1271_bool_env("RPG_AUTOPLAY_STRICT_SURVIVAL_EVIDENCE")
+        or _n1271_bool_env("N1271_STRICT_SURVIVAL_EVIDENCE")
+    )
+
+
+def _n1271_add_artifact(summary, name, payload):
+    summary = _n1271_dict(summary)
+    artifacts = dict(_n1271_dict(summary.get("artifact_level_summaries")))
+    artifacts[name] = payload
+    summary["artifact_level_summaries"] = artifacts
+    return summary
+
+
+def _n1271_attach_report_section(summary, evidence):
+    summary = _n1271_dict(summary)
+    sections = list(_n1271_list(summary.get("report_sections")))
+    if any(_n1271_dict(section).get("id") == "n1271-survival-autoplay-evidence" for section in sections):
+        summary["report_sections"] = sections
+        return summary
+    sections.append({
+        "id": "n1271-survival-autoplay-evidence",
+        "title": "N127.1 Survival Autoplay Evidence",
+        "html": _n1271_render_survival_autoplay_evidence_report_section(evidence),
+    })
+    summary["report_sections"] = sections
+    return summary
+
+
+def _n1271_attach_survival_autoplay_evidence(summary, transcript, *, strict=False):
+    summary = dict(_n1271_dict(summary))
+    evidence = _n1271_build_survival_autoplay_evidence_summary(_n1271_list(transcript), strict=bool(strict))
+    gate = _n1271_dict(evidence.get("evidence_gate"))
+    summary["survival_autoplay_evidence_summary"] = evidence
+    summary["survival_autoplay_evidence_gate"] = gate
+    summary = _n1271_add_artifact(summary, "survival-autoplay-evidence-summary.json", evidence)
+    summary = _n1271_add_artifact(summary, "survival-autoplay-evidence-gate.json", gate)
+    summary = _n1271_add_artifact(summary, "survival-autoplay-pressure-response-rows.json", _n1271_list(evidence.get("pressure_response_rows")))
+    summary = _n1271_attach_report_section(summary, evidence)
+    return summary
+
+
+if callable(_N1271_ATTACH_PREV):
+    def _attach_survival_report_metrics(base, transcript):
+        result = _N1271_ATTACH_PREV(base, transcript)
+        return _n1271_attach_survival_autoplay_evidence(result, transcript, strict=False)
+
+
+if callable(_N1271_EVAL_PREV):
+    def _build_100_turn_evaluation_summary(*args, **kwargs):
+        result = _N1271_EVAL_PREV(*args, **kwargs)
+        transcript = kwargs.get("transcript")
+        if transcript is None and len(args) >= 5:
+            transcript = args[4]
+        strict = _n1271_strict_survival_gates(kwargs)
+        result = _n1271_attach_survival_autoplay_evidence(result, transcript or [], strict=strict)
+        gate = _n1271_dict(result.get("survival_autoplay_evidence_gate"))
+        if strict and not gate.get("ok"):
+            failed = list(_n1271_list(result.get("failed_gates")))
+            if "survival_autoplay_evidence_ok" not in failed:
+                failed.append("survival_autoplay_evidence_ok")
+            result["failed_gates"] = failed
+            result["failed_gate_count"] = len(failed)
+            result["ok"] = False
+        return result
+
+
+if callable(_N1271_READY_PREV):
+    def _build_100_turn_readiness_summary(*args, **kwargs):
+        result = _N1271_READY_PREV(*args, **kwargs)
+        transcript = kwargs.get("transcript") if "transcript" in kwargs else (args[1] if len(args) > 1 else [])
+        strict = _n1271_strict_survival_gates(kwargs)
+        evidence = _n1271_build_survival_autoplay_evidence_summary(_n1271_list(transcript), strict=strict)
+        gate = _n1271_dict(evidence.get("evidence_gate"))
+        gates = dict(_n1271_dict(result.get("gates")))
+        gates["survival_autoplay_evidence_ok"] = bool(gate.get("ok"))
+        result["gates"] = gates
+        advisory = list(_n1271_list(result.get("advisory_gates")))
+        if not strict and "survival_autoplay_evidence_ok" not in advisory:
+            advisory.append("survival_autoplay_evidence_ok")
+        result["advisory_gates"] = advisory
+        result["survival_autoplay_evidence_summary"] = evidence
+        result["survival_autoplay_evidence_gate"] = gate
+        if strict and not gate.get("ok"):
+            failed = list(_n1271_list(result.get("failed_gates")))
+            if "survival_autoplay_evidence_ok" not in failed:
+                failed.append("survival_autoplay_evidence_ok")
+            result["failed_gates"] = failed
+            result["failed_gate_count"] = len(failed)
+            result["ok"] = False
+        return result
