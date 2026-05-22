@@ -42,10 +42,60 @@ DEFAULT_TURNS = [
     "I wait and listen for a moment.",
     "I ask Bran what food, water, or a room would cost if I need rest.",
 ]
+_LLM_TRUE_KEYS = {
+    "called",
+    "llm_called",
+    "model_called",
+    "provider_called",
+    "provider_requested",
+    "provider_attempted",
+    "provider_valid",
+    "used_llm",
+    "used_provider",
+}
+_LLM_COUNT_KEYS = {
+    "attempt_count",
+    "completion_tokens",
+    "input_tokens",
+    "llm_call_count",
+    "output_tokens",
+    "provider_attempt_count",
+    "provider_call_count",
+    "raw_text_length",
+    "total_tokens",
+}
+_LLM_TEXT_KEYS = {
+    "raw_text",
+    "raw_text_excerpt",
+    "response_text",
+    "structured_narration_text",
+}
+_LLM_SOURCE_MARKERS = (
+    "provider_runtime_narration",
+    "runtime_provider_narration",
+    "central_provider",
+    "llm_provider",
+    "provider_call",
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
 
 
 def _extract_turn_contract(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -110,6 +160,89 @@ def _extract_narration_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _value_looks_like_provider_source(value: Any) -> bool:
+    text = _safe_str(value).strip().lower()
+    if not text:
+        return False
+    if text in {"fallback", "deterministic_fallback", "none", "disabled"}:
+        return False
+    return any(marker in text for marker in _LLM_SOURCE_MARKERS)
+
+
+def _diagnostic_provider_call_seen(payload: Dict[str, Any]) -> bool:
+    payload = _safe_dict(payload)
+    if not payload:
+        return False
+    for key, value in payload.items():
+        key_l = _safe_str(key).lower()
+        if key_l in _LLM_TRUE_KEYS and value is True:
+            return True
+        if key_l in _LLM_COUNT_KEYS and _safe_int(value, 0) > 0:
+            return True
+        if key_l in _LLM_TEXT_KEYS and _safe_str(value).strip():
+            return True
+    for key in ("source", "selected_method", "method", "provider_source", "narration_source"):
+        if _value_looks_like_provider_source(payload.get(key)):
+            return True
+    return False
+
+
+def _collect_llm_evidence_paths(value: Any, *, prefix: str = "root", limit: int = 12) -> List[str]:
+    """Return compact evidence paths proving a live provider/LLM call happened.
+
+    Runtime payload shapes have changed repeatedly across N12x work.  Older
+    smokes only checked a handful of top-level narration diagnostics fields,
+    which made ``--require-llm`` fail even when the provider evidence had simply
+    moved under result/session/runtime diagnostics.  This recursive scanner is
+    intentionally evidence-only: it records positive booleans, positive counts,
+    non-empty raw provider text, or explicit provider-runtime source markers.
+    """
+
+    found: List[str] = []
+
+    def visit(node: Any, path: str) -> None:
+        if len(found) >= limit:
+            return
+        if isinstance(node, dict):
+            if _diagnostic_provider_call_seen(node):
+                found.append(path)
+                if len(found) >= limit:
+                    return
+            for key, child in node.items():
+                key_l = _safe_str(key).lower()
+                child_path = f"{path}.{key_l}"
+                if key_l in _LLM_TRUE_KEYS and child is True:
+                    found.append(child_path)
+                elif key_l in _LLM_COUNT_KEYS and _safe_int(child, 0) > 0:
+                    found.append(child_path)
+                elif key_l in _LLM_TEXT_KEYS and _safe_str(child).strip():
+                    found.append(child_path)
+                elif key_l in {"source", "selected_method", "method", "provider_source", "narration_source"} and _value_looks_like_provider_source(child):
+                    found.append(child_path)
+                if len(found) >= limit:
+                    return
+                if isinstance(child, (dict, list)):
+                    visit(child, child_path)
+                    if len(found) >= limit:
+                        return
+        elif isinstance(node, list):
+            for index, child in enumerate(node[:20]):
+                if isinstance(child, (dict, list)):
+                    visit(child, f"{path}[{index}]")
+                    if len(found) >= limit:
+                        return
+
+    visit(value, prefix)
+    deduped: List[str] = []
+    seen = set()
+    for item in found:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped[:limit]
+
+
 def _provider_call_seen(payload: Dict[str, Any]) -> bool:
     payload = _safe_dict(payload)
     diagnostics_sources = [
@@ -121,36 +254,41 @@ def _provider_call_seen(payload: Dict[str, Any]) -> bool:
         diagnostics = _safe_dict(diagnostics_source)
         if not diagnostics:
             continue
-        if diagnostics.get("called") is True:
+        if _diagnostic_provider_call_seen(diagnostics):
             return True
-        if diagnostics.get("provider_requested") is True:
-            return True
-        if diagnostics.get("provider_attempted") is True:
-            return True
-        if diagnostics.get("provider_valid") is True and diagnostics.get("selected_method"):
-            return True
-        if int(diagnostics.get("provider_attempt_count") or 0) > 0:
-            return True
-        if int(diagnostics.get("raw_text_length") or 0) > 0:
-            return True
-        if diagnostics.get("raw_text_excerpt"):
-            return True
-    return False
+    return bool(_collect_llm_evidence_paths(payload, prefix="narration_payload", limit=1))
+
+
+def _llm_evidence_paths(result: Dict[str, Any]) -> List[str]:
+    result = _safe_dict(result)
+    payload = _extract_narration_payload(result)
+    paths: List[str] = []
+    if result.get("llm_called"):
+        paths.append("result.llm_called")
+    if _safe_dict(result.get("result")).get("llm_called"):
+        paths.append("result.result.llm_called")
+    if payload.get("source") == "provider_runtime_narration":
+        paths.append("narration_payload.source")
+    if _provider_call_seen(payload):
+        paths.extend(_collect_llm_evidence_paths(payload, prefix="narration_payload"))
+    paths.extend(_collect_llm_evidence_paths(result, prefix="result"))
+    deduped: List[str] = []
+    seen = set()
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        deduped.append(path)
+    return deduped[:16]
 
 
 def _llm_called(result: Dict[str, Any]) -> bool:
-    result = _safe_dict(result)
-    payload = _extract_narration_payload(result)
-    return bool(
-        result.get("llm_called")
-        or _safe_dict(result.get("result")).get("llm_called")
-        or payload.get("source") == "provider_runtime_narration"
-        or _provider_call_seen(payload)
-    )
+    return bool(_llm_evidence_paths(result))
 
 
 def _build_row(turn_index: int, player_input: str, result: Dict[str, Any]) -> Dict[str, Any]:
     contract = _extract_turn_contract(result)
+    llm_evidence = _llm_evidence_paths(result)
     row = {
         "turn_index": turn_index,
         "player": player_input,
@@ -158,7 +296,8 @@ def _build_row(turn_index: int, player_input: str, result: Dict[str, Any]) -> Di
         "turn_contract": contract,
         "climate_survival": _extract_climate_survival(result),
         "resource_changes": _extract_resource_changes(result),
-        "llm_called": _llm_called(result),
+        "llm_called": bool(llm_evidence),
+        "llm_evidence_paths": llm_evidence,
         "raw_result_keys": sorted(str(key) for key in _safe_dict(result).keys()),
     }
     return row
@@ -195,18 +334,24 @@ def run_smoke(*, turns: int, session_id: str, require_llm: bool) -> Dict[str, An
     source_gate = build_survival_metric_source_gate(source_summary)
     pressure_summary = build_survival_pressure_relief_summary(projected_rows)
     llm_called_count = sum(1 for row in projected_rows if bool(row.get("llm_called")))
+    llm_evidence_paths = [
+        {"turn_index": row.get("turn_index"), "paths": row.get("llm_evidence_paths") or []}
+        for row in projected_rows
+        if row.get("llm_evidence_paths")
+    ]
 
     ok = bool(source_gate.get("ok")) and not errors
     if require_llm and llm_called_count <= 0:
         ok = False
 
     summary = {
-        "format_version": "n1253_manual_survival_source_smoke_v1",
+        "format_version": "n1253_manual_survival_source_smoke_v2",
         "ok": ok,
         "session_id": session_id,
         "turns_requested": turns,
         "turns_executed": len(projected_rows),
         "llm_called_count": llm_called_count,
+        "llm_evidence_paths": llm_evidence_paths,
         "require_llm": require_llm,
         "errors": errors,
         "source_gate": source_gate,
