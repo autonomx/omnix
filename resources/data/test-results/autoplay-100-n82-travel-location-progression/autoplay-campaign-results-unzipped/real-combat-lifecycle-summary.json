@@ -1,304 +1,304 @@
 {
   "attack_events": [
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 38,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 38,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 38,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"fallback_source\": \"llm_safe_fallback\", \"narration\": \"Bran immediately leans forward, his eyes locking onto the official seal of the manifest you present. Garran shifts beside him, a flicker of grim satisfaction crossing his usually stoic features as he takes in the documented proof. The evidence paints a clear picture, confirming suspicions that have been festering within their ranks regarding Captain Voss's involvement in the recent series of attacks. If that proof is solid, we copy it, guard it, and press the name it gives us.\", \"npc\": {\"line\": \"If that proof is solid, we copy it, guard it, and press the name it gives us.\", \"speaker\": \"Captain Voss\"}, \"source\": \"llm_safe_fallback\", \"unsupported_combat_claim_preselection_suppressed\": true, \"unsupported_combat_claim_sanitizer\": {\"dropped_sentence_count\": 0, \"dropped_sentence_prev",
+      "raw_preview": "{\"action\": \"The report is accepted by Bran, confirming suspicions of an impending attack.\", \"current_action_response\": {\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"Bran must first acknowledge the report about the trail, blood, and bridge pointing to an ambush before offering commentary or asking follow-up questions.\", \"required_focus\": []}, \"followup_hooks\": [], \"format_version\": \"rpg_narration_v2\", \"narration\": \"A shadow crosses Bran’s face as you deliver your assessment; the weight of imminent danger seems to settle onto his shoulders. He slowly nods, absorbing the details of the traveler's trail and the grim evidence left at the bridge crossing. The notion of a prepared ambush makes the already tense air feel heavy with anticipation of violence.\", \"npc\": {\"line\": \"An ambush, you say? That aligns perfectly with what I feared; this isn't mere travel weariness. The trail leads directly into a trap, or something much worse.\", \"sp",
       "summary": "",
-      "turn": 38,
+      "turn": 8,
       "type": null
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"canonical_text\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"display_text\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9, \"source\": \"direct_graph_",
-      "summary": "",
-      "turn": 38,
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 20,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"format_version\": \"current_action_response_v1\", \"npc_line_addresses_current_action\": true, \"reason\": \"The bandit's line must directly answer who hired them and why they attacked Garran's wagon.\", \"required_focus\": []}",
+      "summary": "The bandit's line must directly answer who hired them and why they attacked Garran's wagon.",
+      "turn": 20,
       "type": null
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"metadata\": {\"semantic_action\": {\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}}, \"priority\": 9}",
-      "summary": "",
-      "turn": 38,
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 21,
       "type": null
     },
     {
-      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"changed\": false, \"original_action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\"}",
-      "summary": "",
-      "turn": 38,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 21,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 21,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 21,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 22,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 39,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 22,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 22,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 22,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 23,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T23:22:07.098190+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:c898bbbdfc8f79f1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 39,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 23,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 39,
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 23,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 39,
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 23,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 39,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 39,
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 24,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 40,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 24,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 24,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 24,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 25,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 40,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 40, \"created_at\": \"2026-05-21T23:22:07.187727+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:1b3f82b99892cfe8\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 40,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 40,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T23:22:07.098190+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:c898bbbdfc8f79f1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 40,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 25,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 40,
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 25,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 40,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 40,
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 25,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 40,
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 26,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 41,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 26,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 26,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 26,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 27,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 41,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 40, \"created_at\": \"2026-05-21T23:22:07.187727+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:1b3f82b99892cfe8\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 41,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 41,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T23:22:07.098190+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:c898bbbdfc8f79f1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 41,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 27,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 41,
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 27,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 41,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 41,
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 27,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 41,
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 28,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 42,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 28,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 28,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 28,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 29,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 42,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 40, \"created_at\": \"2026-05-21T23:22:07.187727+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:1b3f82b99892cfe8\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 42,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 42,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T23:22:07.098190+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:c898bbbdfc8f79f1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 42,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 29,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 42,
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 29,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 42,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 42,
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 29,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 42,
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 30,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 43,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 30,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 30,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 30,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 31,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 43,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 40, \"created_at\": \"2026-05-21T23:22:07.187727+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:future_hook:1b3f82b99892cfe8\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 43,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"target\": \"Bran\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 43,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-21T23:22:07.098190+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:c898bbbdfc8f79f1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a5cf3c94155514ac\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 43,
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 31,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 43,
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 31,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\"}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 43,
-      "type": "Faction Confirmation"
-    },
-    {
-      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.\"}",
-      "summary": "The physical document (manifest) serves as tangible proof, confirming Captain Voss's culpability in the recent attacks.",
-      "turn": 43,
+      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 31,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"action_type\": \"attack_melee\", \"activity_label\": \"attack_melee\", \"intensity\": 1, \"interaction_mode\": \"solo\", \"location_id\": \"\", \"observer_hooks\": [], \"player_input\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"reason\": \"\", \"scene_impact\": \"none\", \"secondary_actor_ids\": [], \"semantic_action_id\": \"fast_semantic_action_bda95a240f43de87\", \"semantic_family\": \"observation\", \"social_axes\": [], \"stakes\": 1, \"summary\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"tags\": [\"attack_melee\", \"observation\", \"player_action\"], \"target_id\": \"\", \"target_name\": \"\", \"visibility\": \"local\"}",
-      "summary": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "turn": 43,
+      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 32,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Faction Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:771beaee52879be2\", \"summary\": \"The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.\", \"turn_index\": 40}",
-      "summary": "The attacks are not random; they are directed by internal figures, specifically implicating Captain Voss as an active agent.",
-      "turn": 44,
-      "type": "Faction Confirmation"
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 21, \"created_at\": \"2026-05-22T00:07:08.965713+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:20:semantic_intent:f5e0b633927473f7\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6ae033ad30fe9a83\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 21}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 32,
+      "type": "semantic_intent"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.\", \"target\": \"Bran\"}",
+      "summary": "Questioning the captured bandit about his employer and the motive for attacking Garran's wagon.",
+      "turn": 32,
+      "type": "semantic_intent"
     }
   ],
   "combat_text_turns": [
@@ -314,303 +314,303 @@
   ],
   "damage_events": [
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
       "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 1,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 1,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
       "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 2,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 2,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
       "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 3,
       "type": null
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 3,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 4,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 4,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 5,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 5,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 6,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 6,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 7,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 7,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 8,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 8,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 8,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 8,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief that Veska commands authority.\"}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief that Veska commands authority.",
+      "turn": 8,
+      "type": "memory"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 9,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 9,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 9,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
+      "turn": 9,
       "type": null
     },
     {
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\"}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
-      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
-      "turn": 4,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
-      "turn": 4,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T23:22:04.872353+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:4b868ff015f28fdc\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
-      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
-      "turn": 5,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
-      "turn": 5,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the North Watchpost next, citing the ledgers as evidence of Veska's presence there.\"}",
-      "summary": "Bran suggests investigating the North Watchpost next, citing the ledgers as evidence of Veska's presence there.",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T23:22:04.872353+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:4b868ff015f28fdc\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 5,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
-      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
-      "turn": 6,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
-      "turn": 6,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:4215ce389728afb3\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 6}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-21T23:22:04.916650+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:future_hook:7d8ba9d115ac45ae\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:4215ce389728afb3\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 6,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T23:22:04.872353+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:4b868ff015f28fdc\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 6,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:4215ce389728afb3\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 6}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 7,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 7,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 7,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
-      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
-      "turn": 7,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
-      "turn": 7,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 7,
+      "turn": 9,
       "type": "Immediate Investigation Prompt"
     }
   ],
@@ -628,7 +628,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -641,8 +641,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
@@ -654,8 +654,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
@@ -667,7 +667,20 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
       "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 1,
       "type": null
@@ -680,8 +693,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 1,
       "type": null
     },
@@ -693,7 +706,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -706,8 +719,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
@@ -719,8 +732,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
@@ -732,7 +745,20 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
       "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 2,
       "type": null
@@ -745,8 +771,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 2,
       "type": null
     },
@@ -758,7 +784,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
@@ -771,8 +797,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
@@ -784,8 +810,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
@@ -797,7 +823,20 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
       "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 3,
       "type": null
@@ -810,8 +849,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 3,
       "type": null
     },
@@ -823,20 +862,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5e05788ad8c424cd\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
@@ -849,8 +875,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:647bbefbb1bbb36d\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 95}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:06271924181b5d64\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 92}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
@@ -862,8 +888,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:dc7d31d724e25dea\", \"summary\": \"The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.\", \"turn_index\": 90}",
-      "summary": "The tracks lead directly inside the watchpost; further investigation of the structure is warranted to follow the trail.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7d0a557e2015690\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 91}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
@@ -875,7 +901,20 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:132a7c42a80244be\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:864c8e0a889a8d02\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 90}",
+      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
+      "turn": 4,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:a613e682ab75ebc5\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 94}",
       "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 4,
       "type": null
@@ -888,8 +927,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:950bc81b6c8b24eb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.\", \"turn_index\": 90}",
-      "summary": "Confirmation that Handler Veska has recently passed through this specific north watchpost, leaving behind clear tracks.",
+      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c882345887dda94a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.\", \"turn_index\": 91}",
+      "summary": "The physical evidence confirming recent activity at the North Watchpost (the ledgers) provides tangible support for Bran's belief in Veska's authoritative command structure.",
       "turn": 4,
       "type": null
     },
@@ -901,48 +940,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 4}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:728fc52d53399150\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"turn_index\": 94}",
       "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-21T23:22:04.872353+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:4b868ff015f28fdc\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c6a4eaa8152ee87e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "future_hook"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\", \"target\": \"Bran\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.\"}",
-      "summary": "With these ledgers in hand, further investigation into the structure (North Watchpost) where Veska was seen is strongly warranted by Bran.",
-      "turn": 4,
+      "turn": 5,
       "type": "Immediate Investigation Prompt"
     }
   ],
@@ -985,17 +985,17 @@
     "missing_parts": [],
     "ok": true,
     "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
-    "real_attack_event_count": 486,
-    "real_damage_event_count": 7934,
-    "real_resolution_event_count": 47
+    "real_attack_event_count": 550,
+    "real_damage_event_count": 5121,
+    "real_resolution_event_count": 49
   },
   "ok": true,
   "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
-  "real_attack_event_count": 486,
+  "real_attack_event_count": 550,
   "real_combat_lifecycle_ok": true,
-  "real_damage_event_count": 7934,
-  "real_resolution_event_count": 47,
-  "real_round_event_count": 34,
+  "real_damage_event_count": 5121,
+  "real_resolution_event_count": 49,
+  "real_round_event_count": 2,
   "resolution_events": [
     {
       "raw_preview": "{\"action_id\": \"report_findings_to_bran\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"report\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:report_findings_to_bran\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:report\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"report\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
@@ -1112,6 +1112,12 @@
       "type": null
     },
     {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}",
+      "summary": "",
+      "turn": 20,
+      "type": null
+    },
+    {
       "raw_preview": "{\"action_id\": \"search_bandit_satchel\", \"changed_parts\": [\"faction_consequence\", \"inspect\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:search_bandit_satchel\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:inspect\", \"mechanic:npc_reaction\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"inspect\", \"npc_reaction\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
       "summary": "",
       "turn": 21,
@@ -1124,6 +1130,12 @@
       "type": "graph_direct_completion"
     },
     {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}",
+      "summary": "",
+      "turn": 21,
+      "type": null
+    },
+    {
       "raw_preview": "{\"action_id\": \"return_to_bran_with_proof\", \"changed_parts\": [\"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"travel\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:return_to_bran_with_proof\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:travel\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"travel\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
       "summary": "",
       "turn": 22,
@@ -1134,6 +1146,18 @@
       "summary": "Graph action completed: return_to_bran_with_proof",
       "turn": 22,
       "type": "graph_direct_completion"
+    },
+    {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}",
+      "summary": "",
+      "turn": 22,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action_id\": \"protect_wagon_or_lure_bandits\", \"action_terms\": [\"ambush\", \"bandit\", \"fight\", \"protect\", \"wagon\", \"lure\"], \"changed_parts\": [\"combat_started\", \"combat_resolved\", \"xp_gain\", \"mechanic_completed\"], \"command\": \"I help Garran protect the wagon while drawing the ambushers out of hiding.\", \"completes_mechanic\": \"combat_resolved\", \"completion_flags\": [], \"display\": {}, \"effects\": {\"flags\": {\"mechanic:combat_resolved\": true, \"mechanic:combat_started\": true, \"mechanic:xp_gain\": true}}, \"graph_id\": \"graph:tavern_story_seed:witness_to_quarry\", \"mechanic\": \"combat_started\", \"node_id\": \"protect_wagon_or_lure_bandits\", \"node_title\": \"Protect the wagon and draw out the ambushers.\", \"priority\": 91, \"required_mechanic\": \"combat_started\", \"semantic\": \"prepare\", \"source\": \"scenario_progression_graph\", \"target_id\": \"location:quarry_road\", \"target_type\": \"location\"}",
+      "summary": "",
+      "turn": 23,
+      "type": null
     },
     {
       "raw_preview": "{\"action_id\": \"return_to_allies_with_voss_proof\", \"changed_parts\": [\"companion_added\", \"faction_consequence\", \"mechanic_completed\", \"npc_memory\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\", \"world_signal\"], \"completed\": true, \"completed_parts\": [\"action:return_to_allies_with_voss_proof\", \"mechanic:combat_resolved\", \"mechanic:combat_started\", \"mechanic:faction_consequence\", \"mechanic:npc_reaction\", \"mechanic:party_recruitment\", \"mechanic:party_setup\", \"mechanic:travel\", \"mechanic:xp_gain\"], \"execution_applied\": false, \"execution_kind\": \"\", \"mechanic\": \"combat_resolved\", \"mechanics\": [\"faction_consequence\", \"npc_reaction\", \"party_recruitment\", \"party_setup\", \"travel\"], \"xp_delta\": null, \"xp_execution_applied\": false}",
@@ -1157,18 +1181,6 @@
       "raw_preview": "{\"action\": \"No combat, damage, death, or injury is resolved by the turn contract.\", \"followup_hooks\": [], \"grounding_validation\": {\"fallback_source\": \"deterministic_fallback\", \"fallback_used\": true, \"ok\": false, \"selected_candidate\": \"deterministic_fallback\", \"violations\": [{\"code\": \"unsupported_combat_claim\", \"evidence\": \"\\\\bcombat\\\\b\", \"field\": \"narration\", \"message\": \"Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.\"}]}, \"narration\": \"The confrontation remains tense, but no injury is resolved.\", \"npc_line\": \"Careful. This does not need to become violence.\", \"npc_speaker\": \"NPC\", \"reward\": null}",
       "summary": "",
       "turn": 38,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"confidence\": 1.0, \"format_version\": \"presentation_intent_v1\", \"parse_source\": \"missing\", \"primary_category\": \"general\", \"reason\": \"The action combines active protection (threat/combat element) with direct communication to guards (dialogue), resulting in a general observation of resolved security.\", \"secondary_categories\": []}",
-      "summary": "The action combines active protection (threat/combat element) with direct communication to guards (dialogue), resulting in a general observation of resolved security.",
-      "turn": 44,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"confidence\": 1.0, \"format_version\": \"presentation_intent_v1\", \"primary_category\": \"general\", \"reason\": \"The action combines active protection (threat/combat element) with direct communication to guards (dialogue), resulting in a general observation of resolved security.\", \"secondary_categories\": []}",
-      "summary": "The action combines active protection (threat/combat element) with direct communication to guards (dialogue), resulting in a general observation of resolved security.",
-      "turn": 44,
       "type": null
     },
     {
@@ -1281,210 +1293,6 @@
     }
   ],
   "round_events": [
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 89,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 90,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 90,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 90,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 91,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 91,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 91,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 92,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 92,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 92,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 93,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 93,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 93,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 94,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 94,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 94,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 95,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 95,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 95,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 96,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 96,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 96,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 97,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 97,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 97,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 98,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 98,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 98,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 99,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 99,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 99,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 90, \"created_at\": \"2026-05-21T23:22:14.254601+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"relationship_delta\", \"npc_id\": \"Bran\", \"payload\": {\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:89:relationship_delta:1152b1bbacbc8658\", \"signal_id\": \"npc_evo:Bran:relationship_delta:projection:e5cef2f883920015\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 90}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 100,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"grounded_target\": \"Bran\", \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 100,
-      "type": "relationship_delta"
-    },
-    {
-      "raw_preview": "{\"axis\": \"trust\", \"delta\": 0, \"kind\": \"relationship_delta\", \"summary\": \"The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.\", \"target\": \"Bran\"}",
-      "summary": "The successful tracking reinforces the player's dedication and investigation efforts, subtly increasing Bran's trust in your initiative.",
-      "turn": 100,
-      "type": "relationship_delta"
-    },
     {
       "consequence_event_count": 1,
       "direct_graph_combat_count": 4,

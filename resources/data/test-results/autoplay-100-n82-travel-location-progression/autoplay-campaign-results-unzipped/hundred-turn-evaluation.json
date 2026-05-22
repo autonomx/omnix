@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.050191,
-        "p95_turn_seconds": 8.335545
+        "avg_turn_seconds": 12.989038,
+        "p95_turn_seconds": 23.392813999999998
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.05s, p95 8.34s."
+      "message": "Average turn latency 12.99s, p95 23.39s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -444,8 +444,8 @@
   "warnings_count": 0,
   "top_warnings": [],
   "survival_pressure_relief_summary": {
-    "format_version": "n1234_survival_pressure_relief_summary_v1",
-    "source": "transcript.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
+    "format_version": "n1234_survival_pressure_relief_summary_v2_n1251",
+    "source": "final_transcript_rows.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
     "turn_count": 100,
     "trend_rows": [
       {
@@ -460,7 +460,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 2,
@@ -474,7 +475,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 3,
@@ -488,7 +490,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 4,
@@ -502,7 +505,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 5,
@@ -516,7 +520,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 6,
@@ -530,7 +535,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 7,
@@ -544,7 +550,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 8,
@@ -558,7 +565,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 9,
@@ -572,7 +580,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 10,
@@ -586,7 +595,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 11,
@@ -600,7 +610,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 12,
@@ -614,7 +625,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 13,
@@ -628,7 +640,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 14,
@@ -642,7 +655,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 15,
@@ -656,7 +670,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 16,
@@ -670,7 +685,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 17,
@@ -684,7 +700,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 18,
@@ -698,7 +715,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 19,
@@ -712,7 +730,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 20,
@@ -726,7 +745,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 21,
@@ -740,7 +760,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 22,
@@ -754,7 +775,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 23,
@@ -768,7 +790,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 24,
@@ -782,7 +805,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 25,
@@ -796,7 +820,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 26,
@@ -810,7 +835,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 27,
@@ -824,7 +850,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 28,
@@ -838,7 +865,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 29,
@@ -852,7 +880,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 30,
@@ -866,7 +895,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 31,
@@ -880,7 +910,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 32,
@@ -894,7 +925,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 33,
@@ -908,7 +940,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 34,
@@ -922,7 +955,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 35,
@@ -936,7 +970,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 36,
@@ -950,7 +985,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 37,
@@ -964,7 +1000,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 38,
@@ -978,7 +1015,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 39,
@@ -992,7 +1030,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 40,
@@ -1006,7 +1045,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 41,
@@ -1020,7 +1060,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 42,
@@ -1034,7 +1075,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 43,
@@ -1048,7 +1090,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 44,
@@ -1062,7 +1105,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 45,
@@ -1076,7 +1120,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 46,
@@ -1090,7 +1135,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 47,
@@ -1104,7 +1150,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 48,
@@ -1118,7 +1165,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 49,
@@ -1132,7 +1180,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 50,
@@ -1146,7 +1195,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 51,
@@ -1160,7 +1210,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 52,
@@ -1174,7 +1225,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 53,
@@ -1188,7 +1240,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 54,
@@ -1202,7 +1255,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 55,
@@ -1216,7 +1270,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 56,
@@ -1230,7 +1285,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 57,
@@ -1244,7 +1300,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 58,
@@ -1258,7 +1315,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 59,
@@ -1272,7 +1330,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 60,
@@ -1286,7 +1345,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 61,
@@ -1300,7 +1360,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 62,
@@ -1314,7 +1375,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 63,
@@ -1328,7 +1390,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 64,
@@ -1342,7 +1405,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 65,
@@ -1356,7 +1420,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 66,
@@ -1370,7 +1435,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 67,
@@ -1384,7 +1450,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 68,
@@ -1398,7 +1465,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 69,
@@ -1412,7 +1480,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 70,
@@ -1426,7 +1495,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 71,
@@ -1440,7 +1510,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 72,
@@ -1454,7 +1525,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 73,
@@ -1468,7 +1540,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 74,
@@ -1482,7 +1555,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 75,
@@ -1496,7 +1570,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 76,
@@ -1510,7 +1585,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 77,
@@ -1524,7 +1600,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 78,
@@ -1538,7 +1615,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 79,
@@ -1552,7 +1630,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 80,
@@ -1566,7 +1645,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 81,
@@ -1580,7 +1660,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 82,
@@ -1594,7 +1675,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 83,
@@ -1608,7 +1690,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 84,
@@ -1622,7 +1705,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 85,
@@ -1636,7 +1720,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 86,
@@ -1650,7 +1735,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 87,
@@ -1664,7 +1750,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 88,
@@ -1678,7 +1765,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 89,
@@ -1692,7 +1780,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 90,
@@ -1706,7 +1795,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 91,
@@ -1720,7 +1810,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 92,
@@ -1734,7 +1825,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 93,
@@ -1748,7 +1840,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 94,
@@ -1762,7 +1855,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 95,
@@ -1776,7 +1870,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 96,
@@ -1790,7 +1885,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 97,
@@ -1804,7 +1900,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 98,
@@ -1818,7 +1915,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 99,
@@ -1832,7 +1930,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 100,
@@ -1846,7 +1945,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       }
     ],
     "trend_row_count": 100,
@@ -1874,11 +1974,78 @@
       "thirst": 3,
       "fatigue": 2
     },
+    "source_coverage_summary": {
+      "format_version": "n1251_survival_metric_source_summary_v1",
+      "source": "final_transcript_rows",
+      "coverage": {
+        "row_count": 100,
+        "climate_survival_rows": 100,
+        "resource_change_rows": 83,
+        "climate_tick_source_rows": 0,
+        "survival_action_rows": 0,
+        "survival_suggestion_rows": 0,
+        "relief_applied_rows": 0,
+        "warning_rows": 0,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 0
+      },
+      "source_coverage_rate": 0.0,
+      "example_missing_source_rows": [
+        {
+          "turn_index": 15,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 25,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 34,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 35,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 36,
+          "missing": "resource_changes"
+        }
+      ],
+      "notes": [
+        "climate_survival_rows proves values are projected into transcript rows.",
+        "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+        "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
+      ]
+    },
+    "source_gate": {
+      "gate": "survival_metric_source_ok",
+      "ok": false,
+      "advisory_only": true,
+      "source": "n1251_survival_metric_source_repair",
+      "reasons": [
+        "missing_climate_tick_source_rows"
+      ],
+      "coverage": {
+        "row_count": 100,
+        "climate_survival_rows": 100,
+        "resource_change_rows": 83,
+        "climate_tick_source_rows": 0,
+        "survival_action_rows": 0,
+        "survival_suggestion_rows": 0,
+        "relief_applied_rows": 0,
+        "warning_rows": 0,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 0
+      },
+      "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
+    },
     "artifact_files": {
       "summary": "survival-pressure-relief-summary.json",
-      "trend_rows": "survival-pressure-trend-rows.json"
+      "trend_rows": "survival-pressure-trend-rows.json",
+      "source_summary": "survival-metric-source-summary.json"
     },
-    "report_section_title": "N123.4 Survival Pressure vs Player Response"
+    "report_section_title": "N125.1 Real Survival Metric Source Evidence"
   },
   "survival_pressure_trend_rows": [
     {
@@ -1893,7 +2060,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 2,
@@ -1907,7 +2075,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 3,
@@ -1921,7 +2090,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 4,
@@ -1935,7 +2105,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 5,
@@ -1949,7 +2120,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 6,
@@ -1963,7 +2135,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 7,
@@ -1977,7 +2150,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 8,
@@ -1991,7 +2165,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 9,
@@ -2005,7 +2180,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 10,
@@ -2019,7 +2195,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 11,
@@ -2033,7 +2210,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 12,
@@ -2047,7 +2225,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 13,
@@ -2061,7 +2240,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 14,
@@ -2075,7 +2255,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 15,
@@ -2089,7 +2270,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 16,
@@ -2103,7 +2285,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 17,
@@ -2117,7 +2300,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 18,
@@ -2131,7 +2315,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 19,
@@ -2145,7 +2330,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 20,
@@ -2159,7 +2345,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 21,
@@ -2173,7 +2360,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 22,
@@ -2187,7 +2375,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 23,
@@ -2201,7 +2390,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 24,
@@ -2215,7 +2405,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 25,
@@ -2229,7 +2420,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 26,
@@ -2243,7 +2435,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 27,
@@ -2257,7 +2450,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 28,
@@ -2271,7 +2465,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 29,
@@ -2285,7 +2480,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 30,
@@ -2299,7 +2495,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 31,
@@ -2313,7 +2510,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 32,
@@ -2327,7 +2525,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 33,
@@ -2341,7 +2540,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 34,
@@ -2355,7 +2555,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 35,
@@ -2369,7 +2570,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 36,
@@ -2383,7 +2585,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 37,
@@ -2397,7 +2600,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 38,
@@ -2411,7 +2615,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 39,
@@ -2425,7 +2630,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 40,
@@ -2439,7 +2645,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 41,
@@ -2453,7 +2660,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 42,
@@ -2467,7 +2675,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 43,
@@ -2481,7 +2690,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 44,
@@ -2495,7 +2705,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 45,
@@ -2509,7 +2720,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 46,
@@ -2523,7 +2735,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 47,
@@ -2537,7 +2750,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 48,
@@ -2551,7 +2765,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 49,
@@ -2565,7 +2780,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 50,
@@ -2579,7 +2795,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 51,
@@ -2593,7 +2810,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 52,
@@ -2607,7 +2825,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 53,
@@ -2621,7 +2840,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 54,
@@ -2635,7 +2855,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 55,
@@ -2649,7 +2870,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 56,
@@ -2663,7 +2885,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 57,
@@ -2677,7 +2900,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 58,
@@ -2691,7 +2915,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 59,
@@ -2705,7 +2930,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 60,
@@ -2719,7 +2945,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 61,
@@ -2733,7 +2960,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 62,
@@ -2747,7 +2975,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 63,
@@ -2761,7 +2990,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 64,
@@ -2775,7 +3005,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 65,
@@ -2789,7 +3020,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 66,
@@ -2803,7 +3035,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 67,
@@ -2817,7 +3050,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 68,
@@ -2831,7 +3065,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 69,
@@ -2845,7 +3080,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 70,
@@ -2859,7 +3095,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 71,
@@ -2873,7 +3110,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 72,
@@ -2887,7 +3125,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 73,
@@ -2901,7 +3140,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 74,
@@ -2915,7 +3155,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 75,
@@ -2929,7 +3170,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 76,
@@ -2943,7 +3185,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 77,
@@ -2957,7 +3200,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 78,
@@ -2971,7 +3215,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 79,
@@ -2985,7 +3230,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 80,
@@ -2999,7 +3245,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 81,
@@ -3013,7 +3260,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 82,
@@ -3027,7 +3275,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 83,
@@ -3041,7 +3290,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 84,
@@ -3055,7 +3305,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 85,
@@ -3069,7 +3320,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 86,
@@ -3083,7 +3335,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 87,
@@ -3097,7 +3350,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 88,
@@ -3111,7 +3365,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 89,
@@ -3125,7 +3380,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 90,
@@ -3139,7 +3395,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 91,
@@ -3153,7 +3410,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 92,
@@ -3167,7 +3425,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 93,
@@ -3181,7 +3440,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 94,
@@ -3195,7 +3455,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 95,
@@ -3209,7 +3470,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 96,
@@ -3223,7 +3485,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 97,
@@ -3237,7 +3500,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 98,
@@ -3251,7 +3515,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 99,
@@ -3265,7 +3530,8 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     },
     {
       "turn_index": 100,
@@ -3279,10 +3545,17 @@
       "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": false
+      "relief_blocked": false,
+      "source_present": false
     }
   ],
   "report_sections": [
+    {
+      "id": "n1251-survival-source",
+      "title": "N125.1 Real Survival Metric Source Evidence",
+      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = False (advisory)</p>\n  <p><strong>Reasons:</strong> missing_climate_tick_source_rows</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>83</td></tr><tr><td>climate_tick_source_rows</td><td>0</td></tr><tr><td>survival_action_rows</td><td>0</td></tr><tr><td>survival_suggestion_rows</td><td>0</td></tr><tr><td>relief_applied_rows</td><td>0</td></tr><tr><td>warning_rows</td><td>0</td></tr><tr><td>nonzero_need_rows</td><td>95</td></tr><tr><td>nonzero_delta_rows</td><td>0</td></tr></tbody></table>\n</section>",
+      "source": "survival-metric-source-summary.json"
+    },
     {
       "id": "n1234-survival-pressure",
       "title": "N123.4 Survival Pressure vs Player Response",
@@ -3292,8 +3565,8 @@
   ],
   "artifact_level_summaries": {
     "survival-pressure-relief-summary.json": {
-      "format_version": "n1234_survival_pressure_relief_summary_v1",
-      "source": "transcript.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
+      "format_version": "n1234_survival_pressure_relief_summary_v2_n1251",
+      "source": "final_transcript_rows.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
       "turn_count": 100,
       "trend_rows": [
         {
@@ -3308,7 +3581,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 2,
@@ -3322,7 +3596,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 3,
@@ -3336,7 +3611,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 4,
@@ -3350,7 +3626,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 5,
@@ -3364,7 +3641,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 6,
@@ -3378,7 +3656,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 7,
@@ -3392,7 +3671,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 8,
@@ -3406,7 +3686,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 9,
@@ -3420,7 +3701,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 10,
@@ -3434,7 +3716,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 11,
@@ -3448,7 +3731,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 12,
@@ -3462,7 +3746,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 13,
@@ -3476,7 +3761,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 14,
@@ -3490,7 +3776,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 15,
@@ -3504,7 +3791,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 16,
@@ -3518,7 +3806,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 17,
@@ -3532,7 +3821,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 18,
@@ -3546,7 +3836,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 19,
@@ -3560,7 +3851,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 20,
@@ -3574,7 +3866,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 21,
@@ -3588,7 +3881,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 22,
@@ -3602,7 +3896,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 23,
@@ -3616,7 +3911,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 24,
@@ -3630,7 +3926,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 25,
@@ -3644,7 +3941,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 26,
@@ -3658,7 +3956,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 27,
@@ -3672,7 +3971,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 28,
@@ -3686,7 +3986,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 29,
@@ -3700,7 +4001,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 30,
@@ -3714,7 +4016,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 31,
@@ -3728,7 +4031,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 32,
@@ -3742,7 +4046,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 33,
@@ -3756,7 +4061,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 34,
@@ -3770,7 +4076,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 35,
@@ -3784,7 +4091,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 36,
@@ -3798,7 +4106,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 37,
@@ -3812,7 +4121,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 38,
@@ -3826,7 +4136,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 39,
@@ -3840,7 +4151,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 40,
@@ -3854,7 +4166,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 41,
@@ -3868,7 +4181,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 42,
@@ -3882,7 +4196,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 43,
@@ -3896,7 +4211,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 44,
@@ -3910,7 +4226,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 45,
@@ -3924,7 +4241,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 46,
@@ -3938,7 +4256,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 47,
@@ -3952,7 +4271,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 48,
@@ -3966,7 +4286,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 49,
@@ -3980,7 +4301,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 50,
@@ -3994,7 +4316,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 51,
@@ -4008,7 +4331,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 52,
@@ -4022,7 +4346,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 53,
@@ -4036,7 +4361,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 54,
@@ -4050,7 +4376,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 55,
@@ -4064,7 +4391,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 56,
@@ -4078,7 +4406,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 57,
@@ -4092,7 +4421,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 58,
@@ -4106,7 +4436,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 59,
@@ -4120,7 +4451,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 60,
@@ -4134,7 +4466,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 61,
@@ -4148,7 +4481,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 62,
@@ -4162,7 +4496,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 63,
@@ -4176,7 +4511,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 64,
@@ -4190,7 +4526,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 65,
@@ -4204,7 +4541,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 66,
@@ -4218,7 +4556,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 67,
@@ -4232,7 +4571,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 68,
@@ -4246,7 +4586,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 69,
@@ -4260,7 +4601,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 70,
@@ -4274,7 +4616,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 71,
@@ -4288,7 +4631,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 72,
@@ -4302,7 +4646,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 73,
@@ -4316,7 +4661,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 74,
@@ -4330,7 +4676,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 75,
@@ -4344,7 +4691,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 76,
@@ -4358,7 +4706,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 77,
@@ -4372,7 +4721,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 78,
@@ -4386,7 +4736,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 79,
@@ -4400,7 +4751,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 80,
@@ -4414,7 +4766,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 81,
@@ -4428,7 +4781,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 82,
@@ -4442,7 +4796,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 83,
@@ -4456,7 +4811,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 84,
@@ -4470,7 +4826,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 85,
@@ -4484,7 +4841,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 86,
@@ -4498,7 +4856,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 87,
@@ -4512,7 +4871,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 88,
@@ -4526,7 +4886,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 89,
@@ -4540,7 +4901,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 90,
@@ -4554,7 +4916,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 91,
@@ -4568,7 +4931,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 92,
@@ -4582,7 +4946,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 93,
@@ -4596,7 +4961,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 94,
@@ -4610,7 +4976,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 95,
@@ -4624,7 +4991,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 96,
@@ -4638,7 +5006,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 97,
@@ -4652,7 +5021,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 98,
@@ -4666,7 +5036,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 99,
@@ -4680,7 +5051,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         },
         {
           "turn_index": 100,
@@ -4694,7 +5066,8 @@
           "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": false
+          "relief_blocked": false,
+          "source_present": false
         }
       ],
       "trend_row_count": 100,
@@ -4722,11 +5095,78 @@
         "thirst": 3,
         "fatigue": 2
       },
+      "source_coverage_summary": {
+        "format_version": "n1251_survival_metric_source_summary_v1",
+        "source": "final_transcript_rows",
+        "coverage": {
+          "row_count": 100,
+          "climate_survival_rows": 100,
+          "resource_change_rows": 83,
+          "climate_tick_source_rows": 0,
+          "survival_action_rows": 0,
+          "survival_suggestion_rows": 0,
+          "relief_applied_rows": 0,
+          "warning_rows": 0,
+          "nonzero_need_rows": 95,
+          "nonzero_delta_rows": 0
+        },
+        "source_coverage_rate": 0.0,
+        "example_missing_source_rows": [
+          {
+            "turn_index": 15,
+            "missing": "resource_changes"
+          },
+          {
+            "turn_index": 25,
+            "missing": "resource_changes"
+          },
+          {
+            "turn_index": 34,
+            "missing": "resource_changes"
+          },
+          {
+            "turn_index": 35,
+            "missing": "resource_changes"
+          },
+          {
+            "turn_index": 36,
+            "missing": "resource_changes"
+          }
+        ],
+        "notes": [
+          "climate_survival_rows proves values are projected into transcript rows.",
+          "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+          "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
+        ]
+      },
+      "source_gate": {
+        "gate": "survival_metric_source_ok",
+        "ok": false,
+        "advisory_only": true,
+        "source": "n1251_survival_metric_source_repair",
+        "reasons": [
+          "missing_climate_tick_source_rows"
+        ],
+        "coverage": {
+          "row_count": 100,
+          "climate_survival_rows": 100,
+          "resource_change_rows": 83,
+          "climate_tick_source_rows": 0,
+          "survival_action_rows": 0,
+          "survival_suggestion_rows": 0,
+          "relief_applied_rows": 0,
+          "warning_rows": 0,
+          "nonzero_need_rows": 95,
+          "nonzero_delta_rows": 0
+        },
+        "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
+      },
       "artifact_files": {
         "summary": "survival-pressure-relief-summary.json",
-        "trend_rows": "survival-pressure-trend-rows.json"
+        "trend_rows": "survival-pressure-trend-rows.json",
+        "source_summary": "survival-metric-source-summary.json"
       },
-      "report_section_title": "N123.4 Survival Pressure vs Player Response"
+      "report_section_title": "N125.1 Real Survival Metric Source Evidence"
     },
     "survival-pressure-trend-rows.json": [
       {
@@ -4741,7 +5181,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 2,
@@ -4755,7 +5196,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 3,
@@ -4769,7 +5211,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 4,
@@ -4783,7 +5226,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 5,
@@ -4797,7 +5241,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 6,
@@ -4811,7 +5256,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 7,
@@ -4825,7 +5271,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 8,
@@ -4839,7 +5286,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 9,
@@ -4853,7 +5301,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 10,
@@ -4867,7 +5316,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 11,
@@ -4881,7 +5331,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 12,
@@ -4895,7 +5346,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 13,
@@ -4909,7 +5361,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 14,
@@ -4923,7 +5376,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 15,
@@ -4937,7 +5391,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 16,
@@ -4951,7 +5406,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 17,
@@ -4965,7 +5421,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 18,
@@ -4979,7 +5436,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 19,
@@ -4993,7 +5451,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 20,
@@ -5007,7 +5466,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 21,
@@ -5021,7 +5481,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 22,
@@ -5035,7 +5496,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 23,
@@ -5049,7 +5511,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 24,
@@ -5063,7 +5526,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 25,
@@ -5077,7 +5541,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 26,
@@ -5091,7 +5556,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 27,
@@ -5105,7 +5571,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 28,
@@ -5119,7 +5586,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 29,
@@ -5133,7 +5601,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 30,
@@ -5147,7 +5616,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 31,
@@ -5161,7 +5631,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 32,
@@ -5175,7 +5646,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 33,
@@ -5189,7 +5661,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 34,
@@ -5203,7 +5676,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 35,
@@ -5217,7 +5691,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 36,
@@ -5231,7 +5706,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 37,
@@ -5245,7 +5721,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 38,
@@ -5259,7 +5736,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 39,
@@ -5273,7 +5751,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 40,
@@ -5287,7 +5766,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 41,
@@ -5301,7 +5781,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 42,
@@ -5315,7 +5796,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 43,
@@ -5329,7 +5811,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 44,
@@ -5343,7 +5826,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 45,
@@ -5357,7 +5841,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 46,
@@ -5371,7 +5856,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 47,
@@ -5385,7 +5871,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 48,
@@ -5399,7 +5886,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 49,
@@ -5413,7 +5901,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 50,
@@ -5427,7 +5916,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 51,
@@ -5441,7 +5931,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 52,
@@ -5455,7 +5946,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 53,
@@ -5469,7 +5961,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 54,
@@ -5483,7 +5976,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 55,
@@ -5497,7 +5991,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 56,
@@ -5511,7 +6006,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 57,
@@ -5525,7 +6021,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 58,
@@ -5539,7 +6036,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 59,
@@ -5553,7 +6051,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 60,
@@ -5567,7 +6066,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 61,
@@ -5581,7 +6081,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 62,
@@ -5595,7 +6096,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 63,
@@ -5609,7 +6111,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 64,
@@ -5623,7 +6126,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 65,
@@ -5637,7 +6141,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 66,
@@ -5651,7 +6156,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 67,
@@ -5665,7 +6171,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 68,
@@ -5679,7 +6186,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 69,
@@ -5693,7 +6201,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 70,
@@ -5707,7 +6216,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 71,
@@ -5721,7 +6231,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 72,
@@ -5735,7 +6246,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 73,
@@ -5749,7 +6261,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 74,
@@ -5763,7 +6276,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 75,
@@ -5777,7 +6291,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 76,
@@ -5791,7 +6306,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 77,
@@ -5805,7 +6321,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 78,
@@ -5819,7 +6336,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 79,
@@ -5833,7 +6351,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 80,
@@ -5847,7 +6366,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 81,
@@ -5861,7 +6381,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 82,
@@ -5875,7 +6396,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 83,
@@ -5889,7 +6411,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 84,
@@ -5903,7 +6426,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 85,
@@ -5917,7 +6441,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 86,
@@ -5931,7 +6456,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 87,
@@ -5945,7 +6471,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 88,
@@ -5959,7 +6486,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 89,
@@ -5973,7 +6501,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 90,
@@ -5987,7 +6516,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 91,
@@ -6001,7 +6531,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 92,
@@ -6015,7 +6546,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 93,
@@ -6029,7 +6561,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 94,
@@ -6043,7 +6576,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 95,
@@ -6057,7 +6591,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 96,
@@ -6071,7 +6606,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 97,
@@ -6085,7 +6621,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 98,
@@ -6099,7 +6636,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 99,
@@ -6113,7 +6651,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       },
       {
         "turn_index": 100,
@@ -6127,7 +6666,8 @@
         "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": false
+        "relief_blocked": false,
+        "source_present": false
       }
     ],
     "survival-autoplay-response-metrics.json": {
@@ -6166,6 +6706,72 @@
         "max_blocked_relief_loop_count": 3,
         "min_taken_rate_when_suggestions_seen": 0.2
       }
+    },
+    "survival-metric-source-summary.json": {
+      "format_version": "n1251_survival_metric_source_summary_v1",
+      "source": "final_transcript_rows",
+      "coverage": {
+        "row_count": 100,
+        "climate_survival_rows": 100,
+        "resource_change_rows": 83,
+        "climate_tick_source_rows": 0,
+        "survival_action_rows": 0,
+        "survival_suggestion_rows": 0,
+        "relief_applied_rows": 0,
+        "warning_rows": 0,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 0
+      },
+      "source_coverage_rate": 0.0,
+      "example_missing_source_rows": [
+        {
+          "turn_index": 15,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 25,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 34,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 35,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 36,
+          "missing": "resource_changes"
+        }
+      ],
+      "notes": [
+        "climate_survival_rows proves values are projected into transcript rows.",
+        "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+        "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
+      ]
+    },
+    "survival-metric-source-gate.json": {
+      "gate": "survival_metric_source_ok",
+      "ok": false,
+      "advisory_only": true,
+      "source": "n1251_survival_metric_source_repair",
+      "reasons": [
+        "missing_climate_tick_source_rows"
+      ],
+      "coverage": {
+        "row_count": 100,
+        "climate_survival_rows": 100,
+        "resource_change_rows": 83,
+        "climate_tick_source_rows": 0,
+        "survival_action_rows": 0,
+        "survival_suggestion_rows": 0,
+        "relief_applied_rows": 0,
+        "warning_rows": 0,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 0
+      },
+      "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
     }
   },
   "survival_autoplay_response_metrics": {
@@ -7573,5 +8179,3044 @@
       "max_blocked_relief_loop_count": 3,
       "min_taken_rate_when_suggestions_seen": 0.2
     }
+  },
+  "real_run_survival_metrics": {
+    "format_version": "n1234_survival_pressure_relief_summary_v2_n1251",
+    "source": "final_transcript_rows.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
+    "turn_count": 100,
+    "trend_rows": [
+      {
+        "turn_index": 1,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 2,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 3,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 4,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 5,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 6,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 7,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 8,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 9,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 10,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 11,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 12,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 13,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 14,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 15,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 16,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 17,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 18,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 19,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 20,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 21,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 22,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 23,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 24,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 25,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 26,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 27,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 28,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 29,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 30,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 31,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 32,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 33,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 34,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 35,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 36,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 37,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 38,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 39,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 40,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 41,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 42,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 43,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 44,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 45,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 46,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 47,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 48,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 49,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 50,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 51,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 52,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 53,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 54,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 55,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 56,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 57,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 58,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 59,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 60,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 61,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 62,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 63,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 64,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 65,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 66,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 67,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 68,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 69,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 70,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 71,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 72,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 73,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 74,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 75,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 76,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 77,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 78,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 79,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 80,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 81,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 82,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 83,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 84,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 85,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 86,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 87,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 88,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 89,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 90,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 91,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 92,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 93,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 94,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 95,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 96,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 97,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 98,
+        "hunger": 4,
+        "thirst": 6,
+        "fatigue": 4,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 99,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      },
+      {
+        "turn_index": 100,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": false
+      }
+    ],
+    "trend_row_count": 100,
+    "pressure_turn_count": 0,
+    "survival_warning_count": 0,
+    "warning_counts_by_type": {},
+    "relief_action_count": 0,
+    "relief_counts_by_kind": {},
+    "blocked_relief_count": 0,
+    "blocked_counts_by_reason": {},
+    "inventory_consumed_summary": [],
+    "service_relief_purchases_summary": [],
+    "net_resource_deltas": {
+      "hunger_delta": 0,
+      "thirst_delta": 0,
+      "fatigue_delta": 0
+    },
+    "max_needs": {
+      "hunger": 4,
+      "thirst": 6,
+      "fatigue": 4
+    },
+    "final_needs": {
+      "hunger": 2,
+      "thirst": 3,
+      "fatigue": 2
+    },
+    "source_coverage_summary": {
+      "format_version": "n1251_survival_metric_source_summary_v1",
+      "source": "final_transcript_rows",
+      "coverage": {
+        "row_count": 100,
+        "climate_survival_rows": 100,
+        "resource_change_rows": 83,
+        "climate_tick_source_rows": 0,
+        "survival_action_rows": 0,
+        "survival_suggestion_rows": 0,
+        "relief_applied_rows": 0,
+        "warning_rows": 0,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 0
+      },
+      "source_coverage_rate": 0.0,
+      "example_missing_source_rows": [
+        {
+          "turn_index": 15,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 25,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 34,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 35,
+          "missing": "resource_changes"
+        },
+        {
+          "turn_index": 36,
+          "missing": "resource_changes"
+        }
+      ],
+      "notes": [
+        "climate_survival_rows proves values are projected into transcript rows.",
+        "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+        "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
+      ]
+    },
+    "source_gate": {
+      "gate": "survival_metric_source_ok",
+      "ok": false,
+      "advisory_only": true,
+      "source": "n1251_survival_metric_source_repair",
+      "reasons": [
+        "missing_climate_tick_source_rows"
+      ],
+      "coverage": {
+        "row_count": 100,
+        "climate_survival_rows": 100,
+        "resource_change_rows": 83,
+        "climate_tick_source_rows": 0,
+        "survival_action_rows": 0,
+        "survival_suggestion_rows": 0,
+        "relief_applied_rows": 0,
+        "warning_rows": 0,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 0
+      },
+      "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
+    },
+    "artifact_files": {
+      "summary": "survival-pressure-relief-summary.json",
+      "trend_rows": "survival-pressure-trend-rows.json",
+      "source_summary": "survival-metric-source-summary.json"
+    },
+    "report_section_title": "N125.1 Real Survival Metric Source Evidence"
+  },
+  "synthetic_survival_balance_simulation": {
+    "format_version": "n1242_survival_balance_simulation_v1",
+    "turns": 100,
+    "rows": [
+      {
+        "turn_index": 1,
+        "hunger": 1,
+        "thirst": 2,
+        "fatigue": 1,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 2,
+        "hunger": 2,
+        "thirst": 4,
+        "fatigue": 2,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 3,
+        "hunger": 3,
+        "thirst": 6,
+        "fatigue": 3,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 4,
+        "hunger": 4,
+        "thirst": 8,
+        "fatigue": 4,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 5,
+        "hunger": 5,
+        "thirst": 10,
+        "fatigue": 5,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 6,
+        "hunger": 6,
+        "thirst": 12,
+        "fatigue": 6,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 7,
+        "hunger": 7,
+        "thirst": 14,
+        "fatigue": 7,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 8,
+        "hunger": 8,
+        "thirst": 16,
+        "fatigue": 8,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 9,
+        "hunger": 9,
+        "thirst": 18,
+        "fatigue": 9,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 10,
+        "hunger": 10,
+        "thirst": 20,
+        "fatigue": 10,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 11,
+        "hunger": 11,
+        "thirst": 22,
+        "fatigue": 11,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 12,
+        "hunger": 12,
+        "thirst": 24,
+        "fatigue": 12,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 13,
+        "hunger": 13,
+        "thirst": 26,
+        "fatigue": 13,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 14,
+        "hunger": 14,
+        "thirst": 28,
+        "fatigue": 14,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 15,
+        "hunger": 15,
+        "thirst": 30,
+        "fatigue": 15,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 16,
+        "hunger": 16,
+        "thirst": 32,
+        "fatigue": 16,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 17,
+        "hunger": 17,
+        "thirst": 34,
+        "fatigue": 17,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 18,
+        "hunger": 18,
+        "thirst": 36,
+        "fatigue": 18,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 19,
+        "hunger": 19,
+        "thirst": 38,
+        "fatigue": 19,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 20,
+        "hunger": 20,
+        "thirst": 40,
+        "fatigue": 20,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 21,
+        "hunger": 21,
+        "thirst": 42,
+        "fatigue": 21,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 22,
+        "hunger": 22,
+        "thirst": 44,
+        "fatigue": 22,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 23,
+        "hunger": 23,
+        "thirst": 46,
+        "fatigue": 23,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 24,
+        "hunger": 24,
+        "thirst": 48,
+        "fatigue": 24,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 3
+        }
+      },
+      {
+        "turn_index": 25,
+        "hunger": 25,
+        "thirst": 20,
+        "fatigue": 25,
+        "action_kind": "drink_water",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 26,
+        "hunger": 26,
+        "thirst": 22,
+        "fatigue": 26,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 27,
+        "hunger": 27,
+        "thirst": 24,
+        "fatigue": 27,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 28,
+        "hunger": 28,
+        "thirst": 26,
+        "fatigue": 28,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 29,
+        "hunger": 29,
+        "thirst": 28,
+        "fatigue": 29,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 30,
+        "hunger": 30,
+        "thirst": 30,
+        "fatigue": 30,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 31,
+        "hunger": 31,
+        "thirst": 32,
+        "fatigue": 31,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 32,
+        "hunger": 32,
+        "thirst": 34,
+        "fatigue": 32,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 33,
+        "hunger": 33,
+        "thirst": 36,
+        "fatigue": 33,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 34,
+        "hunger": 34,
+        "thirst": 38,
+        "fatigue": 34,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 35,
+        "hunger": 35,
+        "thirst": 40,
+        "fatigue": 35,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 36,
+        "hunger": 36,
+        "thirst": 42,
+        "fatigue": 36,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 37,
+        "hunger": 37,
+        "thirst": 44,
+        "fatigue": 37,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 38,
+        "hunger": 38,
+        "thirst": 46,
+        "fatigue": 38,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 39,
+        "hunger": 39,
+        "thirst": 48,
+        "fatigue": 39,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 2
+        }
+      },
+      {
+        "turn_index": 40,
+        "hunger": 40,
+        "thirst": 20,
+        "fatigue": 40,
+        "action_kind": "drink_water",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 41,
+        "hunger": 41,
+        "thirst": 22,
+        "fatigue": 41,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 42,
+        "hunger": 42,
+        "thirst": 24,
+        "fatigue": 42,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 43,
+        "hunger": 43,
+        "thirst": 26,
+        "fatigue": 43,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 44,
+        "hunger": 44,
+        "thirst": 28,
+        "fatigue": 44,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 45,
+        "hunger": 45,
+        "thirst": 30,
+        "fatigue": 45,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 46,
+        "hunger": 46,
+        "thirst": 32,
+        "fatigue": 46,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 47,
+        "hunger": 47,
+        "thirst": 34,
+        "fatigue": 47,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 48,
+        "hunger": 48,
+        "thirst": 36,
+        "fatigue": 48,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 49,
+        "hunger": 49,
+        "thirst": 38,
+        "fatigue": 49,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 3,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 50,
+        "hunger": 20,
+        "thirst": 40,
+        "fatigue": 50,
+        "action_kind": "eat_food",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 51,
+        "hunger": 21,
+        "thirst": 42,
+        "fatigue": 26,
+        "action_kind": "rest",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 52,
+        "hunger": 22,
+        "thirst": 44,
+        "fatigue": 27,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 53,
+        "hunger": 23,
+        "thirst": 46,
+        "fatigue": 28,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 54,
+        "hunger": 24,
+        "thirst": 48,
+        "fatigue": 29,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 1
+        }
+      },
+      {
+        "turn_index": 55,
+        "hunger": 25,
+        "thirst": 20,
+        "fatigue": 30,
+        "action_kind": "drink_water",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 56,
+        "hunger": 26,
+        "thirst": 22,
+        "fatigue": 31,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 57,
+        "hunger": 27,
+        "thirst": 24,
+        "fatigue": 32,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 58,
+        "hunger": 28,
+        "thirst": 26,
+        "fatigue": 33,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 59,
+        "hunger": 29,
+        "thirst": 28,
+        "fatigue": 34,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 60,
+        "hunger": 30,
+        "thirst": 30,
+        "fatigue": 35,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 61,
+        "hunger": 31,
+        "thirst": 32,
+        "fatigue": 36,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 62,
+        "hunger": 32,
+        "thirst": 34,
+        "fatigue": 37,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 63,
+        "hunger": 33,
+        "thirst": 36,
+        "fatigue": 38,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 64,
+        "hunger": 34,
+        "thirst": 38,
+        "fatigue": 39,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 65,
+        "hunger": 35,
+        "thirst": 40,
+        "fatigue": 40,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 66,
+        "hunger": 36,
+        "thirst": 42,
+        "fatigue": 41,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 67,
+        "hunger": 37,
+        "thirst": 44,
+        "fatigue": 42,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 68,
+        "hunger": 38,
+        "thirst": 46,
+        "fatigue": 43,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 69,
+        "hunger": 39,
+        "thirst": 48,
+        "fatigue": 44,
+        "action_kind": "",
+        "blocked": false,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 70,
+        "hunger": 40,
+        "thirst": 50,
+        "fatigue": 45,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 71,
+        "hunger": 41,
+        "thirst": 52,
+        "fatigue": 46,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 72,
+        "hunger": 42,
+        "thirst": 54,
+        "fatigue": 47,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 73,
+        "hunger": 43,
+        "thirst": 56,
+        "fatigue": 48,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 74,
+        "hunger": 44,
+        "thirst": 58,
+        "fatigue": 49,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 75,
+        "hunger": 45,
+        "thirst": 60,
+        "fatigue": 50,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 76,
+        "hunger": 46,
+        "thirst": 62,
+        "fatigue": 51,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 77,
+        "hunger": 47,
+        "thirst": 64,
+        "fatigue": 52,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 78,
+        "hunger": 48,
+        "thirst": 66,
+        "fatigue": 53,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 79,
+        "hunger": 49,
+        "thirst": 68,
+        "fatigue": 54,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 80,
+        "hunger": 50,
+        "thirst": 70,
+        "fatigue": 55,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 81,
+        "hunger": 51,
+        "thirst": 72,
+        "fatigue": 56,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 82,
+        "hunger": 52,
+        "thirst": 74,
+        "fatigue": 57,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 83,
+        "hunger": 53,
+        "thirst": 76,
+        "fatigue": 58,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 84,
+        "hunger": 54,
+        "thirst": 78,
+        "fatigue": 59,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 85,
+        "hunger": 55,
+        "thirst": 80,
+        "fatigue": 60,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 86,
+        "hunger": 56,
+        "thirst": 82,
+        "fatigue": 61,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 87,
+        "hunger": 57,
+        "thirst": 84,
+        "fatigue": 62,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 88,
+        "hunger": 58,
+        "thirst": 86,
+        "fatigue": 63,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 89,
+        "hunger": 59,
+        "thirst": 88,
+        "fatigue": 64,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 90,
+        "hunger": 60,
+        "thirst": 90,
+        "fatigue": 65,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 91,
+        "hunger": 61,
+        "thirst": 92,
+        "fatigue": 66,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 92,
+        "hunger": 62,
+        "thirst": 94,
+        "fatigue": 67,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 93,
+        "hunger": 63,
+        "thirst": 96,
+        "fatigue": 68,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 94,
+        "hunger": 64,
+        "thirst": 98,
+        "fatigue": 69,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 95,
+        "hunger": 65,
+        "thirst": 100,
+        "fatigue": 70,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst",
+          "fatigue"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 96,
+        "hunger": 66,
+        "thirst": 100,
+        "fatigue": 71,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst",
+          "fatigue"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 97,
+        "hunger": 67,
+        "thirst": 100,
+        "fatigue": 72,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst",
+          "fatigue"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 98,
+        "hunger": 68,
+        "thirst": 100,
+        "fatigue": 73,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst",
+          "fatigue"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 99,
+        "hunger": 69,
+        "thirst": 100,
+        "fatigue": 74,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "thirst",
+          "fatigue"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      },
+      {
+        "turn_index": 100,
+        "hunger": 70,
+        "thirst": 100,
+        "fatigue": 75,
+        "action_kind": "",
+        "blocked": true,
+        "warnings": [
+          "hunger",
+          "thirst",
+          "fatigue"
+        ],
+        "inventory": {
+          "food": 2,
+          "drink": 0
+        }
+      }
+    ],
+    "relief_action_count": 5,
+    "blocked_relief_count": 31,
+    "warning_turn_count": 21,
+    "warning_turn_rate": 0.21,
+    "final_needs": {
+      "hunger": 70,
+      "thirst": 100,
+      "fatigue": 75
+    },
+    "max_needs": {
+      "hunger": 70,
+      "thirst": 100,
+      "fatigue": 75
+    }
+  },
+  "survival_metric_source_summary": {
+    "format_version": "n1251_survival_metric_source_summary_v1",
+    "source": "final_transcript_rows",
+    "coverage": {
+      "row_count": 100,
+      "climate_survival_rows": 100,
+      "resource_change_rows": 83,
+      "climate_tick_source_rows": 0,
+      "survival_action_rows": 0,
+      "survival_suggestion_rows": 0,
+      "relief_applied_rows": 0,
+      "warning_rows": 0,
+      "nonzero_need_rows": 95,
+      "nonzero_delta_rows": 0
+    },
+    "source_coverage_rate": 0.0,
+    "example_missing_source_rows": [
+      {
+        "turn_index": 15,
+        "missing": "resource_changes"
+      },
+      {
+        "turn_index": 25,
+        "missing": "resource_changes"
+      },
+      {
+        "turn_index": 34,
+        "missing": "resource_changes"
+      },
+      {
+        "turn_index": 35,
+        "missing": "resource_changes"
+      },
+      {
+        "turn_index": 36,
+        "missing": "resource_changes"
+      }
+    ],
+    "notes": [
+      "climate_survival_rows proves values are projected into transcript rows.",
+      "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+      "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
+    ]
+  },
+  "survival_metric_source_gate": {
+    "gate": "survival_metric_source_ok",
+    "ok": false,
+    "advisory_only": true,
+    "source": "n1251_survival_metric_source_repair",
+    "reasons": [
+      "missing_climate_tick_source_rows"
+    ],
+    "coverage": {
+      "row_count": 100,
+      "climate_survival_rows": 100,
+      "resource_change_rows": 83,
+      "climate_tick_source_rows": 0,
+      "survival_action_rows": 0,
+      "survival_suggestion_rows": 0,
+      "relief_applied_rows": 0,
+      "warning_rows": 0,
+      "nonzero_need_rows": 95,
+      "nonzero_delta_rows": 0
+    },
+    "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
   }
 }
