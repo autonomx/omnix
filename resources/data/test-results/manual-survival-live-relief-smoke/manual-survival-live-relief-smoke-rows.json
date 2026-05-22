@@ -331,7 +331,7 @@
     "needs": {
       "fatigue": 78,
       "hunger": 45,
-      "thirst": 82
+      "thirst": 47
     },
     "player_input": "I eat the trail ration.",
     "raw_result_keys": [
@@ -385,18 +385,8 @@
     ],
     "relief_applied": true,
     "relief_need": "hunger",
-    "suggestion_count": 2,
+    "suggestion_count": 1,
     "suggestions": [
-      {
-        "action": "drink waterskin",
-        "kind": "survival_relief",
-        "need": "thirst",
-        "priority": 82,
-        "reason": "thirst_high",
-        "source": "n1263_live_runtime_survival_suggestion",
-        "value": 82,
-        "warning": "thirst_high"
-      },
       {
         "action": "rest",
         "kind": "survival_relief",
@@ -413,13 +403,13 @@
       "after": {
         "fatigue": 78,
         "hunger": 45,
-        "thirst": 82
+        "thirst": 47
       },
       "applied": true,
       "before": {
         "fatigue": 78,
         "hunger": 80,
-        "thirst": 82
+        "thirst": 47
       },
       "blocked": false,
       "blocked_reason": "",
@@ -474,8 +464,8 @@
     "inventory_consumed": [],
     "needs": {
       "fatigue": 43,
-      "hunger": 80,
-      "thirst": 82
+      "hunger": 45,
+      "thirst": 47
     },
     "player_input": "I rest for a while.",
     "raw_result_keys": [
@@ -529,41 +519,20 @@
     ],
     "relief_applied": true,
     "relief_need": "fatigue",
-    "suggestion_count": 2,
-    "suggestions": [
-      {
-        "action": "drink waterskin",
-        "kind": "survival_relief",
-        "need": "thirst",
-        "priority": 82,
-        "reason": "thirst_high",
-        "source": "n1263_live_runtime_survival_suggestion",
-        "value": 82,
-        "warning": "thirst_high"
-      },
-      {
-        "action": "eat trail ration",
-        "kind": "survival_relief",
-        "need": "hunger",
-        "priority": 80,
-        "reason": "hunger_high",
-        "source": "n1263_live_runtime_survival_suggestion",
-        "value": 80,
-        "warning": "hunger_high"
-      }
-    ],
+    "suggestion_count": 0,
+    "suggestions": [],
     "survival_action": {
       "action": "rest",
       "after": {
         "fatigue": 43,
-        "hunger": 80,
-        "thirst": 82
+        "hunger": 45,
+        "thirst": 47
       },
       "applied": true,
       "before": {
         "fatigue": 78,
-        "hunger": 80,
-        "thirst": 82
+        "hunger": 45,
+        "thirst": 47
       },
       "blocked": false,
       "blocked_reason": "",

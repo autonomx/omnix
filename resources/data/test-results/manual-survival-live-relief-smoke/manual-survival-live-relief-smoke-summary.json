@@ -6,13 +6,13 @@
   "errors": [],
   "final_needs": {
     "fatigue": 43,
-    "hunger": 80,
-    "thirst": 82
+    "hunger": 45,
+    "thirst": 47
   },
-  "format_version": "n1263_manual_survival_live_relief_smoke_v3",
+  "format_version": "n1263_manual_survival_live_relief_smoke_v4",
   "inventory_consumed_count": 2,
   "negative_delta_rows": 3,
-  "ok": false,
+  "ok": true,
   "relief_applied_count": 3,
   "relief_needs": [
     "fatigue",
@@ -27,14 +27,11 @@
       "negative_delta_rows": 3,
       "relief_applied_rows": 3,
       "row_count": 4,
-      "survival_suggestion_rows": 4
+      "survival_suggestion_rows": 3
     },
     "gate": "live_runtime_survival_suggestions_and_relief",
-    "ok": false,
-    "reasons": [
-      "thirst_not_reduced",
-      "hunger_not_reduced"
-    ],
+    "ok": true,
+    "reasons": [],
     "source": "n1263_live_runtime_survival_repair"
   },
   "starting_needs": {
@@ -42,11 +39,8 @@
     "hunger": 80,
     "thirst": 82
   },
-  "survival_suggestion_rows": 4,
+  "survival_suggestion_rows": 3,
   "turns_executed": 4,
   "turns_requested": 4,
-  "validation_failures": [
-    "thirst_not_reduced",
-    "hunger_not_reduced"
-  ]
+  "validation_failures": []
 }
