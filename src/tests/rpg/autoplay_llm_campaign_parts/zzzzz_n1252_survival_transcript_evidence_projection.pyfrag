@@ -1,0 +1,52 @@
+# N125.2 — persist turn-contract survival evidence into final transcript rows.
+#
+# Late fragment: normalizes transcript rows before N125.1/N124 summary helpers
+# consume them.  This preserves survival evidence into stable row fields when it
+# already exists in nested turn-contract/result payloads.
+
+_N1252_EVAL_PREV = globals().get("_build_100_turn_evaluation_summary")
+_N1252_READY_PREV = globals().get("_build_100_turn_readiness_summary")
+
+try:
+    from app.rpg.session.survival_transcript import persist_survival_evidence_into_transcript_rows
+except Exception:  # pragma: no cover - defensive import for generated harness contexts
+    persist_survival_evidence_into_transcript_rows = None
+
+
+def _n1252_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _n1252_with_projected_transcript(args, kwargs):
+    args = list(args)
+    kwargs = dict(kwargs)
+    transcript = kwargs.get("transcript")
+    transcript_index = None
+    if transcript is None and len(args) >= 5 and isinstance(args[4], list):
+        transcript = args[4]
+        transcript_index = 4
+    if transcript is None and len(args) >= 2 and isinstance(args[1], list):
+        transcript = args[1]
+        transcript_index = 1
+    transcript = _n1252_list(transcript)
+    if callable(persist_survival_evidence_into_transcript_rows):
+        transcript = persist_survival_evidence_into_transcript_rows(transcript)
+    if "transcript" in kwargs:
+        kwargs["transcript"] = transcript
+    elif transcript_index is not None:
+        args[transcript_index] = transcript
+    else:
+        kwargs["transcript"] = transcript
+    return tuple(args), kwargs
+
+
+if callable(_N1252_EVAL_PREV):
+    def _build_100_turn_evaluation_summary(*args, **kwargs):
+        projected_args, projected_kwargs = _n1252_with_projected_transcript(args, kwargs)
+        return _N1252_EVAL_PREV(*projected_args, **projected_kwargs)
+
+
+if callable(_N1252_READY_PREV):
+    def _build_100_turn_readiness_summary(*args, **kwargs):
+        projected_args, projected_kwargs = _n1252_with_projected_transcript(args, kwargs)
+        return _N1252_READY_PREV(*projected_args, **projected_kwargs)
