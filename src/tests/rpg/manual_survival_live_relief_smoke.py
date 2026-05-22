@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -137,6 +138,57 @@ def _row(index: int, command: str, result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _climate_from_needs(needs: Dict[str, int]) -> Dict[str, Any]:
+    warnings = [f"{key}_high" for key, value in needs.items() if _safe_int(value, 0) >= 70]
+    return {
+        "format_version": "n1263_live_relief_smoke_carry_forward_v1",
+        "runtime_enforced": True,
+        "source": "n1263_live_relief_smoke_carry_forward",
+        "minutes_per_turn": 15,
+        "survival": {**needs, "warnings": warnings},
+    }
+
+
+def _carry_forward_session(session: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    session = _safe_dict(session)
+    if not session:
+        return session
+    needs = {key: _safe_int(value, 0) for key, value in _safe_dict(row.get("needs")).items() if key in ("hunger", "thirst", "fatigue")}
+    inventory_after = [copy.deepcopy(_safe_dict(item)) for item in _safe_list(row.get("inventory_after")) if isinstance(item, dict)]
+    climate_survival = _climate_from_needs(needs)
+
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory_state = _safe_dict(player_state.get("inventory_state"))
+    simulation_state["needs"] = dict(needs)
+    simulation_state["climate_survival"] = copy.deepcopy(climate_survival)
+    player_state["needs"] = dict(needs)
+    player_state["climate_survival"] = copy.deepcopy(climate_survival)
+    if inventory_after:
+        inventory_state["items"] = inventory_after
+        player_state["inventory_state"] = inventory_state
+        player_state["inventory"] = {"items": copy.deepcopy(inventory_after)}
+    simulation_state["player_state"] = player_state
+    session["simulation_state"] = simulation_state
+
+    state = _safe_dict(session.get("state"))
+    state["simulation_state"] = copy.deepcopy(simulation_state)
+    state["player_state"] = copy.deepcopy(player_state)
+    state["needs"] = dict(needs)
+    state["climate_survival"] = copy.deepcopy(climate_survival)
+    session["state"] = state
+
+    setup_payload = _safe_dict(session.get("setup_payload"))
+    metadata = _safe_dict(setup_payload.get("metadata"))
+    metadata["simulation_state"] = copy.deepcopy(simulation_state)
+    metadata["player_state"] = copy.deepcopy(player_state)
+    metadata["needs"] = dict(needs)
+    metadata["climate_survival"] = copy.deepcopy(climate_survival)
+    setup_payload["metadata"] = metadata
+    session["setup_payload"] = setup_payload
+    return session
+
+
 def _summarize(session_id: str, rows: List[Dict[str, Any]], errors: List[str]) -> Dict[str, Any]:
     final_needs = _safe_dict(rows[-1].get("needs")) if rows else {}
     relief_rows = [row for row in rows if row.get("relief_applied")]
@@ -164,7 +216,7 @@ def _summarize(session_id: str, rows: List[Dict[str, Any]], errors: List[str]) -
     if _safe_int(final_needs.get("fatigue"), 999) >= DEFAULT_NEEDS["fatigue"]:
         failures.append("fatigue_not_reduced")
     return {
-        "format_version": "n1263_manual_survival_live_relief_smoke_v3",
+        "format_version": "n1263_manual_survival_live_relief_smoke_v4",
         "ok": not errors and not failures,
         "session_id": session_id,
         "turns_requested": len(COMMANDS),
@@ -205,10 +257,11 @@ def run_smoke(session_id: str) -> Dict[str, Any]:
     for index, command in enumerate(COMMANDS, start=1):
         try:
             result = _safe_dict(apply_turn(session_id=session_id, player_input=command))
-            session = _safe_dict(result.get("session"))
+            row = _row(index, command, result)
+            session = _carry_forward_session(_safe_dict(result.get("session")), row)
             if session:
                 save_session(session)
-            rows.append(_row(index, command, result))
+            rows.append(row)
         except Exception as exc:
             errors.append(f"turn_{index}:{type(exc).__name__}:{exc}")
             break
