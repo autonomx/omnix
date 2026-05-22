@@ -4,6 +4,9 @@
 _N1272_GLOBAL_APPLY_TURN_PREV = globals().get("apply_turn")
 
 from app.rpg.session.service import load_session as _n1272_load_session  # noqa: E402
+from app.rpg.session.survival_autoplay_persistence import (  # noqa: E402
+    persist_result_survival_state as _n1272_persist_result_survival_state,
+)
 from app.rpg.session.survival_autoplay_player_agent import (  # noqa: E402
     promote_survival_suggestion_for_autoplay as _n1272_promote_survival_suggestion_for_autoplay,
 )
@@ -82,7 +85,9 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
         promotion.setdefault("promoted_player_input", promoted_player_input)
         promotion["effective_player_input"] = promoted_player_input
         promotion["input_was_replaced"] = promoted_player_input != original_player_input
-        return _n1272_attach_promotion(result, promotion)
+        result = _n1272_attach_promotion(result, promotion)
+        result = _n1272_persist_result_survival_state(result, save=True)
+        return result
 
     _wrapped_apply_turn._n1272_survival_autoplay_wrapped = True
     _wrapped_apply_turn._n1272_previous_apply_turn = previous_apply_turn
