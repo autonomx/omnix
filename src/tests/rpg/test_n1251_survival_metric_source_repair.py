@@ -85,6 +85,25 @@ def _row_with_values_but_missing_sources(turn: int = 1):
     }
 
 
+def _row_with_authoritative_climate_state(turn: int = 1):
+    return {
+        "turn_index": turn,
+        "climate_survival": {
+            "format_version": "n1231_climate_survival_state_v1",
+            "runtime_enforced": True,
+            "source": "deterministic_authoritative_turn_tick",
+            "tick": turn,
+            "minutes_per_turn": 15,
+            "survival": {
+                "hunger": 4,
+                "thirst": 6,
+                "fatigue": 4,
+                "warnings": [],
+            },
+        },
+    }
+
+
 def test_n1251_source_summary_detects_full_nested_turn_contract_evidence() -> None:
     summary = build_survival_metric_source_summary([_row_with_full_source(1)])
 
@@ -114,6 +133,19 @@ def test_n1251_source_gate_flags_value_only_rows_as_advisory_gap() -> None:
     assert "missing_climate_tick_source_rows" in gate["reasons"]
 
 
+def test_n1251_authoritative_climate_state_counts_as_tick_source_without_fabricating_deltas() -> None:
+    summary = build_survival_metric_source_summary([_row_with_authoritative_climate_state(1)])
+    gate = build_survival_metric_source_gate(summary)
+
+    assert summary["coverage"]["row_count"] == 1
+    assert summary["coverage"]["climate_survival_rows"] == 1
+    assert summary["coverage"]["resource_change_rows"] == 0
+    assert summary["coverage"]["climate_tick_source_rows"] == 1
+    assert summary["coverage"]["nonzero_delta_rows"] == 0
+    assert gate["ok"] is True
+    assert gate["reasons"] == []
+
+
 def test_n1251_repaired_survival_pressure_summary_includes_source_coverage_and_real_metrics() -> None:
     summary = build_survival_pressure_relief_summary([_row_with_full_source(1)])
 
@@ -125,6 +157,22 @@ def test_n1251_repaired_survival_pressure_summary_includes_source_coverage_and_r
     assert summary["inventory_consumed_summary"] == [
         {"item_id": "waterskin", "name": "Waterskin", "quantity": 1}
     ]
+    assert summary["source_coverage_summary"]["coverage"]["climate_tick_source_rows"] == 1
+    assert summary["source_gate"]["ok"] is True
+    assert summary["trend_rows"][0]["source_present"] is True
+
+
+def test_n1251_authoritative_climate_state_counts_pressure_source_without_relief_or_delta() -> None:
+    summary = build_survival_pressure_relief_summary([_row_with_authoritative_climate_state(1)])
+
+    assert summary["pressure_turn_count"] == 1
+    assert summary["survival_warning_count"] == 0
+    assert summary["relief_action_count"] == 0
+    assert summary["net_resource_deltas"] == {
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+    }
     assert summary["source_coverage_summary"]["coverage"]["climate_tick_source_rows"] == 1
     assert summary["source_gate"]["ok"] is True
     assert summary["trend_rows"][0]["source_present"] is True
