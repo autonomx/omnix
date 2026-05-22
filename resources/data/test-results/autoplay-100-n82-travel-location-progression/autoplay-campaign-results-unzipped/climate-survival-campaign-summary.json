@@ -1,0 +1,259 @@
+{
+  "campaign_tracking_enabled": true,
+  "day_tick_count": 56,
+  "days_elapsed": 4,
+  "final_time": {
+    "day": 5,
+    "hour": 4,
+    "phase": "night",
+    "season": "spring",
+    "temperature_c": 5,
+    "weather": "rain"
+  },
+  "format_version": "n122_climate_survival_campaign_summary_v1",
+  "minutes_per_turn": 60,
+  "night_tick_count": 44,
+  "ok": true,
+  "player_auto_care_enabled": true,
+  "policy": "Deterministic climate and survival pressure are derived from campaign minutes per turn. Auto-care emits bounded eat/drink/sleep actions when thresholds are crossed.",
+  "settings": {
+    "auto_care_enabled": true,
+    "climate_time_enabled": true,
+    "day_night_cycle_enabled": true,
+    "fatigue_per_day": 32.0,
+    "hunger_enabled": true,
+    "hunger_per_day": 28.0,
+    "hungry_threshold": 55.0,
+    "season_start": "spring",
+    "seasons_enabled": true,
+    "sleep_enabled": true,
+    "sleep_start_hour": 22,
+    "survival_enabled": true,
+    "temperature_enabled": true,
+    "thirst_enabled": true,
+    "thirst_per_day": 40.0,
+    "thirsty_threshold": 50.0,
+    "tired_threshold": 60.0,
+    "wake_hour": 6,
+    "weather_enabled": true,
+    "weather_volatility": "normal"
+  },
+  "survival": {
+    "action_count": 7,
+    "action_counts": {
+      "drink_when_thirsty": 3,
+      "eat_when_hungry": 2,
+      "sleep_when_tired_at_night": 2
+    },
+    "actions": [
+      {
+        "after": 0.0,
+        "before": 51.67,
+        "hour": 7,
+        "kind": "drink_when_thirsty",
+        "source": "deterministic_survival_auto_care",
+        "turn": 31
+      },
+      {
+        "after": 0.0,
+        "before": 61.33,
+        "hour": 22,
+        "kind": "sleep_when_tired_at_night",
+        "source": "deterministic_survival_auto_care",
+        "turn": 46
+      },
+      {
+        "after": 0.0,
+        "before": 56.0,
+        "hour": 0,
+        "kind": "eat_when_hungry",
+        "source": "deterministic_survival_auto_care",
+        "turn": 48
+      },
+      {
+        "after": 0.0,
+        "before": 51.67,
+        "hour": 14,
+        "kind": "drink_when_thirsty",
+        "source": "deterministic_survival_auto_care",
+        "turn": 62
+      },
+      {
+        "after": 0.0,
+        "before": 51.67,
+        "hour": 21,
+        "kind": "drink_when_thirsty",
+        "source": "deterministic_survival_auto_care",
+        "turn": 93
+      },
+      {
+        "after": 0.0,
+        "before": 64.0,
+        "hour": 22,
+        "kind": "sleep_when_tired_at_night",
+        "source": "deterministic_survival_auto_care",
+        "turn": 94
+      },
+      {
+        "after": 0.0,
+        "before": 56.0,
+        "hour": 0,
+        "kind": "eat_when_hungry",
+        "source": "deterministic_survival_auto_care",
+        "turn": 96
+      }
+    ],
+    "fatigue": 8.0,
+    "hunger": 4.67,
+    "thirst": 11.67
+  },
+  "total_minutes": 6000,
+  "turns": 100,
+  "weather_sample_count": 18,
+  "weather_samples": [
+    {
+      "day": 1,
+      "hour": 1,
+      "season": "spring",
+      "temperature_c": 5,
+      "turn": 1,
+      "weather": "rain"
+    },
+    {
+      "day": 1,
+      "hour": 6,
+      "season": "spring",
+      "temperature_c": 10,
+      "turn": 6,
+      "weather": "rain"
+    },
+    {
+      "day": 1,
+      "hour": 12,
+      "season": "spring",
+      "temperature_c": 14,
+      "turn": 12,
+      "weather": "rain"
+    },
+    {
+      "day": 1,
+      "hour": 18,
+      "season": "spring",
+      "temperature_c": 10,
+      "turn": 18,
+      "weather": "rain"
+    },
+    {
+      "day": 2,
+      "hour": 0,
+      "season": "spring",
+      "temperature_c": 7,
+      "turn": 24,
+      "weather": "mist"
+    },
+    {
+      "day": 2,
+      "hour": 6,
+      "season": "spring",
+      "temperature_c": 12,
+      "turn": 30,
+      "weather": "mist"
+    },
+    {
+      "day": 2,
+      "hour": 12,
+      "season": "spring",
+      "temperature_c": 16,
+      "turn": 36,
+      "weather": "mist"
+    },
+    {
+      "day": 2,
+      "hour": 18,
+      "season": "spring",
+      "temperature_c": 12,
+      "turn": 42,
+      "weather": "mist"
+    },
+    {
+      "day": 3,
+      "hour": 0,
+      "season": "spring",
+      "temperature_c": 10,
+      "turn": 48,
+      "weather": "clear"
+    },
+    {
+      "day": 3,
+      "hour": 6,
+      "season": "spring",
+      "temperature_c": 15,
+      "turn": 54,
+      "weather": "clear"
+    },
+    {
+      "day": 3,
+      "hour": 12,
+      "season": "spring",
+      "temperature_c": 19,
+      "turn": 60,
+      "weather": "clear"
+    },
+    {
+      "day": 3,
+      "hour": 18,
+      "season": "spring",
+      "temperature_c": 15,
+      "turn": 66,
+      "weather": "clear"
+    },
+    {
+      "day": 4,
+      "hour": 0,
+      "season": "spring",
+      "temperature_c": 8,
+      "turn": 72,
+      "weather": "cloudy"
+    },
+    {
+      "day": 4,
+      "hour": 6,
+      "season": "spring",
+      "temperature_c": 13,
+      "turn": 78,
+      "weather": "cloudy"
+    },
+    {
+      "day": 4,
+      "hour": 12,
+      "season": "spring",
+      "temperature_c": 17,
+      "turn": 84,
+      "weather": "cloudy"
+    },
+    {
+      "day": 4,
+      "hour": 18,
+      "season": "spring",
+      "temperature_c": 13,
+      "turn": 90,
+      "weather": "cloudy"
+    },
+    {
+      "day": 5,
+      "hour": 0,
+      "season": "spring",
+      "temperature_c": 5,
+      "turn": 96,
+      "weather": "rain"
+    },
+    {
+      "day": 5,
+      "hour": 4,
+      "season": "spring",
+      "temperature_c": 5,
+      "turn": 100,
+      "weather": "rain"
+    }
+  ]
+}

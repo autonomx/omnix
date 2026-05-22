@@ -1,0 +1,85 @@
+{
+  "action_count": 7,
+  "action_counts": {
+    "drink_when_thirsty": 3,
+    "eat_when_hungry": 2,
+    "sleep_when_tired_at_night": 2
+  },
+  "actions_preview": [
+    {
+      "after": 0.0,
+      "before": 51.67,
+      "hour": 7,
+      "kind": "drink_when_thirsty",
+      "source": "deterministic_survival_auto_care",
+      "turn": 31
+    },
+    {
+      "after": 0.0,
+      "before": 61.33,
+      "hour": 22,
+      "kind": "sleep_when_tired_at_night",
+      "source": "deterministic_survival_auto_care",
+      "turn": 46
+    },
+    {
+      "after": 0.0,
+      "before": 56.0,
+      "hour": 0,
+      "kind": "eat_when_hungry",
+      "source": "deterministic_survival_auto_care",
+      "turn": 48
+    },
+    {
+      "after": 0.0,
+      "before": 51.67,
+      "hour": 14,
+      "kind": "drink_when_thirsty",
+      "source": "deterministic_survival_auto_care",
+      "turn": 62
+    },
+    {
+      "after": 0.0,
+      "before": 51.67,
+      "hour": 21,
+      "kind": "drink_when_thirsty",
+      "source": "deterministic_survival_auto_care",
+      "turn": 93
+    },
+    {
+      "after": 0.0,
+      "before": 64.0,
+      "hour": 22,
+      "kind": "sleep_when_tired_at_night",
+      "source": "deterministic_survival_auto_care",
+      "turn": 94
+    },
+    {
+      "after": 0.0,
+      "before": 56.0,
+      "hour": 0,
+      "kind": "eat_when_hungry",
+      "source": "deterministic_survival_auto_care",
+      "turn": 96
+    }
+  ],
+  "campaign_tracking_enabled": true,
+  "final_needs": {
+    "fatigue": 8.0,
+    "hunger": 4.67,
+    "thirst": 11.67
+  },
+  "final_time": {
+    "day": 5,
+    "hour": 4,
+    "phase": "night",
+    "season": "spring",
+    "temperature_c": 5,
+    "weather": "rain"
+  },
+  "format_version": "n1221_climate_survival_action_plan_v1",
+  "next_recommended_actions": [],
+  "ok": true,
+  "player_auto_care_enabled": true,
+  "policy": "Player auto-care is deterministic: eat/drink/sleep actions are emitted when bounded hunger/thirst/fatigue thresholds are crossed. next_recommended_actions is only populated if final needs remain above threshold."
+}

@@ -1,0 +1,13 @@
+{
+  "artifacts": [
+    "memory-arc-faction-compaction-summary.json",
+    "npc-goal-agency-summary.json",
+    "economy-long-term-sinks-summary.json",
+    "combined-endurance-systems-summary.json"
+  ],
+  "economy_long_term_sinks_ok": true,
+  "format_version": "n121_combined_endurance_systems_summary_v1",
+  "memory_arc_faction_compaction_ok": true,
+  "npc_goal_agency_ok": true,
+  "ok": true
+}
