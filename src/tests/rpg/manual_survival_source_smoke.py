@@ -111,17 +111,30 @@ def _extract_narration_payload(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _provider_call_seen(payload: Dict[str, Any]) -> bool:
-    diagnostics = _safe_dict(_safe_dict(payload).get("provider_call_diagnostics"))
-    if diagnostics.get("called") is True:
-        return True
-    if diagnostics.get("provider_requested") is True:
-        return True
-    if diagnostics.get("provider_valid") is True and diagnostics.get("selected_method"):
-        return True
-    if int(diagnostics.get("raw_text_length") or 0) > 0:
-        return True
-    if diagnostics.get("raw_text_excerpt"):
-        return True
+    payload = _safe_dict(payload)
+    diagnostics_sources = [
+        payload.get("provider_call_diagnostics"),
+        _safe_dict(payload.get("runtime_narration_diagnostics")).get("provider_call_diagnostics"),
+        payload.get("runtime_narration_diagnostics"),
+    ]
+    for diagnostics_source in diagnostics_sources:
+        diagnostics = _safe_dict(diagnostics_source)
+        if not diagnostics:
+            continue
+        if diagnostics.get("called") is True:
+            return True
+        if diagnostics.get("provider_requested") is True:
+            return True
+        if diagnostics.get("provider_attempted") is True:
+            return True
+        if diagnostics.get("provider_valid") is True and diagnostics.get("selected_method"):
+            return True
+        if int(diagnostics.get("provider_attempt_count") or 0) > 0:
+            return True
+        if int(diagnostics.get("raw_text_length") or 0) > 0:
+            return True
+        if diagnostics.get("raw_text_excerpt"):
+            return True
     return False
 
 
