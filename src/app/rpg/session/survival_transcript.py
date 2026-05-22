@@ -9,7 +9,7 @@ source coverage instead of only projected survival values.
 """
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from app.rpg.session.survival_metrics import (
     climate_survival,
@@ -25,6 +25,7 @@ from app.rpg.session.survival_metrics import (
 )
 
 SURVIVAL_TRANSCRIPT_PROJECTION_FORMAT = "n1252_survival_transcript_projection_v1"
+_COMPACTED_CONTRACT_CLIMATE_SOURCE = "n1252_projected_turn_contract_climate_survival"
 
 
 def _copy_if_present(target: Dict[str, Any], key: str, value: Any) -> bool:
@@ -37,12 +38,53 @@ def _copy_if_present(target: Dict[str, Any], key: str, value: Any) -> bool:
     return False
 
 
+def _has_need_values(climate: Dict[str, Any]) -> bool:
+    survival = safe_dict(climate.get("survival") or climate.get("values"))
+    if climate.get("tick") is None:
+        return False
+    return all(key in survival for key in ("hunger", "thirst", "fatigue"))
+
+
+def _restore_compacted_contract_climate_source(
+    *,
+    climate: Dict[str, Any],
+    contract: Dict[str, Any],
+) -> Tuple[Dict[str, Any], bool]:
+    """Restore source metadata only for compacted turn-contract climate rows.
+
+    Real autoplay rows can retain ``result.turn_contract.climate_survival`` while
+    stripping non-value metadata such as ``format_version`` and ``source``.  That
+    shape is still authoritative turn-contract evidence, unlike a value-only
+    top-level runtime display row.  This helper therefore restores the minimal
+    N123.1 metadata only when the climate payload comes from the nested turn
+    contract and has bounded survival need values.
+    """
+
+    climate = safe_dict(climate)
+    contract = safe_dict(contract)
+    if not climate:
+        return {}, False
+    if has_climate_tick_source({"climate_survival": climate}):
+        return climate, False
+    contract_climate = safe_dict(contract.get("climate_survival"))
+    if not contract_climate or contract_climate != climate:
+        return climate, False
+    if not _has_need_values(climate):
+        return climate, False
+
+    restored = deepcopy(climate)
+    restored.setdefault("format_version", "n1231_climate_survival_state_v1")
+    restored.setdefault("runtime_enforced", True)
+    restored.setdefault("source", _COMPACTED_CONTRACT_CLIMATE_SOURCE)
+    return restored, True
+
+
 def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """Return a row with stable survival evidence fields preserved.
 
-    The function never fabricates source evidence. It only promotes evidence that
-    already exists somewhere in the source row, such as result.turn_contract or
-    authoritative_result.turn_contract.
+    The function never fabricates survival values, resource deltas, suggestions,
+    or relief actions. It only promotes evidence that already exists somewhere in
+    the source row, such as result.turn_contract or authoritative_result.
     """
 
     source = safe_dict(row)
@@ -51,6 +93,10 @@ def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[s
     projected_contract = dict(safe_dict(projected.get("turn_contract")) or contract)
 
     climate = climate_survival(source)
+    climate, climate_source_restored = _restore_compacted_contract_climate_source(
+        climate=climate,
+        contract=contract,
+    )
     changes = resource_changes(source)
     effects = effect_result(source)
     action = survival_action(source)
@@ -71,7 +117,8 @@ def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[s
     _copy_if_present(projected, "survival_suggested_actions", suggestions)
 
     # Add stable convenience deltas for artifact readers. These are derived only
-    # from preserved resource_changes and remain zero when no source delta exists.
+    # from preserved resource_changes and remain zero/absent when no source delta
+    # exists.
     if changes:
         projected["hunger_delta"] = flat_delta(projected, "hunger_delta")
         projected["thirst_delta"] = flat_delta(projected, "thirst_delta")
@@ -81,6 +128,7 @@ def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[s
         "format_version": SURVIVAL_TRANSCRIPT_PROJECTION_FORMAT,
         "source": "n1252_final_transcript_row_projection",
         "climate_survival_preserved": has_climate,
+        "climate_source_restored": climate_source_restored,
         "resource_changes_preserved": has_changes,
         "effect_result_preserved": has_effect,
         "survival_action_preserved": has_action,
