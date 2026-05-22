@@ -17,6 +17,11 @@ except Exception:  # pragma: no cover - defensive import for generated harness c
     build_survival_metric_source_summary = None
     _n1251_build_survival_summary = None
 
+try:
+    from app.rpg.session.survival_transcript import persist_survival_evidence_into_transcript_rows as _n1251_project_survival_rows
+except Exception:  # pragma: no cover - defensive import for generated harness contexts
+    _n1251_project_survival_rows = None
+
 
 def _n1251_dict(value):
     return value if isinstance(value, dict) else {}
@@ -26,13 +31,20 @@ def _n1251_list(value):
     return value if isinstance(value, list) else []
 
 
+def _n1251_project_transcript(transcript):
+    transcript = _n1251_list(transcript)
+    if callable(_n1251_project_survival_rows):
+        return _n1251_project_survival_rows(transcript)
+    return transcript
+
+
 def _n1251_transcript_from_args(args, kwargs):
     transcript = kwargs.get("transcript")
     if transcript is None and len(args) >= 5:
         transcript = args[4]
     if transcript is None and len(args) >= 2 and isinstance(args[1], list):
         transcript = args[1]
-    return _n1251_list(transcript)
+    return _n1251_project_transcript(transcript)
 
 
 def _n1251_render_source_section(source_summary, gate):
@@ -72,7 +84,7 @@ def _n1251_insert_source_section(sections, source_section):
 
 def _n1251_attach_source_repair(summary, transcript):
     base = dict(_n1251_dict(summary))
-    transcript = _n1251_list(transcript)
+    transcript = _n1251_project_transcript(transcript)
     if not callable(_n1251_build_survival_summary):
         return base
     survival_summary = _n1251_build_survival_summary(transcript)
