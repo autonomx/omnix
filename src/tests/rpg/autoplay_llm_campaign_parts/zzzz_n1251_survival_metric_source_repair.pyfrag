@@ -22,6 +22,11 @@ try:
 except Exception:  # pragma: no cover - defensive for generated harness contexts
     _n1251_project_survival_rows = None
 
+try:
+    from app.rpg.session.survival_transcript_resource_backing import restore_resource_backed_climate_sources as _n1251_restore_resource_backed_sources
+except Exception:  # pragma: no cover - defensive for generated harness contexts
+    _n1251_restore_resource_backed_sources = None
+
 
 def _n1251_dict(value):
     return value if isinstance(value, dict) else {}
@@ -39,10 +44,10 @@ def _n1251_project_transcript(transcript):
     transcript = _n1251_list(transcript)
     if not transcript:
         return []
-    if all(_n1251_has_projection(row) for row in transcript):
-        return transcript
-    if callable(_n1251_project_survival_rows):
-        return _n1251_project_survival_rows(transcript)
+    if not all(_n1251_has_projection(row) for row in transcript) and callable(_n1251_project_survival_rows):
+        transcript = _n1251_project_survival_rows(transcript)
+    if callable(_n1251_restore_resource_backed_sources):
+        transcript = _n1251_restore_resource_backed_sources(transcript)
     return transcript
 
 
