@@ -89,20 +89,50 @@ def _extract_resource_changes(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _extract_narration_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    session = _safe_dict(result.get("session"))
+    candidates = [
+        result.get("narration_payload"),
+        result.get("structured_narration"),
+        result.get("narration_result"),
+        result_sub.get("narration_payload"),
+        result_sub.get("structured_narration"),
+        result_sub.get("narration_result"),
+        session.get("last_narration_payload"),
+        session.get("narration_payload"),
+    ]
+    for value in candidates:
+        value = _safe_dict(value)
+        if value:
+            return value
+    return {}
+
+
+def _provider_call_seen(payload: Dict[str, Any]) -> bool:
+    diagnostics = _safe_dict(_safe_dict(payload).get("provider_call_diagnostics"))
+    if diagnostics.get("called") is True:
+        return True
+    if diagnostics.get("provider_requested") is True:
+        return True
+    if diagnostics.get("provider_valid") is True and diagnostics.get("selected_method"):
+        return True
+    if int(diagnostics.get("raw_text_length") or 0) > 0:
+        return True
+    if diagnostics.get("raw_text_excerpt"):
+        return True
+    return False
+
+
 def _llm_called(result: Dict[str, Any]) -> bool:
     result = _safe_dict(result)
-    payload = _safe_dict(
-        result.get("narration_payload")
-        or result.get("structured_narration")
-        or result.get("narration_result")
-        or _safe_dict(result.get("result")).get("narration_payload")
-        or _safe_dict(result.get("result")).get("structured_narration")
-    )
+    payload = _extract_narration_payload(result)
     return bool(
         result.get("llm_called")
         or _safe_dict(result.get("result")).get("llm_called")
         or payload.get("source") == "provider_runtime_narration"
-        or _safe_dict(payload.get("provider_call_diagnostics")).get("called")
+        or _provider_call_seen(payload)
     )
 
 
