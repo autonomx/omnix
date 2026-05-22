@@ -23,7 +23,7 @@
     "hunger_delta": 0,
     "thirst_delta": 0
   },
-  "pressure_turn_count": 3,
+  "pressure_turn_count": 2,
   "relief_action_count": 0,
   "relief_counts_by_kind": {},
   "report_section_title": "N125.1 Real Survival Metric Source Evidence",
@@ -32,17 +32,22 @@
   "source_coverage_summary": {
     "coverage": {
       "climate_survival_rows": 3,
-      "climate_tick_source_rows": 3,
+      "climate_tick_source_rows": 2,
       "nonzero_delta_rows": 0,
       "nonzero_need_rows": 3,
       "relief_applied_rows": 0,
-      "resource_change_rows": 3,
+      "resource_change_rows": 2,
       "row_count": 3,
       "survival_action_rows": 0,
       "survival_suggestion_rows": 0,
       "warning_rows": 0
     },
-    "example_missing_source_rows": [],
+    "example_missing_source_rows": [
+      {
+        "missing": "resource_changes",
+        "turn_index": 1
+      }
+    ],
     "format_version": "n1251_survival_metric_source_summary_v1",
     "notes": [
       "climate_survival_rows proves values are projected into transcript rows.",
@@ -50,17 +55,17 @@
       "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
     ],
     "source": "final_transcript_rows",
-    "source_coverage_rate": 1.0
+    "source_coverage_rate": 0.6666666666666666
   },
   "source_gate": {
     "advisory_only": true,
     "coverage": {
       "climate_survival_rows": 3,
-      "climate_tick_source_rows": 3,
+      "climate_tick_source_rows": 2,
       "nonzero_delta_rows": 0,
       "nonzero_need_rows": 3,
       "relief_applied_rows": 0,
-      "resource_change_rows": 3,
+      "resource_change_rows": 2,
       "row_count": 3,
       "survival_action_rows": 0,
       "survival_suggestion_rows": 0,
@@ -83,7 +88,7 @@
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
-      "source_present": true,
+      "source_present": false,
       "thirst": 3,
       "thirst_delta": 0,
       "turn_index": 1,

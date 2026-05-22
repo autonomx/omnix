@@ -1,17 +1,22 @@
 {
   "coverage": {
     "climate_survival_rows": 3,
-    "climate_tick_source_rows": 3,
+    "climate_tick_source_rows": 2,
     "nonzero_delta_rows": 0,
     "nonzero_need_rows": 3,
     "relief_applied_rows": 0,
-    "resource_change_rows": 3,
+    "resource_change_rows": 2,
     "row_count": 3,
     "survival_action_rows": 0,
     "survival_suggestion_rows": 0,
     "warning_rows": 0
   },
-  "example_missing_source_rows": [],
+  "example_missing_source_rows": [
+    {
+      "missing": "resource_changes",
+      "turn_index": 1
+    }
+  ],
   "format_version": "n1251_survival_metric_source_summary_v1",
   "notes": [
     "climate_survival_rows proves values are projected into transcript rows.",
@@ -19,5 +24,5 @@
     "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
   ],
   "source": "final_transcript_rows",
-  "source_coverage_rate": 1.0
+  "source_coverage_rate": 0.6666666666666666
 }
