@@ -50,11 +50,23 @@ def _n1271_attach_report_section(summary, evidence):
     if any(_n1271_dict(section).get("id") == "n1271-survival-autoplay-evidence" for section in sections):
         summary["report_sections"] = sections
         return summary
-    sections.append({
+    section = {
         "id": "n1271-survival-autoplay-evidence",
         "title": "N127.1 Survival Autoplay Evidence",
         "html": _n1271_render_survival_autoplay_evidence_report_section(evidence),
-    })
+    }
+    # N1234 tests and report conventions expect the base survival pressure
+    # section to remain the final survival report section. Keep N127.1 adjacent
+    # to it without changing that older ordering contract.
+    insert_at = None
+    for index, existing in enumerate(sections):
+        if _n1271_dict(existing).get("id") == "n1234-survival-pressure":
+            insert_at = index
+            break
+    if insert_at is None:
+        sections.append(section)
+    else:
+        sections.insert(insert_at, section)
     summary["report_sections"] = sections
     return summary
 
