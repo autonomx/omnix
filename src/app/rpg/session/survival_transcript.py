@@ -26,6 +26,7 @@ from app.rpg.session.survival_metrics import (
 
 SURVIVAL_TRANSCRIPT_PROJECTION_FORMAT = "n1252_survival_transcript_projection_v1"
 _COMPACTED_CONTRACT_CLIMATE_SOURCE = "n1252_projected_turn_contract_climate_survival"
+_COMPACTED_FINAL_ROW_CLIMATE_SOURCE = "n1252_projected_final_transcript_climate_survival"
 
 
 def _copy_if_present(target: Dict[str, Any], key: str, value: Any) -> bool:
@@ -45,38 +46,72 @@ def _has_need_values(climate: Dict[str, Any]) -> bool:
     return all(key in survival for key in ("hunger", "thirst", "fatigue"))
 
 
-def _restore_compacted_contract_climate_source(
+def _is_final_transcript_context(row: Dict[str, Any]) -> bool:
+    """Return true for compacted autoplay transcript rows, not display-only values."""
+
+    row = safe_dict(row)
+    if row.get("turn_index") is None and row.get("turn") is None:
+        return False
+    evidence_keys = (
+        "player",
+        "player_action",
+        "action",
+        "canonical_turn_action",
+        "narration",
+        "result",
+        "authoritative_result",
+        "raw_result",
+        "resolved_action",
+        "resolved_result",
+        "resource_changes",
+        "effect_result",
+    )
+    return any(key in row for key in evidence_keys)
+
+
+def _restore_climate_source(
     *,
     climate: Dict[str, Any],
     contract: Dict[str, Any],
-) -> Tuple[Dict[str, Any], bool]:
-    """Restore source metadata only for compacted turn-contract climate rows.
+    row: Dict[str, Any],
+) -> Tuple[Dict[str, Any], bool, str]:
+    """Restore source metadata for compacted authoritative survival rows.
 
-    Real autoplay rows can retain ``result.turn_contract.climate_survival`` while
-    stripping non-value metadata such as ``format_version`` and ``source``.  That
-    shape is still authoritative turn-contract evidence, unlike a value-only
-    top-level runtime display row.  This helper therefore restores the minimal
-    N123.1 metadata only when the climate payload comes from the nested turn
-    contract and has bounded survival need values.
+    Real autoplay rows can retain climate survival values while stripping
+    non-value metadata such as ``format_version`` and ``source``.  This helper
+    restores the minimal N123.1 metadata only for rows that still carry
+    authoritative transcript context: nested turn-contract climate rows or final
+    transcript rows with player/result/action evidence.  Pure top-level
+    value-only runtime display rows are intentionally left source-less.
     """
 
     climate = safe_dict(climate)
     contract = safe_dict(contract)
+    row = safe_dict(row)
     if not climate:
-        return {}, False
+        return {}, False, ""
     if has_climate_tick_source({"climate_survival": climate}):
-        return climate, False
-    contract_climate = safe_dict(contract.get("climate_survival"))
-    if not contract_climate or contract_climate != climate:
-        return climate, False
+        return climate, False, ""
     if not _has_need_values(climate):
-        return climate, False
+        return climate, False, ""
 
-    restored = deepcopy(climate)
-    restored.setdefault("format_version", "n1231_climate_survival_state_v1")
-    restored.setdefault("runtime_enforced", True)
-    restored.setdefault("source", _COMPACTED_CONTRACT_CLIMATE_SOURCE)
-    return restored, True
+    contract_climate = safe_dict(contract.get("climate_survival"))
+    if contract_climate and contract_climate == climate:
+        restored = deepcopy(climate)
+        restored.setdefault("format_version", "n1231_climate_survival_state_v1")
+        restored.setdefault("runtime_enforced", True)
+        restored.setdefault("source", _COMPACTED_CONTRACT_CLIMATE_SOURCE)
+        return restored, True, _COMPACTED_CONTRACT_CLIMATE_SOURCE
+
+    top_level_climate = safe_dict(row.get("climate_survival"))
+    if top_level_climate and top_level_climate == climate and _is_final_transcript_context(row):
+        restored = deepcopy(climate)
+        restored.setdefault("format_version", "n1231_climate_survival_state_v1")
+        restored.setdefault("runtime_enforced", True)
+        restored.setdefault("source", _COMPACTED_FINAL_ROW_CLIMATE_SOURCE)
+        return restored, True, _COMPACTED_FINAL_ROW_CLIMATE_SOURCE
+
+    return climate, False, ""
 
 
 def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -84,7 +119,8 @@ def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[s
 
     The function never fabricates survival values, resource deltas, suggestions,
     or relief actions. It only promotes evidence that already exists somewhere in
-    the source row, such as result.turn_contract or authoritative_result.
+    the source row, such as result.turn_contract, authoritative_result, or a
+    compacted final transcript row.
     """
 
     source = safe_dict(row)
@@ -93,9 +129,10 @@ def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[s
     projected_contract = dict(safe_dict(projected.get("turn_contract")) or contract)
 
     climate = climate_survival(source)
-    climate, climate_source_restored = _restore_compacted_contract_climate_source(
+    climate, climate_source_restored, restored_source = _restore_climate_source(
         climate=climate,
         contract=contract,
+        row=source,
     )
     changes = resource_changes(source)
     effects = effect_result(source)
@@ -129,6 +166,7 @@ def persist_survival_evidence_into_transcript_row(row: Dict[str, Any]) -> Dict[s
         "source": "n1252_final_transcript_row_projection",
         "climate_survival_preserved": has_climate,
         "climate_source_restored": climate_source_restored,
+        "restored_climate_source": restored_source,
         "resource_changes_preserved": has_changes,
         "effect_result_preserved": has_effect,
         "survival_action_preserved": has_action,
