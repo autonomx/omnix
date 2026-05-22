@@ -163,6 +163,7 @@ def _candidate_player_input_values(
         for key in ("player_input", "input", "text", "raw_input", "command"):
             yield container.get(key)
         for nested_key in (
+            "narration_context",
             "action",
             "semantic_action",
             "semantic_action_record",
