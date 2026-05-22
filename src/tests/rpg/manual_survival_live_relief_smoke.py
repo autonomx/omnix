@@ -5,10 +5,10 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from app.rpg.session.service import save_session
 from tests.rpg.manual.constants import TEST_RESULTS_ROOT
 from tests.rpg.manual.live_survival_seed import DEFAULT_NEEDS, seed_live_survival_session
 from tests.rpg.manual.safe import _safe_dict, _safe_int, _safe_list, _safe_str
-from tests.rpg.manual.session_helpers import _save_manual_session_for_test
 from tests.rpg.manual.turn_execution import _get_apply_turn
 
 OUT_DIR = TEST_RESULTS_ROOT / "manual-survival-live-relief-smoke"
@@ -164,7 +164,7 @@ def _summarize(session_id: str, rows: List[Dict[str, Any]], errors: List[str]) -
     if _safe_int(final_needs.get("fatigue"), 999) >= DEFAULT_NEEDS["fatigue"]:
         failures.append("fatigue_not_reduced")
     return {
-        "format_version": "n1263_manual_survival_live_relief_smoke_v2",
+        "format_version": "n1263_manual_survival_live_relief_smoke_v3",
         "ok": not errors and not failures,
         "session_id": session_id,
         "turns_requested": len(COMMANDS),
@@ -205,8 +205,9 @@ def run_smoke(session_id: str) -> Dict[str, Any]:
     for index, command in enumerate(COMMANDS, start=1):
         try:
             result = _safe_dict(apply_turn(session_id=session_id, player_input=command))
-            if _safe_dict(result.get("session")):
-                _save_manual_session_for_test(session_id, _safe_dict(result.get("session")))
+            session = _safe_dict(result.get("session"))
+            if session:
+                save_session(session)
             rows.append(_row(index, command, result))
         except Exception as exc:
             errors.append(f"turn_{index}:{type(exc).__name__}:{exc}")
