@@ -1,0 +1,499 @@
+[
+  {
+    "deltas": {
+      "fatigue_delta": 0,
+      "hunger_delta": 0,
+      "thirst_delta": -35
+    },
+    "effective_player_input": "I drink Waterskin",
+    "inventory_consumed": [
+      {
+        "item_id": "waterskin",
+        "name": "Waterskin",
+        "quantity_after": 0,
+        "quantity_before": 1,
+        "quantity_delta": -1,
+        "source": "n1263_live_runtime_survival_relief"
+      }
+    ],
+    "needs": {
+      "fatigue": 78,
+      "hunger": 80,
+      "thirst": 47
+    },
+    "original_player_input": "I continue investigating the road and ask what clue matters next.",
+    "persistence": {
+      "applied": true,
+      "needs": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 47,
+        "warnings": [
+          "hunger_high",
+          "fatigue_high"
+        ]
+      },
+      "source": "n1272_survival_autoplay_persistence"
+    },
+    "promotion": {
+      "action_kind": "drink_water",
+      "command": "I drink Waterskin",
+      "effective_player_input": "I drink Waterskin",
+      "input_was_replaced": true,
+      "need": "thirst",
+      "need_value": 82,
+      "needs": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 82
+      },
+      "original_player_input": "I continue investigating the road and ask what clue matters next.",
+      "original_was_survival_command": false,
+      "promoted": true,
+      "promoted_player_input": "I drink Waterskin",
+      "reason": "highest_pressure_backed_survival_suggestion",
+      "source": "n1272_survival_autoplay_player_agent",
+      "suggestion": {
+        "action_kind": "drink_water",
+        "command": "I drink Waterskin",
+        "item_id": "waterskin",
+        "label": "Drink Waterskin",
+        "quantity": 1,
+        "reason": "thirst_high_inventory_drink_available",
+        "source": "n1233_survival_suggestion",
+        "type": "survival_relief"
+      },
+      "suggestion_count": 5
+    },
+    "promotion_action_kind": "drink_water",
+    "promotion_applied": true,
+    "promotion_need": "thirst",
+    "raw_result_keys": [
+      "character_cards_summary",
+      "combat_ammo_result",
+      "combat_loot_result",
+      "combat_narration_contract",
+      "combat_narration_error",
+      "combat_narration_payload",
+      "combat_narration_validation",
+      "combat_result",
+      "combat_state",
+      "companion_auto_equip_result",
+      "companion_item_acceptance_result",
+      "companion_memory_summary",
+      "companion_presence_projection",
+      "companion_presence_summary",
+      "companion_quest_progress_result",
+      "companion_quest_summary",
+      "companion_relationship_drift_result",
+      "consumable_result",
+      "container_result",
+      "crafting_result",
+      "direct_companion_turn_result",
+      "equipment_stats",
+      "general_interaction_result",
+      "interaction_result",
+      "inventory_result",
+      "llm_called",
+      "llm_purpose",
+      "loot_result",
+      "merchant_result",
+      "narration",
+      "narration_context",
+      "narration_payload",
+      "narration_quality_context",
+      "npc",
+      "npc_profile_summary",
+      "ok",
+      "party_aware_turn_context",
+      "party_composition_effects",
+      "repair_result",
+      "resolved_result",
+      "result",
+      "runtime_state",
+      "semantic_action_v2",
+      "session",
+      "simulation_state",
+      "structured_narration",
+      "survival_autoplay_persistence",
+      "survival_autoplay_player_agent",
+      "survival_autoplay_promotion",
+      "turn_contract",
+      "visible_interaction_reason"
+    ],
+    "relief_applied": true,
+    "relief_need": "thirst",
+    "suggestion_count": 2,
+    "suggestions": [
+      {
+        "action": "eat trail ration",
+        "kind": "survival_relief",
+        "need": "hunger",
+        "priority": 80,
+        "reason": "hunger_high",
+        "source": "n1263_live_runtime_survival_suggestion",
+        "value": 80,
+        "warning": "hunger_high"
+      },
+      {
+        "action": "rest",
+        "kind": "survival_relief",
+        "need": "fatigue",
+        "priority": 78,
+        "reason": "fatigue_high",
+        "source": "n1263_live_runtime_survival_suggestion",
+        "value": 78,
+        "warning": "fatigue_high"
+      }
+    ],
+    "survival_action": {
+      "action": "drink_waterskin",
+      "after": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 47
+      },
+      "applied": true,
+      "before": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 82
+      },
+      "blocked": false,
+      "blocked_reason": "",
+      "deltas": {
+        "fatigue_delta": 0,
+        "hunger_delta": 0,
+        "thirst_delta": -35
+      },
+      "inventory_consumed": [
+        {
+          "item_id": "waterskin",
+          "name": "Waterskin",
+          "quantity_after": 0,
+          "quantity_before": 1,
+          "quantity_delta": -1,
+          "source": "n1263_live_runtime_survival_relief"
+        }
+      ],
+      "kind": "survival_relief",
+      "need": "thirst",
+      "reason": "survival_relief_applied",
+      "source": "n1263_live_runtime_survival_relief"
+    },
+    "turn_index": 1
+  },
+  {
+    "deltas": {
+      "fatigue_delta": 0,
+      "hunger_delta": -35,
+      "thirst_delta": 0
+    },
+    "effective_player_input": "I eat Trail Ration",
+    "inventory_consumed": [
+      {
+        "item_id": "trail_ration",
+        "name": "Trail Ration",
+        "quantity_after": 0,
+        "quantity_before": 1,
+        "quantity_delta": -1,
+        "source": "n1263_live_runtime_survival_relief"
+      }
+    ],
+    "needs": {
+      "fatigue": 78,
+      "hunger": 45,
+      "thirst": 47
+    },
+    "original_player_input": "I keep following the wagon lead and watch for danger.",
+    "persistence": {
+      "applied": true,
+      "needs": {
+        "fatigue": 78,
+        "hunger": 45,
+        "thirst": 47,
+        "warnings": [
+          "fatigue_high"
+        ]
+      },
+      "source": "n1272_survival_autoplay_persistence"
+    },
+    "promotion": {
+      "action_kind": "eat_food",
+      "command": "I eat Trail Ration",
+      "effective_player_input": "I eat Trail Ration",
+      "input_was_replaced": true,
+      "need": "hunger",
+      "need_value": 80,
+      "needs": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 47
+      },
+      "original_player_input": "I keep following the wagon lead and watch for danger.",
+      "original_was_survival_command": false,
+      "promoted": true,
+      "promoted_player_input": "I eat Trail Ration",
+      "reason": "highest_pressure_backed_survival_suggestion",
+      "source": "n1272_survival_autoplay_player_agent",
+      "suggestion": {
+        "action_kind": "eat_food",
+        "command": "I eat Trail Ration",
+        "item_id": "trail_ration",
+        "label": "Eat Trail Ration",
+        "quantity": 1,
+        "reason": "hunger_high_inventory_food_available",
+        "source": "n1233_survival_suggestion",
+        "type": "survival_relief"
+      },
+      "suggestion_count": 4
+    },
+    "promotion_action_kind": "eat_food",
+    "promotion_applied": true,
+    "promotion_need": "hunger",
+    "raw_result_keys": [
+      "character_cards_summary",
+      "combat_ammo_result",
+      "combat_loot_result",
+      "combat_narration_contract",
+      "combat_narration_error",
+      "combat_narration_payload",
+      "combat_narration_validation",
+      "combat_result",
+      "combat_state",
+      "companion_auto_equip_result",
+      "companion_item_acceptance_result",
+      "companion_memory_summary",
+      "companion_presence_projection",
+      "companion_presence_summary",
+      "companion_quest_progress_result",
+      "companion_quest_summary",
+      "companion_relationship_drift_result",
+      "consumable_result",
+      "container_result",
+      "crafting_result",
+      "direct_companion_turn_result",
+      "equipment_stats",
+      "general_interaction_result",
+      "interaction_result",
+      "inventory_result",
+      "llm_called",
+      "llm_purpose",
+      "loot_result",
+      "merchant_result",
+      "narration",
+      "narration_context",
+      "narration_payload",
+      "narration_quality_context",
+      "npc",
+      "npc_profile_summary",
+      "ok",
+      "party_aware_turn_context",
+      "party_composition_effects",
+      "repair_result",
+      "resolved_result",
+      "result",
+      "runtime_state",
+      "semantic_action_v2",
+      "session",
+      "simulation_state",
+      "structured_narration",
+      "survival_autoplay_persistence",
+      "survival_autoplay_player_agent",
+      "survival_autoplay_promotion",
+      "turn_contract",
+      "visible_interaction_reason"
+    ],
+    "relief_applied": true,
+    "relief_need": "hunger",
+    "suggestion_count": 1,
+    "suggestions": [
+      {
+        "action": "rest",
+        "kind": "survival_relief",
+        "need": "fatigue",
+        "priority": 78,
+        "reason": "fatigue_high",
+        "source": "n1263_live_runtime_survival_suggestion",
+        "value": 78,
+        "warning": "fatigue_high"
+      }
+    ],
+    "survival_action": {
+      "action": "eat_trail_ration",
+      "after": {
+        "fatigue": 78,
+        "hunger": 45,
+        "thirst": 47
+      },
+      "applied": true,
+      "before": {
+        "fatigue": 78,
+        "hunger": 80,
+        "thirst": 47
+      },
+      "blocked": false,
+      "blocked_reason": "",
+      "deltas": {
+        "fatigue_delta": 0,
+        "hunger_delta": -35,
+        "thirst_delta": 0
+      },
+      "inventory_consumed": [
+        {
+          "item_id": "trail_ration",
+          "name": "Trail Ration",
+          "quantity_after": 0,
+          "quantity_before": 1,
+          "quantity_delta": -1,
+          "source": "n1263_live_runtime_survival_relief"
+        }
+      ],
+      "kind": "survival_relief",
+      "need": "hunger",
+      "reason": "survival_relief_applied",
+      "source": "n1263_live_runtime_survival_relief"
+    },
+    "turn_index": 2
+  },
+  {
+    "deltas": {
+      "fatigue_delta": -35,
+      "hunger_delta": 0,
+      "thirst_delta": 0
+    },
+    "effective_player_input": "I rest",
+    "inventory_consumed": [],
+    "needs": {
+      "fatigue": 43,
+      "hunger": 45,
+      "thirst": 47
+    },
+    "original_player_input": "I press the investigation forward toward the next useful sign.",
+    "persistence": {
+      "applied": true,
+      "needs": {
+        "fatigue": 43,
+        "hunger": 45,
+        "thirst": 47,
+        "warnings": []
+      },
+      "source": "n1272_survival_autoplay_persistence"
+    },
+    "promotion": {
+      "action_kind": "rest",
+      "command": "I rest",
+      "effective_player_input": "I rest",
+      "input_was_replaced": true,
+      "need": "fatigue",
+      "need_value": 78,
+      "needs": {
+        "fatigue": 78,
+        "hunger": 45,
+        "thirst": 47
+      },
+      "original_player_input": "I press the investigation forward toward the next useful sign.",
+      "original_was_survival_command": false,
+      "promoted": true,
+      "promoted_player_input": "I rest",
+      "reason": "highest_pressure_backed_survival_suggestion",
+      "source": "n1272_survival_autoplay_player_agent",
+      "suggestion": {
+        "action_kind": "rest",
+        "command": "I rest",
+        "label": "Rest",
+        "reason": "fatigue_high_rest_available",
+        "source": "n1233_survival_suggestion",
+        "type": "survival_relief"
+      },
+      "suggestion_count": 2
+    },
+    "promotion_action_kind": "rest",
+    "promotion_applied": true,
+    "promotion_need": "fatigue",
+    "raw_result_keys": [
+      "character_cards_summary",
+      "combat_ammo_result",
+      "combat_loot_result",
+      "combat_narration_contract",
+      "combat_narration_error",
+      "combat_narration_payload",
+      "combat_narration_validation",
+      "combat_result",
+      "combat_state",
+      "companion_auto_equip_result",
+      "companion_item_acceptance_result",
+      "companion_memory_summary",
+      "companion_presence_projection",
+      "companion_presence_summary",
+      "companion_quest_progress_result",
+      "companion_quest_summary",
+      "companion_relationship_drift_result",
+      "consumable_result",
+      "container_result",
+      "crafting_result",
+      "direct_companion_turn_result",
+      "equipment_stats",
+      "general_interaction_result",
+      "interaction_result",
+      "inventory_result",
+      "llm_called",
+      "llm_purpose",
+      "loot_result",
+      "merchant_result",
+      "narration",
+      "narration_context",
+      "narration_payload",
+      "narration_quality_context",
+      "npc",
+      "npc_profile_summary",
+      "ok",
+      "party_aware_turn_context",
+      "party_composition_effects",
+      "repair_result",
+      "resolved_result",
+      "result",
+      "runtime_state",
+      "semantic_action_v2",
+      "session",
+      "simulation_state",
+      "structured_narration",
+      "survival_autoplay_persistence",
+      "survival_autoplay_player_agent",
+      "survival_autoplay_promotion",
+      "turn_contract",
+      "visible_interaction_reason"
+    ],
+    "relief_applied": true,
+    "relief_need": "fatigue",
+    "suggestion_count": 0,
+    "suggestions": [],
+    "survival_action": {
+      "action": "rest",
+      "after": {
+        "fatigue": 43,
+        "hunger": 45,
+        "thirst": 47
+      },
+      "applied": true,
+      "before": {
+        "fatigue": 78,
+        "hunger": 45,
+        "thirst": 47
+      },
+      "blocked": false,
+      "blocked_reason": "",
+      "deltas": {
+        "fatigue_delta": -35,
+        "hunger_delta": 0,
+        "thirst_delta": 0
+      },
+      "inventory_consumed": [],
+      "kind": "survival_relief",
+      "need": "fatigue",
+      "reason": "survival_relief_applied",
+      "source": "n1263_live_runtime_survival_relief"
+    },
+    "turn_index": 3
+  }
+]
