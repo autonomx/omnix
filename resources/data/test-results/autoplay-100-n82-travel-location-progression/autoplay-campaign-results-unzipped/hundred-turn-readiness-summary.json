@@ -219,10 +219,10 @@
         "ok": true,
         "severity": "advisory",
         "value": {
-          "real_round_event_count": 2,
-          "real_attack_event_count": 855,
-          "real_damage_event_count": 7014,
-          "real_resolution_event_count": 46,
+          "real_round_event_count": 4,
+          "real_attack_event_count": 285,
+          "real_damage_event_count": 4311,
+          "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
           "abstract_round_event_count": 2,
           "direct_graph_rounds_ok": true,
@@ -265,11 +265,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 3028151,
-          "operational_bytes_per_turn": 30281.51,
-          "operational_projected_1000_turn_bytes": 30281510,
-          "full_debug_bytes_sampled": 310835289,
-          "full_debug_projected_1000_turn_bytes": 3108352890,
+          "operational_bytes_sampled": 3034759,
+          "operational_bytes_per_turn": 30347.59,
+          "operational_projected_1000_turn_bytes": 30347590,
+          "full_debug_bytes_sampled": 288020033,
+          "full_debug_projected_1000_turn_bytes": 2880200330,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -3358,7 +3358,7 @@
         ],
         "notes": [
           "climate_survival_rows proves values are projected into transcript rows.",
-          "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+          "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
           "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
         ]
       },
@@ -4933,7 +4933,7 @@
       ],
       "notes": [
         "climate_survival_rows proves values are projected into transcript rows.",
-        "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+        "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
         "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
       ]
     },
@@ -6535,7 +6535,7 @@
       ],
       "notes": [
         "climate_survival_rows proves values are projected into transcript rows.",
-        "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+        "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
         "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
       ]
     },
@@ -8139,7 +8139,7 @@
       ],
       "notes": [
         "climate_survival_rows proves values are projected into transcript rows.",
-        "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+        "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
         "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
       ]
     },
@@ -11083,7 +11083,7 @@
     ],
     "notes": [
       "climate_survival_rows proves values are projected into transcript rows.",
-      "climate_tick_source_rows proves authoritative N123.1 resource-change evidence is measurable.",
+      "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
       "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable."
     ]
   },
