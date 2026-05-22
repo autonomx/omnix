@@ -8,9 +8,11 @@ shapes.  This module normalizes those shapes, records source coverage, and
 builds an advisory evidence gate so reports distinguish real-run evidence from
 synthetic balance simulations.
 
-N125.2 accepts either explicit turn-contract resource-change source evidence or
-persisted authoritative climate state evidence.  It still does not fabricate
-resource deltas, survival actions, suggestions, or relief rows.
+N125.2 accepts either explicit turn-contract resource-change source evidence,
+persisted authoritative climate state evidence, or compact final transcript rows
+that carry both climate values and a real resource_changes payload.  It still
+does not fabricate resource deltas, survival actions, suggestions, or relief
+rows.
 """
 
 from typing import Any, Dict, Iterable, List
@@ -231,11 +233,23 @@ def _climate_state_has_authoritative_tick_source(climate: Dict[str, Any]) -> boo
     format_version = _safe_str(climate.get("format_version"))
     if source == "deterministic_authoritative_turn_tick":
         return True
+    if source == "n1252_projected_resource_change_backed_climate_survival":
+        return True
+    if source == "n1252_projected_final_transcript_climate_survival":
+        return True
+    if source == "n1252_projected_turn_contract_climate_survival":
+        return True
     if format_version == "n1231_climate_survival_state_v1":
         return True
     if climate.get("runtime_enforced") is True and format_version.startswith("n1231_"):
         return True
     return False
+
+
+def _climate_has_need_values(climate: Dict[str, Any]) -> bool:
+    climate = safe_dict(climate)
+    survival = safe_dict(climate.get("survival") or climate.get("values"))
+    return all(key in survival for key in ("hunger", "thirst", "fatigue"))
 
 
 def has_climate_tick_source(row: Dict[str, Any]) -> bool:
@@ -252,6 +266,12 @@ def has_climate_tick_source(row: Dict[str, Any]) -> bool:
     if effect.get("source") == "n1231_climate_survival_tick":
         return True
     if safe_dict(effect.get("climate_survival")).get("source") == "n1231_climate_survival_tick":
+        return True
+    # N125.2: compact final transcript rows can preserve climate values and
+    # merged resource_changes while stripping the specific N123.1 source marker.
+    # Treat that combination as source-backed, but do not bless climate-only
+    # value rows.
+    if climate and changes and _climate_has_need_values(climate):
         return True
     return False
 
