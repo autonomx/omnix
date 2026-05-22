@@ -29,12 +29,12 @@
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
     "metadata_repaired_count": 69,
-    "category_reclassified_count": 50,
+    "category_reclassified_count": 48,
     "dialogue_relevance_repaired_count": 36,
     "service_resolver_veto_count": 0,
     "dominant_sources": {
       "provider_metadata_or_shape_repair": 69,
-      "provider_category_reclassification": 50,
+      "provider_category_reclassification": 48,
       "dialogue_action_relevance_repair": 36,
       "service_resolver_veto": 0,
       "unsupported_combat_claim_suppressed": 0,
