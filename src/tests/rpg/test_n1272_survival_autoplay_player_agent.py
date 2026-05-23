@@ -6,7 +6,7 @@ from app.rpg.session.survival_autoplay_player_agent import (
 )
 
 
-def _session(*, hunger=80, thirst=82, fatigue=78, items=None):
+def _session(*, hunger=80, thirst=82, fatigue=78, items=None, runtime_state=None):
     if items is None:
         items = [
             {"item_id": "trail_ration", "name": "Trail Ration", "quantity": 1, "tags": ["food"]},
@@ -22,7 +22,7 @@ def _session(*, hunger=80, thirst=82, fatigue=78, items=None):
                 "inventory_state": {"items": items, "currency": {"gold": 1, "silver": 10, "copper": 20}},
             },
         },
-        "runtime_state": {},
+        "runtime_state": dict(runtime_state or {}),
     }
 
 
@@ -73,3 +73,68 @@ def test_n1272_promote_survival_suggestion_preserves_normal_input_when_pressure_
     assert player_input == "I ask Bran about the road."
     assert promotion["promoted"] is False
     assert promotion["reason"] == "survival_pressure_below_threshold"
+
+
+def test_n1279_critical_thirst_outranks_higher_fatigue_when_drink_backed() -> None:
+    promotion = choose_survival_autoplay_suggestion(
+        _session(hunger=20, thirst=92, fatigue=100, items=[
+            {"item_id": "waterskin", "name": "Waterskin", "quantity": 1, "tags": ["drink", "water"]},
+        ])
+    )
+
+    assert promotion["promoted"] is True
+    assert promotion["need"] == "thirst"
+    assert promotion["action_kind"] == "drink_water"
+    assert promotion["reason"] == "critical_thirst_backed_drink_priority"
+    assert promotion["critical_thirst"] is True
+    assert promotion["critical_thirst_source"] == "n1279_thirst_critical_relief_priority"
+
+
+def test_n1279_critical_thirst_can_use_inventory_even_if_suggestion_projection_is_stale() -> None:
+    promotion = choose_survival_autoplay_suggestion(
+        _session(hunger=10, thirst=95, fatigue=10, items=[
+            {"item_id": "canteen", "name": "Canteen", "quantity": 1, "tags": ["water"]},
+        ])
+    )
+
+    assert promotion["promoted"] is True
+    assert promotion["need"] == "thirst"
+    assert promotion["command"] == "I drink Canteen"
+    assert promotion["suggestion"]["source"] in {"n1233_survival_suggestion", "n1279_thirst_critical_relief_priority"}
+
+
+def test_n1279_cadence_guard_keeps_drink_priority_after_capped_thirst() -> None:
+    runtime_state = {
+        "survival_autoplay_promotion_history": [
+            {"action_kind": "rest", "needs": {"hunger": 20, "thirst": 100, "fatigue": 95}},
+        ]
+    }
+    promotion = choose_survival_autoplay_suggestion(
+        _session(hunger=20, thirst=84, fatigue=99, runtime_state=runtime_state, items=[
+            {"item_id": "waterskin", "name": "Waterskin", "quantity": 1, "tags": ["drink", "water"]},
+        ])
+    )
+
+    assert promotion["promoted"] is True
+    assert promotion["need"] == "thirst"
+    assert promotion["action_kind"] == "drink_water"
+    assert promotion["reason"] == "critical_thirst_backed_drink_priority"
+    assert promotion["cadence_guard_active"] is True
+
+
+def test_n1279_repeated_critical_drink_is_allowed_when_thirst_remains_capped() -> None:
+    runtime_state = {
+        "survival_autoplay_promotion_history": [
+            {"action_kind": "drink_water", "needs": {"hunger": 20, "thirst": 100, "fatigue": 70}},
+        ]
+    }
+    promotion = choose_survival_autoplay_suggestion(
+        _session(hunger=20, thirst=100, fatigue=99, runtime_state=runtime_state, items=[
+            {"item_id": "waterskin", "name": "Waterskin", "quantity": 1, "tags": ["drink", "water"]},
+        ])
+    )
+
+    assert promotion["promoted"] is True
+    assert promotion["need"] == "thirst"
+    assert promotion["reason"] == "critical_thirst_cadence_repeat_drink"
+    assert promotion["previous_relief_action_kind"] == "drink_water"
