@@ -1,0 +1,10 @@
+{
+  "format_version": "bundle_a1_tracked_artifact_placeholder_v1",
+  "source": "bundle_a1_final_artifact_inclusion_manifest",
+  "ok": false,
+  "advisory_ok": false,
+  "placeholder": true,
+  "notes": [
+    "This tracked placeholder ensures future 100-turn result commits update the final transcript payload budget summary instead of leaving it untracked."
+  ]
+}
