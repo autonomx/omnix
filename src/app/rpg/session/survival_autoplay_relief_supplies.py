@@ -14,9 +14,15 @@ from typing import Any, Dict, Tuple
 
 SOURCE = "n1276_survival_hunger_thirst_relief_coverage"
 HANDOFF_SOURCE = "n1277_survival_relief_supply_handoff"
+BALANCE_SOURCE = "n1278_survival_relief_balance_tuning"
 NEEDS = ("hunger", "thirst", "fatigue")
-MAX_GRANTS_PER_SESSION = {"food": 2, "drink": 2}
-PRESSURE_THRESHOLD = 50
+# Thirst rises faster than hunger in the current deterministic tick (+2 vs +1),
+# so N127.8 gives drink relief a larger but still bounded autoplay budget and a
+# slightly earlier threshold.  These are coverage supplies, not hidden rewards:
+# every item is explicit inventory consumed by the deterministic resolver.
+MAX_GRANTS_PER_SESSION = {"food": 3, "drink": 4}
+PRESSURE_THRESHOLDS = {"food": 55, "drink": 45}
+PRESSURE_THRESHOLD = min(PRESSURE_THRESHOLDS.values())
 
 _IN_PROCESS_SUPPLY_GRANTS: Dict[str, Dict[str, int]] = {}
 
@@ -152,6 +158,7 @@ def _record_counter(session: Dict[str, Any], session_key: str | None, counters: 
     runtime = _runtime_state(session)
     runtime["survival_autoplay_relief_supply_grants"] = dict(counters)
     runtime["survival_autoplay_relief_supply_source"] = SOURCE
+    runtime["survival_autoplay_relief_balance_source"] = BALANCE_SOURCE
     key = _session_key(session_key)
     if key:
         _IN_PROCESS_SUPPLY_GRANTS[key] = dict(counters)
@@ -165,16 +172,18 @@ def _add_item(simulation_state: Dict[str, Any], *, kind: str, ordinal: int) -> D
             "item_id": f"autoplay_field_ration_{ordinal}",
             "name": "Autoplay Field Ration",
             "quantity": 1,
-            "tags": ["food", "ration", "survival", SOURCE],
+            "tags": ["food", "ration", "survival", SOURCE, BALANCE_SOURCE],
             "source": SOURCE,
+            "balance_source": BALANCE_SOURCE,
         }
     else:
         item = {
             "item_id": f"autoplay_waterskin_{ordinal}",
             "name": "Autoplay Waterskin",
             "quantity": 1,
-            "tags": ["drink", "water", "waterskin", "survival", SOURCE],
+            "tags": ["drink", "water", "waterskin", "survival", SOURCE, BALANCE_SOURCE],
             "source": SOURCE,
+            "balance_source": BALANCE_SOURCE,
         }
     items.append(item)
     inventory["items"] = items
@@ -185,10 +194,13 @@ def _is_autoplay_supply_item(item: Dict[str, Any]) -> bool:
     item = _safe_dict(item)
     if _safe_str(item.get("source")) in (SOURCE, HANDOFF_SOURCE):
         return True
+    if _safe_str(item.get("balance_source")) == BALANCE_SOURCE:
+        return True
     item_id = _item_identity(item)
     if item_id.startswith("autoplay_field_ration_") or item_id.startswith("autoplay_waterskin_"):
         return True
-    return SOURCE.lower() in _item_tags(item)
+    tags = _item_tags(item)
+    return SOURCE.lower() in tags or BALANCE_SOURCE.lower() in tags
 
 
 def _item_key(item: Dict[str, Any]) -> str:
@@ -214,9 +226,11 @@ def _copy_supply_items(source_session: Dict[str, Any], target_session: Dict[str,
         if key and key in existing_keys:
             continue
         item.setdefault("source", SOURCE)
+        item["balance_source"] = _safe_str(item.get("balance_source") or BALANCE_SOURCE)
         tags = list(_safe_list(item.get("tags")))
-        if HANDOFF_SOURCE not in tags:
-            tags.append(HANDOFF_SOURCE)
+        for tag in (HANDOFF_SOURCE, BALANCE_SOURCE):
+            if tag not in tags:
+                tags.append(tag)
         item["tags"] = tags
         target_items.append(item)
         if key:
@@ -239,6 +253,7 @@ def _merge_counters_from_source(source_session: Dict[str, Any], target_session: 
     }
     target_runtime["survival_autoplay_relief_supply_grants"] = dict(counters)
     target_runtime["survival_autoplay_relief_supply_source"] = SOURCE
+    target_runtime["survival_autoplay_relief_balance_source"] = BALANCE_SOURCE
     if key:
         _IN_PROCESS_SUPPLY_GRANTS[key] = dict(counters)
     return counters
@@ -286,10 +301,13 @@ def merge_survival_autoplay_relief_supplies_into_session(
     summary = {
         "applied": bool(copied),
         "source": HANDOFF_SOURCE,
+        "balance_source": BALANCE_SOURCE,
         "session_key": _session_key(session_key),
         "copied_count": len(copied),
         "copied_items": copied,
         "grant_counters": dict(counters),
+        "limits": dict(MAX_GRANTS_PER_SESSION),
+        "thresholds": dict(PRESSURE_THRESHOLDS),
     }
     runtime = _runtime_state(session)
     runtime["last_survival_autoplay_relief_supply_handoff_summary"] = copy.deepcopy(summary)
@@ -317,27 +335,29 @@ def ensure_survival_autoplay_relief_supplies(
     counters = _grant_counters(session, session_key)
     grants: list[Dict[str, Any]] = []
 
-    if values.get("hunger", 0) >= PRESSURE_THRESHOLD and not _has_item_kind(simulation_state, "food"):
+    if values.get("hunger", 0) >= PRESSURE_THRESHOLDS["food"] and not _has_item_kind(simulation_state, "food"):
         if counters.get("food", 0) < MAX_GRANTS_PER_SESSION["food"]:
             counters["food"] = counters.get("food", 0) + 1
-            grants.append({"kind": "food", "need": "hunger", "need_value": values.get("hunger", 0), "item": _add_item(simulation_state, kind="food", ordinal=counters["food"])})
+            grants.append({"kind": "food", "need": "hunger", "need_value": values.get("hunger", 0), "threshold": PRESSURE_THRESHOLDS["food"], "item": _add_item(simulation_state, kind="food", ordinal=counters["food"])})
 
-    if values.get("thirst", 0) >= PRESSURE_THRESHOLD and not _has_item_kind(simulation_state, "drink"):
+    if values.get("thirst", 0) >= PRESSURE_THRESHOLDS["drink"] and not _has_item_kind(simulation_state, "drink"):
         if counters.get("drink", 0) < MAX_GRANTS_PER_SESSION["drink"]:
             counters["drink"] = counters.get("drink", 0) + 1
-            grants.append({"kind": "drink", "need": "thirst", "need_value": values.get("thirst", 0), "item": _add_item(simulation_state, kind="drink", ordinal=counters["drink"])})
+            grants.append({"kind": "drink", "need": "thirst", "need_value": values.get("thirst", 0), "threshold": PRESSURE_THRESHOLDS["drink"], "item": _add_item(simulation_state, kind="drink", ordinal=counters["drink"])})
 
     _record_counter(session, session_key, counters)
     session = _mirror_session_roots(session, simulation_state)
     summary = {
         "applied": bool(grants),
         "source": SOURCE,
+        "balance_source": BALANCE_SOURCE,
         "session_key": _session_key(session_key),
         "needs": values,
         "grant_count": len(grants),
         "grants": grants,
         "grant_counters": dict(counters),
         "limits": dict(MAX_GRANTS_PER_SESSION),
+        "thresholds": dict(PRESSURE_THRESHOLDS),
     }
     runtime = _runtime_state(session)
     runtime["last_survival_autoplay_relief_supply_summary"] = copy.deepcopy(summary)
