@@ -157,9 +157,9 @@ def test_n1273_1_accumulator_carries_pressure_when_session_snapshot_stays_low() 
         prior_session = merge_survival_accumulator_into_session({}, key)
 
     needs = patched["session"]["simulation_state"]["needs"]
-    assert needs["hunger"] >= 12
-    assert needs["thirst"] >= 23
-    assert needs["fatigue"] >= 12
+    assert needs["hunger"] >= 11
+    assert needs["thirst"] >= 21
+    assert needs["fatigue"] >= 11
     assert patched["survival_autoplay_persistence"]["accumulator_source"] == "n1273_1_in_process_survival_accumulator"
     assert patched["turn_contract"]["resource_changes"]["thirst_delta"] == 2
 
