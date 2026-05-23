@@ -32,7 +32,7 @@ def _relief_row(turn: int, *, need: str, action_name: str, deltas: dict, item_id
     consumed = []
     if item_id:
         consumed = [{"item_id": item_id, "name": item_id.replace("_", " ").title(), "quantity_before": 1, "quantity_after": 0, "quantity_delta": -1}]
-    action = {"applied": True, "action": action_name, "need": need, "deltas": dict(deltas), "inventory_consumed": consumed}
+    action = {"applied": True, "action": action_name, "action_kind": action_name, "need": need, "deltas": dict(deltas), "inventory_consumed": consumed}
     return {
         "turn_index": turn,
         "turn_contract": {
@@ -65,6 +65,13 @@ def _rows():
     ]
 
 
+def _rest_only_rows():
+    return [
+        _pressure_row(1),
+        _relief_row(2, need="fatigue", action_name="rest", deltas={"fatigue_delta": -25}),
+    ]
+
+
 def test_n1271_builds_survival_autoplay_evidence_summary() -> None:
     summary = build_survival_autoplay_evidence_summary(_rows())
     assert summary["format_version"] == "n1271_survival_autoplay_evidence_summary_v1"
@@ -73,8 +80,28 @@ def test_n1271_builds_survival_autoplay_evidence_summary() -> None:
     assert summary["gates"]["survival_suggestions_seen"] is True
     assert summary["gates"]["survival_relief_actions_seen"] is True
     assert summary["gates"]["survival_inventory_consumed_seen"] is True
+    assert summary["gates"]["survival_response_evidence_seen"] is True
     assert summary["gates"]["survival_state_carry_forward_seen"] is True
     assert {item["item_id"] for item in summary["inventory_consumed_summary"]} == {"trail_ration", "waterskin"}
+
+
+def test_n1275_rest_only_relief_satisfies_response_evidence_gate() -> None:
+    summary = build_survival_autoplay_evidence_summary(_rest_only_rows())
+
+    assert summary["evidence_gate"]["ok"] is True
+    assert summary["gates"]["survival_inventory_consumed_seen"] is False
+    assert summary["gates"]["survival_non_inventory_relief_seen"] is True
+    assert summary["gates"]["survival_response_evidence_seen"] is True
+    assert summary["non_inventory_relief_summary"] == [{"action_kind": "rest", "count": 1}]
+    assert "survival_inventory_consumed_seen" not in summary["evidence_gate"]["required_gates"]
+
+
+def test_n1275_missing_relief_still_fails_advisory_evidence_gate() -> None:
+    summary = build_survival_autoplay_evidence_summary([_pressure_row(1)])
+
+    assert summary["evidence_gate"]["ok"] is False
+    assert "survival_relief_actions_seen" in summary["evidence_gate"]["reasons"]
+    assert "survival_response_evidence_seen" in summary["evidence_gate"]["reasons"]
 
 
 def test_n1271_report_section_renders_evidence_tables() -> None:
@@ -82,6 +109,7 @@ def test_n1271_report_section_renders_evidence_tables() -> None:
     assert "N127.1 Survival Autoplay Evidence" in html
     assert "Pressure to suggestion to response" in html
     assert "Inventory consumed" in html
+    assert "Non-inventory relief" in html
     assert "waterskin" in html
 
 
