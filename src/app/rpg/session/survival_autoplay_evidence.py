@@ -162,6 +162,26 @@ def _suggestion_row_count(rows: List[Dict[str, Any]]) -> int:
     return sum(1 for row in rows if _all_suggestions(row))
 
 
+def _non_inventory_relief_summary(relief_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    buckets: Dict[str, Dict[str, Any]] = {}
+    for row in relief_rows:
+        if not row.get("applied"):
+            continue
+        if row.get("inventory_consumed"):
+            continue
+        action_kind = _safe_str(row.get("action_kind") or "unknown_relief")
+        bucket = buckets.setdefault(action_kind, {"action_kind": action_kind, "count": 0})
+        bucket["count"] += 1
+    return sorted(buckets.values(), key=lambda item: item["action_kind"])
+
+
+def _has_negative_resource_response(rows: List[Dict[str, Any]]) -> bool:
+    for row in rows:
+        if any(flat_delta(row, f"{need}_delta") < 0 for need in NEEDS):
+            return True
+    return False
+
+
 def build_survival_autoplay_evidence_summary(transcript: Iterable[Dict[str, Any]], *, strict: bool = False) -> Dict[str, Any]:
     rows = [safe_dict(row) for row in (transcript if isinstance(transcript, list) else list(transcript or []))]
     source_summary = build_survival_metric_source_summary(rows)
@@ -170,19 +190,47 @@ def build_survival_autoplay_evidence_summary(transcript: Iterable[Dict[str, Any]
     relief_rows = _relief_action_rows(rows)
     consumed = _inventory_consumed_summary(rows) or safe_list(pressure_summary.get("inventory_consumed_summary"))
     service_purchases = _service_purchase_summary(rows) or safe_list(pressure_summary.get("service_relief_purchases_summary"))
+    non_inventory_relief = _non_inventory_relief_summary(relief_rows)
     carry = _carry_forward_evidence(rows)
     pressure_rows = _pressure_response_rows(rows)
     suggestion_rows = _suggestion_row_count(rows) or safe_int(source_coverage.get("survival_suggestion_rows"), 0)
     relief_applied_rows = sum(1 for row in relief_rows if row.get("applied")) or safe_int(source_coverage.get("relief_applied_rows"), 0)
+    relief_action_count = relief_applied_rows or safe_int(pressure_summary.get("relief_action_count"), 0)
+    negative_resource_response = _has_negative_resource_response(rows) or bool(carry.get("ok"))
+    response_evidence_seen = bool(consumed or service_purchases or non_inventory_relief or negative_resource_response)
     gates = {
         "survival_pressure_seen": safe_int(pressure_summary.get("pressure_turn_count"), 0) > 0 or safe_int(source_coverage.get("climate_survival_rows"), 0) > 0,
         "survival_suggestions_seen": suggestion_rows > 0,
-        "survival_relief_actions_seen": relief_applied_rows > 0 or safe_int(pressure_summary.get("relief_action_count"), 0) > 0,
+        "survival_relief_actions_seen": relief_action_count > 0,
         "survival_inventory_consumed_seen": bool(consumed),
+        "survival_service_purchase_seen": bool(service_purchases),
+        "survival_non_inventory_relief_seen": bool(non_inventory_relief),
+        "survival_negative_resource_response_seen": bool(negative_resource_response),
+        "survival_response_evidence_seen": response_evidence_seen,
         "survival_state_carry_forward_seen": bool(carry.get("ok")),
     }
-    failed = [key for key, value in gates.items() if not value]
-    gate = {"gate": "survival_autoplay_evidence_ok", "ok": not failed, "advisory_only": not strict, "source": GATE_SOURCE, "reasons": failed, "gates": gates}
+    required_gates = (
+        "survival_pressure_seen",
+        "survival_suggestions_seen",
+        "survival_relief_actions_seen",
+        "survival_response_evidence_seen",
+        "survival_state_carry_forward_seen",
+    )
+    failed = [key for key in required_gates if not gates.get(key)]
+    gate = {
+        "gate": "survival_autoplay_evidence_ok",
+        "ok": not failed,
+        "advisory_only": not strict,
+        "source": GATE_SOURCE,
+        "reasons": failed,
+        "gates": gates,
+        "required_gates": list(required_gates),
+        "optional_evidence_gates": [
+            "survival_inventory_consumed_seen",
+            "survival_service_purchase_seen",
+            "survival_non_inventory_relief_seen",
+        ],
+    }
     return {
         "format_version": FORMAT_VERSION,
         "source": "final_transcript_rows.turn_contract.runtime_survival_evidence",
@@ -195,10 +243,11 @@ def build_survival_autoplay_evidence_summary(transcript: Iterable[Dict[str, Any]
         "pressure_turn_count": safe_int(pressure_summary.get("pressure_turn_count"), 0),
         "survival_warning_count": safe_int(pressure_summary.get("survival_warning_count"), 0),
         "survival_suggestion_rows": suggestion_rows,
-        "relief_action_count": relief_applied_rows or safe_int(pressure_summary.get("relief_action_count"), 0),
+        "relief_action_count": relief_action_count,
         "blocked_relief_count": safe_int(pressure_summary.get("blocked_relief_count"), 0),
         "inventory_consumed_summary": consumed,
         "service_relief_purchases_summary": service_purchases,
+        "non_inventory_relief_summary": non_inventory_relief,
         "carry_forward_evidence": carry,
         "net_resource_deltas": safe_dict(pressure_summary.get("net_resource_deltas")),
         "max_needs": safe_dict(pressure_summary.get("max_needs")),
@@ -216,6 +265,7 @@ def render_survival_autoplay_evidence_report_section(summary: Dict[str, Any]) ->
     gates = safe_dict(summary.get("gates"))
     consumed = safe_list(summary.get("inventory_consumed_summary"))
     services = safe_list(summary.get("service_relief_purchases_summary"))
+    non_inventory = safe_list(summary.get("non_inventory_relief_summary"))
     rows = safe_list(summary.get("pressure_response_rows"))[:12]
 
     def esc(value: Any) -> str:
@@ -225,6 +275,7 @@ def render_survival_autoplay_evidence_report_section(summary: Dict[str, Any]) ->
     gate_rows = "".join("<tr><td>" + esc(key) + "</td><td>" + ("PASS" if value else "ADVISORY GAP") + "</td></tr>" for key, value in gates.items())
     consumed_rows = "".join("<tr><td>" + esc(item.get("item_id")) + "</td><td>" + esc(item.get("name")) + "</td><td>" + esc(item.get("quantity")) + "</td></tr>" for item in consumed) or "<tr><td colspan='3'>No inventory consumption observed.</td></tr>"
     service_rows = "".join("<tr><td>" + esc(item.get("service_kind")) + "</td><td>" + esc(item.get("count")) + "</td><td>" + esc(item.get("blocked_count")) + "</td></tr>" for item in services) or "<tr><td colspan='3'>No service relief purchases observed.</td></tr>"
+    non_inventory_rows = "".join("<tr><td>" + esc(item.get("action_kind")) + "</td><td>" + esc(item.get("count")) + "</td></tr>" for item in non_inventory) or "<tr><td colspan='2'>No non-inventory relief observed.</td></tr>"
     timeline_rows = "".join("<tr><td>" + esc(row.get("turn_index")) + "</td><td>H " + esc(safe_dict(row.get("needs")).get("hunger")) + " / T " + esc(safe_dict(row.get("needs")).get("thirst")) + " / F " + esc(safe_dict(row.get("needs")).get("fatigue")) + "</td><td>" + esc(row.get("suggestion_count")) + "</td><td>" + esc(row.get("relief_action_kind")) + "</td><td>" + ("yes" if row.get("relief_applied") else "no") + "</td></tr>" for row in rows) or "<tr><td colspan='5'>No survival pressure rows observed.</td></tr>"
     return (
         "<section id='n1271-survival-autoplay-evidence'>"
@@ -235,5 +286,6 @@ def render_survival_autoplay_evidence_report_section(summary: Dict[str, Any]) ->
         "<table><thead><tr><th>Turn</th><th>Needs</th><th>Suggestions</th><th>Relief</th><th>Applied</th></tr></thead><tbody>" + timeline_rows + "</tbody></table>"
         "<h3>Inventory consumed</h3><table><thead><tr><th>Item</th><th>Name</th><th>Qty</th></tr></thead><tbody>" + consumed_rows + "</tbody></table>"
         "<h3>Service relief purchases</h3><table><thead><tr><th>Service</th><th>Count</th><th>Blocked</th></tr></thead><tbody>" + service_rows + "</tbody></table>"
+        "<h3>Non-inventory relief</h3><table><thead><tr><th>Action</th><th>Count</th></tr></thead><tbody>" + non_inventory_rows + "</tbody></table>"
         "</section>"
     )
