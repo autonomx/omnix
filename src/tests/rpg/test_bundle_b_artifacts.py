@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from app.rpg.session.bundle_ab_late_manifest_hook import register_late_manifest_repair
 from app.rpg.session.bundle_b_artifacts import (
     build_content_exhaustion_forecast_summary,
     build_long_run_dry_run_projection_summary,
@@ -159,3 +160,25 @@ def test_bundle_b_writes_expected_artifacts_and_manifest(tmp_path) -> None:
     assert health["content_exhaustion_forecast_ok"] is True
     patched_eval = json.loads((result_dir / "hundred-turn-evaluation.json").read_text(encoding="utf-8"))
     assert patched_eval["bundle_b_artifacts"]["long_run_projection_ok"] is True
+
+
+def test_bundle_b_empty_manifest_write_guard_rebuilds_manifest(tmp_path) -> None:
+    result_dir = tmp_path / "autoplay-campaign-results-unzipped"
+    result_dir.mkdir()
+    (result_dir / "hundred-turn-evaluation.json").write_text(json.dumps(_evaluation()), encoding="utf-8")
+    (result_dir / "hundred-turn-readiness-summary.json").write_text(json.dumps(_readiness()), encoding="utf-8")
+    (result_dir / "autoplay-health.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (result_dir / "quality-gate-summary.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (result_dir / "survival-exit-criteria-summary.json").write_text(json.dumps(_survival_exit()), encoding="utf-8")
+    (result_dir / "transcript-payload-budget-summary.json").write_text(json.dumps(_payload_budget()), encoding="utf-8")
+    write_bundle_b_artifacts(result_dir)
+
+    register_late_manifest_repair([result_dir])
+    (result_dir / "artifact-manifest.json").write_text("", encoding="utf-8")
+
+    manifest = json.loads((result_dir / "artifact-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["empty_write_guard_applied"] is True
+    assert manifest["ok"] is True
+    assert "quality-gate-summary.json" in manifest["embedded_artifacts"]
+    assert "long-run-dry-run-projection-summary.json" in manifest["embedded_artifacts"]
+    assert "content-exhaustion-forecast-summary.json" in manifest["embedded_artifacts"]
