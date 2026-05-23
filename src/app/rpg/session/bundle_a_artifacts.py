@@ -6,11 +6,15 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 SURVIVAL_EXIT_SOURCE = "n128_survival_system_exit_criteria_regression_lock"
 PAYLOAD_BUDGET_SOURCE = "n129_transcript_report_payload_size_cleanup"
+MANIFEST_SOURCE = "bundle_a1_final_artifact_inclusion_manifest"
 
 SURVIVAL_EXIT_FILE = "survival-exit-criteria-summary.json"
 PAYLOAD_BUDGET_FILE = "transcript-payload-budget-summary.json"
+QUALITY_GATE_FILE = "quality-gate-summary.json"
+ARTIFACT_MANIFEST_FILE = "artifact-manifest.json"
 EVALUATION_FILE = "hundred-turn-evaluation.json"
 READINESS_FILE = "hundred-turn-readiness-summary.json"
+HEALTH_FILE = "autoplay-health.json"
 FULL_TRANSCRIPT_FILE = "full-transcript.json"
 
 DEFAULT_MAX_COMPACT_ROW_BYTES = 120_000
@@ -32,6 +36,7 @@ HEAVY_FIELD_NAMES = {
     "runtime_probe_history",
     "survival_autoplay_runtime_probe_history",
 }
+BUNDLE_A_FILES = [QUALITY_GATE_FILE, SURVIVAL_EXIT_FILE, PAYLOAD_BUDGET_FILE]
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -243,6 +248,111 @@ def _load_transcript(root: Path, evaluation: Dict[str, Any]) -> List[Dict[str, A
     return []
 
 
+def _existing_manifest(root: Path) -> Dict[str, Any]:
+    data = _read_json(root / ARTIFACT_MANIFEST_FILE)
+    return _safe_dict(data) if data else {}
+
+
+def _quality_summary(root: Path) -> Dict[str, Any]:
+    return _safe_dict(_read_json(root / QUALITY_GATE_FILE))
+
+
+def _write_bundle_manifest(
+    root: Path,
+    *,
+    quality: Dict[str, Any],
+    survival: Dict[str, Any],
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    existing = _existing_manifest(root)
+    existing_files = []
+    if isinstance(existing.get("files"), list):
+        existing_files = [str(item) for item in existing.get("files") if item]
+    merged_files = list(dict.fromkeys([*existing_files, *BUNDLE_A_FILES]))
+    physical_presence = {name: (root / name).exists() for name in BUNDLE_A_FILES}
+    manifest = {
+        **existing,
+        "format_version": "bundle_a1_artifact_manifest_v1",
+        "source": MANIFEST_SOURCE,
+        "ok": all(physical_presence.values()),
+        "bundle_a_files": list(BUNDLE_A_FILES),
+        "files": merged_files,
+        "physical_presence": physical_presence,
+        "embedded_artifacts": {
+            QUALITY_GATE_FILE: quality,
+            SURVIVAL_EXIT_FILE: survival,
+            PAYLOAD_BUDGET_FILE: payload,
+        },
+        "notes": [
+            "Bundle A summaries are embedded here so tracked artifact commits still expose them even if new JSON files were not git-added.",
+            "The physical JSON files are still written next to this manifest for normal zip/export flows.",
+        ],
+    }
+    _write_json(root / ARTIFACT_MANIFEST_FILE, manifest)
+    return manifest
+
+
+def _patch_evaluation_with_bundle_a(root: Path, survival: Dict[str, Any], payload: Dict[str, Any], manifest: Dict[str, Any]) -> None:
+    path = root / EVALUATION_FILE
+    evaluation = _safe_dict(_read_json(path))
+    if not evaluation:
+        return
+    artifacts = _safe_dict(evaluation.get("artifact_level_summaries"))
+    artifacts[SURVIVAL_EXIT_FILE] = survival
+    artifacts[PAYLOAD_BUDGET_FILE] = payload
+    artifacts[ARTIFACT_MANIFEST_FILE] = {
+        "source": manifest.get("source"),
+        "ok": manifest.get("ok"),
+        "bundle_a_files": manifest.get("bundle_a_files"),
+        "physical_presence": manifest.get("physical_presence"),
+    }
+    evaluation["artifact_level_summaries"] = artifacts
+    evaluation["bundle_a_artifact_manifest"] = {
+        "source": MANIFEST_SOURCE,
+        "files": list(BUNDLE_A_FILES),
+        "manifest_file": ARTIFACT_MANIFEST_FILE,
+        "physical_presence": manifest.get("physical_presence"),
+    }
+    _write_json(path, evaluation)
+
+
+def _patch_readiness_with_bundle_a(root: Path, survival: Dict[str, Any], payload: Dict[str, Any]) -> None:
+    path = root / READINESS_FILE
+    readiness = _safe_dict(_read_json(path))
+    if not readiness:
+        return
+    bundle = _safe_dict(readiness.get("bundle_a_artifacts"))
+    bundle.update({
+        "source": MANIFEST_SOURCE,
+        "survival_exit_criteria_ok": bool(survival.get("ok")),
+        "transcript_payload_budget_ok": bool(payload.get("ok")),
+        "transcript_payload_budget_advisory_ok": bool(payload.get("advisory_ok")),
+        "files": list(BUNDLE_A_FILES),
+        "manifest_file": ARTIFACT_MANIFEST_FILE,
+    })
+    readiness["bundle_a_artifacts"] = bundle
+    _write_json(path, readiness)
+
+
+def _patch_health_with_bundle_a(root: Path, survival: Dict[str, Any], payload: Dict[str, Any], manifest: Dict[str, Any]) -> None:
+    path = root / HEALTH_FILE
+    health = _safe_dict(_read_json(path))
+    if not health:
+        return
+    health["bundle_a_artifacts_ok"] = bool(survival.get("ok")) and bool(payload.get("advisory_ok")) and bool(manifest.get("ok"))
+    health["bundle_a_artifact_manifest_path"] = ARTIFACT_MANIFEST_FILE
+    health["survival_exit_criteria_ok"] = bool(survival.get("ok"))
+    health["transcript_payload_budget_ok"] = bool(payload.get("ok"))
+    health["transcript_payload_budget_advisory_ok"] = bool(payload.get("advisory_ok"))
+    health["bundle_a_artifacts"] = {
+        "source": MANIFEST_SOURCE,
+        "files": list(BUNDLE_A_FILES),
+        "physical_presence": manifest.get("physical_presence"),
+        "manifest_file": ARTIFACT_MANIFEST_FILE,
+    }
+    _write_json(path, health)
+
+
 def write_bundle_a_artifacts(result_dir: str | Path) -> Dict[str, Any]:
     root = Path(result_dir)
     evaluation = _safe_dict(_read_json(root / EVALUATION_FILE))
@@ -254,6 +364,11 @@ def write_bundle_a_artifacts(result_dir: str | Path) -> Dict[str, Any]:
     payload = build_transcript_payload_budget_summary(transcript)
     _write_json(root / SURVIVAL_EXIT_FILE, survival)
     _write_json(root / PAYLOAD_BUDGET_FILE, payload)
+    quality = _quality_summary(root)
+    manifest = _write_bundle_manifest(root, quality=quality, survival=survival, payload=payload)
+    _patch_evaluation_with_bundle_a(root, survival, payload, manifest)
+    _patch_readiness_with_bundle_a(root, survival, payload)
+    _patch_health_with_bundle_a(root, survival, payload, manifest)
     return {
         "applied": True,
         "source": "bundle_a_artifacts",
@@ -261,5 +376,7 @@ def write_bundle_a_artifacts(result_dir: str | Path) -> Dict[str, Any]:
         "survival_exit_ok": survival.get("ok"),
         "payload_budget_ok": payload.get("ok"),
         "payload_budget_advisory_ok": payload.get("advisory_ok"),
-        "files": [SURVIVAL_EXIT_FILE, PAYLOAD_BUDGET_FILE],
+        "manifest_ok": manifest.get("ok"),
+        "physical_presence": manifest.get("physical_presence"),
+        "files": [SURVIVAL_EXIT_FILE, PAYLOAD_BUDGET_FILE, ARTIFACT_MANIFEST_FILE],
     }
