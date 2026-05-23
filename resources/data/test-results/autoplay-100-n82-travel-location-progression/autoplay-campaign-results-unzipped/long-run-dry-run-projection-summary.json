@@ -1,0 +1,10 @@
+{
+  "format_version": "bundle_b1_tracked_artifact_placeholder_v1",
+  "source": "bundle_b_long_run_projection_manifest",
+  "ok": false,
+  "advisory_ok": false,
+  "placeholder": true,
+  "notes": [
+    "This tracked placeholder ensures future 100-turn result commits update the long-run dry-run projection summary instead of leaving it untracked."
+  ]
+}
