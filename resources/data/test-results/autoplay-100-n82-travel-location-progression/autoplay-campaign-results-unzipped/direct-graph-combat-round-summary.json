@@ -35,7 +35,7 @@
   "missing_parts": [],
   "ok": true,
   "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
-  "real_attack_event_count": 287,
-  "real_damage_event_count": 5590,
+  "real_attack_event_count": 579,
+  "real_damage_event_count": 5192,
   "real_resolution_event_count": 45
 }

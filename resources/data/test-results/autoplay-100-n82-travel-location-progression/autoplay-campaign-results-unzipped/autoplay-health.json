@@ -1,15 +1,17 @@
 {
   "format_version": "autoplay_health_v2",
-  "ok": true,
-  "summary_ok": true,
+  "ok": false,
+  "summary_ok": false,
   "hundred_turn_evaluation_ok": true,
   "hundred_turn_readiness_ok": true,
   "failed_gate_count": 0,
   "failed_evaluation_gates": [],
   "failed_readiness_gates": [],
-  "quality_gate_summary_ok": true,
-  "quality_gate_summary_advisory": true,
-  "warnings": [],
+  "quality_gate_summary_ok": false,
+  "quality_gate_summary_advisory": false,
+  "warnings": [
+    "quality_gate_summary_failed"
+  ],
   "turns_executed": 100,
   "requested_turns": 100,
   "runtime_error_count": 0,
