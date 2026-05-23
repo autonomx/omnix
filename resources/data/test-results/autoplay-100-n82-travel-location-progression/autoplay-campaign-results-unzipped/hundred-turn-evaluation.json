@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.123654999999999,
-        "p95_turn_seconds": 8.695450000000001
+        "avg_turn_seconds": 5.880363999999999,
+        "p95_turn_seconds": 8.513729
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.12s, p95 8.70s."
+      "message": "Average turn latency 5.88s, p95 8.51s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -450,6 +450,21 @@
     "trend_rows": [
       {
         "turn_index": 1,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 2,
         "hunger": 3,
         "thirst": 5,
         "fatigue": 3,
@@ -464,7 +479,7 @@
         "source_present": true
       },
       {
-        "turn_index": 2,
+        "turn_index": 3,
         "hunger": 4,
         "thirst": 7,
         "fatigue": 4,
@@ -479,7 +494,7 @@
         "source_present": true
       },
       {
-        "turn_index": 3,
+        "turn_index": 4,
         "hunger": 5,
         "thirst": 9,
         "fatigue": 5,
@@ -494,7 +509,7 @@
         "source_present": true
       },
       {
-        "turn_index": 4,
+        "turn_index": 5,
         "hunger": 6,
         "thirst": 11,
         "fatigue": 6,
@@ -509,7 +524,7 @@
         "source_present": true
       },
       {
-        "turn_index": 5,
+        "turn_index": 6,
         "hunger": 7,
         "thirst": 13,
         "fatigue": 7,
@@ -524,7 +539,7 @@
         "source_present": true
       },
       {
-        "turn_index": 6,
+        "turn_index": 7,
         "hunger": 8,
         "thirst": 15,
         "fatigue": 8,
@@ -539,7 +554,7 @@
         "source_present": true
       },
       {
-        "turn_index": 7,
+        "turn_index": 8,
         "hunger": 9,
         "thirst": 17,
         "fatigue": 9,
@@ -554,7 +569,7 @@
         "source_present": true
       },
       {
-        "turn_index": 8,
+        "turn_index": 9,
         "hunger": 10,
         "thirst": 19,
         "fatigue": 10,
@@ -569,7 +584,7 @@
         "source_present": true
       },
       {
-        "turn_index": 9,
+        "turn_index": 10,
         "hunger": 11,
         "thirst": 21,
         "fatigue": 11,
@@ -584,7 +599,7 @@
         "source_present": true
       },
       {
-        "turn_index": 10,
+        "turn_index": 11,
         "hunger": 12,
         "thirst": 23,
         "fatigue": 12,
@@ -599,7 +614,7 @@
         "source_present": true
       },
       {
-        "turn_index": 11,
+        "turn_index": 12,
         "hunger": 13,
         "thirst": 25,
         "fatigue": 13,
@@ -614,7 +629,7 @@
         "source_present": true
       },
       {
-        "turn_index": 12,
+        "turn_index": 13,
         "hunger": 14,
         "thirst": 27,
         "fatigue": 14,
@@ -629,25 +644,10 @@
         "source_present": true
       },
       {
-        "turn_index": 13,
+        "turn_index": 14,
         "hunger": 15,
         "thirst": 29,
         "fatigue": 15,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 0,
-        "warnings": [],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 14,
-        "hunger": 16,
-        "thirst": 31,
-        "fatigue": 16,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -675,6 +675,21 @@
       },
       {
         "turn_index": 16,
+        "hunger": 16,
+        "thirst": 31,
+        "fatigue": 16,
+        "hunger_delta": 1,
+        "thirst_delta": 2,
+        "fatigue_delta": 1,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 17,
         "hunger": 17,
         "thirst": 33,
         "fatigue": 17,
@@ -689,7 +704,7 @@
         "source_present": true
       },
       {
-        "turn_index": 17,
+        "turn_index": 18,
         "hunger": 18,
         "thirst": 35,
         "fatigue": 18,
@@ -704,7 +719,7 @@
         "source_present": true
       },
       {
-        "turn_index": 18,
+        "turn_index": 19,
         "hunger": 19,
         "thirst": 37,
         "fatigue": 19,
@@ -719,7 +734,7 @@
         "source_present": true
       },
       {
-        "turn_index": 19,
+        "turn_index": 20,
         "hunger": 20,
         "thirst": 39,
         "fatigue": 20,
@@ -734,7 +749,7 @@
         "source_present": true
       },
       {
-        "turn_index": 20,
+        "turn_index": 21,
         "hunger": 21,
         "thirst": 41,
         "fatigue": 21,
@@ -749,7 +764,7 @@
         "source_present": true
       },
       {
-        "turn_index": 21,
+        "turn_index": 22,
         "hunger": 22,
         "thirst": 43,
         "fatigue": 22,
@@ -764,7 +779,7 @@
         "source_present": true
       },
       {
-        "turn_index": 22,
+        "turn_index": 23,
         "hunger": 23,
         "thirst": 45,
         "fatigue": 23,
@@ -779,7 +794,7 @@
         "source_present": true
       },
       {
-        "turn_index": 23,
+        "turn_index": 24,
         "hunger": 24,
         "thirst": 47,
         "fatigue": 24,
@@ -794,7 +809,7 @@
         "source_present": true
       },
       {
-        "turn_index": 24,
+        "turn_index": 25,
         "hunger": 25,
         "thirst": 49,
         "fatigue": 25,
@@ -809,7 +824,7 @@
         "source_present": true
       },
       {
-        "turn_index": 25,
+        "turn_index": 26,
         "hunger": 26,
         "thirst": 51,
         "fatigue": 26,
@@ -824,7 +839,7 @@
         "source_present": true
       },
       {
-        "turn_index": 26,
+        "turn_index": 27,
         "hunger": 27,
         "thirst": 53,
         "fatigue": 27,
@@ -839,7 +854,7 @@
         "source_present": true
       },
       {
-        "turn_index": 27,
+        "turn_index": 28,
         "hunger": 28,
         "thirst": 55,
         "fatigue": 28,
@@ -854,7 +869,7 @@
         "source_present": true
       },
       {
-        "turn_index": 28,
+        "turn_index": 29,
         "hunger": 29,
         "thirst": 57,
         "fatigue": 29,
@@ -869,7 +884,7 @@
         "source_present": true
       },
       {
-        "turn_index": 29,
+        "turn_index": 30,
         "hunger": 30,
         "thirst": 59,
         "fatigue": 30,
@@ -884,7 +899,7 @@
         "source_present": true
       },
       {
-        "turn_index": 30,
+        "turn_index": 31,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 31,
@@ -899,7 +914,7 @@
         "source_present": true
       },
       {
-        "turn_index": 31,
+        "turn_index": 32,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 32,
@@ -914,7 +929,7 @@
         "source_present": true
       },
       {
-        "turn_index": 32,
+        "turn_index": 33,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 33,
@@ -929,7 +944,7 @@
         "source_present": true
       },
       {
-        "turn_index": 33,
+        "turn_index": 34,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 34,
@@ -944,7 +959,7 @@
         "source_present": true
       },
       {
-        "turn_index": 34,
+        "turn_index": 35,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 35,
@@ -959,7 +974,7 @@
         "source_present": true
       },
       {
-        "turn_index": 35,
+        "turn_index": 36,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 36,
@@ -976,7 +991,7 @@
         "source_present": true
       },
       {
-        "turn_index": 36,
+        "turn_index": 37,
         "hunger": 37,
         "thirst": 73,
         "fatigue": 37,
@@ -993,7 +1008,7 @@
         "source_present": true
       },
       {
-        "turn_index": 37,
+        "turn_index": 38,
         "hunger": 38,
         "thirst": 75,
         "fatigue": 38,
@@ -1010,7 +1025,7 @@
         "source_present": true
       },
       {
-        "turn_index": 38,
+        "turn_index": 39,
         "hunger": 39,
         "thirst": 77,
         "fatigue": 39,
@@ -1027,7 +1042,7 @@
         "source_present": true
       },
       {
-        "turn_index": 39,
+        "turn_index": 40,
         "hunger": 40,
         "thirst": 79,
         "fatigue": 40,
@@ -1044,7 +1059,7 @@
         "source_present": true
       },
       {
-        "turn_index": 40,
+        "turn_index": 41,
         "hunger": 41,
         "thirst": 81,
         "fatigue": 41,
@@ -1061,7 +1076,7 @@
         "source_present": true
       },
       {
-        "turn_index": 41,
+        "turn_index": 42,
         "hunger": 42,
         "thirst": 83,
         "fatigue": 42,
@@ -1078,7 +1093,7 @@
         "source_present": true
       },
       {
-        "turn_index": 42,
+        "turn_index": 43,
         "hunger": 43,
         "thirst": 85,
         "fatigue": 43,
@@ -1095,7 +1110,7 @@
         "source_present": true
       },
       {
-        "turn_index": 43,
+        "turn_index": 44,
         "hunger": 44,
         "thirst": 87,
         "fatigue": 44,
@@ -1112,7 +1127,7 @@
         "source_present": true
       },
       {
-        "turn_index": 44,
+        "turn_index": 45,
         "hunger": 45,
         "thirst": 89,
         "fatigue": 45,
@@ -1129,7 +1144,7 @@
         "source_present": true
       },
       {
-        "turn_index": 45,
+        "turn_index": 46,
         "hunger": 46,
         "thirst": 91,
         "fatigue": 46,
@@ -1146,27 +1161,10 @@
         "source_present": true
       },
       {
-        "turn_index": 46,
+        "turn_index": 47,
         "hunger": 47,
         "thirst": 93,
         "fatigue": 47,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 47,
-        "hunger": 48,
-        "thirst": 95,
-        "fatigue": 48,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -1211,6 +1209,23 @@
       },
       {
         "turn_index": 50,
+        "hunger": 48,
+        "thirst": 95,
+        "fatigue": 48,
+        "hunger_delta": 1,
+        "thirst_delta": 2,
+        "fatigue_delta": 1,
+        "warning_count": 1,
+        "warnings": [
+          "thirst_high"
+        ],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 51,
         "hunger": 49,
         "thirst": 97,
         "fatigue": 49,
@@ -1227,7 +1242,7 @@
         "source_present": true
       },
       {
-        "turn_index": 51,
+        "turn_index": 52,
         "hunger": 50,
         "thirst": 99,
         "fatigue": 50,
@@ -1244,7 +1259,7 @@
         "source_present": true
       },
       {
-        "turn_index": 52,
+        "turn_index": 53,
         "hunger": 51,
         "thirst": 100,
         "fatigue": 51,
@@ -1261,7 +1276,7 @@
         "source_present": true
       },
       {
-        "turn_index": 53,
+        "turn_index": 54,
         "hunger": 52,
         "thirst": 100,
         "fatigue": 52,
@@ -1278,7 +1293,7 @@
         "source_present": true
       },
       {
-        "turn_index": 54,
+        "turn_index": 55,
         "hunger": 53,
         "thirst": 100,
         "fatigue": 53,
@@ -1295,7 +1310,7 @@
         "source_present": true
       },
       {
-        "turn_index": 55,
+        "turn_index": 56,
         "hunger": 54,
         "thirst": 100,
         "fatigue": 54,
@@ -1312,7 +1327,7 @@
         "source_present": true
       },
       {
-        "turn_index": 56,
+        "turn_index": 57,
         "hunger": 55,
         "thirst": 100,
         "fatigue": 55,
@@ -1329,7 +1344,7 @@
         "source_present": true
       },
       {
-        "turn_index": 57,
+        "turn_index": 58,
         "hunger": 56,
         "thirst": 100,
         "fatigue": 56,
@@ -1346,7 +1361,7 @@
         "source_present": true
       },
       {
-        "turn_index": 58,
+        "turn_index": 59,
         "hunger": 57,
         "thirst": 100,
         "fatigue": 57,
@@ -1363,7 +1378,7 @@
         "source_present": true
       },
       {
-        "turn_index": 59,
+        "turn_index": 60,
         "hunger": 58,
         "thirst": 100,
         "fatigue": 58,
@@ -1380,7 +1395,7 @@
         "source_present": true
       },
       {
-        "turn_index": 60,
+        "turn_index": 61,
         "hunger": 59,
         "thirst": 100,
         "fatigue": 59,
@@ -1397,7 +1412,7 @@
         "source_present": true
       },
       {
-        "turn_index": 61,
+        "turn_index": 62,
         "hunger": 60,
         "thirst": 100,
         "fatigue": 60,
@@ -1414,7 +1429,7 @@
         "source_present": true
       },
       {
-        "turn_index": 62,
+        "turn_index": 63,
         "hunger": 61,
         "thirst": 100,
         "fatigue": 61,
@@ -1431,7 +1446,7 @@
         "source_present": true
       },
       {
-        "turn_index": 63,
+        "turn_index": 64,
         "hunger": 62,
         "thirst": 100,
         "fatigue": 62,
@@ -1448,7 +1463,7 @@
         "source_present": true
       },
       {
-        "turn_index": 64,
+        "turn_index": 65,
         "hunger": 63,
         "thirst": 100,
         "fatigue": 63,
@@ -1465,7 +1480,7 @@
         "source_present": true
       },
       {
-        "turn_index": 65,
+        "turn_index": 66,
         "hunger": 64,
         "thirst": 100,
         "fatigue": 64,
@@ -1482,7 +1497,7 @@
         "source_present": true
       },
       {
-        "turn_index": 66,
+        "turn_index": 67,
         "hunger": 65,
         "thirst": 100,
         "fatigue": 65,
@@ -1499,7 +1514,7 @@
         "source_present": true
       },
       {
-        "turn_index": 67,
+        "turn_index": 68,
         "hunger": 66,
         "thirst": 100,
         "fatigue": 66,
@@ -1516,7 +1531,7 @@
         "source_present": true
       },
       {
-        "turn_index": 68,
+        "turn_index": 69,
         "hunger": 67,
         "thirst": 100,
         "fatigue": 67,
@@ -1533,7 +1548,7 @@
         "source_present": true
       },
       {
-        "turn_index": 69,
+        "turn_index": 70,
         "hunger": 68,
         "thirst": 100,
         "fatigue": 68,
@@ -1550,7 +1565,7 @@
         "source_present": true
       },
       {
-        "turn_index": 70,
+        "turn_index": 71,
         "hunger": 69,
         "thirst": 100,
         "fatigue": 69,
@@ -1567,7 +1582,7 @@
         "source_present": true
       },
       {
-        "turn_index": 71,
+        "turn_index": 72,
         "hunger": 70,
         "thirst": 100,
         "fatigue": 70,
@@ -1586,7 +1601,7 @@
         "source_present": true
       },
       {
-        "turn_index": 72,
+        "turn_index": 73,
         "hunger": 71,
         "thirst": 100,
         "fatigue": 71,
@@ -1605,7 +1620,7 @@
         "source_present": true
       },
       {
-        "turn_index": 73,
+        "turn_index": 74,
         "hunger": 72,
         "thirst": 100,
         "fatigue": 72,
@@ -1624,7 +1639,7 @@
         "source_present": true
       },
       {
-        "turn_index": 74,
+        "turn_index": 75,
         "hunger": 73,
         "thirst": 100,
         "fatigue": 73,
@@ -1643,7 +1658,7 @@
         "source_present": true
       },
       {
-        "turn_index": 75,
+        "turn_index": 76,
         "hunger": 74,
         "thirst": 100,
         "fatigue": 74,
@@ -1662,7 +1677,7 @@
         "source_present": true
       },
       {
-        "turn_index": 76,
+        "turn_index": 77,
         "hunger": 75,
         "thirst": 100,
         "fatigue": 75,
@@ -1681,7 +1696,7 @@
         "source_present": true
       },
       {
-        "turn_index": 77,
+        "turn_index": 78,
         "hunger": 76,
         "thirst": 100,
         "fatigue": 76,
@@ -1700,7 +1715,7 @@
         "source_present": true
       },
       {
-        "turn_index": 78,
+        "turn_index": 79,
         "hunger": 77,
         "thirst": 100,
         "fatigue": 77,
@@ -1719,7 +1734,7 @@
         "source_present": true
       },
       {
-        "turn_index": 79,
+        "turn_index": 80,
         "hunger": 78,
         "thirst": 100,
         "fatigue": 78,
@@ -1738,7 +1753,7 @@
         "source_present": true
       },
       {
-        "turn_index": 80,
+        "turn_index": 81,
         "hunger": 79,
         "thirst": 100,
         "fatigue": 79,
@@ -1757,7 +1772,7 @@
         "source_present": true
       },
       {
-        "turn_index": 81,
+        "turn_index": 82,
         "hunger": 80,
         "thirst": 100,
         "fatigue": 80,
@@ -1776,7 +1791,7 @@
         "source_present": true
       },
       {
-        "turn_index": 82,
+        "turn_index": 83,
         "hunger": 81,
         "thirst": 100,
         "fatigue": 81,
@@ -1795,7 +1810,7 @@
         "source_present": true
       },
       {
-        "turn_index": 83,
+        "turn_index": 84,
         "hunger": 82,
         "thirst": 100,
         "fatigue": 82,
@@ -1814,7 +1829,7 @@
         "source_present": true
       },
       {
-        "turn_index": 84,
+        "turn_index": 85,
         "hunger": 83,
         "thirst": 100,
         "fatigue": 83,
@@ -1833,7 +1848,7 @@
         "source_present": true
       },
       {
-        "turn_index": 85,
+        "turn_index": 86,
         "hunger": 84,
         "thirst": 100,
         "fatigue": 84,
@@ -1852,7 +1867,7 @@
         "source_present": true
       },
       {
-        "turn_index": 86,
+        "turn_index": 87,
         "hunger": 85,
         "thirst": 100,
         "fatigue": 85,
@@ -1871,7 +1886,7 @@
         "source_present": true
       },
       {
-        "turn_index": 87,
+        "turn_index": 88,
         "hunger": 86,
         "thirst": 100,
         "fatigue": 86,
@@ -1890,7 +1905,7 @@
         "source_present": true
       },
       {
-        "turn_index": 88,
+        "turn_index": 89,
         "hunger": 87,
         "thirst": 100,
         "fatigue": 87,
@@ -1909,7 +1924,7 @@
         "source_present": true
       },
       {
-        "turn_index": 89,
+        "turn_index": 90,
         "hunger": 88,
         "thirst": 100,
         "fatigue": 88,
@@ -1928,7 +1943,7 @@
         "source_present": true
       },
       {
-        "turn_index": 90,
+        "turn_index": 91,
         "hunger": 89,
         "thirst": 100,
         "fatigue": 89,
@@ -1947,7 +1962,7 @@
         "source_present": true
       },
       {
-        "turn_index": 91,
+        "turn_index": 92,
         "hunger": 90,
         "thirst": 100,
         "fatigue": 90,
@@ -1966,7 +1981,7 @@
         "source_present": true
       },
       {
-        "turn_index": 92,
+        "turn_index": 93,
         "hunger": 91,
         "thirst": 100,
         "fatigue": 91,
@@ -1985,7 +2000,7 @@
         "source_present": true
       },
       {
-        "turn_index": 93,
+        "turn_index": 94,
         "hunger": 92,
         "thirst": 100,
         "fatigue": 92,
@@ -2004,7 +2019,7 @@
         "source_present": true
       },
       {
-        "turn_index": 94,
+        "turn_index": 95,
         "hunger": 93,
         "thirst": 100,
         "fatigue": 93,
@@ -2023,7 +2038,7 @@
         "source_present": true
       },
       {
-        "turn_index": 95,
+        "turn_index": 96,
         "hunger": 94,
         "thirst": 100,
         "fatigue": 94,
@@ -2042,7 +2057,7 @@
         "source_present": true
       },
       {
-        "turn_index": 96,
+        "turn_index": 97,
         "hunger": 95,
         "thirst": 100,
         "fatigue": 95,
@@ -2061,7 +2076,7 @@
         "source_present": true
       },
       {
-        "turn_index": 97,
+        "turn_index": 98,
         "hunger": 96,
         "thirst": 100,
         "fatigue": 96,
@@ -2080,7 +2095,7 @@
         "source_present": true
       },
       {
-        "turn_index": 98,
+        "turn_index": 99,
         "hunger": 97,
         "thirst": 100,
         "fatigue": 97,
@@ -2099,29 +2114,10 @@
         "source_present": true
       },
       {
-        "turn_index": 99,
+        "turn_index": 100,
         "hunger": 98,
         "thirst": 100,
         "fatigue": 98,
-        "hunger_delta": 1,
-        "thirst_delta": 0,
-        "fatigue_delta": 1,
-        "warning_count": 3,
-        "warnings": [
-          "fatigue_high",
-          "hunger_high",
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 100,
-        "hunger": 99,
-        "thirst": 100,
-        "fatigue": 99,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
@@ -2139,11 +2135,11 @@
     ],
     "trend_row_count": 100,
     "pressure_turn_count": 97,
-    "survival_warning_count": 124,
+    "survival_warning_count": 121,
     "warning_counts_by_type": {
-      "thirst_high": 64,
-      "fatigue_high": 30,
-      "hunger_high": 30
+      "thirst_high": 63,
+      "fatigue_high": 29,
+      "hunger_high": 29
     },
     "relief_action_count": 0,
     "relief_counts_by_kind": {},
@@ -2152,19 +2148,19 @@
     "inventory_consumed_summary": [],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
-      "hunger_delta": 97,
+      "hunger_delta": 96,
       "thirst_delta": 97,
-      "fatigue_delta": 97
+      "fatigue_delta": 96
     },
     "max_needs": {
-      "hunger": 99,
+      "hunger": 98,
       "thirst": 100,
-      "fatigue": 99
+      "fatigue": 98
     },
     "final_needs": {
-      "hunger": 99,
+      "hunger": 98,
       "thirst": 100,
-      "fatigue": 99
+      "fatigue": 98
     },
     "source_coverage_summary": {
       "format_version": "n1251_survival_metric_source_summary_v1",
@@ -2177,9 +2173,9 @@
         "survival_action_rows": 0,
         "survival_suggestion_rows": 0,
         "relief_applied_rows": 0,
-        "warning_rows": 64,
+        "warning_rows": 63,
         "nonzero_need_rows": 97,
-        "nonzero_delta_rows": 97
+        "nonzero_delta_rows": 96
       },
       "source_coverage_rate": 0.97,
       "example_missing_source_rows": [
@@ -2216,9 +2212,9 @@
         "survival_action_rows": 0,
         "survival_suggestion_rows": 0,
         "relief_applied_rows": 0,
-        "warning_rows": 64,
+        "warning_rows": 63,
         "nonzero_need_rows": 97,
-        "nonzero_delta_rows": 97
+        "nonzero_delta_rows": 96
       },
       "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
     },
@@ -2232,6 +2228,21 @@
   "survival_pressure_trend_rows": [
     {
       "turn_index": 1,
+      "hunger": 2,
+      "thirst": 3,
+      "fatigue": 2,
+      "hunger_delta": 0,
+      "thirst_delta": 0,
+      "fatigue_delta": 0,
+      "warning_count": 0,
+      "warnings": [],
+      "relief_action_kind": "",
+      "relief_applied": false,
+      "relief_blocked": false,
+      "source_present": true
+    },
+    {
+      "turn_index": 2,
       "hunger": 3,
       "thirst": 5,
       "fatigue": 3,
@@ -2246,7 +2257,7 @@
       "source_present": true
     },
     {
-      "turn_index": 2,
+      "turn_index": 3,
       "hunger": 4,
       "thirst": 7,
       "fatigue": 4,
@@ -2261,7 +2272,7 @@
       "source_present": true
     },
     {
-      "turn_index": 3,
+      "turn_index": 4,
       "hunger": 5,
       "thirst": 9,
       "fatigue": 5,
@@ -2276,7 +2287,7 @@
       "source_present": true
     },
     {
-      "turn_index": 4,
+      "turn_index": 5,
       "hunger": 6,
       "thirst": 11,
       "fatigue": 6,
@@ -2291,7 +2302,7 @@
       "source_present": true
     },
     {
-      "turn_index": 5,
+      "turn_index": 6,
       "hunger": 7,
       "thirst": 13,
       "fatigue": 7,
@@ -2306,7 +2317,7 @@
       "source_present": true
     },
     {
-      "turn_index": 6,
+      "turn_index": 7,
       "hunger": 8,
       "thirst": 15,
       "fatigue": 8,
@@ -2321,7 +2332,7 @@
       "source_present": true
     },
     {
-      "turn_index": 7,
+      "turn_index": 8,
       "hunger": 9,
       "thirst": 17,
       "fatigue": 9,
@@ -2336,7 +2347,7 @@
       "source_present": true
     },
     {
-      "turn_index": 8,
+      "turn_index": 9,
       "hunger": 10,
       "thirst": 19,
       "fatigue": 10,
@@ -2351,7 +2362,7 @@
       "source_present": true
     },
     {
-      "turn_index": 9,
+      "turn_index": 10,
       "hunger": 11,
       "thirst": 21,
       "fatigue": 11,
@@ -2366,7 +2377,7 @@
       "source_present": true
     },
     {
-      "turn_index": 10,
+      "turn_index": 11,
       "hunger": 12,
       "thirst": 23,
       "fatigue": 12,
@@ -2381,7 +2392,7 @@
       "source_present": true
     },
     {
-      "turn_index": 11,
+      "turn_index": 12,
       "hunger": 13,
       "thirst": 25,
       "fatigue": 13,
@@ -2396,7 +2407,7 @@
       "source_present": true
     },
     {
-      "turn_index": 12,
+      "turn_index": 13,
       "hunger": 14,
       "thirst": 27,
       "fatigue": 14,
@@ -2411,25 +2422,10 @@
       "source_present": true
     },
     {
-      "turn_index": 13,
+      "turn_index": 14,
       "hunger": 15,
       "thirst": 29,
       "fatigue": 15,
-      "hunger_delta": 1,
-      "thirst_delta": 2,
-      "fatigue_delta": 1,
-      "warning_count": 0,
-      "warnings": [],
-      "relief_action_kind": "",
-      "relief_applied": false,
-      "relief_blocked": false,
-      "source_present": true
-    },
-    {
-      "turn_index": 14,
-      "hunger": 16,
-      "thirst": 31,
-      "fatigue": 16,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
@@ -2457,6 +2453,21 @@
     },
     {
       "turn_index": 16,
+      "hunger": 16,
+      "thirst": 31,
+      "fatigue": 16,
+      "hunger_delta": 1,
+      "thirst_delta": 2,
+      "fatigue_delta": 1,
+      "warning_count": 0,
+      "warnings": [],
+      "relief_action_kind": "",
+      "relief_applied": false,
+      "relief_blocked": false,
+      "source_present": true
+    },
+    {
+      "turn_index": 17,
       "hunger": 17,
       "thirst": 33,
       "fatigue": 17,
@@ -2471,7 +2482,7 @@
       "source_present": true
     },
     {
-      "turn_index": 17,
+      "turn_index": 18,
       "hunger": 18,
       "thirst": 35,
       "fatigue": 18,
@@ -2486,7 +2497,7 @@
       "source_present": true
     },
     {
-      "turn_index": 18,
+      "turn_index": 19,
       "hunger": 19,
       "thirst": 37,
       "fatigue": 19,
@@ -2501,7 +2512,7 @@
       "source_present": true
     },
     {
-      "turn_index": 19,
+      "turn_index": 20,
       "hunger": 20,
       "thirst": 39,
       "fatigue": 20,
@@ -2516,7 +2527,7 @@
       "source_present": true
     },
     {
-      "turn_index": 20,
+      "turn_index": 21,
       "hunger": 21,
       "thirst": 41,
       "fatigue": 21,
@@ -2531,7 +2542,7 @@
       "source_present": true
     },
     {
-      "turn_index": 21,
+      "turn_index": 22,
       "hunger": 22,
       "thirst": 43,
       "fatigue": 22,
@@ -2546,7 +2557,7 @@
       "source_present": true
     },
     {
-      "turn_index": 22,
+      "turn_index": 23,
       "hunger": 23,
       "thirst": 45,
       "fatigue": 23,
@@ -2561,7 +2572,7 @@
       "source_present": true
     },
     {
-      "turn_index": 23,
+      "turn_index": 24,
       "hunger": 24,
       "thirst": 47,
       "fatigue": 24,
@@ -2576,7 +2587,7 @@
       "source_present": true
     },
     {
-      "turn_index": 24,
+      "turn_index": 25,
       "hunger": 25,
       "thirst": 49,
       "fatigue": 25,
@@ -2591,7 +2602,7 @@
       "source_present": true
     },
     {
-      "turn_index": 25,
+      "turn_index": 26,
       "hunger": 26,
       "thirst": 51,
       "fatigue": 26,
@@ -2606,7 +2617,7 @@
       "source_present": true
     },
     {
-      "turn_index": 26,
+      "turn_index": 27,
       "hunger": 27,
       "thirst": 53,
       "fatigue": 27,
@@ -2621,7 +2632,7 @@
       "source_present": true
     },
     {
-      "turn_index": 27,
+      "turn_index": 28,
       "hunger": 28,
       "thirst": 55,
       "fatigue": 28,
@@ -2636,7 +2647,7 @@
       "source_present": true
     },
     {
-      "turn_index": 28,
+      "turn_index": 29,
       "hunger": 29,
       "thirst": 57,
       "fatigue": 29,
@@ -2651,7 +2662,7 @@
       "source_present": true
     },
     {
-      "turn_index": 29,
+      "turn_index": 30,
       "hunger": 30,
       "thirst": 59,
       "fatigue": 30,
@@ -2666,7 +2677,7 @@
       "source_present": true
     },
     {
-      "turn_index": 30,
+      "turn_index": 31,
       "hunger": 31,
       "thirst": 61,
       "fatigue": 31,
@@ -2681,7 +2692,7 @@
       "source_present": true
     },
     {
-      "turn_index": 31,
+      "turn_index": 32,
       "hunger": 32,
       "thirst": 63,
       "fatigue": 32,
@@ -2696,7 +2707,7 @@
       "source_present": true
     },
     {
-      "turn_index": 32,
+      "turn_index": 33,
       "hunger": 33,
       "thirst": 65,
       "fatigue": 33,
@@ -2711,7 +2722,7 @@
       "source_present": true
     },
     {
-      "turn_index": 33,
+      "turn_index": 34,
       "hunger": 34,
       "thirst": 67,
       "fatigue": 34,
@@ -2726,7 +2737,7 @@
       "source_present": true
     },
     {
-      "turn_index": 34,
+      "turn_index": 35,
       "hunger": 35,
       "thirst": 69,
       "fatigue": 35,
@@ -2741,7 +2752,7 @@
       "source_present": true
     },
     {
-      "turn_index": 35,
+      "turn_index": 36,
       "hunger": 36,
       "thirst": 71,
       "fatigue": 36,
@@ -2758,7 +2769,7 @@
       "source_present": true
     },
     {
-      "turn_index": 36,
+      "turn_index": 37,
       "hunger": 37,
       "thirst": 73,
       "fatigue": 37,
@@ -2775,7 +2786,7 @@
       "source_present": true
     },
     {
-      "turn_index": 37,
+      "turn_index": 38,
       "hunger": 38,
       "thirst": 75,
       "fatigue": 38,
@@ -2792,7 +2803,7 @@
       "source_present": true
     },
     {
-      "turn_index": 38,
+      "turn_index": 39,
       "hunger": 39,
       "thirst": 77,
       "fatigue": 39,
@@ -2809,7 +2820,7 @@
       "source_present": true
     },
     {
-      "turn_index": 39,
+      "turn_index": 40,
       "hunger": 40,
       "thirst": 79,
       "fatigue": 40,
@@ -2826,7 +2837,7 @@
       "source_present": true
     },
     {
-      "turn_index": 40,
+      "turn_index": 41,
       "hunger": 41,
       "thirst": 81,
       "fatigue": 41,
@@ -2843,7 +2854,7 @@
       "source_present": true
     },
     {
-      "turn_index": 41,
+      "turn_index": 42,
       "hunger": 42,
       "thirst": 83,
       "fatigue": 42,
@@ -2860,7 +2871,7 @@
       "source_present": true
     },
     {
-      "turn_index": 42,
+      "turn_index": 43,
       "hunger": 43,
       "thirst": 85,
       "fatigue": 43,
@@ -2877,7 +2888,7 @@
       "source_present": true
     },
     {
-      "turn_index": 43,
+      "turn_index": 44,
       "hunger": 44,
       "thirst": 87,
       "fatigue": 44,
@@ -2894,7 +2905,7 @@
       "source_present": true
     },
     {
-      "turn_index": 44,
+      "turn_index": 45,
       "hunger": 45,
       "thirst": 89,
       "fatigue": 45,
@@ -2911,7 +2922,7 @@
       "source_present": true
     },
     {
-      "turn_index": 45,
+      "turn_index": 46,
       "hunger": 46,
       "thirst": 91,
       "fatigue": 46,
@@ -2928,27 +2939,10 @@
       "source_present": true
     },
     {
-      "turn_index": 46,
+      "turn_index": 47,
       "hunger": 47,
       "thirst": 93,
       "fatigue": 47,
-      "hunger_delta": 1,
-      "thirst_delta": 2,
-      "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
-      "relief_action_kind": "",
-      "relief_applied": false,
-      "relief_blocked": false,
-      "source_present": true
-    },
-    {
-      "turn_index": 47,
-      "hunger": 48,
-      "thirst": 95,
-      "fatigue": 48,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
@@ -2993,6 +2987,23 @@
     },
     {
       "turn_index": 50,
+      "hunger": 48,
+      "thirst": 95,
+      "fatigue": 48,
+      "hunger_delta": 1,
+      "thirst_delta": 2,
+      "fatigue_delta": 1,
+      "warning_count": 1,
+      "warnings": [
+        "thirst_high"
+      ],
+      "relief_action_kind": "",
+      "relief_applied": false,
+      "relief_blocked": false,
+      "source_present": true
+    },
+    {
+      "turn_index": 51,
       "hunger": 49,
       "thirst": 97,
       "fatigue": 49,
@@ -3009,7 +3020,7 @@
       "source_present": true
     },
     {
-      "turn_index": 51,
+      "turn_index": 52,
       "hunger": 50,
       "thirst": 99,
       "fatigue": 50,
@@ -3026,7 +3037,7 @@
       "source_present": true
     },
     {
-      "turn_index": 52,
+      "turn_index": 53,
       "hunger": 51,
       "thirst": 100,
       "fatigue": 51,
@@ -3043,7 +3054,7 @@
       "source_present": true
     },
     {
-      "turn_index": 53,
+      "turn_index": 54,
       "hunger": 52,
       "thirst": 100,
       "fatigue": 52,
@@ -3060,7 +3071,7 @@
       "source_present": true
     },
     {
-      "turn_index": 54,
+      "turn_index": 55,
       "hunger": 53,
       "thirst": 100,
       "fatigue": 53,
@@ -3077,7 +3088,7 @@
       "source_present": true
     },
     {
-      "turn_index": 55,
+      "turn_index": 56,
       "hunger": 54,
       "thirst": 100,
       "fatigue": 54,
@@ -3094,7 +3105,7 @@
       "source_present": true
     },
     {
-      "turn_index": 56,
+      "turn_index": 57,
       "hunger": 55,
       "thirst": 100,
       "fatigue": 55,
@@ -3111,7 +3122,7 @@
       "source_present": true
     },
     {
-      "turn_index": 57,
+      "turn_index": 58,
       "hunger": 56,
       "thirst": 100,
       "fatigue": 56,
@@ -3128,7 +3139,7 @@
       "source_present": true
     },
     {
-      "turn_index": 58,
+      "turn_index": 59,
       "hunger": 57,
       "thirst": 100,
       "fatigue": 57,
@@ -3145,7 +3156,7 @@
       "source_present": true
     },
     {
-      "turn_index": 59,
+      "turn_index": 60,
       "hunger": 58,
       "thirst": 100,
       "fatigue": 58,
@@ -3162,7 +3173,7 @@
       "source_present": true
     },
     {
-      "turn_index": 60,
+      "turn_index": 61,
       "hunger": 59,
       "thirst": 100,
       "fatigue": 59,
@@ -3179,7 +3190,7 @@
       "source_present": true
     },
     {
-      "turn_index": 61,
+      "turn_index": 62,
       "hunger": 60,
       "thirst": 100,
       "fatigue": 60,
@@ -3196,7 +3207,7 @@
       "source_present": true
     },
     {
-      "turn_index": 62,
+      "turn_index": 63,
       "hunger": 61,
       "thirst": 100,
       "fatigue": 61,
@@ -3213,7 +3224,7 @@
       "source_present": true
     },
     {
-      "turn_index": 63,
+      "turn_index": 64,
       "hunger": 62,
       "thirst": 100,
       "fatigue": 62,
@@ -3230,7 +3241,7 @@
       "source_present": true
     },
     {
-      "turn_index": 64,
+      "turn_index": 65,
       "hunger": 63,
       "thirst": 100,
       "fatigue": 63,
@@ -3247,7 +3258,7 @@
       "source_present": true
     },
     {
-      "turn_index": 65,
+      "turn_index": 66,
       "hunger": 64,
       "thirst": 100,
       "fatigue": 64,
@@ -3264,7 +3275,7 @@
       "source_present": true
     },
     {
-      "turn_index": 66,
+      "turn_index": 67,
       "hunger": 65,
       "thirst": 100,
       "fatigue": 65,
@@ -3281,7 +3292,7 @@
       "source_present": true
     },
     {
-      "turn_index": 67,
+      "turn_index": 68,
       "hunger": 66,
       "thirst": 100,
       "fatigue": 66,
@@ -3298,7 +3309,7 @@
       "source_present": true
     },
     {
-      "turn_index": 68,
+      "turn_index": 69,
       "hunger": 67,
       "thirst": 100,
       "fatigue": 67,
@@ -3315,7 +3326,7 @@
       "source_present": true
     },
     {
-      "turn_index": 69,
+      "turn_index": 70,
       "hunger": 68,
       "thirst": 100,
       "fatigue": 68,
@@ -3332,7 +3343,7 @@
       "source_present": true
     },
     {
-      "turn_index": 70,
+      "turn_index": 71,
       "hunger": 69,
       "thirst": 100,
       "fatigue": 69,
@@ -3349,7 +3360,7 @@
       "source_present": true
     },
     {
-      "turn_index": 71,
+      "turn_index": 72,
       "hunger": 70,
       "thirst": 100,
       "fatigue": 70,
@@ -3368,7 +3379,7 @@
       "source_present": true
     },
     {
-      "turn_index": 72,
+      "turn_index": 73,
       "hunger": 71,
       "thirst": 100,
       "fatigue": 71,
@@ -3387,7 +3398,7 @@
       "source_present": true
     },
     {
-      "turn_index": 73,
+      "turn_index": 74,
       "hunger": 72,
       "thirst": 100,
       "fatigue": 72,
@@ -3406,7 +3417,7 @@
       "source_present": true
     },
     {
-      "turn_index": 74,
+      "turn_index": 75,
       "hunger": 73,
       "thirst": 100,
       "fatigue": 73,
@@ -3425,7 +3436,7 @@
       "source_present": true
     },
     {
-      "turn_index": 75,
+      "turn_index": 76,
       "hunger": 74,
       "thirst": 100,
       "fatigue": 74,
@@ -3444,7 +3455,7 @@
       "source_present": true
     },
     {
-      "turn_index": 76,
+      "turn_index": 77,
       "hunger": 75,
       "thirst": 100,
       "fatigue": 75,
@@ -3463,7 +3474,7 @@
       "source_present": true
     },
     {
-      "turn_index": 77,
+      "turn_index": 78,
       "hunger": 76,
       "thirst": 100,
       "fatigue": 76,
@@ -3482,7 +3493,7 @@
       "source_present": true
     },
     {
-      "turn_index": 78,
+      "turn_index": 79,
       "hunger": 77,
       "thirst": 100,
       "fatigue": 77,
@@ -3501,7 +3512,7 @@
       "source_present": true
     },
     {
-      "turn_index": 79,
+      "turn_index": 80,
       "hunger": 78,
       "thirst": 100,
       "fatigue": 78,
@@ -3520,7 +3531,7 @@
       "source_present": true
     },
     {
-      "turn_index": 80,
+      "turn_index": 81,
       "hunger": 79,
       "thirst": 100,
       "fatigue": 79,
@@ -3539,7 +3550,7 @@
       "source_present": true
     },
     {
-      "turn_index": 81,
+      "turn_index": 82,
       "hunger": 80,
       "thirst": 100,
       "fatigue": 80,
@@ -3558,7 +3569,7 @@
       "source_present": true
     },
     {
-      "turn_index": 82,
+      "turn_index": 83,
       "hunger": 81,
       "thirst": 100,
       "fatigue": 81,
@@ -3577,7 +3588,7 @@
       "source_present": true
     },
     {
-      "turn_index": 83,
+      "turn_index": 84,
       "hunger": 82,
       "thirst": 100,
       "fatigue": 82,
@@ -3596,7 +3607,7 @@
       "source_present": true
     },
     {
-      "turn_index": 84,
+      "turn_index": 85,
       "hunger": 83,
       "thirst": 100,
       "fatigue": 83,
@@ -3615,7 +3626,7 @@
       "source_present": true
     },
     {
-      "turn_index": 85,
+      "turn_index": 86,
       "hunger": 84,
       "thirst": 100,
       "fatigue": 84,
@@ -3634,7 +3645,7 @@
       "source_present": true
     },
     {
-      "turn_index": 86,
+      "turn_index": 87,
       "hunger": 85,
       "thirst": 100,
       "fatigue": 85,
@@ -3653,7 +3664,7 @@
       "source_present": true
     },
     {
-      "turn_index": 87,
+      "turn_index": 88,
       "hunger": 86,
       "thirst": 100,
       "fatigue": 86,
@@ -3672,7 +3683,7 @@
       "source_present": true
     },
     {
-      "turn_index": 88,
+      "turn_index": 89,
       "hunger": 87,
       "thirst": 100,
       "fatigue": 87,
@@ -3691,7 +3702,7 @@
       "source_present": true
     },
     {
-      "turn_index": 89,
+      "turn_index": 90,
       "hunger": 88,
       "thirst": 100,
       "fatigue": 88,
@@ -3710,7 +3721,7 @@
       "source_present": true
     },
     {
-      "turn_index": 90,
+      "turn_index": 91,
       "hunger": 89,
       "thirst": 100,
       "fatigue": 89,
@@ -3729,7 +3740,7 @@
       "source_present": true
     },
     {
-      "turn_index": 91,
+      "turn_index": 92,
       "hunger": 90,
       "thirst": 100,
       "fatigue": 90,
@@ -3748,7 +3759,7 @@
       "source_present": true
     },
     {
-      "turn_index": 92,
+      "turn_index": 93,
       "hunger": 91,
       "thirst": 100,
       "fatigue": 91,
@@ -3767,7 +3778,7 @@
       "source_present": true
     },
     {
-      "turn_index": 93,
+      "turn_index": 94,
       "hunger": 92,
       "thirst": 100,
       "fatigue": 92,
@@ -3786,7 +3797,7 @@
       "source_present": true
     },
     {
-      "turn_index": 94,
+      "turn_index": 95,
       "hunger": 93,
       "thirst": 100,
       "fatigue": 93,
@@ -3805,7 +3816,7 @@
       "source_present": true
     },
     {
-      "turn_index": 95,
+      "turn_index": 96,
       "hunger": 94,
       "thirst": 100,
       "fatigue": 94,
@@ -3824,7 +3835,7 @@
       "source_present": true
     },
     {
-      "turn_index": 96,
+      "turn_index": 97,
       "hunger": 95,
       "thirst": 100,
       "fatigue": 95,
@@ -3843,7 +3854,7 @@
       "source_present": true
     },
     {
-      "turn_index": 97,
+      "turn_index": 98,
       "hunger": 96,
       "thirst": 100,
       "fatigue": 96,
@@ -3862,7 +3873,7 @@
       "source_present": true
     },
     {
-      "turn_index": 98,
+      "turn_index": 99,
       "hunger": 97,
       "thirst": 100,
       "fatigue": 97,
@@ -3881,29 +3892,10 @@
       "source_present": true
     },
     {
-      "turn_index": 99,
+      "turn_index": 100,
       "hunger": 98,
       "thirst": 100,
       "fatigue": 98,
-      "hunger_delta": 1,
-      "thirst_delta": 0,
-      "fatigue_delta": 1,
-      "warning_count": 3,
-      "warnings": [
-        "fatigue_high",
-        "hunger_high",
-        "thirst_high"
-      ],
-      "relief_action_kind": "",
-      "relief_applied": false,
-      "relief_blocked": false,
-      "source_present": true
-    },
-    {
-      "turn_index": 100,
-      "hunger": 99,
-      "thirst": 100,
-      "fatigue": 99,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
@@ -3923,18 +3915,18 @@
     {
       "id": "n1271-survival-autoplay-evidence",
       "title": "N127.1 Survival Autoplay Evidence",
-      "html": "<section id='n1271-survival-autoplay-evidence'><h2>N127.1 Survival Autoplay Evidence</h2><p><strong>Evidence gate:</strong> ADVISORY GAP (advisory=True)</p><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody><tr><td>survival_pressure_seen</td><td>PASS</td></tr><tr><td>survival_suggestions_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_relief_actions_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_inventory_consumed_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_state_carry_forward_seen</td><td>ADVISORY GAP</td></tr></tbody></table><h3>Pressure to suggestion to response</h3><table><thead><tr><th>Turn</th><th>Needs</th><th>Suggestions</th><th>Relief</th><th>Applied</th></tr></thead><tbody><tr><td>1</td><td>H 3 / T 5 / F 3</td><td>0</td><td></td><td>no</td></tr><tr><td>2</td><td>H 4 / T 7 / F 4</td><td>0</td><td></td><td>no</td></tr><tr><td>3</td><td>H 5 / T 9 / F 5</td><td>0</td><td></td><td>no</td></tr><tr><td>4</td><td>H 6 / T 11 / F 6</td><td>0</td><td></td><td>no</td></tr><tr><td>5</td><td>H 7 / T 13 / F 7</td><td>0</td><td></td><td>no</td></tr><tr><td>6</td><td>H 8 / T 15 / F 8</td><td>0</td><td></td><td>no</td></tr><tr><td>7</td><td>H 9 / T 17 / F 9</td><td>0</td><td></td><td>no</td></tr><tr><td>8</td><td>H 10 / T 19 / F 10</td><td>0</td><td></td><td>no</td></tr><tr><td>9</td><td>H 11 / T 21 / F 11</td><td>0</td><td></td><td>no</td></tr><tr><td>10</td><td>H 12 / T 23 / F 12</td><td>0</td><td></td><td>no</td></tr><tr><td>11</td><td>H 13 / T 25 / F 13</td><td>0</td><td></td><td>no</td></tr><tr><td>12</td><td>H 14 / T 27 / F 14</td><td>0</td><td></td><td>no</td></tr></tbody></table><h3>Inventory consumed</h3><table><thead><tr><th>Item</th><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td colspan='3'>No inventory consumption observed.</td></tr></tbody></table><h3>Service relief purchases</h3><table><thead><tr><th>Service</th><th>Count</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>No service relief purchases observed.</td></tr></tbody></table></section>"
+      "html": "<section id='n1271-survival-autoplay-evidence'><h2>N127.1 Survival Autoplay Evidence</h2><p><strong>Evidence gate:</strong> ADVISORY GAP (advisory=True)</p><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody><tr><td>survival_pressure_seen</td><td>PASS</td></tr><tr><td>survival_suggestions_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_relief_actions_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_inventory_consumed_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_state_carry_forward_seen</td><td>ADVISORY GAP</td></tr></tbody></table><h3>Pressure to suggestion to response</h3><table><thead><tr><th>Turn</th><th>Needs</th><th>Suggestions</th><th>Relief</th><th>Applied</th></tr></thead><tbody><tr><td>1</td><td>H 2 / T 3 / F 2</td><td>0</td><td></td><td>no</td></tr><tr><td>2</td><td>H 3 / T 5 / F 3</td><td>0</td><td></td><td>no</td></tr><tr><td>3</td><td>H 4 / T 7 / F 4</td><td>0</td><td></td><td>no</td></tr><tr><td>4</td><td>H 5 / T 9 / F 5</td><td>0</td><td></td><td>no</td></tr><tr><td>5</td><td>H 6 / T 11 / F 6</td><td>0</td><td></td><td>no</td></tr><tr><td>6</td><td>H 7 / T 13 / F 7</td><td>0</td><td></td><td>no</td></tr><tr><td>7</td><td>H 8 / T 15 / F 8</td><td>0</td><td></td><td>no</td></tr><tr><td>8</td><td>H 9 / T 17 / F 9</td><td>0</td><td></td><td>no</td></tr><tr><td>9</td><td>H 10 / T 19 / F 10</td><td>0</td><td></td><td>no</td></tr><tr><td>10</td><td>H 11 / T 21 / F 11</td><td>0</td><td></td><td>no</td></tr><tr><td>11</td><td>H 12 / T 23 / F 12</td><td>0</td><td></td><td>no</td></tr><tr><td>12</td><td>H 13 / T 25 / F 13</td><td>0</td><td></td><td>no</td></tr></tbody></table><h3>Inventory consumed</h3><table><thead><tr><th>Item</th><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td colspan='3'>No inventory consumption observed.</td></tr></tbody></table><h3>Service relief purchases</h3><table><thead><tr><th>Service</th><th>Count</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>No service relief purchases observed.</td></tr></tbody></table></section>"
     },
     {
       "id": "n1251-survival-source",
       "title": "N125.1 Real Survival Metric Source Evidence",
-      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>97</td></tr><tr><td>climate_tick_source_rows</td><td>97</td></tr><tr><td>survival_action_rows</td><td>0</td></tr><tr><td>survival_suggestion_rows</td><td>0</td></tr><tr><td>relief_applied_rows</td><td>0</td></tr><tr><td>warning_rows</td><td>64</td></tr><tr><td>nonzero_need_rows</td><td>97</td></tr><tr><td>nonzero_delta_rows</td><td>97</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>97</td></tr><tr><td>climate_tick_source_rows</td><td>97</td></tr><tr><td>survival_action_rows</td><td>0</td></tr><tr><td>survival_suggestion_rows</td><td>0</td></tr><tr><td>relief_applied_rows</td><td>0</td></tr><tr><td>warning_rows</td><td>63</td></tr><tr><td>nonzero_need_rows</td><td>97</td></tr><tr><td>nonzero_delta_rows</td><td>96</td></tr></tbody></table>\n</section>",
       "source": "survival-metric-source-summary.json"
     },
     {
       "id": "n1234-survival-pressure",
       "title": "N123.4 Survival Pressure vs Player Response",
-      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>97</span></div>\n    <div><strong>Warnings</strong><span>124</span></div>\n    <div><strong>Relief actions</strong><span>0</span></div>\n    <div><strong>Blocked relief</strong><span>0</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>88</td><td>100</td><td>88</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>90</td><td>89</td><td>100</td><td>89</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>91</td><td>90</td><td>100</td><td>90</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>92</td><td>91</td><td>100</td><td>91</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>93</td><td>92</td><td>100</td><td>92</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>94</td><td>93</td><td>100</td><td>93</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>95</td><td>94</td><td>100</td><td>94</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>96</td><td>95</td><td>100</td><td>95</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>97</td><td>96</td><td>100</td><td>96</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>98</td><td>97</td><td>100</td><td>97</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>99</td><td>98</td><td>100</td><td>98</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>100</td><td>99</td><td>100</td><td>99</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td colspan='2'>None</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>97</span></div>\n    <div><strong>Warnings</strong><span>121</span></div>\n    <div><strong>Relief actions</strong><span>0</span></div>\n    <div><strong>Blocked relief</strong><span>0</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>87</td><td>100</td><td>87</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>90</td><td>88</td><td>100</td><td>88</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>91</td><td>89</td><td>100</td><td>89</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>92</td><td>90</td><td>100</td><td>90</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>93</td><td>91</td><td>100</td><td>91</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>94</td><td>92</td><td>100</td><td>92</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>95</td><td>93</td><td>100</td><td>93</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>96</td><td>94</td><td>100</td><td>94</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>97</td><td>95</td><td>100</td><td>95</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>98</td><td>96</td><td>100</td><td>96</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>99</td><td>97</td><td>100</td><td>97</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr><tr><td>100</td><td>98</td><td>100</td><td>98</td><td></td><td>fatigue_high, hunger_high, thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td colspan='2'>None</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
       "source": "transcript.turn_contract.climate_survival.resource_changes.effect_result.survival_action"
     }
   ],
@@ -3946,6 +3938,21 @@
       "trend_rows": [
         {
           "turn_index": 1,
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2,
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0,
+          "warning_count": 0,
+          "warnings": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "source_present": true
+        },
+        {
+          "turn_index": 2,
           "hunger": 3,
           "thirst": 5,
           "fatigue": 3,
@@ -3960,7 +3967,7 @@
           "source_present": true
         },
         {
-          "turn_index": 2,
+          "turn_index": 3,
           "hunger": 4,
           "thirst": 7,
           "fatigue": 4,
@@ -3975,7 +3982,7 @@
           "source_present": true
         },
         {
-          "turn_index": 3,
+          "turn_index": 4,
           "hunger": 5,
           "thirst": 9,
           "fatigue": 5,
@@ -3990,7 +3997,7 @@
           "source_present": true
         },
         {
-          "turn_index": 4,
+          "turn_index": 5,
           "hunger": 6,
           "thirst": 11,
           "fatigue": 6,
@@ -4005,7 +4012,7 @@
           "source_present": true
         },
         {
-          "turn_index": 5,
+          "turn_index": 6,
           "hunger": 7,
           "thirst": 13,
           "fatigue": 7,
@@ -4020,7 +4027,7 @@
           "source_present": true
         },
         {
-          "turn_index": 6,
+          "turn_index": 7,
           "hunger": 8,
           "thirst": 15,
           "fatigue": 8,
@@ -4035,7 +4042,7 @@
           "source_present": true
         },
         {
-          "turn_index": 7,
+          "turn_index": 8,
           "hunger": 9,
           "thirst": 17,
           "fatigue": 9,
@@ -4050,7 +4057,7 @@
           "source_present": true
         },
         {
-          "turn_index": 8,
+          "turn_index": 9,
           "hunger": 10,
           "thirst": 19,
           "fatigue": 10,
@@ -4065,7 +4072,7 @@
           "source_present": true
         },
         {
-          "turn_index": 9,
+          "turn_index": 10,
           "hunger": 11,
           "thirst": 21,
           "fatigue": 11,
@@ -4080,7 +4087,7 @@
           "source_present": true
         },
         {
-          "turn_index": 10,
+          "turn_index": 11,
           "hunger": 12,
           "thirst": 23,
           "fatigue": 12,
@@ -4095,7 +4102,7 @@
           "source_present": true
         },
         {
-          "turn_index": 11,
+          "turn_index": 12,
           "hunger": 13,
           "thirst": 25,
           "fatigue": 13,
@@ -4110,7 +4117,7 @@
           "source_present": true
         },
         {
-          "turn_index": 12,
+          "turn_index": 13,
           "hunger": 14,
           "thirst": 27,
           "fatigue": 14,
@@ -4125,25 +4132,10 @@
           "source_present": true
         },
         {
-          "turn_index": 13,
+          "turn_index": 14,
           "hunger": 15,
           "thirst": 29,
           "fatigue": 15,
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1,
-          "warning_count": 0,
-          "warnings": [],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "source_present": true
-        },
-        {
-          "turn_index": 14,
-          "hunger": 16,
-          "thirst": 31,
-          "fatigue": 16,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
@@ -4171,6 +4163,21 @@
         },
         {
           "turn_index": 16,
+          "hunger": 16,
+          "thirst": 31,
+          "fatigue": 16,
+          "hunger_delta": 1,
+          "thirst_delta": 2,
+          "fatigue_delta": 1,
+          "warning_count": 0,
+          "warnings": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "source_present": true
+        },
+        {
+          "turn_index": 17,
           "hunger": 17,
           "thirst": 33,
           "fatigue": 17,
@@ -4185,7 +4192,7 @@
           "source_present": true
         },
         {
-          "turn_index": 17,
+          "turn_index": 18,
           "hunger": 18,
           "thirst": 35,
           "fatigue": 18,
@@ -4200,7 +4207,7 @@
           "source_present": true
         },
         {
-          "turn_index": 18,
+          "turn_index": 19,
           "hunger": 19,
           "thirst": 37,
           "fatigue": 19,
@@ -4215,7 +4222,7 @@
           "source_present": true
         },
         {
-          "turn_index": 19,
+          "turn_index": 20,
           "hunger": 20,
           "thirst": 39,
           "fatigue": 20,
@@ -4230,7 +4237,7 @@
           "source_present": true
         },
         {
-          "turn_index": 20,
+          "turn_index": 21,
           "hunger": 21,
           "thirst": 41,
           "fatigue": 21,
@@ -4245,7 +4252,7 @@
           "source_present": true
         },
         {
-          "turn_index": 21,
+          "turn_index": 22,
           "hunger": 22,
           "thirst": 43,
           "fatigue": 22,
@@ -4260,7 +4267,7 @@
           "source_present": true
         },
         {
-          "turn_index": 22,
+          "turn_index": 23,
           "hunger": 23,
           "thirst": 45,
           "fatigue": 23,
@@ -4275,7 +4282,7 @@
           "source_present": true
         },
         {
-          "turn_index": 23,
+          "turn_index": 24,
           "hunger": 24,
           "thirst": 47,
           "fatigue": 24,
@@ -4290,7 +4297,7 @@
           "source_present": true
         },
         {
-          "turn_index": 24,
+          "turn_index": 25,
           "hunger": 25,
           "thirst": 49,
           "fatigue": 25,
@@ -4305,7 +4312,7 @@
           "source_present": true
         },
         {
-          "turn_index": 25,
+          "turn_index": 26,
           "hunger": 26,
           "thirst": 51,
           "fatigue": 26,
@@ -4320,7 +4327,7 @@
           "source_present": true
         },
         {
-          "turn_index": 26,
+          "turn_index": 27,
           "hunger": 27,
           "thirst": 53,
           "fatigue": 27,
@@ -4335,7 +4342,7 @@
           "source_present": true
         },
         {
-          "turn_index": 27,
+          "turn_index": 28,
           "hunger": 28,
           "thirst": 55,
           "fatigue": 28,
@@ -4350,7 +4357,7 @@
           "source_present": true
         },
         {
-          "turn_index": 28,
+          "turn_index": 29,
           "hunger": 29,
           "thirst": 57,
           "fatigue": 29,
@@ -4365,7 +4372,7 @@
           "source_present": true
         },
         {
-          "turn_index": 29,
+          "turn_index": 30,
           "hunger": 30,
           "thirst": 59,
           "fatigue": 30,
@@ -4380,7 +4387,7 @@
           "source_present": true
         },
         {
-          "turn_index": 30,
+          "turn_index": 31,
           "hunger": 31,
           "thirst": 61,
           "fatigue": 31,
@@ -4395,7 +4402,7 @@
           "source_present": true
         },
         {
-          "turn_index": 31,
+          "turn_index": 32,
           "hunger": 32,
           "thirst": 63,
           "fatigue": 32,
@@ -4410,7 +4417,7 @@
           "source_present": true
         },
         {
-          "turn_index": 32,
+          "turn_index": 33,
           "hunger": 33,
           "thirst": 65,
           "fatigue": 33,
@@ -4425,7 +4432,7 @@
           "source_present": true
         },
         {
-          "turn_index": 33,
+          "turn_index": 34,
           "hunger": 34,
           "thirst": 67,
           "fatigue": 34,
@@ -4440,7 +4447,7 @@
           "source_present": true
         },
         {
-          "turn_index": 34,
+          "turn_index": 35,
           "hunger": 35,
           "thirst": 69,
           "fatigue": 35,
@@ -4455,7 +4462,7 @@
           "source_present": true
         },
         {
-          "turn_index": 35,
+          "turn_index": 36,
           "hunger": 36,
           "thirst": 71,
           "fatigue": 36,
@@ -4472,7 +4479,7 @@
           "source_present": true
         },
         {
-          "turn_index": 36,
+          "turn_index": 37,
           "hunger": 37,
           "thirst": 73,
           "fatigue": 37,
@@ -4489,7 +4496,7 @@
           "source_present": true
         },
         {
-          "turn_index": 37,
+          "turn_index": 38,
           "hunger": 38,
           "thirst": 75,
           "fatigue": 38,
@@ -4506,7 +4513,7 @@
           "source_present": true
         },
         {
-          "turn_index": 38,
+          "turn_index": 39,
           "hunger": 39,
           "thirst": 77,
           "fatigue": 39,
@@ -4523,7 +4530,7 @@
           "source_present": true
         },
         {
-          "turn_index": 39,
+          "turn_index": 40,
           "hunger": 40,
           "thirst": 79,
           "fatigue": 40,
@@ -4540,7 +4547,7 @@
           "source_present": true
         },
         {
-          "turn_index": 40,
+          "turn_index": 41,
           "hunger": 41,
           "thirst": 81,
           "fatigue": 41,
@@ -4557,7 +4564,7 @@
           "source_present": true
         },
         {
-          "turn_index": 41,
+          "turn_index": 42,
           "hunger": 42,
           "thirst": 83,
           "fatigue": 42,
@@ -4574,7 +4581,7 @@
           "source_present": true
         },
         {
-          "turn_index": 42,
+          "turn_index": 43,
           "hunger": 43,
           "thirst": 85,
           "fatigue": 43,
@@ -4591,7 +4598,7 @@
           "source_present": true
         },
         {
-          "turn_index": 43,
+          "turn_index": 44,
           "hunger": 44,
           "thirst": 87,
           "fatigue": 44,
@@ -4608,7 +4615,7 @@
           "source_present": true
         },
         {
-          "turn_index": 44,
+          "turn_index": 45,
           "hunger": 45,
           "thirst": 89,
           "fatigue": 45,
@@ -4625,7 +4632,7 @@
           "source_present": true
         },
         {
-          "turn_index": 45,
+          "turn_index": 46,
           "hunger": 46,
           "thirst": 91,
           "fatigue": 46,
@@ -4642,27 +4649,10 @@
           "source_present": true
         },
         {
-          "turn_index": 46,
+          "turn_index": 47,
           "hunger": 47,
           "thirst": 93,
           "fatigue": 47,
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "source_present": true
-        },
-        {
-          "turn_index": 47,
-          "hunger": 48,
-          "thirst": 95,
-          "fatigue": 48,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
@@ -4707,6 +4697,23 @@
         },
         {
           "turn_index": 50,
+          "hunger": 48,
+          "thirst": 95,
+          "fatigue": 48,
+          "hunger_delta": 1,
+          "thirst_delta": 2,
+          "fatigue_delta": 1,
+          "warning_count": 1,
+          "warnings": [
+            "thirst_high"
+          ],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "source_present": true
+        },
+        {
+          "turn_index": 51,
           "hunger": 49,
           "thirst": 97,
           "fatigue": 49,
@@ -4723,7 +4730,7 @@
           "source_present": true
         },
         {
-          "turn_index": 51,
+          "turn_index": 52,
           "hunger": 50,
           "thirst": 99,
           "fatigue": 50,
@@ -4740,7 +4747,7 @@
           "source_present": true
         },
         {
-          "turn_index": 52,
+          "turn_index": 53,
           "hunger": 51,
           "thirst": 100,
           "fatigue": 51,
@@ -4757,7 +4764,7 @@
           "source_present": true
         },
         {
-          "turn_index": 53,
+          "turn_index": 54,
           "hunger": 52,
           "thirst": 100,
           "fatigue": 52,
@@ -4774,7 +4781,7 @@
           "source_present": true
         },
         {
-          "turn_index": 54,
+          "turn_index": 55,
           "hunger": 53,
           "thirst": 100,
           "fatigue": 53,
@@ -4791,7 +4798,7 @@
           "source_present": true
         },
         {
-          "turn_index": 55,
+          "turn_index": 56,
           "hunger": 54,
           "thirst": 100,
           "fatigue": 54,
@@ -4808,7 +4815,7 @@
           "source_present": true
         },
         {
-          "turn_index": 56,
+          "turn_index": 57,
           "hunger": 55,
           "thirst": 100,
           "fatigue": 55,
@@ -4825,7 +4832,7 @@
           "source_present": true
         },
         {
-          "turn_index": 57,
+          "turn_index": 58,
           "hunger": 56,
           "thirst": 100,
           "fatigue": 56,
@@ -4842,7 +4849,7 @@
           "source_present": true
         },
         {
-          "turn_index": 58,
+          "turn_index": 59,
           "hunger": 57,
           "thirst": 100,
           "fatigue": 57,
@@ -4859,7 +4866,7 @@
           "source_present": true
         },
         {
-          "turn_index": 59,
+          "turn_index": 60,
           "hunger": 58,
           "thirst": 100,
           "fatigue": 58,
@@ -4876,7 +4883,7 @@
           "source_present": true
         },
         {
-          "turn_index": 60,
+          "turn_index": 61,
           "hunger": 59,
           "thirst": 100,
           "fatigue": 59,
@@ -4893,7 +4900,7 @@
           "source_present": true
         },
         {
-          "turn_index": 61,
+          "turn_index": 62,
           "hunger": 60,
           "thirst": 100,
           "fatigue": 60,
@@ -4910,7 +4917,7 @@
           "source_present": true
         },
         {
-          "turn_index": 62,
+          "turn_index": 63,
           "hunger": 61,
           "thirst": 100,
           "fatigue": 61,
@@ -4927,7 +4934,7 @@
           "source_present": true
         },
         {
-          "turn_index": 63,
+          "turn_index": 64,
           "hunger": 62,
           "thirst": 100,
           "fatigue": 62,
@@ -4944,7 +4951,7 @@
           "source_present": true
         },
         {
-          "turn_index": 64,
+          "turn_index": 65,
           "hunger": 63,
           "thirst": 100,
           "fatigue": 63,
@@ -4961,7 +4968,7 @@
           "source_present": true
         },
         {
-          "turn_index": 65,
+          "turn_index": 66,
           "hunger": 64,
           "thirst": 100,
           "fatigue": 64,
@@ -4978,7 +4985,7 @@
           "source_present": true
         },
         {
-          "turn_index": 66,
+          "turn_index": 67,
           "hunger": 65,
           "thirst": 100,
           "fatigue": 65,
@@ -4995,7 +5002,7 @@
           "source_present": true
         },
         {
-          "turn_index": 67,
+          "turn_index": 68,
           "hunger": 66,
           "thirst": 100,
           "fatigue": 66,
@@ -5012,7 +5019,7 @@
           "source_present": true
         },
         {
-          "turn_index": 68,
+          "turn_index": 69,
           "hunger": 67,
           "thirst": 100,
           "fatigue": 67,
@@ -5029,7 +5036,7 @@
           "source_present": true
         },
         {
-          "turn_index": 69,
+          "turn_index": 70,
           "hunger": 68,
           "thirst": 100,
           "fatigue": 68,
@@ -5046,7 +5053,7 @@
           "source_present": true
         },
         {
-          "turn_index": 70,
+          "turn_index": 71,
           "hunger": 69,
           "thirst": 100,
           "fatigue": 69,
@@ -5063,7 +5070,7 @@
           "source_present": true
         },
         {
-          "turn_index": 71,
+          "turn_index": 72,
           "hunger": 70,
           "thirst": 100,
           "fatigue": 70,
@@ -5082,7 +5089,7 @@
           "source_present": true
         },
         {
-          "turn_index": 72,
+          "turn_index": 73,
           "hunger": 71,
           "thirst": 100,
           "fatigue": 71,
@@ -5101,7 +5108,7 @@
           "source_present": true
         },
         {
-          "turn_index": 73,
+          "turn_index": 74,
           "hunger": 72,
           "thirst": 100,
           "fatigue": 72,
@@ -5120,7 +5127,7 @@
           "source_present": true
         },
         {
-          "turn_index": 74,
+          "turn_index": 75,
           "hunger": 73,
           "thirst": 100,
           "fatigue": 73,
@@ -5139,7 +5146,7 @@
           "source_present": true
         },
         {
-          "turn_index": 75,
+          "turn_index": 76,
           "hunger": 74,
           "thirst": 100,
           "fatigue": 74,
@@ -5158,7 +5165,7 @@
           "source_present": true
         },
         {
-          "turn_index": 76,
+          "turn_index": 77,
           "hunger": 75,
           "thirst": 100,
           "fatigue": 75,
@@ -5177,7 +5184,7 @@
           "source_present": true
         },
         {
-          "turn_index": 77,
+          "turn_index": 78,
           "hunger": 76,
           "thirst": 100,
           "fatigue": 76,
@@ -5196,7 +5203,7 @@
           "source_present": true
         },
         {
-          "turn_index": 78,
+          "turn_index": 79,
           "hunger": 77,
           "thirst": 100,
           "fatigue": 77,
@@ -5215,7 +5222,7 @@
           "source_present": true
         },
         {
-          "turn_index": 79,
+          "turn_index": 80,
           "hunger": 78,
           "thirst": 100,
           "fatigue": 78,
@@ -5234,7 +5241,7 @@
           "source_present": true
         },
         {
-          "turn_index": 80,
+          "turn_index": 81,
           "hunger": 79,
           "thirst": 100,
           "fatigue": 79,
@@ -5253,7 +5260,7 @@
           "source_present": true
         },
         {
-          "turn_index": 81,
+          "turn_index": 82,
           "hunger": 80,
           "thirst": 100,
           "fatigue": 80,
@@ -5272,7 +5279,7 @@
           "source_present": true
         },
         {
-          "turn_index": 82,
+          "turn_index": 83,
           "hunger": 81,
           "thirst": 100,
           "fatigue": 81,
@@ -5291,7 +5298,7 @@
           "source_present": true
         },
         {
-          "turn_index": 83,
+          "turn_index": 84,
           "hunger": 82,
           "thirst": 100,
           "fatigue": 82,
@@ -5310,7 +5317,7 @@
           "source_present": true
         },
         {
-          "turn_index": 84,
+          "turn_index": 85,
           "hunger": 83,
           "thirst": 100,
           "fatigue": 83,
@@ -5329,7 +5336,7 @@
           "source_present": true
         },
         {
-          "turn_index": 85,
+          "turn_index": 86,
           "hunger": 84,
           "thirst": 100,
           "fatigue": 84,
@@ -5348,7 +5355,7 @@
           "source_present": true
         },
         {
-          "turn_index": 86,
+          "turn_index": 87,
           "hunger": 85,
           "thirst": 100,
           "fatigue": 85,
@@ -5367,7 +5374,7 @@
           "source_present": true
         },
         {
-          "turn_index": 87,
+          "turn_index": 88,
           "hunger": 86,
           "thirst": 100,
           "fatigue": 86,
@@ -5386,7 +5393,7 @@
           "source_present": true
         },
         {
-          "turn_index": 88,
+          "turn_index": 89,
           "hunger": 87,
           "thirst": 100,
           "fatigue": 87,
@@ -5405,7 +5412,7 @@
           "source_present": true
         },
         {
-          "turn_index": 89,
+          "turn_index": 90,
           "hunger": 88,
           "thirst": 100,
           "fatigue": 88,
@@ -5424,7 +5431,7 @@
           "source_present": true
         },
         {
-          "turn_index": 90,
+          "turn_index": 91,
           "hunger": 89,
           "thirst": 100,
           "fatigue": 89,
@@ -5443,7 +5450,7 @@
           "source_present": true
         },
         {
-          "turn_index": 91,
+          "turn_index": 92,
           "hunger": 90,
           "thirst": 100,
           "fatigue": 90,
@@ -5462,7 +5469,7 @@
           "source_present": true
         },
         {
-          "turn_index": 92,
+          "turn_index": 93,
           "hunger": 91,
           "thirst": 100,
           "fatigue": 91,
@@ -5481,7 +5488,7 @@
           "source_present": true
         },
         {
-          "turn_index": 93,
+          "turn_index": 94,
           "hunger": 92,
           "thirst": 100,
           "fatigue": 92,
@@ -5500,7 +5507,7 @@
           "source_present": true
         },
         {
-          "turn_index": 94,
+          "turn_index": 95,
           "hunger": 93,
           "thirst": 100,
           "fatigue": 93,
@@ -5519,7 +5526,7 @@
           "source_present": true
         },
         {
-          "turn_index": 95,
+          "turn_index": 96,
           "hunger": 94,
           "thirst": 100,
           "fatigue": 94,
@@ -5538,7 +5545,7 @@
           "source_present": true
         },
         {
-          "turn_index": 96,
+          "turn_index": 97,
           "hunger": 95,
           "thirst": 100,
           "fatigue": 95,
@@ -5557,7 +5564,7 @@
           "source_present": true
         },
         {
-          "turn_index": 97,
+          "turn_index": 98,
           "hunger": 96,
           "thirst": 100,
           "fatigue": 96,
@@ -5576,7 +5583,7 @@
           "source_present": true
         },
         {
-          "turn_index": 98,
+          "turn_index": 99,
           "hunger": 97,
           "thirst": 100,
           "fatigue": 97,
@@ -5595,29 +5602,10 @@
           "source_present": true
         },
         {
-          "turn_index": 99,
+          "turn_index": 100,
           "hunger": 98,
           "thirst": 100,
           "fatigue": 98,
-          "hunger_delta": 1,
-          "thirst_delta": 0,
-          "fatigue_delta": 1,
-          "warning_count": 3,
-          "warnings": [
-            "fatigue_high",
-            "hunger_high",
-            "thirst_high"
-          ],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "source_present": true
-        },
-        {
-          "turn_index": 100,
-          "hunger": 99,
-          "thirst": 100,
-          "fatigue": 99,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
@@ -5635,11 +5623,11 @@
       ],
       "trend_row_count": 100,
       "pressure_turn_count": 97,
-      "survival_warning_count": 124,
+      "survival_warning_count": 121,
       "warning_counts_by_type": {
-        "thirst_high": 64,
-        "fatigue_high": 30,
-        "hunger_high": 30
+        "thirst_high": 63,
+        "fatigue_high": 29,
+        "hunger_high": 29
       },
       "relief_action_count": 0,
       "relief_counts_by_kind": {},
@@ -5648,19 +5636,19 @@
       "inventory_consumed_summary": [],
       "service_relief_purchases_summary": [],
       "net_resource_deltas": {
-        "hunger_delta": 97,
+        "hunger_delta": 96,
         "thirst_delta": 97,
-        "fatigue_delta": 97
+        "fatigue_delta": 96
       },
       "max_needs": {
-        "hunger": 99,
+        "hunger": 98,
         "thirst": 100,
-        "fatigue": 99
+        "fatigue": 98
       },
       "final_needs": {
-        "hunger": 99,
+        "hunger": 98,
         "thirst": 100,
-        "fatigue": 99
+        "fatigue": 98
       },
       "source_coverage_summary": {
         "format_version": "n1251_survival_metric_source_summary_v1",
@@ -5673,9 +5661,9 @@
           "survival_action_rows": 0,
           "survival_suggestion_rows": 0,
           "relief_applied_rows": 0,
-          "warning_rows": 64,
+          "warning_rows": 63,
           "nonzero_need_rows": 97,
-          "nonzero_delta_rows": 97
+          "nonzero_delta_rows": 96
         },
         "source_coverage_rate": 0.97,
         "example_missing_source_rows": [
@@ -5712,9 +5700,9 @@
           "survival_action_rows": 0,
           "survival_suggestion_rows": 0,
           "relief_applied_rows": 0,
-          "warning_rows": 64,
+          "warning_rows": 63,
           "nonzero_need_rows": 97,
-          "nonzero_delta_rows": 97
+          "nonzero_delta_rows": 96
         },
         "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
       },
@@ -5728,6 +5716,21 @@
     "survival-pressure-trend-rows.json": [
       {
         "turn_index": 1,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 2,
         "hunger": 3,
         "thirst": 5,
         "fatigue": 3,
@@ -5742,7 +5745,7 @@
         "source_present": true
       },
       {
-        "turn_index": 2,
+        "turn_index": 3,
         "hunger": 4,
         "thirst": 7,
         "fatigue": 4,
@@ -5757,7 +5760,7 @@
         "source_present": true
       },
       {
-        "turn_index": 3,
+        "turn_index": 4,
         "hunger": 5,
         "thirst": 9,
         "fatigue": 5,
@@ -5772,7 +5775,7 @@
         "source_present": true
       },
       {
-        "turn_index": 4,
+        "turn_index": 5,
         "hunger": 6,
         "thirst": 11,
         "fatigue": 6,
@@ -5787,7 +5790,7 @@
         "source_present": true
       },
       {
-        "turn_index": 5,
+        "turn_index": 6,
         "hunger": 7,
         "thirst": 13,
         "fatigue": 7,
@@ -5802,7 +5805,7 @@
         "source_present": true
       },
       {
-        "turn_index": 6,
+        "turn_index": 7,
         "hunger": 8,
         "thirst": 15,
         "fatigue": 8,
@@ -5817,7 +5820,7 @@
         "source_present": true
       },
       {
-        "turn_index": 7,
+        "turn_index": 8,
         "hunger": 9,
         "thirst": 17,
         "fatigue": 9,
@@ -5832,7 +5835,7 @@
         "source_present": true
       },
       {
-        "turn_index": 8,
+        "turn_index": 9,
         "hunger": 10,
         "thirst": 19,
         "fatigue": 10,
@@ -5847,7 +5850,7 @@
         "source_present": true
       },
       {
-        "turn_index": 9,
+        "turn_index": 10,
         "hunger": 11,
         "thirst": 21,
         "fatigue": 11,
@@ -5862,7 +5865,7 @@
         "source_present": true
       },
       {
-        "turn_index": 10,
+        "turn_index": 11,
         "hunger": 12,
         "thirst": 23,
         "fatigue": 12,
@@ -5877,7 +5880,7 @@
         "source_present": true
       },
       {
-        "turn_index": 11,
+        "turn_index": 12,
         "hunger": 13,
         "thirst": 25,
         "fatigue": 13,
@@ -5892,7 +5895,7 @@
         "source_present": true
       },
       {
-        "turn_index": 12,
+        "turn_index": 13,
         "hunger": 14,
         "thirst": 27,
         "fatigue": 14,
@@ -5907,25 +5910,10 @@
         "source_present": true
       },
       {
-        "turn_index": 13,
+        "turn_index": 14,
         "hunger": 15,
         "thirst": 29,
         "fatigue": 15,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 0,
-        "warnings": [],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 14,
-        "hunger": 16,
-        "thirst": 31,
-        "fatigue": 16,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -5953,6 +5941,21 @@
       },
       {
         "turn_index": 16,
+        "hunger": 16,
+        "thirst": 31,
+        "fatigue": 16,
+        "hunger_delta": 1,
+        "thirst_delta": 2,
+        "fatigue_delta": 1,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 17,
         "hunger": 17,
         "thirst": 33,
         "fatigue": 17,
@@ -5967,7 +5970,7 @@
         "source_present": true
       },
       {
-        "turn_index": 17,
+        "turn_index": 18,
         "hunger": 18,
         "thirst": 35,
         "fatigue": 18,
@@ -5982,7 +5985,7 @@
         "source_present": true
       },
       {
-        "turn_index": 18,
+        "turn_index": 19,
         "hunger": 19,
         "thirst": 37,
         "fatigue": 19,
@@ -5997,7 +6000,7 @@
         "source_present": true
       },
       {
-        "turn_index": 19,
+        "turn_index": 20,
         "hunger": 20,
         "thirst": 39,
         "fatigue": 20,
@@ -6012,7 +6015,7 @@
         "source_present": true
       },
       {
-        "turn_index": 20,
+        "turn_index": 21,
         "hunger": 21,
         "thirst": 41,
         "fatigue": 21,
@@ -6027,7 +6030,7 @@
         "source_present": true
       },
       {
-        "turn_index": 21,
+        "turn_index": 22,
         "hunger": 22,
         "thirst": 43,
         "fatigue": 22,
@@ -6042,7 +6045,7 @@
         "source_present": true
       },
       {
-        "turn_index": 22,
+        "turn_index": 23,
         "hunger": 23,
         "thirst": 45,
         "fatigue": 23,
@@ -6057,7 +6060,7 @@
         "source_present": true
       },
       {
-        "turn_index": 23,
+        "turn_index": 24,
         "hunger": 24,
         "thirst": 47,
         "fatigue": 24,
@@ -6072,7 +6075,7 @@
         "source_present": true
       },
       {
-        "turn_index": 24,
+        "turn_index": 25,
         "hunger": 25,
         "thirst": 49,
         "fatigue": 25,
@@ -6087,7 +6090,7 @@
         "source_present": true
       },
       {
-        "turn_index": 25,
+        "turn_index": 26,
         "hunger": 26,
         "thirst": 51,
         "fatigue": 26,
@@ -6102,7 +6105,7 @@
         "source_present": true
       },
       {
-        "turn_index": 26,
+        "turn_index": 27,
         "hunger": 27,
         "thirst": 53,
         "fatigue": 27,
@@ -6117,7 +6120,7 @@
         "source_present": true
       },
       {
-        "turn_index": 27,
+        "turn_index": 28,
         "hunger": 28,
         "thirst": 55,
         "fatigue": 28,
@@ -6132,7 +6135,7 @@
         "source_present": true
       },
       {
-        "turn_index": 28,
+        "turn_index": 29,
         "hunger": 29,
         "thirst": 57,
         "fatigue": 29,
@@ -6147,7 +6150,7 @@
         "source_present": true
       },
       {
-        "turn_index": 29,
+        "turn_index": 30,
         "hunger": 30,
         "thirst": 59,
         "fatigue": 30,
@@ -6162,7 +6165,7 @@
         "source_present": true
       },
       {
-        "turn_index": 30,
+        "turn_index": 31,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 31,
@@ -6177,7 +6180,7 @@
         "source_present": true
       },
       {
-        "turn_index": 31,
+        "turn_index": 32,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 32,
@@ -6192,7 +6195,7 @@
         "source_present": true
       },
       {
-        "turn_index": 32,
+        "turn_index": 33,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 33,
@@ -6207,7 +6210,7 @@
         "source_present": true
       },
       {
-        "turn_index": 33,
+        "turn_index": 34,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 34,
@@ -6222,7 +6225,7 @@
         "source_present": true
       },
       {
-        "turn_index": 34,
+        "turn_index": 35,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 35,
@@ -6237,7 +6240,7 @@
         "source_present": true
       },
       {
-        "turn_index": 35,
+        "turn_index": 36,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 36,
@@ -6254,7 +6257,7 @@
         "source_present": true
       },
       {
-        "turn_index": 36,
+        "turn_index": 37,
         "hunger": 37,
         "thirst": 73,
         "fatigue": 37,
@@ -6271,7 +6274,7 @@
         "source_present": true
       },
       {
-        "turn_index": 37,
+        "turn_index": 38,
         "hunger": 38,
         "thirst": 75,
         "fatigue": 38,
@@ -6288,7 +6291,7 @@
         "source_present": true
       },
       {
-        "turn_index": 38,
+        "turn_index": 39,
         "hunger": 39,
         "thirst": 77,
         "fatigue": 39,
@@ -6305,7 +6308,7 @@
         "source_present": true
       },
       {
-        "turn_index": 39,
+        "turn_index": 40,
         "hunger": 40,
         "thirst": 79,
         "fatigue": 40,
@@ -6322,7 +6325,7 @@
         "source_present": true
       },
       {
-        "turn_index": 40,
+        "turn_index": 41,
         "hunger": 41,
         "thirst": 81,
         "fatigue": 41,
@@ -6339,7 +6342,7 @@
         "source_present": true
       },
       {
-        "turn_index": 41,
+        "turn_index": 42,
         "hunger": 42,
         "thirst": 83,
         "fatigue": 42,
@@ -6356,7 +6359,7 @@
         "source_present": true
       },
       {
-        "turn_index": 42,
+        "turn_index": 43,
         "hunger": 43,
         "thirst": 85,
         "fatigue": 43,
@@ -6373,7 +6376,7 @@
         "source_present": true
       },
       {
-        "turn_index": 43,
+        "turn_index": 44,
         "hunger": 44,
         "thirst": 87,
         "fatigue": 44,
@@ -6390,7 +6393,7 @@
         "source_present": true
       },
       {
-        "turn_index": 44,
+        "turn_index": 45,
         "hunger": 45,
         "thirst": 89,
         "fatigue": 45,
@@ -6407,7 +6410,7 @@
         "source_present": true
       },
       {
-        "turn_index": 45,
+        "turn_index": 46,
         "hunger": 46,
         "thirst": 91,
         "fatigue": 46,
@@ -6424,27 +6427,10 @@
         "source_present": true
       },
       {
-        "turn_index": 46,
+        "turn_index": 47,
         "hunger": 47,
         "thirst": 93,
         "fatigue": 47,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 47,
-        "hunger": 48,
-        "thirst": 95,
-        "fatigue": 48,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -6489,6 +6475,23 @@
       },
       {
         "turn_index": 50,
+        "hunger": 48,
+        "thirst": 95,
+        "fatigue": 48,
+        "hunger_delta": 1,
+        "thirst_delta": 2,
+        "fatigue_delta": 1,
+        "warning_count": 1,
+        "warnings": [
+          "thirst_high"
+        ],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 51,
         "hunger": 49,
         "thirst": 97,
         "fatigue": 49,
@@ -6505,7 +6508,7 @@
         "source_present": true
       },
       {
-        "turn_index": 51,
+        "turn_index": 52,
         "hunger": 50,
         "thirst": 99,
         "fatigue": 50,
@@ -6522,7 +6525,7 @@
         "source_present": true
       },
       {
-        "turn_index": 52,
+        "turn_index": 53,
         "hunger": 51,
         "thirst": 100,
         "fatigue": 51,
@@ -6539,7 +6542,7 @@
         "source_present": true
       },
       {
-        "turn_index": 53,
+        "turn_index": 54,
         "hunger": 52,
         "thirst": 100,
         "fatigue": 52,
@@ -6556,7 +6559,7 @@
         "source_present": true
       },
       {
-        "turn_index": 54,
+        "turn_index": 55,
         "hunger": 53,
         "thirst": 100,
         "fatigue": 53,
@@ -6573,7 +6576,7 @@
         "source_present": true
       },
       {
-        "turn_index": 55,
+        "turn_index": 56,
         "hunger": 54,
         "thirst": 100,
         "fatigue": 54,
@@ -6590,7 +6593,7 @@
         "source_present": true
       },
       {
-        "turn_index": 56,
+        "turn_index": 57,
         "hunger": 55,
         "thirst": 100,
         "fatigue": 55,
@@ -6607,7 +6610,7 @@
         "source_present": true
       },
       {
-        "turn_index": 57,
+        "turn_index": 58,
         "hunger": 56,
         "thirst": 100,
         "fatigue": 56,
@@ -6624,7 +6627,7 @@
         "source_present": true
       },
       {
-        "turn_index": 58,
+        "turn_index": 59,
         "hunger": 57,
         "thirst": 100,
         "fatigue": 57,
@@ -6641,7 +6644,7 @@
         "source_present": true
       },
       {
-        "turn_index": 59,
+        "turn_index": 60,
         "hunger": 58,
         "thirst": 100,
         "fatigue": 58,
@@ -6658,7 +6661,7 @@
         "source_present": true
       },
       {
-        "turn_index": 60,
+        "turn_index": 61,
         "hunger": 59,
         "thirst": 100,
         "fatigue": 59,
@@ -6675,7 +6678,7 @@
         "source_present": true
       },
       {
-        "turn_index": 61,
+        "turn_index": 62,
         "hunger": 60,
         "thirst": 100,
         "fatigue": 60,
@@ -6692,7 +6695,7 @@
         "source_present": true
       },
       {
-        "turn_index": 62,
+        "turn_index": 63,
         "hunger": 61,
         "thirst": 100,
         "fatigue": 61,
@@ -6709,7 +6712,7 @@
         "source_present": true
       },
       {
-        "turn_index": 63,
+        "turn_index": 64,
         "hunger": 62,
         "thirst": 100,
         "fatigue": 62,
@@ -6726,7 +6729,7 @@
         "source_present": true
       },
       {
-        "turn_index": 64,
+        "turn_index": 65,
         "hunger": 63,
         "thirst": 100,
         "fatigue": 63,
@@ -6743,7 +6746,7 @@
         "source_present": true
       },
       {
-        "turn_index": 65,
+        "turn_index": 66,
         "hunger": 64,
         "thirst": 100,
         "fatigue": 64,
@@ -6760,7 +6763,7 @@
         "source_present": true
       },
       {
-        "turn_index": 66,
+        "turn_index": 67,
         "hunger": 65,
         "thirst": 100,
         "fatigue": 65,
@@ -6777,7 +6780,7 @@
         "source_present": true
       },
       {
-        "turn_index": 67,
+        "turn_index": 68,
         "hunger": 66,
         "thirst": 100,
         "fatigue": 66,
@@ -6794,7 +6797,7 @@
         "source_present": true
       },
       {
-        "turn_index": 68,
+        "turn_index": 69,
         "hunger": 67,
         "thirst": 100,
         "fatigue": 67,
@@ -6811,7 +6814,7 @@
         "source_present": true
       },
       {
-        "turn_index": 69,
+        "turn_index": 70,
         "hunger": 68,
         "thirst": 100,
         "fatigue": 68,
@@ -6828,7 +6831,7 @@
         "source_present": true
       },
       {
-        "turn_index": 70,
+        "turn_index": 71,
         "hunger": 69,
         "thirst": 100,
         "fatigue": 69,
@@ -6845,7 +6848,7 @@
         "source_present": true
       },
       {
-        "turn_index": 71,
+        "turn_index": 72,
         "hunger": 70,
         "thirst": 100,
         "fatigue": 70,
@@ -6864,7 +6867,7 @@
         "source_present": true
       },
       {
-        "turn_index": 72,
+        "turn_index": 73,
         "hunger": 71,
         "thirst": 100,
         "fatigue": 71,
@@ -6883,7 +6886,7 @@
         "source_present": true
       },
       {
-        "turn_index": 73,
+        "turn_index": 74,
         "hunger": 72,
         "thirst": 100,
         "fatigue": 72,
@@ -6902,7 +6905,7 @@
         "source_present": true
       },
       {
-        "turn_index": 74,
+        "turn_index": 75,
         "hunger": 73,
         "thirst": 100,
         "fatigue": 73,
@@ -6921,7 +6924,7 @@
         "source_present": true
       },
       {
-        "turn_index": 75,
+        "turn_index": 76,
         "hunger": 74,
         "thirst": 100,
         "fatigue": 74,
@@ -6940,7 +6943,7 @@
         "source_present": true
       },
       {
-        "turn_index": 76,
+        "turn_index": 77,
         "hunger": 75,
         "thirst": 100,
         "fatigue": 75,
@@ -6959,7 +6962,7 @@
         "source_present": true
       },
       {
-        "turn_index": 77,
+        "turn_index": 78,
         "hunger": 76,
         "thirst": 100,
         "fatigue": 76,
@@ -6978,7 +6981,7 @@
         "source_present": true
       },
       {
-        "turn_index": 78,
+        "turn_index": 79,
         "hunger": 77,
         "thirst": 100,
         "fatigue": 77,
@@ -6997,7 +7000,7 @@
         "source_present": true
       },
       {
-        "turn_index": 79,
+        "turn_index": 80,
         "hunger": 78,
         "thirst": 100,
         "fatigue": 78,
@@ -7016,7 +7019,7 @@
         "source_present": true
       },
       {
-        "turn_index": 80,
+        "turn_index": 81,
         "hunger": 79,
         "thirst": 100,
         "fatigue": 79,
@@ -7035,7 +7038,7 @@
         "source_present": true
       },
       {
-        "turn_index": 81,
+        "turn_index": 82,
         "hunger": 80,
         "thirst": 100,
         "fatigue": 80,
@@ -7054,7 +7057,7 @@
         "source_present": true
       },
       {
-        "turn_index": 82,
+        "turn_index": 83,
         "hunger": 81,
         "thirst": 100,
         "fatigue": 81,
@@ -7073,7 +7076,7 @@
         "source_present": true
       },
       {
-        "turn_index": 83,
+        "turn_index": 84,
         "hunger": 82,
         "thirst": 100,
         "fatigue": 82,
@@ -7092,7 +7095,7 @@
         "source_present": true
       },
       {
-        "turn_index": 84,
+        "turn_index": 85,
         "hunger": 83,
         "thirst": 100,
         "fatigue": 83,
@@ -7111,7 +7114,7 @@
         "source_present": true
       },
       {
-        "turn_index": 85,
+        "turn_index": 86,
         "hunger": 84,
         "thirst": 100,
         "fatigue": 84,
@@ -7130,7 +7133,7 @@
         "source_present": true
       },
       {
-        "turn_index": 86,
+        "turn_index": 87,
         "hunger": 85,
         "thirst": 100,
         "fatigue": 85,
@@ -7149,7 +7152,7 @@
         "source_present": true
       },
       {
-        "turn_index": 87,
+        "turn_index": 88,
         "hunger": 86,
         "thirst": 100,
         "fatigue": 86,
@@ -7168,7 +7171,7 @@
         "source_present": true
       },
       {
-        "turn_index": 88,
+        "turn_index": 89,
         "hunger": 87,
         "thirst": 100,
         "fatigue": 87,
@@ -7187,7 +7190,7 @@
         "source_present": true
       },
       {
-        "turn_index": 89,
+        "turn_index": 90,
         "hunger": 88,
         "thirst": 100,
         "fatigue": 88,
@@ -7206,7 +7209,7 @@
         "source_present": true
       },
       {
-        "turn_index": 90,
+        "turn_index": 91,
         "hunger": 89,
         "thirst": 100,
         "fatigue": 89,
@@ -7225,7 +7228,7 @@
         "source_present": true
       },
       {
-        "turn_index": 91,
+        "turn_index": 92,
         "hunger": 90,
         "thirst": 100,
         "fatigue": 90,
@@ -7244,7 +7247,7 @@
         "source_present": true
       },
       {
-        "turn_index": 92,
+        "turn_index": 93,
         "hunger": 91,
         "thirst": 100,
         "fatigue": 91,
@@ -7263,7 +7266,7 @@
         "source_present": true
       },
       {
-        "turn_index": 93,
+        "turn_index": 94,
         "hunger": 92,
         "thirst": 100,
         "fatigue": 92,
@@ -7282,7 +7285,7 @@
         "source_present": true
       },
       {
-        "turn_index": 94,
+        "turn_index": 95,
         "hunger": 93,
         "thirst": 100,
         "fatigue": 93,
@@ -7301,7 +7304,7 @@
         "source_present": true
       },
       {
-        "turn_index": 95,
+        "turn_index": 96,
         "hunger": 94,
         "thirst": 100,
         "fatigue": 94,
@@ -7320,7 +7323,7 @@
         "source_present": true
       },
       {
-        "turn_index": 96,
+        "turn_index": 97,
         "hunger": 95,
         "thirst": 100,
         "fatigue": 95,
@@ -7339,7 +7342,7 @@
         "source_present": true
       },
       {
-        "turn_index": 97,
+        "turn_index": 98,
         "hunger": 96,
         "thirst": 100,
         "fatigue": 96,
@@ -7358,7 +7361,7 @@
         "source_present": true
       },
       {
-        "turn_index": 98,
+        "turn_index": 99,
         "hunger": 97,
         "thirst": 100,
         "fatigue": 97,
@@ -7377,29 +7380,10 @@
         "source_present": true
       },
       {
-        "turn_index": 99,
+        "turn_index": 100,
         "hunger": 98,
         "thirst": 100,
         "fatigue": 98,
-        "hunger_delta": 1,
-        "thirst_delta": 0,
-        "fatigue_delta": 1,
-        "warning_count": 3,
-        "warnings": [
-          "fatigue_high",
-          "hunger_high",
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 100,
-        "hunger": 99,
-        "thirst": 100,
-        "fatigue": 99,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
@@ -7454,7 +7438,7 @@
       ],
       "turn_count": 100,
       "pressure_turn_count": 97,
-      "survival_warning_count": 124,
+      "survival_warning_count": 121,
       "survival_suggestion_rows": 0,
       "relief_action_count": 0,
       "blocked_relief_count": 0,
@@ -7466,23 +7450,42 @@
         "examples": []
       },
       "net_resource_deltas": {
-        "hunger_delta": 97,
+        "hunger_delta": 96,
         "thirst_delta": 97,
-        "fatigue_delta": 97
+        "fatigue_delta": 96
       },
       "max_needs": {
-        "hunger": 99,
+        "hunger": 98,
         "thirst": 100,
-        "fatigue": 99
+        "fatigue": 98
       },
       "final_needs": {
-        "hunger": 99,
+        "hunger": 98,
         "thirst": 100,
-        "fatigue": 99
+        "fatigue": 98
       },
       "pressure_response_rows": [
         {
           "turn_index": 1,
+          "needs": {
+            "hunger": 2,
+            "thirst": 3,
+            "fatigue": 2
+          },
+          "suggestion_count": 0,
+          "suggestions": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "resource_deltas": {
+            "hunger_delta": 0,
+            "thirst_delta": 0,
+            "fatigue_delta": 0
+          },
+          "inventory_consumed": []
+        },
+        {
+          "turn_index": 2,
           "needs": {
             "hunger": 3,
             "thirst": 5,
@@ -7501,7 +7504,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 2,
+          "turn_index": 3,
           "needs": {
             "hunger": 4,
             "thirst": 7,
@@ -7520,7 +7523,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 3,
+          "turn_index": 4,
           "needs": {
             "hunger": 5,
             "thirst": 9,
@@ -7539,7 +7542,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 4,
+          "turn_index": 5,
           "needs": {
             "hunger": 6,
             "thirst": 11,
@@ -7558,7 +7561,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 5,
+          "turn_index": 6,
           "needs": {
             "hunger": 7,
             "thirst": 13,
@@ -7577,7 +7580,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 6,
+          "turn_index": 7,
           "needs": {
             "hunger": 8,
             "thirst": 15,
@@ -7596,7 +7599,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 7,
+          "turn_index": 8,
           "needs": {
             "hunger": 9,
             "thirst": 17,
@@ -7615,7 +7618,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 8,
+          "turn_index": 9,
           "needs": {
             "hunger": 10,
             "thirst": 19,
@@ -7634,7 +7637,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 9,
+          "turn_index": 10,
           "needs": {
             "hunger": 11,
             "thirst": 21,
@@ -7653,7 +7656,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 10,
+          "turn_index": 11,
           "needs": {
             "hunger": 12,
             "thirst": 23,
@@ -7672,7 +7675,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 11,
+          "turn_index": 12,
           "needs": {
             "hunger": 13,
             "thirst": 25,
@@ -7691,7 +7694,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 12,
+          "turn_index": 13,
           "needs": {
             "hunger": 14,
             "thirst": 27,
@@ -7710,30 +7713,11 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 13,
+          "turn_index": 14,
           "needs": {
             "hunger": 15,
             "thirst": 29,
             "fatigue": 15
-          },
-          "suggestion_count": 0,
-          "suggestions": [],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "resource_deltas": {
-            "hunger_delta": 1,
-            "thirst_delta": 2,
-            "fatigue_delta": 1
-          },
-          "inventory_consumed": []
-        },
-        {
-          "turn_index": 14,
-          "needs": {
-            "hunger": 16,
-            "thirst": 31,
-            "fatigue": 16
           },
           "suggestion_count": 0,
           "suggestions": [],
@@ -7769,6 +7753,25 @@
         {
           "turn_index": 16,
           "needs": {
+            "hunger": 16,
+            "thirst": 31,
+            "fatigue": 16
+          },
+          "suggestion_count": 0,
+          "suggestions": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "resource_deltas": {
+            "hunger_delta": 1,
+            "thirst_delta": 2,
+            "fatigue_delta": 1
+          },
+          "inventory_consumed": []
+        },
+        {
+          "turn_index": 17,
+          "needs": {
             "hunger": 17,
             "thirst": 33,
             "fatigue": 17
@@ -7786,7 +7789,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 17,
+          "turn_index": 18,
           "needs": {
             "hunger": 18,
             "thirst": 35,
@@ -7805,7 +7808,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 18,
+          "turn_index": 19,
           "needs": {
             "hunger": 19,
             "thirst": 37,
@@ -7824,7 +7827,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 19,
+          "turn_index": 20,
           "needs": {
             "hunger": 20,
             "thirst": 39,
@@ -7843,7 +7846,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 20,
+          "turn_index": 21,
           "needs": {
             "hunger": 21,
             "thirst": 41,
@@ -7862,7 +7865,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 21,
+          "turn_index": 22,
           "needs": {
             "hunger": 22,
             "thirst": 43,
@@ -7881,7 +7884,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 22,
+          "turn_index": 23,
           "needs": {
             "hunger": 23,
             "thirst": 45,
@@ -7900,7 +7903,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 23,
+          "turn_index": 24,
           "needs": {
             "hunger": 24,
             "thirst": 47,
@@ -7919,30 +7922,11 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 24,
+          "turn_index": 25,
           "needs": {
             "hunger": 25,
             "thirst": 49,
             "fatigue": 25
-          },
-          "suggestion_count": 0,
-          "suggestions": [],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "resource_deltas": {
-            "hunger_delta": 1,
-            "thirst_delta": 2,
-            "fatigue_delta": 1
-          },
-          "inventory_consumed": []
-        },
-        {
-          "turn_index": 25,
-          "needs": {
-            "hunger": 26,
-            "thirst": 51,
-            "fatigue": 26
           },
           "suggestion_count": 0,
           "suggestions": [],
@@ -7969,9 +7953,9 @@
           "survival_action_rows": 0,
           "survival_suggestion_rows": 0,
           "relief_applied_rows": 0,
-          "warning_rows": 64,
+          "warning_rows": 63,
           "nonzero_need_rows": 97,
-          "nonzero_delta_rows": 97
+          "nonzero_delta_rows": 96
         },
         "source_coverage_rate": 0.97,
         "example_missing_source_rows": [
@@ -8023,6 +8007,25 @@
       {
         "turn_index": 1,
         "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 2,
+        "needs": {
           "hunger": 3,
           "thirst": 5,
           "fatigue": 3
@@ -8040,7 +8043,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 2,
+        "turn_index": 3,
         "needs": {
           "hunger": 4,
           "thirst": 7,
@@ -8059,7 +8062,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 3,
+        "turn_index": 4,
         "needs": {
           "hunger": 5,
           "thirst": 9,
@@ -8078,7 +8081,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 4,
+        "turn_index": 5,
         "needs": {
           "hunger": 6,
           "thirst": 11,
@@ -8097,7 +8100,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 5,
+        "turn_index": 6,
         "needs": {
           "hunger": 7,
           "thirst": 13,
@@ -8116,7 +8119,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 6,
+        "turn_index": 7,
         "needs": {
           "hunger": 8,
           "thirst": 15,
@@ -8135,7 +8138,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 7,
+        "turn_index": 8,
         "needs": {
           "hunger": 9,
           "thirst": 17,
@@ -8154,7 +8157,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 8,
+        "turn_index": 9,
         "needs": {
           "hunger": 10,
           "thirst": 19,
@@ -8173,7 +8176,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 9,
+        "turn_index": 10,
         "needs": {
           "hunger": 11,
           "thirst": 21,
@@ -8192,7 +8195,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 10,
+        "turn_index": 11,
         "needs": {
           "hunger": 12,
           "thirst": 23,
@@ -8211,7 +8214,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 11,
+        "turn_index": 12,
         "needs": {
           "hunger": 13,
           "thirst": 25,
@@ -8230,7 +8233,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 12,
+        "turn_index": 13,
         "needs": {
           "hunger": 14,
           "thirst": 27,
@@ -8249,30 +8252,11 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 13,
+        "turn_index": 14,
         "needs": {
           "hunger": 15,
           "thirst": 29,
           "fatigue": 15
-        },
-        "suggestion_count": 0,
-        "suggestions": [],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "resource_deltas": {
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1
-        },
-        "inventory_consumed": []
-      },
-      {
-        "turn_index": 14,
-        "needs": {
-          "hunger": 16,
-          "thirst": 31,
-          "fatigue": 16
         },
         "suggestion_count": 0,
         "suggestions": [],
@@ -8308,6 +8292,25 @@
       {
         "turn_index": 16,
         "needs": {
+          "hunger": 16,
+          "thirst": 31,
+          "fatigue": 16
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 1,
+          "thirst_delta": 2,
+          "fatigue_delta": 1
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 17,
+        "needs": {
           "hunger": 17,
           "thirst": 33,
           "fatigue": 17
@@ -8325,7 +8328,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 17,
+        "turn_index": 18,
         "needs": {
           "hunger": 18,
           "thirst": 35,
@@ -8344,7 +8347,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 18,
+        "turn_index": 19,
         "needs": {
           "hunger": 19,
           "thirst": 37,
@@ -8363,7 +8366,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 19,
+        "turn_index": 20,
         "needs": {
           "hunger": 20,
           "thirst": 39,
@@ -8382,7 +8385,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 20,
+        "turn_index": 21,
         "needs": {
           "hunger": 21,
           "thirst": 41,
@@ -8401,7 +8404,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 21,
+        "turn_index": 22,
         "needs": {
           "hunger": 22,
           "thirst": 43,
@@ -8420,7 +8423,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 22,
+        "turn_index": 23,
         "needs": {
           "hunger": 23,
           "thirst": 45,
@@ -8439,7 +8442,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 23,
+        "turn_index": 24,
         "needs": {
           "hunger": 24,
           "thirst": 47,
@@ -8458,30 +8461,11 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 24,
+        "turn_index": 25,
         "needs": {
           "hunger": 25,
           "thirst": 49,
           "fatigue": 25
-        },
-        "suggestion_count": 0,
-        "suggestions": [],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "resource_deltas": {
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1
-        },
-        "inventory_consumed": []
-      },
-      {
-        "turn_index": 25,
-        "needs": {
-          "hunger": 26,
-          "thirst": 51,
-          "fatigue": 26
         },
         "suggestion_count": 0,
         "suggestions": [],
@@ -8509,8 +8493,8 @@
       "format_version": "n1243_survival_supply_metrics_v1",
       "food_available_turns": 0,
       "drink_available_turns": 0,
-      "starvation_risk_turns": 15,
-      "dehydration_risk_turns": 57
+      "starvation_risk_turns": 14,
+      "dehydration_risk_turns": 56
     },
     "survival-response-gate.json": {
       "gate": "survival_response_ok",
@@ -8546,9 +8530,9 @@
         "survival_action_rows": 0,
         "survival_suggestion_rows": 0,
         "relief_applied_rows": 0,
-        "warning_rows": 64,
+        "warning_rows": 63,
         "nonzero_need_rows": 97,
-        "nonzero_delta_rows": 97
+        "nonzero_delta_rows": 96
       },
       "source_coverage_rate": 0.97,
       "example_missing_source_rows": [
@@ -8585,9 +8569,9 @@
         "survival_action_rows": 0,
         "survival_suggestion_rows": 0,
         "relief_applied_rows": 0,
-        "warning_rows": 64,
+        "warning_rows": 63,
         "nonzero_need_rows": 97,
-        "nonzero_delta_rows": 97
+        "nonzero_delta_rows": 96
       },
       "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
     }
@@ -8631,7 +8615,7 @@
     ],
     "turn_count": 100,
     "pressure_turn_count": 97,
-    "survival_warning_count": 124,
+    "survival_warning_count": 121,
     "survival_suggestion_rows": 0,
     "relief_action_count": 0,
     "blocked_relief_count": 0,
@@ -8643,23 +8627,42 @@
       "examples": []
     },
     "net_resource_deltas": {
-      "hunger_delta": 97,
+      "hunger_delta": 96,
       "thirst_delta": 97,
-      "fatigue_delta": 97
+      "fatigue_delta": 96
     },
     "max_needs": {
-      "hunger": 99,
+      "hunger": 98,
       "thirst": 100,
-      "fatigue": 99
+      "fatigue": 98
     },
     "final_needs": {
-      "hunger": 99,
+      "hunger": 98,
       "thirst": 100,
-      "fatigue": 99
+      "fatigue": 98
     },
     "pressure_response_rows": [
       {
         "turn_index": 1,
+        "needs": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 2,
         "needs": {
           "hunger": 3,
           "thirst": 5,
@@ -8678,7 +8681,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 2,
+        "turn_index": 3,
         "needs": {
           "hunger": 4,
           "thirst": 7,
@@ -8697,7 +8700,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 3,
+        "turn_index": 4,
         "needs": {
           "hunger": 5,
           "thirst": 9,
@@ -8716,7 +8719,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 4,
+        "turn_index": 5,
         "needs": {
           "hunger": 6,
           "thirst": 11,
@@ -8735,7 +8738,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 5,
+        "turn_index": 6,
         "needs": {
           "hunger": 7,
           "thirst": 13,
@@ -8754,7 +8757,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 6,
+        "turn_index": 7,
         "needs": {
           "hunger": 8,
           "thirst": 15,
@@ -8773,7 +8776,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 7,
+        "turn_index": 8,
         "needs": {
           "hunger": 9,
           "thirst": 17,
@@ -8792,7 +8795,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 8,
+        "turn_index": 9,
         "needs": {
           "hunger": 10,
           "thirst": 19,
@@ -8811,7 +8814,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 9,
+        "turn_index": 10,
         "needs": {
           "hunger": 11,
           "thirst": 21,
@@ -8830,7 +8833,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 10,
+        "turn_index": 11,
         "needs": {
           "hunger": 12,
           "thirst": 23,
@@ -8849,7 +8852,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 11,
+        "turn_index": 12,
         "needs": {
           "hunger": 13,
           "thirst": 25,
@@ -8868,7 +8871,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 12,
+        "turn_index": 13,
         "needs": {
           "hunger": 14,
           "thirst": 27,
@@ -8887,30 +8890,11 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 13,
+        "turn_index": 14,
         "needs": {
           "hunger": 15,
           "thirst": 29,
           "fatigue": 15
-        },
-        "suggestion_count": 0,
-        "suggestions": [],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "resource_deltas": {
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1
-        },
-        "inventory_consumed": []
-      },
-      {
-        "turn_index": 14,
-        "needs": {
-          "hunger": 16,
-          "thirst": 31,
-          "fatigue": 16
         },
         "suggestion_count": 0,
         "suggestions": [],
@@ -8946,6 +8930,25 @@
       {
         "turn_index": 16,
         "needs": {
+          "hunger": 16,
+          "thirst": 31,
+          "fatigue": 16
+        },
+        "suggestion_count": 0,
+        "suggestions": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "resource_deltas": {
+          "hunger_delta": 1,
+          "thirst_delta": 2,
+          "fatigue_delta": 1
+        },
+        "inventory_consumed": []
+      },
+      {
+        "turn_index": 17,
+        "needs": {
           "hunger": 17,
           "thirst": 33,
           "fatigue": 17
@@ -8963,7 +8966,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 17,
+        "turn_index": 18,
         "needs": {
           "hunger": 18,
           "thirst": 35,
@@ -8982,7 +8985,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 18,
+        "turn_index": 19,
         "needs": {
           "hunger": 19,
           "thirst": 37,
@@ -9001,7 +9004,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 19,
+        "turn_index": 20,
         "needs": {
           "hunger": 20,
           "thirst": 39,
@@ -9020,7 +9023,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 20,
+        "turn_index": 21,
         "needs": {
           "hunger": 21,
           "thirst": 41,
@@ -9039,7 +9042,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 21,
+        "turn_index": 22,
         "needs": {
           "hunger": 22,
           "thirst": 43,
@@ -9058,7 +9061,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 22,
+        "turn_index": 23,
         "needs": {
           "hunger": 23,
           "thirst": 45,
@@ -9077,7 +9080,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 23,
+        "turn_index": 24,
         "needs": {
           "hunger": 24,
           "thirst": 47,
@@ -9096,30 +9099,11 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 24,
+        "turn_index": 25,
         "needs": {
           "hunger": 25,
           "thirst": 49,
           "fatigue": 25
-        },
-        "suggestion_count": 0,
-        "suggestions": [],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "resource_deltas": {
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1
-        },
-        "inventory_consumed": []
-      },
-      {
-        "turn_index": 25,
-        "needs": {
-          "hunger": 26,
-          "thirst": 51,
-          "fatigue": 26
         },
         "suggestion_count": 0,
         "suggestions": [],
@@ -9146,9 +9130,9 @@
         "survival_action_rows": 0,
         "survival_suggestion_rows": 0,
         "relief_applied_rows": 0,
-        "warning_rows": 64,
+        "warning_rows": 63,
         "nonzero_need_rows": 97,
-        "nonzero_delta_rows": 97
+        "nonzero_delta_rows": 96
       },
       "source_coverage_rate": 0.97,
       "example_missing_source_rows": [
@@ -9209,8 +9193,8 @@
     "format_version": "n1243_survival_supply_metrics_v1",
     "food_available_turns": 0,
     "drink_available_turns": 0,
-    "starvation_risk_turns": 15,
-    "dehydration_risk_turns": 57
+    "starvation_risk_turns": 14,
+    "dehydration_risk_turns": 56
   },
   "survival_balance_simulation": {
     "format_version": "n1242_survival_balance_simulation_v1",
@@ -10611,6 +10595,21 @@
     "trend_rows": [
       {
         "turn_index": 1,
+        "hunger": 2,
+        "thirst": 3,
+        "fatigue": 2,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 2,
         "hunger": 3,
         "thirst": 5,
         "fatigue": 3,
@@ -10625,7 +10624,7 @@
         "source_present": true
       },
       {
-        "turn_index": 2,
+        "turn_index": 3,
         "hunger": 4,
         "thirst": 7,
         "fatigue": 4,
@@ -10640,7 +10639,7 @@
         "source_present": true
       },
       {
-        "turn_index": 3,
+        "turn_index": 4,
         "hunger": 5,
         "thirst": 9,
         "fatigue": 5,
@@ -10655,7 +10654,7 @@
         "source_present": true
       },
       {
-        "turn_index": 4,
+        "turn_index": 5,
         "hunger": 6,
         "thirst": 11,
         "fatigue": 6,
@@ -10670,7 +10669,7 @@
         "source_present": true
       },
       {
-        "turn_index": 5,
+        "turn_index": 6,
         "hunger": 7,
         "thirst": 13,
         "fatigue": 7,
@@ -10685,7 +10684,7 @@
         "source_present": true
       },
       {
-        "turn_index": 6,
+        "turn_index": 7,
         "hunger": 8,
         "thirst": 15,
         "fatigue": 8,
@@ -10700,7 +10699,7 @@
         "source_present": true
       },
       {
-        "turn_index": 7,
+        "turn_index": 8,
         "hunger": 9,
         "thirst": 17,
         "fatigue": 9,
@@ -10715,7 +10714,7 @@
         "source_present": true
       },
       {
-        "turn_index": 8,
+        "turn_index": 9,
         "hunger": 10,
         "thirst": 19,
         "fatigue": 10,
@@ -10730,7 +10729,7 @@
         "source_present": true
       },
       {
-        "turn_index": 9,
+        "turn_index": 10,
         "hunger": 11,
         "thirst": 21,
         "fatigue": 11,
@@ -10745,7 +10744,7 @@
         "source_present": true
       },
       {
-        "turn_index": 10,
+        "turn_index": 11,
         "hunger": 12,
         "thirst": 23,
         "fatigue": 12,
@@ -10760,7 +10759,7 @@
         "source_present": true
       },
       {
-        "turn_index": 11,
+        "turn_index": 12,
         "hunger": 13,
         "thirst": 25,
         "fatigue": 13,
@@ -10775,7 +10774,7 @@
         "source_present": true
       },
       {
-        "turn_index": 12,
+        "turn_index": 13,
         "hunger": 14,
         "thirst": 27,
         "fatigue": 14,
@@ -10790,25 +10789,10 @@
         "source_present": true
       },
       {
-        "turn_index": 13,
+        "turn_index": 14,
         "hunger": 15,
         "thirst": 29,
         "fatigue": 15,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 0,
-        "warnings": [],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 14,
-        "hunger": 16,
-        "thirst": 31,
-        "fatigue": 16,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -10836,6 +10820,21 @@
       },
       {
         "turn_index": 16,
+        "hunger": 16,
+        "thirst": 31,
+        "fatigue": 16,
+        "hunger_delta": 1,
+        "thirst_delta": 2,
+        "fatigue_delta": 1,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 17,
         "hunger": 17,
         "thirst": 33,
         "fatigue": 17,
@@ -10850,7 +10849,7 @@
         "source_present": true
       },
       {
-        "turn_index": 17,
+        "turn_index": 18,
         "hunger": 18,
         "thirst": 35,
         "fatigue": 18,
@@ -10865,7 +10864,7 @@
         "source_present": true
       },
       {
-        "turn_index": 18,
+        "turn_index": 19,
         "hunger": 19,
         "thirst": 37,
         "fatigue": 19,
@@ -10880,7 +10879,7 @@
         "source_present": true
       },
       {
-        "turn_index": 19,
+        "turn_index": 20,
         "hunger": 20,
         "thirst": 39,
         "fatigue": 20,
@@ -10895,7 +10894,7 @@
         "source_present": true
       },
       {
-        "turn_index": 20,
+        "turn_index": 21,
         "hunger": 21,
         "thirst": 41,
         "fatigue": 21,
@@ -10910,7 +10909,7 @@
         "source_present": true
       },
       {
-        "turn_index": 21,
+        "turn_index": 22,
         "hunger": 22,
         "thirst": 43,
         "fatigue": 22,
@@ -10925,7 +10924,7 @@
         "source_present": true
       },
       {
-        "turn_index": 22,
+        "turn_index": 23,
         "hunger": 23,
         "thirst": 45,
         "fatigue": 23,
@@ -10940,7 +10939,7 @@
         "source_present": true
       },
       {
-        "turn_index": 23,
+        "turn_index": 24,
         "hunger": 24,
         "thirst": 47,
         "fatigue": 24,
@@ -10955,7 +10954,7 @@
         "source_present": true
       },
       {
-        "turn_index": 24,
+        "turn_index": 25,
         "hunger": 25,
         "thirst": 49,
         "fatigue": 25,
@@ -10970,7 +10969,7 @@
         "source_present": true
       },
       {
-        "turn_index": 25,
+        "turn_index": 26,
         "hunger": 26,
         "thirst": 51,
         "fatigue": 26,
@@ -10985,7 +10984,7 @@
         "source_present": true
       },
       {
-        "turn_index": 26,
+        "turn_index": 27,
         "hunger": 27,
         "thirst": 53,
         "fatigue": 27,
@@ -11000,7 +10999,7 @@
         "source_present": true
       },
       {
-        "turn_index": 27,
+        "turn_index": 28,
         "hunger": 28,
         "thirst": 55,
         "fatigue": 28,
@@ -11015,7 +11014,7 @@
         "source_present": true
       },
       {
-        "turn_index": 28,
+        "turn_index": 29,
         "hunger": 29,
         "thirst": 57,
         "fatigue": 29,
@@ -11030,7 +11029,7 @@
         "source_present": true
       },
       {
-        "turn_index": 29,
+        "turn_index": 30,
         "hunger": 30,
         "thirst": 59,
         "fatigue": 30,
@@ -11045,7 +11044,7 @@
         "source_present": true
       },
       {
-        "turn_index": 30,
+        "turn_index": 31,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 31,
@@ -11060,7 +11059,7 @@
         "source_present": true
       },
       {
-        "turn_index": 31,
+        "turn_index": 32,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 32,
@@ -11075,7 +11074,7 @@
         "source_present": true
       },
       {
-        "turn_index": 32,
+        "turn_index": 33,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 33,
@@ -11090,7 +11089,7 @@
         "source_present": true
       },
       {
-        "turn_index": 33,
+        "turn_index": 34,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 34,
@@ -11105,7 +11104,7 @@
         "source_present": true
       },
       {
-        "turn_index": 34,
+        "turn_index": 35,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 35,
@@ -11120,7 +11119,7 @@
         "source_present": true
       },
       {
-        "turn_index": 35,
+        "turn_index": 36,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 36,
@@ -11137,7 +11136,7 @@
         "source_present": true
       },
       {
-        "turn_index": 36,
+        "turn_index": 37,
         "hunger": 37,
         "thirst": 73,
         "fatigue": 37,
@@ -11154,7 +11153,7 @@
         "source_present": true
       },
       {
-        "turn_index": 37,
+        "turn_index": 38,
         "hunger": 38,
         "thirst": 75,
         "fatigue": 38,
@@ -11171,7 +11170,7 @@
         "source_present": true
       },
       {
-        "turn_index": 38,
+        "turn_index": 39,
         "hunger": 39,
         "thirst": 77,
         "fatigue": 39,
@@ -11188,7 +11187,7 @@
         "source_present": true
       },
       {
-        "turn_index": 39,
+        "turn_index": 40,
         "hunger": 40,
         "thirst": 79,
         "fatigue": 40,
@@ -11205,7 +11204,7 @@
         "source_present": true
       },
       {
-        "turn_index": 40,
+        "turn_index": 41,
         "hunger": 41,
         "thirst": 81,
         "fatigue": 41,
@@ -11222,7 +11221,7 @@
         "source_present": true
       },
       {
-        "turn_index": 41,
+        "turn_index": 42,
         "hunger": 42,
         "thirst": 83,
         "fatigue": 42,
@@ -11239,7 +11238,7 @@
         "source_present": true
       },
       {
-        "turn_index": 42,
+        "turn_index": 43,
         "hunger": 43,
         "thirst": 85,
         "fatigue": 43,
@@ -11256,7 +11255,7 @@
         "source_present": true
       },
       {
-        "turn_index": 43,
+        "turn_index": 44,
         "hunger": 44,
         "thirst": 87,
         "fatigue": 44,
@@ -11273,7 +11272,7 @@
         "source_present": true
       },
       {
-        "turn_index": 44,
+        "turn_index": 45,
         "hunger": 45,
         "thirst": 89,
         "fatigue": 45,
@@ -11290,7 +11289,7 @@
         "source_present": true
       },
       {
-        "turn_index": 45,
+        "turn_index": 46,
         "hunger": 46,
         "thirst": 91,
         "fatigue": 46,
@@ -11307,27 +11306,10 @@
         "source_present": true
       },
       {
-        "turn_index": 46,
+        "turn_index": 47,
         "hunger": 47,
         "thirst": 93,
         "fatigue": 47,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 47,
-        "hunger": 48,
-        "thirst": 95,
-        "fatigue": 48,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -11372,6 +11354,23 @@
       },
       {
         "turn_index": 50,
+        "hunger": 48,
+        "thirst": 95,
+        "fatigue": 48,
+        "hunger_delta": 1,
+        "thirst_delta": 2,
+        "fatigue_delta": 1,
+        "warning_count": 1,
+        "warnings": [
+          "thirst_high"
+        ],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true
+      },
+      {
+        "turn_index": 51,
         "hunger": 49,
         "thirst": 97,
         "fatigue": 49,
@@ -11388,7 +11387,7 @@
         "source_present": true
       },
       {
-        "turn_index": 51,
+        "turn_index": 52,
         "hunger": 50,
         "thirst": 99,
         "fatigue": 50,
@@ -11405,7 +11404,7 @@
         "source_present": true
       },
       {
-        "turn_index": 52,
+        "turn_index": 53,
         "hunger": 51,
         "thirst": 100,
         "fatigue": 51,
@@ -11422,7 +11421,7 @@
         "source_present": true
       },
       {
-        "turn_index": 53,
+        "turn_index": 54,
         "hunger": 52,
         "thirst": 100,
         "fatigue": 52,
@@ -11439,7 +11438,7 @@
         "source_present": true
       },
       {
-        "turn_index": 54,
+        "turn_index": 55,
         "hunger": 53,
         "thirst": 100,
         "fatigue": 53,
@@ -11456,7 +11455,7 @@
         "source_present": true
       },
       {
-        "turn_index": 55,
+        "turn_index": 56,
         "hunger": 54,
         "thirst": 100,
         "fatigue": 54,
@@ -11473,7 +11472,7 @@
         "source_present": true
       },
       {
-        "turn_index": 56,
+        "turn_index": 57,
         "hunger": 55,
         "thirst": 100,
         "fatigue": 55,
@@ -11490,7 +11489,7 @@
         "source_present": true
       },
       {
-        "turn_index": 57,
+        "turn_index": 58,
         "hunger": 56,
         "thirst": 100,
         "fatigue": 56,
@@ -11507,7 +11506,7 @@
         "source_present": true
       },
       {
-        "turn_index": 58,
+        "turn_index": 59,
         "hunger": 57,
         "thirst": 100,
         "fatigue": 57,
@@ -11524,7 +11523,7 @@
         "source_present": true
       },
       {
-        "turn_index": 59,
+        "turn_index": 60,
         "hunger": 58,
         "thirst": 100,
         "fatigue": 58,
@@ -11541,7 +11540,7 @@
         "source_present": true
       },
       {
-        "turn_index": 60,
+        "turn_index": 61,
         "hunger": 59,
         "thirst": 100,
         "fatigue": 59,
@@ -11558,7 +11557,7 @@
         "source_present": true
       },
       {
-        "turn_index": 61,
+        "turn_index": 62,
         "hunger": 60,
         "thirst": 100,
         "fatigue": 60,
@@ -11575,7 +11574,7 @@
         "source_present": true
       },
       {
-        "turn_index": 62,
+        "turn_index": 63,
         "hunger": 61,
         "thirst": 100,
         "fatigue": 61,
@@ -11592,7 +11591,7 @@
         "source_present": true
       },
       {
-        "turn_index": 63,
+        "turn_index": 64,
         "hunger": 62,
         "thirst": 100,
         "fatigue": 62,
@@ -11609,7 +11608,7 @@
         "source_present": true
       },
       {
-        "turn_index": 64,
+        "turn_index": 65,
         "hunger": 63,
         "thirst": 100,
         "fatigue": 63,
@@ -11626,7 +11625,7 @@
         "source_present": true
       },
       {
-        "turn_index": 65,
+        "turn_index": 66,
         "hunger": 64,
         "thirst": 100,
         "fatigue": 64,
@@ -11643,7 +11642,7 @@
         "source_present": true
       },
       {
-        "turn_index": 66,
+        "turn_index": 67,
         "hunger": 65,
         "thirst": 100,
         "fatigue": 65,
@@ -11660,7 +11659,7 @@
         "source_present": true
       },
       {
-        "turn_index": 67,
+        "turn_index": 68,
         "hunger": 66,
         "thirst": 100,
         "fatigue": 66,
@@ -11677,7 +11676,7 @@
         "source_present": true
       },
       {
-        "turn_index": 68,
+        "turn_index": 69,
         "hunger": 67,
         "thirst": 100,
         "fatigue": 67,
@@ -11694,7 +11693,7 @@
         "source_present": true
       },
       {
-        "turn_index": 69,
+        "turn_index": 70,
         "hunger": 68,
         "thirst": 100,
         "fatigue": 68,
@@ -11711,7 +11710,7 @@
         "source_present": true
       },
       {
-        "turn_index": 70,
+        "turn_index": 71,
         "hunger": 69,
         "thirst": 100,
         "fatigue": 69,
@@ -11728,7 +11727,7 @@
         "source_present": true
       },
       {
-        "turn_index": 71,
+        "turn_index": 72,
         "hunger": 70,
         "thirst": 100,
         "fatigue": 70,
@@ -11747,7 +11746,7 @@
         "source_present": true
       },
       {
-        "turn_index": 72,
+        "turn_index": 73,
         "hunger": 71,
         "thirst": 100,
         "fatigue": 71,
@@ -11766,7 +11765,7 @@
         "source_present": true
       },
       {
-        "turn_index": 73,
+        "turn_index": 74,
         "hunger": 72,
         "thirst": 100,
         "fatigue": 72,
@@ -11785,7 +11784,7 @@
         "source_present": true
       },
       {
-        "turn_index": 74,
+        "turn_index": 75,
         "hunger": 73,
         "thirst": 100,
         "fatigue": 73,
@@ -11804,7 +11803,7 @@
         "source_present": true
       },
       {
-        "turn_index": 75,
+        "turn_index": 76,
         "hunger": 74,
         "thirst": 100,
         "fatigue": 74,
@@ -11823,7 +11822,7 @@
         "source_present": true
       },
       {
-        "turn_index": 76,
+        "turn_index": 77,
         "hunger": 75,
         "thirst": 100,
         "fatigue": 75,
@@ -11842,7 +11841,7 @@
         "source_present": true
       },
       {
-        "turn_index": 77,
+        "turn_index": 78,
         "hunger": 76,
         "thirst": 100,
         "fatigue": 76,
@@ -11861,7 +11860,7 @@
         "source_present": true
       },
       {
-        "turn_index": 78,
+        "turn_index": 79,
         "hunger": 77,
         "thirst": 100,
         "fatigue": 77,
@@ -11880,7 +11879,7 @@
         "source_present": true
       },
       {
-        "turn_index": 79,
+        "turn_index": 80,
         "hunger": 78,
         "thirst": 100,
         "fatigue": 78,
@@ -11899,7 +11898,7 @@
         "source_present": true
       },
       {
-        "turn_index": 80,
+        "turn_index": 81,
         "hunger": 79,
         "thirst": 100,
         "fatigue": 79,
@@ -11918,7 +11917,7 @@
         "source_present": true
       },
       {
-        "turn_index": 81,
+        "turn_index": 82,
         "hunger": 80,
         "thirst": 100,
         "fatigue": 80,
@@ -11937,7 +11936,7 @@
         "source_present": true
       },
       {
-        "turn_index": 82,
+        "turn_index": 83,
         "hunger": 81,
         "thirst": 100,
         "fatigue": 81,
@@ -11956,7 +11955,7 @@
         "source_present": true
       },
       {
-        "turn_index": 83,
+        "turn_index": 84,
         "hunger": 82,
         "thirst": 100,
         "fatigue": 82,
@@ -11975,7 +11974,7 @@
         "source_present": true
       },
       {
-        "turn_index": 84,
+        "turn_index": 85,
         "hunger": 83,
         "thirst": 100,
         "fatigue": 83,
@@ -11994,7 +11993,7 @@
         "source_present": true
       },
       {
-        "turn_index": 85,
+        "turn_index": 86,
         "hunger": 84,
         "thirst": 100,
         "fatigue": 84,
@@ -12013,7 +12012,7 @@
         "source_present": true
       },
       {
-        "turn_index": 86,
+        "turn_index": 87,
         "hunger": 85,
         "thirst": 100,
         "fatigue": 85,
@@ -12032,7 +12031,7 @@
         "source_present": true
       },
       {
-        "turn_index": 87,
+        "turn_index": 88,
         "hunger": 86,
         "thirst": 100,
         "fatigue": 86,
@@ -12051,7 +12050,7 @@
         "source_present": true
       },
       {
-        "turn_index": 88,
+        "turn_index": 89,
         "hunger": 87,
         "thirst": 100,
         "fatigue": 87,
@@ -12070,7 +12069,7 @@
         "source_present": true
       },
       {
-        "turn_index": 89,
+        "turn_index": 90,
         "hunger": 88,
         "thirst": 100,
         "fatigue": 88,
@@ -12089,7 +12088,7 @@
         "source_present": true
       },
       {
-        "turn_index": 90,
+        "turn_index": 91,
         "hunger": 89,
         "thirst": 100,
         "fatigue": 89,
@@ -12108,7 +12107,7 @@
         "source_present": true
       },
       {
-        "turn_index": 91,
+        "turn_index": 92,
         "hunger": 90,
         "thirst": 100,
         "fatigue": 90,
@@ -12127,7 +12126,7 @@
         "source_present": true
       },
       {
-        "turn_index": 92,
+        "turn_index": 93,
         "hunger": 91,
         "thirst": 100,
         "fatigue": 91,
@@ -12146,7 +12145,7 @@
         "source_present": true
       },
       {
-        "turn_index": 93,
+        "turn_index": 94,
         "hunger": 92,
         "thirst": 100,
         "fatigue": 92,
@@ -12165,7 +12164,7 @@
         "source_present": true
       },
       {
-        "turn_index": 94,
+        "turn_index": 95,
         "hunger": 93,
         "thirst": 100,
         "fatigue": 93,
@@ -12184,7 +12183,7 @@
         "source_present": true
       },
       {
-        "turn_index": 95,
+        "turn_index": 96,
         "hunger": 94,
         "thirst": 100,
         "fatigue": 94,
@@ -12203,7 +12202,7 @@
         "source_present": true
       },
       {
-        "turn_index": 96,
+        "turn_index": 97,
         "hunger": 95,
         "thirst": 100,
         "fatigue": 95,
@@ -12222,7 +12221,7 @@
         "source_present": true
       },
       {
-        "turn_index": 97,
+        "turn_index": 98,
         "hunger": 96,
         "thirst": 100,
         "fatigue": 96,
@@ -12241,7 +12240,7 @@
         "source_present": true
       },
       {
-        "turn_index": 98,
+        "turn_index": 99,
         "hunger": 97,
         "thirst": 100,
         "fatigue": 97,
@@ -12260,29 +12259,10 @@
         "source_present": true
       },
       {
-        "turn_index": 99,
+        "turn_index": 100,
         "hunger": 98,
         "thirst": 100,
         "fatigue": 98,
-        "hunger_delta": 1,
-        "thirst_delta": 0,
-        "fatigue_delta": 1,
-        "warning_count": 3,
-        "warnings": [
-          "fatigue_high",
-          "hunger_high",
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true
-      },
-      {
-        "turn_index": 100,
-        "hunger": 99,
-        "thirst": 100,
-        "fatigue": 99,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
@@ -12300,11 +12280,11 @@
     ],
     "trend_row_count": 100,
     "pressure_turn_count": 97,
-    "survival_warning_count": 124,
+    "survival_warning_count": 121,
     "warning_counts_by_type": {
-      "thirst_high": 64,
-      "fatigue_high": 30,
-      "hunger_high": 30
+      "thirst_high": 63,
+      "fatigue_high": 29,
+      "hunger_high": 29
     },
     "relief_action_count": 0,
     "relief_counts_by_kind": {},
@@ -12313,19 +12293,19 @@
     "inventory_consumed_summary": [],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
-      "hunger_delta": 97,
+      "hunger_delta": 96,
       "thirst_delta": 97,
-      "fatigue_delta": 97
+      "fatigue_delta": 96
     },
     "max_needs": {
-      "hunger": 99,
+      "hunger": 98,
       "thirst": 100,
-      "fatigue": 99
+      "fatigue": 98
     },
     "final_needs": {
-      "hunger": 99,
+      "hunger": 98,
       "thirst": 100,
-      "fatigue": 99
+      "fatigue": 98
     },
     "source_coverage_summary": {
       "format_version": "n1251_survival_metric_source_summary_v1",
@@ -12338,9 +12318,9 @@
         "survival_action_rows": 0,
         "survival_suggestion_rows": 0,
         "relief_applied_rows": 0,
-        "warning_rows": 64,
+        "warning_rows": 63,
         "nonzero_need_rows": 97,
-        "nonzero_delta_rows": 97
+        "nonzero_delta_rows": 96
       },
       "source_coverage_rate": 0.97,
       "example_missing_source_rows": [
@@ -12377,9 +12357,9 @@
         "survival_action_rows": 0,
         "survival_suggestion_rows": 0,
         "relief_applied_rows": 0,
-        "warning_rows": 64,
+        "warning_rows": 63,
         "nonzero_need_rows": 97,
-        "nonzero_delta_rows": 97
+        "nonzero_delta_rows": 96
       },
       "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
     },
@@ -13770,9 +13750,9 @@
       "survival_action_rows": 0,
       "survival_suggestion_rows": 0,
       "relief_applied_rows": 0,
-      "warning_rows": 64,
+      "warning_rows": 63,
       "nonzero_need_rows": 97,
-      "nonzero_delta_rows": 97
+      "nonzero_delta_rows": 96
     },
     "source_coverage_rate": 0.97,
     "example_missing_source_rows": [
@@ -13809,9 +13789,9 @@
       "survival_action_rows": 0,
       "survival_suggestion_rows": 0,
       "relief_applied_rows": 0,
-      "warning_rows": 64,
+      "warning_rows": 63,
       "nonzero_need_rows": 97,
-      "nonzero_delta_rows": 97
+      "nonzero_delta_rows": 96
     },
     "message": "Real-run survival metrics must be backed by transcript row source evidence, not only synthetic balance simulation."
   }

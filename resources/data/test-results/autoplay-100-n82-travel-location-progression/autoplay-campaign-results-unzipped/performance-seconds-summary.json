@@ -2,162 +2,162 @@
   "source": "performance_seconds_v2_from_summary",
   "turn": {
     "count": 100,
-    "avg_seconds": 6.123654999999999,
-    "p50_seconds": 5.351837000000001,
-    "p90_seconds": 8.520520000000001,
-    "p95_seconds": 8.695450000000001,
-    "max_seconds": 12.096161
+    "avg_seconds": 5.880363999999999,
+    "p50_seconds": 4.8736880000000005,
+    "p90_seconds": 8.078942,
+    "p95_seconds": 8.513729,
+    "max_seconds": 8.954803
   },
   "blocking": {
     "count": 100,
-    "avg_seconds": 0.17827099999999999,
-    "p95_seconds": 0.308526,
-    "max_seconds": 0.467346
+    "avg_seconds": 0.158325,
+    "p95_seconds": 0.216143,
+    "max_seconds": 0.308368
   },
   "playable_blocking": {
     "count": 100,
-    "avg_seconds": 5.752625,
-    "p95_seconds": 8.251648,
-    "max_seconds": 11.851815
+    "avg_seconds": 5.531206,
+    "p95_seconds": 8.058388,
+    "max_seconds": 8.470396000000001
   },
-  "campaign_wall_seconds": 715.598,
+  "campaign_wall_seconds": 694.832,
   "artifact_write_seconds": 0.0,
-  "avg_turn_seconds": 6.123654999999999,
-  "p95_turn_seconds": 8.695450000000001,
-  "max_turn_seconds": 12.096161,
+  "avg_turn_seconds": 5.880363999999999,
+  "p95_turn_seconds": 8.513729,
+  "max_turn_seconds": 8.954803,
   "slowest_turns": [
     {
-      "turn_index": 15,
-      "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
-      "turn_total_ms": 12096.161,
-      "player_agent_ms": 11743.603,
-      "manual_turn_ms": 86.496,
-      "story_hooks_ms": 7.234,
+      "turn_index": 91,
+      "player_action": "I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn_total_ms": 8954.803,
+      "player_agent_ms": 8257.316,
+      "manual_turn_ms": 167.355,
+      "story_hooks_ms": 15.412,
       "base_response_ms": 0.001,
       "checkpoint_ms": 0.0
     },
     {
-      "turn_index": 99,
-      "player_action": "I review Veska's ledgers with Bran and Garran to map the Sable Chain command structure.",
-      "turn_total_ms": 9239.628,
-      "player_agent_ms": 8513.516,
-      "manual_turn_ms": 167.117,
-      "story_hooks_ms": 14.808,
+      "turn_index": 65,
+      "player_action": "I scout the streets around the River Gate safehouse for Sable Chain watchers.",
+      "turn_total_ms": 8860.405,
+      "player_agent_ms": 8168.879,
+      "manual_turn_ms": 137.766,
+      "story_hooks_ms": 12.07,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 83,
+      "player_action": "I confront the Sable Chain route pressure agents at Black Ford and order them to stand down.",
+      "turn_total_ms": 8823.967,
+      "player_agent_ms": 8131.377,
+      "manual_turn_ms": 160.469,
+      "story_hooks_ms": 15.424,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 69,
+      "player_action": "I search the warehouse office for Sable Chain countermove orders.",
+      "turn_total_ms": 8758.701,
+      "player_agent_ms": 8179.284,
+      "manual_turn_ms": 140.146,
+      "story_hooks_ms": 10.887,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 93,
+      "player_action": "I decode Veska's coded message to learn where the Sable Chain leadership is moving.",
+      "turn_total_ms": 8536.276,
+      "player_agent_ms": 7846.222,
+      "manual_turn_ms": 160.373,
+      "story_hooks_ms": 15.299,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 97,
+      "player_action": "I secure Veska's leadership ledgers before the Sable Chain can destroy or move them.",
+      "turn_total_ms": 8512.542,
+      "player_agent_ms": 7822.398,
+      "manual_turn_ms": 164.225,
+      "story_hooks_ms": 14.082,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 81,
+      "player_action": "I read the route pressure instructions from the handler's dead drop.",
+      "turn_total_ms": 8504.137,
+      "player_agent_ms": 7847.213,
+      "manual_turn_ms": 155.808,
+      "story_hooks_ms": 14.614,
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0
     },
     {
-      "turn_index": 89,
-      "player_action": "I travel to the old north watchpost to follow Veska's courier trail.",
-      "turn_total_ms": 8846.023,
-      "player_agent_ms": 8097.595,
-      "manual_turn_ms": 224.183,
-      "story_hooks_ms": 13.448,
-      "base_response_ms": 0.001,
+      "turn_index": 53,
+      "player_action": "I ask Bran what he knows about the Silver Crow cipher on Voss's payment marks.",
+      "turn_total_ms": 8485.393,
+      "player_agent_ms": 7979.689,
+      "manual_turn_ms": 121.019,
+      "story_hooks_ms": 11.103,
+      "base_response_ms": 0.026,
       "checkpoint_ms": 0.0
     },
     {
-      "turn_index": 67,
-      "player_action": "I follow the watchers to the River Gate warehouses.",
-      "turn_total_ms": 8807.236,
-      "player_agent_ms": 8225.369,
-      "manual_turn_ms": 139.546,
-      "story_hooks_ms": 11.606,
+      "turn_index": 73,
+      "player_action": "I capture the strike team's sealed orders before they can destroy them.",
+      "turn_total_ms": 8189.834,
+      "player_agent_ms": 7605.955,
+      "manual_turn_ms": 138.201,
+      "story_hooks_ms": 12.48,
       "base_response_ms": 0.001,
       "checkpoint_ms": 0.0
     },
     {
       "turn_index": 75,
       "player_action": "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler.",
-      "turn_total_ms": 8696.477,
-      "player_agent_ms": 8058.348,
-      "manual_turn_ms": 145.897,
-      "story_hooks_ms": 11.846,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 25,
-      "player_action": "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use.",
-      "turn_total_ms": 8695.396,
-      "player_agent_ms": 8258.936,
-      "manual_turn_ms": 111.022,
-      "story_hooks_ms": 6.915,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 91,
-      "player_action": "I intercept Veska's courier before the message can leave the old north watchpost.",
-      "turn_total_ms": 8680.161,
-      "player_agent_ms": 7746.084,
-      "manual_turn_ms": 407.474,
-      "story_hooks_ms": 14.188,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 73,
-      "player_action": "I capture the strike team's sealed orders before they can destroy them.",
-      "turn_total_ms": 8591.937,
-      "player_agent_ms": 7974.677,
-      "manual_turn_ms": 148.776,
-      "story_hooks_ms": 12.28,
-      "base_response_ms": 0.002,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 63,
-      "player_action": "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
-      "turn_total_ms": 8550.867,
-      "player_agent_ms": 7895.539,
-      "manual_turn_ms": 138.353,
-      "story_hooks_ms": 11.563,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 37,
-      "player_action": "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss.",
-      "turn_total_ms": 8528.807,
-      "player_agent_ms": 8045.378,
-      "manual_turn_ms": 166.431,
-      "story_hooks_ms": 9.718,
+      "turn_total_ms": 8086.632,
+      "player_agent_ms": 7458.957,
+      "manual_turn_ms": 146.339,
+      "story_hooks_ms": 11.799,
       "base_response_ms": 0.001,
       "checkpoint_ms": 0.0
     }
   ],
   "performance_budget_summary": {
     "live_blocking": {
-      "avg_manual_turn_ms": 146.163,
-      "max_manual_turn_ms": 422.727,
+      "avg_manual_turn_ms": 126.009,
+      "max_manual_turn_ms": 271.703,
       "avg_human_playable_blocking_ms": 0.0,
       "max_human_playable_blocking_ms": 0.0,
       "blocking_metric_mode": "authoritative_deterministic_only",
-      "legacy_max_human_playable_blocking_ms": 467.346,
+      "legacy_max_human_playable_blocking_ms": 308.368,
       "max_player_agent_ms": 0.0,
       "max_manual_turn_ms_diagnostic": 0.0
     },
     "autoplay_only": {
-      "avg_player_agent_ms": 5574.354,
-      "max_player_agent_ms": 11743.603,
-      "avg_autoplay_blocking_ms": 5752.625,
-      "max_autoplay_blocking_ms": 11851.815
+      "avg_player_agent_ms": 5372.881,
+      "max_player_agent_ms": 8257.316,
+      "avg_autoplay_blocking_ms": 5531.206,
+      "max_autoplay_blocking_ms": 8470.396
     },
     "background_llm": {
       "total_jobs": 100,
       "narration_jobs": 0,
       "advisory_jobs": 0,
       "combined_background_llm_jobs": 100,
-      "background_job_seconds": 53.16,
+      "background_job_seconds": 48.616,
       "provider_queue_summary": {
         "count": 4,
-        "avg_queue_wait_ms": 3945.979,
-        "max_queue_wait_ms": 6739.59,
-        "avg_run_ms": 13228.371,
-        "max_run_ms": 15973.024,
-        "avg_total_ms": 17174.349,
-        "max_total_ms": 22614.326
+        "avg_queue_wait_ms": 3626.217,
+        "max_queue_wait_ms": 5995.465,
+        "avg_run_ms": 12094.358,
+        "max_run_ms": 14730.489,
+        "avg_total_ms": 15720.575,
+        "max_total_ms": 20725.955
       },
       "provider_queue_by_kind": {
         "deferred_narration": {
@@ -180,12 +180,12 @@
         },
         "combined_background_llm": {
           "count": 4,
-          "avg_queue_wait_ms": 3945.979,
-          "max_queue_wait_ms": 6739.59,
-          "avg_run_ms": 13228.371,
-          "max_run_ms": 15973.024,
-          "avg_total_ms": 17174.349,
-          "max_total_ms": 22614.326
+          "avg_queue_wait_ms": 3626.217,
+          "max_queue_wait_ms": 5995.465,
+          "avg_run_ms": 12094.358,
+          "max_run_ms": 14730.489,
+          "avg_total_ms": 15720.575,
+          "max_total_ms": 20725.955
         }
       },
       "source": "reconciled_background_jobs",
