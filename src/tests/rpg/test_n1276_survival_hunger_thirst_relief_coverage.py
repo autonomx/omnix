@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.rpg.session.survival_autoplay_player_agent import choose_survival_autoplay_suggestion
 from app.rpg.session.survival_autoplay_relief_supplies import (
     ensure_survival_autoplay_relief_supplies,
+    merge_survival_autoplay_relief_supplies_into_session,
     reset_survival_autoplay_supply_grants,
 )
 from app.rpg.session.survival_actions import resolve_survival_action
@@ -110,3 +111,48 @@ def test_n1276_does_not_seed_when_pressure_is_low() -> None:
     assert summary["applied"] is False
     assert summary["grant_count"] == 0
     assert session["simulation_state"]["player_state"]["inventory_state"]["items"] == []
+
+
+def test_n1277_handoff_restores_seeded_supply_after_runtime_reload() -> None:
+    key = "n1277-handoff"
+    reset_survival_autoplay_supply_grants(key)
+    prior_session, seed_summary = ensure_survival_autoplay_relief_supplies(
+        _session(hunger=65, thirst=90, fatigue=10),
+        session_key=key,
+    )
+    runtime_session = _session(hunger=65, thirst=90, fatigue=10)
+
+    merged, handoff = merge_survival_autoplay_relief_supplies_into_session(
+        runtime_session,
+        prior_session,
+        session_key=key,
+    )
+
+    assert seed_summary["applied"] is True
+    assert handoff["applied"] is True
+    assert handoff["copied_count"] == 2
+    merged_ids = {item["item_id"] for item in merged["simulation_state"]["player_state"]["inventory_state"]["items"]}
+    assert "autoplay_waterskin_1" in merged_ids
+    assert "autoplay_field_ration_1" in merged_ids
+    assert merged["runtime_state"]["last_survival_autoplay_relief_supply_handoff_summary"]["copied_count"] == 2
+
+
+def test_n1277_handoff_allows_promoted_drink_to_apply_after_reload() -> None:
+    key = "n1277-consume-after-reload"
+    reset_survival_autoplay_supply_grants(key)
+    prior_session, _seed_summary = ensure_survival_autoplay_relief_supplies(
+        _session(hunger=65, thirst=90, fatigue=10),
+        session_key=key,
+    )
+    runtime_session = _session(hunger=65, thirst=90, fatigue=10)
+    merged, _handoff = merge_survival_autoplay_relief_supplies_into_session(runtime_session, prior_session, session_key=key)
+
+    result = resolve_survival_action(
+        player_input="I drink Autoplay Waterskin",
+        simulation_state=merged["simulation_state"],
+    )
+
+    assert result["applied"] is True
+    assert result["action_kind"] == "drink_water"
+    assert result["resource_changes"]["thirst_delta"] < 0
+    assert result["resource_changes"]["inventory_consumed"]["item_id"] == "autoplay_waterskin_1"
