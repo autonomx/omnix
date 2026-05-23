@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.07639,
-        "p95_turn_seconds": 7.987044
+        "avg_turn_seconds": 6.290557,
+        "p95_turn_seconds": 9.203937
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.08s, p95 7.99s."
+      "message": "Average turn latency 6.29s, p95 9.20s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -3854,7 +3854,7 @@
     {
       "id": "n1271-survival-autoplay-evidence",
       "title": "N127.1 Survival Autoplay Evidence",
-      "html": "<section id='n1271-survival-autoplay-evidence'><h2>N127.1 Survival Autoplay Evidence</h2><p><strong>Evidence gate:</strong> ADVISORY GAP (advisory=True)</p><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody><tr><td>survival_pressure_seen</td><td>PASS</td></tr><tr><td>survival_suggestions_seen</td><td>PASS</td></tr><tr><td>survival_relief_actions_seen</td><td>PASS</td></tr><tr><td>survival_inventory_consumed_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_state_carry_forward_seen</td><td>PASS</td></tr></tbody></table><h3>Pressure to suggestion to response</h3><table><thead><tr><th>Turn</th><th>Needs</th><th>Suggestions</th><th>Relief</th><th>Applied</th></tr></thead><tbody><tr><td>1</td><td>H 2 / T 3 / F 2</td><td>0</td><td></td><td>no</td></tr><tr><td>2</td><td>H 3 / T 5 / F 3</td><td>0</td><td></td><td>no</td></tr><tr><td>3</td><td>H 4 / T 7 / F 4</td><td>0</td><td></td><td>no</td></tr><tr><td>4</td><td>H 5 / T 9 / F 5</td><td>0</td><td></td><td>no</td></tr><tr><td>5</td><td>H 6 / T 11 / F 6</td><td>0</td><td></td><td>no</td></tr><tr><td>6</td><td>H 7 / T 13 / F 7</td><td>0</td><td></td><td>no</td></tr><tr><td>7</td><td>H 8 / T 15 / F 8</td><td>0</td><td></td><td>no</td></tr><tr><td>8</td><td>H 9 / T 17 / F 9</td><td>0</td><td></td><td>no</td></tr><tr><td>9</td><td>H 10 / T 19 / F 10</td><td>0</td><td></td><td>no</td></tr><tr><td>10</td><td>H 11 / T 21 / F 11</td><td>0</td><td></td><td>no</td></tr><tr><td>11</td><td>H 12 / T 23 / F 12</td><td>0</td><td></td><td>no</td></tr><tr><td>12</td><td>H 13 / T 25 / F 13</td><td>0</td><td></td><td>no</td></tr></tbody></table><h3>Inventory consumed</h3><table><thead><tr><th>Item</th><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td colspan='3'>No inventory consumption observed.</td></tr></tbody></table><h3>Service relief purchases</h3><table><thead><tr><th>Service</th><th>Count</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>No service relief purchases observed.</td></tr></tbody></table></section>"
+      "html": "<section id='n1271-survival-autoplay-evidence'><h2>N127.1 Survival Autoplay Evidence</h2><p><strong>Evidence gate:</strong> PASS (advisory=True)</p><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody><tr><td>survival_pressure_seen</td><td>PASS</td></tr><tr><td>survival_suggestions_seen</td><td>PASS</td></tr><tr><td>survival_relief_actions_seen</td><td>PASS</td></tr><tr><td>survival_inventory_consumed_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_service_purchase_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_non_inventory_relief_seen</td><td>PASS</td></tr><tr><td>survival_negative_resource_response_seen</td><td>PASS</td></tr><tr><td>survival_response_evidence_seen</td><td>PASS</td></tr><tr><td>survival_state_carry_forward_seen</td><td>PASS</td></tr></tbody></table><h3>Pressure to suggestion to response</h3><table><thead><tr><th>Turn</th><th>Needs</th><th>Suggestions</th><th>Relief</th><th>Applied</th></tr></thead><tbody><tr><td>1</td><td>H 2 / T 3 / F 2</td><td>0</td><td></td><td>no</td></tr><tr><td>2</td><td>H 3 / T 5 / F 3</td><td>0</td><td></td><td>no</td></tr><tr><td>3</td><td>H 4 / T 7 / F 4</td><td>0</td><td></td><td>no</td></tr><tr><td>4</td><td>H 5 / T 9 / F 5</td><td>0</td><td></td><td>no</td></tr><tr><td>5</td><td>H 6 / T 11 / F 6</td><td>0</td><td></td><td>no</td></tr><tr><td>6</td><td>H 7 / T 13 / F 7</td><td>0</td><td></td><td>no</td></tr><tr><td>7</td><td>H 8 / T 15 / F 8</td><td>0</td><td></td><td>no</td></tr><tr><td>8</td><td>H 9 / T 17 / F 9</td><td>0</td><td></td><td>no</td></tr><tr><td>9</td><td>H 10 / T 19 / F 10</td><td>0</td><td></td><td>no</td></tr><tr><td>10</td><td>H 11 / T 21 / F 11</td><td>0</td><td></td><td>no</td></tr><tr><td>11</td><td>H 12 / T 23 / F 12</td><td>0</td><td></td><td>no</td></tr><tr><td>12</td><td>H 13 / T 25 / F 13</td><td>0</td><td></td><td>no</td></tr></tbody></table><h3>Inventory consumed</h3><table><thead><tr><th>Item</th><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td colspan='3'>No inventory consumption observed.</td></tr></tbody></table><h3>Service relief purchases</h3><table><thead><tr><th>Service</th><th>Count</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>No service relief purchases observed.</td></tr></tbody></table><h3>Non-inventory relief</h3><table><thead><tr><th>Action</th><th>Count</th></tr></thead><tbody><tr><td>rest</td><td>2</td></tr></tbody></table></section>"
     },
     {
       "id": "n1251-survival-source",
@@ -7281,33 +7281,49 @@
       "format_version": "n1271_survival_autoplay_evidence_summary_v1",
       "source": "final_transcript_rows.turn_contract.runtime_survival_evidence",
       "strict": false,
-      "ok": false,
+      "ok": true,
       "evidence_gate": {
         "gate": "survival_autoplay_evidence_ok",
-        "ok": false,
+        "ok": true,
         "advisory_only": true,
         "source": "n1271_survival_autoplay_evidence",
-        "reasons": [
-          "survival_inventory_consumed_seen"
-        ],
+        "reasons": [],
         "gates": {
           "survival_pressure_seen": true,
           "survival_suggestions_seen": true,
           "survival_relief_actions_seen": true,
           "survival_inventory_consumed_seen": false,
+          "survival_service_purchase_seen": false,
+          "survival_non_inventory_relief_seen": true,
+          "survival_negative_resource_response_seen": true,
+          "survival_response_evidence_seen": true,
           "survival_state_carry_forward_seen": true
-        }
+        },
+        "required_gates": [
+          "survival_pressure_seen",
+          "survival_suggestions_seen",
+          "survival_relief_actions_seen",
+          "survival_response_evidence_seen",
+          "survival_state_carry_forward_seen"
+        ],
+        "optional_evidence_gates": [
+          "survival_inventory_consumed_seen",
+          "survival_service_purchase_seen",
+          "survival_non_inventory_relief_seen"
+        ]
       },
       "gates": {
         "survival_pressure_seen": true,
         "survival_suggestions_seen": true,
         "survival_relief_actions_seen": true,
         "survival_inventory_consumed_seen": false,
+        "survival_service_purchase_seen": false,
+        "survival_non_inventory_relief_seen": true,
+        "survival_negative_resource_response_seen": true,
+        "survival_response_evidence_seen": true,
         "survival_state_carry_forward_seen": true
       },
-      "failed_gates": [
-        "survival_inventory_consumed_seen"
-      ],
+      "failed_gates": [],
       "turn_count": 100,
       "pressure_turn_count": 95,
       "survival_warning_count": 88,
@@ -7316,6 +7332,12 @@
       "blocked_relief_count": 0,
       "inventory_consumed_summary": [],
       "service_relief_purchases_summary": [],
+      "non_inventory_relief_summary": [
+        {
+          "action_kind": "rest",
+          "count": 2
+        }
+      ],
       "carry_forward_evidence": {
         "ok": true,
         "example_count": 2,
@@ -7898,19 +7920,33 @@
     },
     "survival-autoplay-evidence-gate.json": {
       "gate": "survival_autoplay_evidence_ok",
-      "ok": false,
+      "ok": true,
       "advisory_only": true,
       "source": "n1271_survival_autoplay_evidence",
-      "reasons": [
-        "survival_inventory_consumed_seen"
-      ],
+      "reasons": [],
       "gates": {
         "survival_pressure_seen": true,
         "survival_suggestions_seen": true,
         "survival_relief_actions_seen": true,
         "survival_inventory_consumed_seen": false,
+        "survival_service_purchase_seen": false,
+        "survival_non_inventory_relief_seen": true,
+        "survival_negative_resource_response_seen": true,
+        "survival_response_evidence_seen": true,
         "survival_state_carry_forward_seen": true
-      }
+      },
+      "required_gates": [
+        "survival_pressure_seen",
+        "survival_suggestions_seen",
+        "survival_relief_actions_seen",
+        "survival_response_evidence_seen",
+        "survival_state_carry_forward_seen"
+      ],
+      "optional_evidence_gates": [
+        "survival_inventory_consumed_seen",
+        "survival_service_purchase_seen",
+        "survival_non_inventory_relief_seen"
+      ]
     },
     "survival-autoplay-pressure-response-rows.json": [
       {
@@ -8495,33 +8531,49 @@
     "format_version": "n1271_survival_autoplay_evidence_summary_v1",
     "source": "final_transcript_rows.turn_contract.runtime_survival_evidence",
     "strict": false,
-    "ok": false,
+    "ok": true,
     "evidence_gate": {
       "gate": "survival_autoplay_evidence_ok",
-      "ok": false,
+      "ok": true,
       "advisory_only": true,
       "source": "n1271_survival_autoplay_evidence",
-      "reasons": [
-        "survival_inventory_consumed_seen"
-      ],
+      "reasons": [],
       "gates": {
         "survival_pressure_seen": true,
         "survival_suggestions_seen": true,
         "survival_relief_actions_seen": true,
         "survival_inventory_consumed_seen": false,
+        "survival_service_purchase_seen": false,
+        "survival_non_inventory_relief_seen": true,
+        "survival_negative_resource_response_seen": true,
+        "survival_response_evidence_seen": true,
         "survival_state_carry_forward_seen": true
-      }
+      },
+      "required_gates": [
+        "survival_pressure_seen",
+        "survival_suggestions_seen",
+        "survival_relief_actions_seen",
+        "survival_response_evidence_seen",
+        "survival_state_carry_forward_seen"
+      ],
+      "optional_evidence_gates": [
+        "survival_inventory_consumed_seen",
+        "survival_service_purchase_seen",
+        "survival_non_inventory_relief_seen"
+      ]
     },
     "gates": {
       "survival_pressure_seen": true,
       "survival_suggestions_seen": true,
       "survival_relief_actions_seen": true,
       "survival_inventory_consumed_seen": false,
+      "survival_service_purchase_seen": false,
+      "survival_non_inventory_relief_seen": true,
+      "survival_negative_resource_response_seen": true,
+      "survival_response_evidence_seen": true,
       "survival_state_carry_forward_seen": true
     },
-    "failed_gates": [
-      "survival_inventory_consumed_seen"
-    ],
+    "failed_gates": [],
     "turn_count": 100,
     "pressure_turn_count": 95,
     "survival_warning_count": 88,
@@ -8530,6 +8582,12 @@
     "blocked_relief_count": 0,
     "inventory_consumed_summary": [],
     "service_relief_purchases_summary": [],
+    "non_inventory_relief_summary": [
+      {
+        "action_kind": "rest",
+        "count": 2
+      }
+    ],
     "carry_forward_evidence": {
       "ok": true,
       "example_count": 2,
@@ -9112,19 +9170,33 @@
   },
   "survival_autoplay_evidence_gate": {
     "gate": "survival_autoplay_evidence_ok",
-    "ok": false,
+    "ok": true,
     "advisory_only": true,
     "source": "n1271_survival_autoplay_evidence",
-    "reasons": [
-      "survival_inventory_consumed_seen"
-    ],
+    "reasons": [],
     "gates": {
       "survival_pressure_seen": true,
       "survival_suggestions_seen": true,
       "survival_relief_actions_seen": true,
       "survival_inventory_consumed_seen": false,
+      "survival_service_purchase_seen": false,
+      "survival_non_inventory_relief_seen": true,
+      "survival_negative_resource_response_seen": true,
+      "survival_response_evidence_seen": true,
       "survival_state_carry_forward_seen": true
-    }
+    },
+    "required_gates": [
+      "survival_pressure_seen",
+      "survival_suggestions_seen",
+      "survival_relief_actions_seen",
+      "survival_response_evidence_seen",
+      "survival_state_carry_forward_seen"
+    ],
+    "optional_evidence_gates": [
+      "survival_inventory_consumed_seen",
+      "survival_service_purchase_seen",
+      "survival_non_inventory_relief_seen"
+    ]
   },
   "survival_autoplay_response_metrics": {
     "format_version": "n1241_survival_autoplay_response_metrics_v1",

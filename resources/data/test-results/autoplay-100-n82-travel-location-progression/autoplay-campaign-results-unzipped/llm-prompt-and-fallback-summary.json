@@ -28,13 +28,13 @@
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 71,
-    "category_reclassified_count": 52,
+    "metadata_repaired_count": 68,
+    "category_reclassified_count": 49,
     "dialogue_relevance_repaired_count": 34,
     "service_resolver_veto_count": 0,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 71,
-      "provider_category_reclassification": 52,
+      "provider_metadata_or_shape_repair": 68,
+      "provider_category_reclassification": 49,
       "dialogue_action_relevance_repair": 34,
       "service_resolver_veto": 0,
       "unsupported_combat_claim_suppressed": 0,
