@@ -15,7 +15,7 @@
   "runtime_error_count": 0,
   "warning_count": 0,
   "service_resolver_veto_rate_high": false,
-  "service_resolver_veto_count": 1,
+  "service_resolver_veto_count": 2,
   "service_resolver_veto_threshold": 10,
   "unsupported_combat_claim_suppressed_count": 0,
   "unsupported_combat_claim_preselection_suppressed_count": 5,

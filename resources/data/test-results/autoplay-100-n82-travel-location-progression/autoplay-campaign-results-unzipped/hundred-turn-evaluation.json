@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.232219,
-        "p95_turn_seconds": 9.163021
+        "avg_turn_seconds": 6.125916,
+        "p95_turn_seconds": 8.478648
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.23s, p95 9.16s."
+      "message": "Average turn latency 6.13s, p95 8.48s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -841,37 +841,37 @@
       {
         "turn_index": 27,
         "hunger": 27,
-        "thirst": 53,
+        "thirst": 23,
         "fatigue": 27,
         "hunger_delta": 1,
-        "thirst_delta": 2,
+        "thirst_delta": -28,
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
         "relief_action_kind": "drink_water",
-        "relief_applied": false,
-        "relief_blocked": true,
+        "relief_applied": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 28,
         "hunger": 28,
-        "thirst": 55,
+        "thirst": 25,
         "fatigue": 28,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "drink_water",
+        "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 29,
         "hunger": 29,
-        "thirst": 57,
+        "thirst": 27,
         "fatigue": 29,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -886,7 +886,7 @@
       {
         "turn_index": 30,
         "hunger": 30,
-        "thirst": 59,
+        "thirst": 29,
         "fatigue": 30,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -901,7 +901,7 @@
       {
         "turn_index": 31,
         "hunger": 31,
-        "thirst": 61,
+        "thirst": 31,
         "fatigue": 31,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -916,7 +916,7 @@
       {
         "turn_index": 32,
         "hunger": 32,
-        "thirst": 63,
+        "thirst": 33,
         "fatigue": 32,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -931,7 +931,7 @@
       {
         "turn_index": 33,
         "hunger": 33,
-        "thirst": 65,
+        "thirst": 35,
         "fatigue": 33,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -946,7 +946,7 @@
       {
         "turn_index": 34,
         "hunger": 34,
-        "thirst": 67,
+        "thirst": 37,
         "fatigue": 34,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -961,7 +961,7 @@
       {
         "turn_index": 35,
         "hunger": 35,
-        "thirst": 69,
+        "thirst": 39,
         "fatigue": 35,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -976,15 +976,13 @@
       {
         "turn_index": 36,
         "hunger": 36,
-        "thirst": 71,
+        "thirst": 41,
         "fatigue": 36,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -993,15 +991,13 @@
       {
         "turn_index": 37,
         "hunger": 37,
-        "thirst": 73,
+        "thirst": 43,
         "fatigue": 37,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1010,15 +1006,13 @@
       {
         "turn_index": 38,
         "hunger": 38,
-        "thirst": 75,
+        "thirst": 45,
         "fatigue": 38,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1027,15 +1021,13 @@
       {
         "turn_index": 39,
         "hunger": 39,
-        "thirst": 77,
+        "thirst": 47,
         "fatigue": 39,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1044,15 +1036,13 @@
       {
         "turn_index": 40,
         "hunger": 40,
-        "thirst": 79,
+        "thirst": 49,
         "fatigue": 40,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1061,15 +1051,13 @@
       {
         "turn_index": 41,
         "hunger": 41,
-        "thirst": 81,
+        "thirst": 51,
         "fatigue": 41,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1078,32 +1066,28 @@
       {
         "turn_index": 42,
         "hunger": 42,
-        "thirst": 83,
+        "thirst": 23,
         "fatigue": 42,
         "hunger_delta": 1,
-        "thirst_delta": 2,
+        "thirst_delta": -28,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "drink_water",
+        "relief_applied": true,
         "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 43,
         "hunger": 43,
-        "thirst": 85,
+        "thirst": 25,
         "fatigue": 43,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1112,15 +1096,13 @@
       {
         "turn_index": 44,
         "hunger": 44,
-        "thirst": 87,
+        "thirst": 27,
         "fatigue": 44,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1129,15 +1111,13 @@
       {
         "turn_index": 45,
         "hunger": 45,
-        "thirst": 89,
+        "thirst": 29,
         "fatigue": 45,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1146,15 +1126,13 @@
       {
         "turn_index": 46,
         "hunger": 46,
-        "thirst": 91,
+        "thirst": 31,
         "fatigue": 46,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1163,15 +1141,13 @@
       {
         "turn_index": 47,
         "hunger": 47,
-        "thirst": 93,
+        "thirst": 33,
         "fatigue": 47,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1210,15 +1186,13 @@
       {
         "turn_index": 50,
         "hunger": 48,
-        "thirst": 95,
+        "thirst": 35,
         "fatigue": 48,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1227,15 +1201,13 @@
       {
         "turn_index": 51,
         "hunger": 49,
-        "thirst": 97,
+        "thirst": 37,
         "fatigue": 49,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1244,15 +1216,13 @@
       {
         "turn_index": 52,
         "hunger": 50,
-        "thirst": 99,
+        "thirst": 39,
         "fatigue": 50,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1261,15 +1231,13 @@
       {
         "turn_index": 53,
         "hunger": 51,
-        "thirst": 100,
+        "thirst": 41,
         "fatigue": 26,
         "hunger_delta": 1,
-        "thirst_delta": 1,
+        "thirst_delta": 2,
         "fatigue_delta": -24,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "rest",
         "relief_applied": true,
         "relief_blocked": false,
@@ -1277,33 +1245,29 @@
       },
       {
         "turn_index": 54,
-        "hunger": 52,
-        "thirst": 100,
+        "hunger": 22,
+        "thirst": 43,
         "fatigue": 27,
-        "hunger_delta": 1,
-        "thirst_delta": 0,
+        "hunger_delta": -29,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "eat_food",
-        "relief_applied": false,
-        "relief_blocked": true,
+        "relief_applied": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 55,
-        "hunger": 53,
-        "thirst": 100,
+        "hunger": 23,
+        "thirst": 45,
         "fatigue": 28,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1311,16 +1275,14 @@
       },
       {
         "turn_index": 56,
-        "hunger": 54,
-        "thirst": 100,
+        "hunger": 24,
+        "thirst": 47,
         "fatigue": 29,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1343,16 +1305,14 @@
       },
       {
         "turn_index": 58,
-        "hunger": 55,
-        "thirst": 100,
+        "hunger": 25,
+        "thirst": 49,
         "fatigue": 30,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1360,16 +1320,14 @@
       },
       {
         "turn_index": 59,
-        "hunger": 56,
-        "thirst": 100,
+        "hunger": 26,
+        "thirst": 51,
         "fatigue": 31,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1377,16 +1335,14 @@
       },
       {
         "turn_index": 60,
-        "hunger": 57,
-        "thirst": 100,
+        "hunger": 27,
+        "thirst": 53,
         "fatigue": 32,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1394,16 +1350,14 @@
       },
       {
         "turn_index": 61,
-        "hunger": 58,
-        "thirst": 100,
+        "hunger": 28,
+        "thirst": 55,
         "fatigue": 33,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1411,16 +1365,14 @@
       },
       {
         "turn_index": 62,
-        "hunger": 59,
-        "thirst": 100,
+        "hunger": 29,
+        "thirst": 57,
         "fatigue": 34,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1428,16 +1380,14 @@
       },
       {
         "turn_index": 63,
-        "hunger": 60,
-        "thirst": 100,
+        "hunger": 30,
+        "thirst": 59,
         "fatigue": 35,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1445,16 +1395,14 @@
       },
       {
         "turn_index": 64,
-        "hunger": 61,
-        "thirst": 100,
+        "hunger": 31,
+        "thirst": 61,
         "fatigue": 36,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1462,16 +1410,14 @@
       },
       {
         "turn_index": 65,
-        "hunger": 62,
-        "thirst": 100,
+        "hunger": 32,
+        "thirst": 63,
         "fatigue": 37,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1479,16 +1425,14 @@
       },
       {
         "turn_index": 66,
-        "hunger": 63,
-        "thirst": 100,
+        "hunger": 33,
+        "thirst": 65,
         "fatigue": 38,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1496,16 +1440,14 @@
       },
       {
         "turn_index": 67,
-        "hunger": 64,
-        "thirst": 100,
+        "hunger": 34,
+        "thirst": 67,
         "fatigue": 39,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1513,16 +1455,14 @@
       },
       {
         "turn_index": 68,
-        "hunger": 65,
-        "thirst": 100,
+        "hunger": 35,
+        "thirst": 69,
         "fatigue": 40,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -1530,11 +1470,11 @@
       },
       {
         "turn_index": 69,
-        "hunger": 66,
-        "thirst": 100,
+        "hunger": 36,
+        "thirst": 71,
         "fatigue": 41,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -1547,11 +1487,11 @@
       },
       {
         "turn_index": 70,
-        "hunger": 67,
-        "thirst": 100,
+        "hunger": 37,
+        "thirst": 73,
         "fatigue": 42,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -1564,11 +1504,11 @@
       },
       {
         "turn_index": 71,
-        "hunger": 68,
-        "thirst": 100,
+        "hunger": 38,
+        "thirst": 75,
         "fatigue": 43,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -1581,11 +1521,11 @@
       },
       {
         "turn_index": 72,
-        "hunger": 69,
-        "thirst": 100,
+        "hunger": 39,
+        "thirst": 77,
         "fatigue": 44,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -1598,15 +1538,14 @@
       },
       {
         "turn_index": 73,
-        "hunger": 70,
-        "thirst": 100,
+        "hunger": 40,
+        "thirst": 79,
         "fatigue": 45,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1616,15 +1555,14 @@
       },
       {
         "turn_index": 74,
-        "hunger": 71,
-        "thirst": 100,
+        "hunger": 41,
+        "thirst": 81,
         "fatigue": 46,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1634,15 +1572,14 @@
       },
       {
         "turn_index": 75,
-        "hunger": 72,
-        "thirst": 100,
+        "hunger": 42,
+        "thirst": 83,
         "fatigue": 47,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1652,15 +1589,14 @@
       },
       {
         "turn_index": 76,
-        "hunger": 73,
-        "thirst": 100,
+        "hunger": 43,
+        "thirst": 85,
         "fatigue": 48,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1670,15 +1606,14 @@
       },
       {
         "turn_index": 77,
-        "hunger": 74,
-        "thirst": 100,
+        "hunger": 44,
+        "thirst": 87,
         "fatigue": 49,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1688,15 +1623,14 @@
       },
       {
         "turn_index": 78,
-        "hunger": 75,
-        "thirst": 100,
+        "hunger": 45,
+        "thirst": 89,
         "fatigue": 50,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1706,15 +1640,14 @@
       },
       {
         "turn_index": 79,
-        "hunger": 76,
-        "thirst": 100,
+        "hunger": 46,
+        "thirst": 91,
         "fatigue": 26,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": -24,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "rest",
@@ -1724,15 +1657,14 @@
       },
       {
         "turn_index": 80,
-        "hunger": 77,
-        "thirst": 100,
+        "hunger": 47,
+        "thirst": 93,
         "fatigue": 27,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1742,15 +1674,14 @@
       },
       {
         "turn_index": 81,
-        "hunger": 78,
-        "thirst": 100,
+        "hunger": 48,
+        "thirst": 95,
         "fatigue": 28,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1760,15 +1691,14 @@
       },
       {
         "turn_index": 82,
-        "hunger": 79,
-        "thirst": 100,
+        "hunger": 49,
+        "thirst": 97,
         "fatigue": 29,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1778,15 +1708,14 @@
       },
       {
         "turn_index": 83,
-        "hunger": 80,
-        "thirst": 100,
+        "hunger": 50,
+        "thirst": 99,
         "fatigue": 30,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1811,15 +1740,14 @@
       },
       {
         "turn_index": 85,
-        "hunger": 81,
+        "hunger": 51,
         "thirst": 100,
         "fatigue": 31,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 1,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1829,15 +1757,14 @@
       },
       {
         "turn_index": 86,
-        "hunger": 82,
+        "hunger": 52,
         "thirst": 100,
         "fatigue": 32,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1847,15 +1774,14 @@
       },
       {
         "turn_index": 87,
-        "hunger": 83,
+        "hunger": 53,
         "thirst": 100,
         "fatigue": 33,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1865,15 +1791,14 @@
       },
       {
         "turn_index": 88,
-        "hunger": 84,
+        "hunger": 54,
         "thirst": 100,
         "fatigue": 34,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1883,15 +1808,14 @@
       },
       {
         "turn_index": 89,
-        "hunger": 85,
+        "hunger": 55,
         "thirst": 100,
         "fatigue": 35,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1901,15 +1825,14 @@
       },
       {
         "turn_index": 90,
-        "hunger": 86,
+        "hunger": 56,
         "thirst": 100,
         "fatigue": 36,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1919,15 +1842,14 @@
       },
       {
         "turn_index": 91,
-        "hunger": 87,
+        "hunger": 57,
         "thirst": 100,
         "fatigue": 37,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1937,15 +1859,14 @@
       },
       {
         "turn_index": 92,
-        "hunger": 88,
+        "hunger": 58,
         "thirst": 100,
         "fatigue": 38,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1955,15 +1876,14 @@
       },
       {
         "turn_index": 93,
-        "hunger": 89,
+        "hunger": 59,
         "thirst": 100,
         "fatigue": 39,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1973,15 +1893,14 @@
       },
       {
         "turn_index": 94,
-        "hunger": 90,
+        "hunger": 60,
         "thirst": 100,
         "fatigue": 40,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -1991,15 +1910,14 @@
       },
       {
         "turn_index": 95,
-        "hunger": 91,
+        "hunger": 61,
         "thirst": 100,
         "fatigue": 41,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -2009,15 +1927,14 @@
       },
       {
         "turn_index": 96,
-        "hunger": 92,
+        "hunger": 62,
         "thirst": 100,
         "fatigue": 42,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -2027,15 +1944,14 @@
       },
       {
         "turn_index": 97,
-        "hunger": 93,
+        "hunger": 63,
         "thirst": 100,
         "fatigue": 43,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -2045,15 +1961,14 @@
       },
       {
         "turn_index": 98,
-        "hunger": 94,
+        "hunger": 64,
         "thirst": 100,
         "fatigue": 44,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -2063,15 +1978,14 @@
       },
       {
         "turn_index": 99,
-        "hunger": 95,
+        "hunger": 65,
         "thirst": 100,
         "fatigue": 45,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -2081,15 +1995,14 @@
       },
       {
         "turn_index": 100,
-        "hunger": 96,
+        "hunger": 66,
         "thirst": 100,
         "fatigue": 46,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -2100,36 +2013,48 @@
     ],
     "trend_row_count": 100,
     "pressure_turn_count": 95,
-    "survival_warning_count": 88,
+    "survival_warning_count": 31,
     "warning_counts_by_type": {
-      "thirst_high": 61,
-      "hunger_high": 27
+      "thirst_high": 31
     },
-    "relief_action_count": 2,
+    "relief_action_count": 5,
     "relief_counts_by_kind": {
       "drink_water": 2,
       "rest": 2,
       "eat_food": 1
     },
-    "blocked_relief_count": 3,
-    "blocked_counts_by_reason": {
-      "no_drink_item": 2,
-      "no_food_item": 1
-    },
-    "inventory_consumed_summary": [],
+    "blocked_relief_count": 0,
+    "blocked_counts_by_reason": {},
+    "inventory_consumed_summary": [
+      {
+        "item_id": "autoplay_field_ration_2",
+        "name": "Autoplay Field Ration",
+        "quantity": 1
+      },
+      {
+        "item_id": "autoplay_waterskin_1",
+        "name": "Autoplay Waterskin",
+        "quantity": 1
+      },
+      {
+        "item_id": "autoplay_waterskin_2",
+        "name": "Autoplay Waterskin",
+        "quantity": 1
+      }
+    ],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
-      "hunger_delta": 94,
+      "hunger_delta": 64,
       "thirst_delta": 97,
       "fatigue_delta": 44
     },
     "max_needs": {
-      "hunger": 96,
+      "hunger": 66,
       "thirst": 100,
       "fatigue": 50
     },
     "final_needs": {
-      "hunger": 96,
+      "hunger": 66,
       "thirst": 100,
       "fatigue": 46
     },
@@ -2142,9 +2067,9 @@
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
         "survival_action_rows": 5,
-        "survival_suggestion_rows": 4,
-        "relief_applied_rows": 2,
-        "warning_rows": 61,
+        "survival_suggestion_rows": 7,
+        "relief_applied_rows": 5,
+        "warning_rows": 31,
         "nonzero_need_rows": 95,
         "nonzero_delta_rows": 94
       },
@@ -2189,9 +2114,9 @@
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
         "survival_action_rows": 5,
-        "survival_suggestion_rows": 4,
-        "relief_applied_rows": 2,
-        "warning_rows": 61,
+        "survival_suggestion_rows": 7,
+        "relief_applied_rows": 5,
+        "warning_rows": 31,
         "nonzero_need_rows": 95,
         "nonzero_delta_rows": 94
       },
@@ -2598,37 +2523,37 @@
     {
       "turn_index": 27,
       "hunger": 27,
-      "thirst": 53,
+      "thirst": 23,
       "fatigue": 27,
       "hunger_delta": 1,
-      "thirst_delta": 2,
+      "thirst_delta": -28,
       "fatigue_delta": 1,
       "warning_count": 0,
       "warnings": [],
       "relief_action_kind": "drink_water",
-      "relief_applied": false,
-      "relief_blocked": true,
+      "relief_applied": true,
+      "relief_blocked": false,
       "source_present": true
     },
     {
       "turn_index": 28,
       "hunger": 28,
-      "thirst": 55,
+      "thirst": 25,
       "fatigue": 28,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
       "warning_count": 0,
       "warnings": [],
-      "relief_action_kind": "drink_water",
+      "relief_action_kind": "",
       "relief_applied": false,
-      "relief_blocked": true,
+      "relief_blocked": false,
       "source_present": true
     },
     {
       "turn_index": 29,
       "hunger": 29,
-      "thirst": 57,
+      "thirst": 27,
       "fatigue": 29,
       "hunger_delta": 1,
       "thirst_delta": 2,
@@ -2643,7 +2568,7 @@
     {
       "turn_index": 30,
       "hunger": 30,
-      "thirst": 59,
+      "thirst": 29,
       "fatigue": 30,
       "hunger_delta": 1,
       "thirst_delta": 2,
@@ -2658,7 +2583,7 @@
     {
       "turn_index": 31,
       "hunger": 31,
-      "thirst": 61,
+      "thirst": 31,
       "fatigue": 31,
       "hunger_delta": 1,
       "thirst_delta": 2,
@@ -2673,7 +2598,7 @@
     {
       "turn_index": 32,
       "hunger": 32,
-      "thirst": 63,
+      "thirst": 33,
       "fatigue": 32,
       "hunger_delta": 1,
       "thirst_delta": 2,
@@ -2688,7 +2613,7 @@
     {
       "turn_index": 33,
       "hunger": 33,
-      "thirst": 65,
+      "thirst": 35,
       "fatigue": 33,
       "hunger_delta": 1,
       "thirst_delta": 2,
@@ -2703,7 +2628,7 @@
     {
       "turn_index": 34,
       "hunger": 34,
-      "thirst": 67,
+      "thirst": 37,
       "fatigue": 34,
       "hunger_delta": 1,
       "thirst_delta": 2,
@@ -2718,7 +2643,7 @@
     {
       "turn_index": 35,
       "hunger": 35,
-      "thirst": 69,
+      "thirst": 39,
       "fatigue": 35,
       "hunger_delta": 1,
       "thirst_delta": 2,
@@ -2733,15 +2658,13 @@
     {
       "turn_index": 36,
       "hunger": 36,
-      "thirst": 71,
+      "thirst": 41,
       "fatigue": 36,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2750,15 +2673,13 @@
     {
       "turn_index": 37,
       "hunger": 37,
-      "thirst": 73,
+      "thirst": 43,
       "fatigue": 37,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2767,15 +2688,13 @@
     {
       "turn_index": 38,
       "hunger": 38,
-      "thirst": 75,
+      "thirst": 45,
       "fatigue": 38,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2784,15 +2703,13 @@
     {
       "turn_index": 39,
       "hunger": 39,
-      "thirst": 77,
+      "thirst": 47,
       "fatigue": 39,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2801,15 +2718,13 @@
     {
       "turn_index": 40,
       "hunger": 40,
-      "thirst": 79,
+      "thirst": 49,
       "fatigue": 40,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2818,15 +2733,13 @@
     {
       "turn_index": 41,
       "hunger": 41,
-      "thirst": 81,
+      "thirst": 51,
       "fatigue": 41,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2835,32 +2748,28 @@
     {
       "turn_index": 42,
       "hunger": 42,
-      "thirst": 83,
+      "thirst": 23,
       "fatigue": 42,
       "hunger_delta": 1,
-      "thirst_delta": 2,
+      "thirst_delta": -28,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
-      "relief_action_kind": "",
-      "relief_applied": false,
+      "warning_count": 0,
+      "warnings": [],
+      "relief_action_kind": "drink_water",
+      "relief_applied": true,
       "relief_blocked": false,
       "source_present": true
     },
     {
       "turn_index": 43,
       "hunger": 43,
-      "thirst": 85,
+      "thirst": 25,
       "fatigue": 43,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2869,15 +2778,13 @@
     {
       "turn_index": 44,
       "hunger": 44,
-      "thirst": 87,
+      "thirst": 27,
       "fatigue": 44,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2886,15 +2793,13 @@
     {
       "turn_index": 45,
       "hunger": 45,
-      "thirst": 89,
+      "thirst": 29,
       "fatigue": 45,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2903,15 +2808,13 @@
     {
       "turn_index": 46,
       "hunger": 46,
-      "thirst": 91,
+      "thirst": 31,
       "fatigue": 46,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2920,15 +2823,13 @@
     {
       "turn_index": 47,
       "hunger": 47,
-      "thirst": 93,
+      "thirst": 33,
       "fatigue": 47,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2967,15 +2868,13 @@
     {
       "turn_index": 50,
       "hunger": 48,
-      "thirst": 95,
+      "thirst": 35,
       "fatigue": 48,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -2984,15 +2883,13 @@
     {
       "turn_index": 51,
       "hunger": 49,
-      "thirst": 97,
+      "thirst": 37,
       "fatigue": 49,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3001,15 +2898,13 @@
     {
       "turn_index": 52,
       "hunger": 50,
-      "thirst": 99,
+      "thirst": 39,
       "fatigue": 50,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3018,15 +2913,13 @@
     {
       "turn_index": 53,
       "hunger": 51,
-      "thirst": 100,
+      "thirst": 41,
       "fatigue": 26,
       "hunger_delta": 1,
-      "thirst_delta": 1,
+      "thirst_delta": 2,
       "fatigue_delta": -24,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "rest",
       "relief_applied": true,
       "relief_blocked": false,
@@ -3034,33 +2927,29 @@
     },
     {
       "turn_index": 54,
-      "hunger": 52,
-      "thirst": 100,
+      "hunger": 22,
+      "thirst": 43,
       "fatigue": 27,
-      "hunger_delta": 1,
-      "thirst_delta": 0,
+      "hunger_delta": -29,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "eat_food",
-      "relief_applied": false,
-      "relief_blocked": true,
+      "relief_applied": true,
+      "relief_blocked": false,
       "source_present": true
     },
     {
       "turn_index": 55,
-      "hunger": 53,
-      "thirst": 100,
+      "hunger": 23,
+      "thirst": 45,
       "fatigue": 28,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3068,16 +2957,14 @@
     },
     {
       "turn_index": 56,
-      "hunger": 54,
-      "thirst": 100,
+      "hunger": 24,
+      "thirst": 47,
       "fatigue": 29,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3100,16 +2987,14 @@
     },
     {
       "turn_index": 58,
-      "hunger": 55,
-      "thirst": 100,
+      "hunger": 25,
+      "thirst": 49,
       "fatigue": 30,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3117,16 +3002,14 @@
     },
     {
       "turn_index": 59,
-      "hunger": 56,
-      "thirst": 100,
+      "hunger": 26,
+      "thirst": 51,
       "fatigue": 31,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3134,16 +3017,14 @@
     },
     {
       "turn_index": 60,
-      "hunger": 57,
-      "thirst": 100,
+      "hunger": 27,
+      "thirst": 53,
       "fatigue": 32,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3151,16 +3032,14 @@
     },
     {
       "turn_index": 61,
-      "hunger": 58,
-      "thirst": 100,
+      "hunger": 28,
+      "thirst": 55,
       "fatigue": 33,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3168,16 +3047,14 @@
     },
     {
       "turn_index": 62,
-      "hunger": 59,
-      "thirst": 100,
+      "hunger": 29,
+      "thirst": 57,
       "fatigue": 34,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3185,16 +3062,14 @@
     },
     {
       "turn_index": 63,
-      "hunger": 60,
-      "thirst": 100,
+      "hunger": 30,
+      "thirst": 59,
       "fatigue": 35,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3202,16 +3077,14 @@
     },
     {
       "turn_index": 64,
-      "hunger": 61,
-      "thirst": 100,
+      "hunger": 31,
+      "thirst": 61,
       "fatigue": 36,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3219,16 +3092,14 @@
     },
     {
       "turn_index": 65,
-      "hunger": 62,
-      "thirst": 100,
+      "hunger": 32,
+      "thirst": 63,
       "fatigue": 37,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3236,16 +3107,14 @@
     },
     {
       "turn_index": 66,
-      "hunger": 63,
-      "thirst": 100,
+      "hunger": 33,
+      "thirst": 65,
       "fatigue": 38,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3253,16 +3122,14 @@
     },
     {
       "turn_index": 67,
-      "hunger": 64,
-      "thirst": 100,
+      "hunger": 34,
+      "thirst": 67,
       "fatigue": 39,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3270,16 +3137,14 @@
     },
     {
       "turn_index": 68,
-      "hunger": 65,
-      "thirst": 100,
+      "hunger": 35,
+      "thirst": 69,
       "fatigue": 40,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
+      "warning_count": 0,
+      "warnings": [],
       "relief_action_kind": "",
       "relief_applied": false,
       "relief_blocked": false,
@@ -3287,11 +3152,11 @@
     },
     {
       "turn_index": 69,
-      "hunger": 66,
-      "thirst": 100,
+      "hunger": 36,
+      "thirst": 71,
       "fatigue": 41,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
       "warning_count": 1,
       "warnings": [
@@ -3304,11 +3169,11 @@
     },
     {
       "turn_index": 70,
-      "hunger": 67,
-      "thirst": 100,
+      "hunger": 37,
+      "thirst": 73,
       "fatigue": 42,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
       "warning_count": 1,
       "warnings": [
@@ -3321,11 +3186,11 @@
     },
     {
       "turn_index": 71,
-      "hunger": 68,
-      "thirst": 100,
+      "hunger": 38,
+      "thirst": 75,
       "fatigue": 43,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
       "warning_count": 1,
       "warnings": [
@@ -3338,11 +3203,11 @@
     },
     {
       "turn_index": 72,
-      "hunger": 69,
-      "thirst": 100,
+      "hunger": 39,
+      "thirst": 77,
       "fatigue": 44,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
       "warning_count": 1,
       "warnings": [
@@ -3355,15 +3220,14 @@
     },
     {
       "turn_index": 73,
-      "hunger": 70,
-      "thirst": 100,
+      "hunger": 40,
+      "thirst": 79,
       "fatigue": 45,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3373,15 +3237,14 @@
     },
     {
       "turn_index": 74,
-      "hunger": 71,
-      "thirst": 100,
+      "hunger": 41,
+      "thirst": 81,
       "fatigue": 46,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3391,15 +3254,14 @@
     },
     {
       "turn_index": 75,
-      "hunger": 72,
-      "thirst": 100,
+      "hunger": 42,
+      "thirst": 83,
       "fatigue": 47,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3409,15 +3271,14 @@
     },
     {
       "turn_index": 76,
-      "hunger": 73,
-      "thirst": 100,
+      "hunger": 43,
+      "thirst": 85,
       "fatigue": 48,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3427,15 +3288,14 @@
     },
     {
       "turn_index": 77,
-      "hunger": 74,
-      "thirst": 100,
+      "hunger": 44,
+      "thirst": 87,
       "fatigue": 49,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3445,15 +3305,14 @@
     },
     {
       "turn_index": 78,
-      "hunger": 75,
-      "thirst": 100,
+      "hunger": 45,
+      "thirst": 89,
       "fatigue": 50,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3463,15 +3322,14 @@
     },
     {
       "turn_index": 79,
-      "hunger": 76,
-      "thirst": 100,
+      "hunger": 46,
+      "thirst": 91,
       "fatigue": 26,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": -24,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "rest",
@@ -3481,15 +3339,14 @@
     },
     {
       "turn_index": 80,
-      "hunger": 77,
-      "thirst": 100,
+      "hunger": 47,
+      "thirst": 93,
       "fatigue": 27,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3499,15 +3356,14 @@
     },
     {
       "turn_index": 81,
-      "hunger": 78,
-      "thirst": 100,
+      "hunger": 48,
+      "thirst": 95,
       "fatigue": 28,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3517,15 +3373,14 @@
     },
     {
       "turn_index": 82,
-      "hunger": 79,
-      "thirst": 100,
+      "hunger": 49,
+      "thirst": 97,
       "fatigue": 29,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3535,15 +3390,14 @@
     },
     {
       "turn_index": 83,
-      "hunger": 80,
-      "thirst": 100,
+      "hunger": 50,
+      "thirst": 99,
       "fatigue": 30,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 2,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3568,15 +3422,14 @@
     },
     {
       "turn_index": 85,
-      "hunger": 81,
+      "hunger": 51,
       "thirst": 100,
       "fatigue": 31,
       "hunger_delta": 1,
-      "thirst_delta": 0,
+      "thirst_delta": 1,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3586,15 +3439,14 @@
     },
     {
       "turn_index": 86,
-      "hunger": 82,
+      "hunger": 52,
       "thirst": 100,
       "fatigue": 32,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3604,15 +3456,14 @@
     },
     {
       "turn_index": 87,
-      "hunger": 83,
+      "hunger": 53,
       "thirst": 100,
       "fatigue": 33,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3622,15 +3473,14 @@
     },
     {
       "turn_index": 88,
-      "hunger": 84,
+      "hunger": 54,
       "thirst": 100,
       "fatigue": 34,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3640,15 +3490,14 @@
     },
     {
       "turn_index": 89,
-      "hunger": 85,
+      "hunger": 55,
       "thirst": 100,
       "fatigue": 35,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3658,15 +3507,14 @@
     },
     {
       "turn_index": 90,
-      "hunger": 86,
+      "hunger": 56,
       "thirst": 100,
       "fatigue": 36,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3676,15 +3524,14 @@
     },
     {
       "turn_index": 91,
-      "hunger": 87,
+      "hunger": 57,
       "thirst": 100,
       "fatigue": 37,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3694,15 +3541,14 @@
     },
     {
       "turn_index": 92,
-      "hunger": 88,
+      "hunger": 58,
       "thirst": 100,
       "fatigue": 38,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3712,15 +3558,14 @@
     },
     {
       "turn_index": 93,
-      "hunger": 89,
+      "hunger": 59,
       "thirst": 100,
       "fatigue": 39,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3730,15 +3575,14 @@
     },
     {
       "turn_index": 94,
-      "hunger": 90,
+      "hunger": 60,
       "thirst": 100,
       "fatigue": 40,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3748,15 +3592,14 @@
     },
     {
       "turn_index": 95,
-      "hunger": 91,
+      "hunger": 61,
       "thirst": 100,
       "fatigue": 41,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3766,15 +3609,14 @@
     },
     {
       "turn_index": 96,
-      "hunger": 92,
+      "hunger": 62,
       "thirst": 100,
       "fatigue": 42,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3784,15 +3626,14 @@
     },
     {
       "turn_index": 97,
-      "hunger": 93,
+      "hunger": 63,
       "thirst": 100,
       "fatigue": 43,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3802,15 +3643,14 @@
     },
     {
       "turn_index": 98,
-      "hunger": 94,
+      "hunger": 64,
       "thirst": 100,
       "fatigue": 44,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3820,15 +3660,14 @@
     },
     {
       "turn_index": 99,
-      "hunger": 95,
+      "hunger": 65,
       "thirst": 100,
       "fatigue": 45,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3838,15 +3677,14 @@
     },
     {
       "turn_index": 100,
-      "hunger": 96,
+      "hunger": 66,
       "thirst": 100,
       "fatigue": 46,
       "hunger_delta": 1,
       "thirst_delta": 0,
       "fatigue_delta": 1,
-      "warning_count": 2,
+      "warning_count": 1,
       "warnings": [
-        "hunger_high",
         "thirst_high"
       ],
       "relief_action_kind": "",
@@ -3859,18 +3697,18 @@
     {
       "id": "n1271-survival-autoplay-evidence",
       "title": "N127.1 Survival Autoplay Evidence",
-      "html": "<section id='n1271-survival-autoplay-evidence'><h2>N127.1 Survival Autoplay Evidence</h2><p><strong>Evidence gate:</strong> PASS (advisory=True)</p><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody><tr><td>survival_pressure_seen</td><td>PASS</td></tr><tr><td>survival_suggestions_seen</td><td>PASS</td></tr><tr><td>survival_relief_actions_seen</td><td>PASS</td></tr><tr><td>survival_inventory_consumed_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_service_purchase_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_non_inventory_relief_seen</td><td>PASS</td></tr><tr><td>survival_negative_resource_response_seen</td><td>PASS</td></tr><tr><td>survival_response_evidence_seen</td><td>PASS</td></tr><tr><td>survival_state_carry_forward_seen</td><td>PASS</td></tr></tbody></table><h3>Pressure to suggestion to response</h3><table><thead><tr><th>Turn</th><th>Needs</th><th>Suggestions</th><th>Relief</th><th>Applied</th></tr></thead><tbody><tr><td>1</td><td>H 2 / T 3 / F 2</td><td>0</td><td></td><td>no</td></tr><tr><td>2</td><td>H 3 / T 5 / F 3</td><td>0</td><td></td><td>no</td></tr><tr><td>3</td><td>H 4 / T 7 / F 4</td><td>0</td><td></td><td>no</td></tr><tr><td>4</td><td>H 5 / T 9 / F 5</td><td>0</td><td></td><td>no</td></tr><tr><td>5</td><td>H 6 / T 11 / F 6</td><td>0</td><td></td><td>no</td></tr><tr><td>6</td><td>H 7 / T 13 / F 7</td><td>0</td><td></td><td>no</td></tr><tr><td>7</td><td>H 8 / T 15 / F 8</td><td>0</td><td></td><td>no</td></tr><tr><td>8</td><td>H 9 / T 17 / F 9</td><td>0</td><td></td><td>no</td></tr><tr><td>9</td><td>H 10 / T 19 / F 10</td><td>0</td><td></td><td>no</td></tr><tr><td>10</td><td>H 11 / T 21 / F 11</td><td>0</td><td></td><td>no</td></tr><tr><td>11</td><td>H 12 / T 23 / F 12</td><td>0</td><td></td><td>no</td></tr><tr><td>12</td><td>H 13 / T 25 / F 13</td><td>0</td><td></td><td>no</td></tr></tbody></table><h3>Inventory consumed</h3><table><thead><tr><th>Item</th><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td colspan='3'>No inventory consumption observed.</td></tr></tbody></table><h3>Service relief purchases</h3><table><thead><tr><th>Service</th><th>Count</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>No service relief purchases observed.</td></tr></tbody></table><h3>Non-inventory relief</h3><table><thead><tr><th>Action</th><th>Count</th></tr></thead><tbody><tr><td>rest</td><td>2</td></tr></tbody></table></section>"
+      "html": "<section id='n1271-survival-autoplay-evidence'><h2>N127.1 Survival Autoplay Evidence</h2><p><strong>Evidence gate:</strong> PASS (advisory=True)</p><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody><tr><td>survival_pressure_seen</td><td>PASS</td></tr><tr><td>survival_suggestions_seen</td><td>PASS</td></tr><tr><td>survival_relief_actions_seen</td><td>PASS</td></tr><tr><td>survival_inventory_consumed_seen</td><td>PASS</td></tr><tr><td>survival_service_purchase_seen</td><td>ADVISORY GAP</td></tr><tr><td>survival_non_inventory_relief_seen</td><td>PASS</td></tr><tr><td>survival_negative_resource_response_seen</td><td>PASS</td></tr><tr><td>survival_response_evidence_seen</td><td>PASS</td></tr><tr><td>survival_state_carry_forward_seen</td><td>PASS</td></tr></tbody></table><h3>Pressure to suggestion to response</h3><table><thead><tr><th>Turn</th><th>Needs</th><th>Suggestions</th><th>Relief</th><th>Applied</th></tr></thead><tbody><tr><td>1</td><td>H 2 / T 3 / F 2</td><td>0</td><td></td><td>no</td></tr><tr><td>2</td><td>H 3 / T 5 / F 3</td><td>0</td><td></td><td>no</td></tr><tr><td>3</td><td>H 4 / T 7 / F 4</td><td>0</td><td></td><td>no</td></tr><tr><td>4</td><td>H 5 / T 9 / F 5</td><td>0</td><td></td><td>no</td></tr><tr><td>5</td><td>H 6 / T 11 / F 6</td><td>0</td><td></td><td>no</td></tr><tr><td>6</td><td>H 7 / T 13 / F 7</td><td>0</td><td></td><td>no</td></tr><tr><td>7</td><td>H 8 / T 15 / F 8</td><td>0</td><td></td><td>no</td></tr><tr><td>8</td><td>H 9 / T 17 / F 9</td><td>0</td><td></td><td>no</td></tr><tr><td>9</td><td>H 10 / T 19 / F 10</td><td>0</td><td></td><td>no</td></tr><tr><td>10</td><td>H 11 / T 21 / F 11</td><td>0</td><td></td><td>no</td></tr><tr><td>11</td><td>H 12 / T 23 / F 12</td><td>0</td><td></td><td>no</td></tr><tr><td>12</td><td>H 13 / T 25 / F 13</td><td>0</td><td></td><td>no</td></tr></tbody></table><h3>Inventory consumed</h3><table><thead><tr><th>Item</th><th>Name</th><th>Qty</th></tr></thead><tbody><tr><td>autoplay_field_ration_2</td><td>Autoplay Field Ration</td><td>1</td></tr><tr><td>autoplay_waterskin_1</td><td>Autoplay Waterskin</td><td>1</td></tr><tr><td>autoplay_waterskin_2</td><td>Autoplay Waterskin</td><td>1</td></tr></tbody></table><h3>Service relief purchases</h3><table><thead><tr><th>Service</th><th>Count</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>No service relief purchases observed.</td></tr></tbody></table><h3>Non-inventory relief</h3><table><thead><tr><th>Action</th><th>Count</th></tr></thead><tbody><tr><td>rest</td><td>2</td></tr></tbody></table></section>"
     },
     {
       "id": "n1251-survival-source",
       "title": "N125.1 Real Survival Metric Source Evidence",
-      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>95</td></tr><tr><td>climate_tick_source_rows</td><td>95</td></tr><tr><td>survival_action_rows</td><td>5</td></tr><tr><td>survival_suggestion_rows</td><td>4</td></tr><tr><td>relief_applied_rows</td><td>2</td></tr><tr><td>warning_rows</td><td>61</td></tr><tr><td>nonzero_need_rows</td><td>95</td></tr><tr><td>nonzero_delta_rows</td><td>94</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>95</td></tr><tr><td>climate_tick_source_rows</td><td>95</td></tr><tr><td>survival_action_rows</td><td>5</td></tr><tr><td>survival_suggestion_rows</td><td>7</td></tr><tr><td>relief_applied_rows</td><td>5</td></tr><tr><td>warning_rows</td><td>31</td></tr><tr><td>nonzero_need_rows</td><td>95</td></tr><tr><td>nonzero_delta_rows</td><td>94</td></tr></tbody></table>\n</section>",
       "source": "survival-metric-source-summary.json"
     },
     {
       "id": "n1234-survival-pressure",
       "title": "N123.4 Survival Pressure vs Player Response",
-      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>95</span></div>\n    <div><strong>Warnings</strong><span>88</span></div>\n    <div><strong>Relief actions</strong><span>2</span></div>\n    <div><strong>Blocked relief</strong><span>3</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>85</td><td>100</td><td>35</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>90</td><td>86</td><td>100</td><td>36</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>91</td><td>87</td><td>100</td><td>37</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>92</td><td>88</td><td>100</td><td>38</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>93</td><td>89</td><td>100</td><td>39</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>94</td><td>90</td><td>100</td><td>40</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>95</td><td>91</td><td>100</td><td>41</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>96</td><td>92</td><td>100</td><td>42</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>97</td><td>93</td><td>100</td><td>43</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>98</td><td>94</td><td>100</td><td>44</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>99</td><td>95</td><td>100</td><td>45</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>100</td><td>96</td><td>100</td><td>46</td><td></td><td>hunger_high, thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td colspan='2'>None</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>95</span></div>\n    <div><strong>Warnings</strong><span>31</span></div>\n    <div><strong>Relief actions</strong><span>5</span></div>\n    <div><strong>Blocked relief</strong><span>0</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>55</td><td>100</td><td>35</td><td></td><td>thirst_high</td></tr><tr><td>90</td><td>56</td><td>100</td><td>36</td><td></td><td>thirst_high</td></tr><tr><td>91</td><td>57</td><td>100</td><td>37</td><td></td><td>thirst_high</td></tr><tr><td>92</td><td>58</td><td>100</td><td>38</td><td></td><td>thirst_high</td></tr><tr><td>93</td><td>59</td><td>100</td><td>39</td><td></td><td>thirst_high</td></tr><tr><td>94</td><td>60</td><td>100</td><td>40</td><td></td><td>thirst_high</td></tr><tr><td>95</td><td>61</td><td>100</td><td>41</td><td></td><td>thirst_high</td></tr><tr><td>96</td><td>62</td><td>100</td><td>42</td><td></td><td>thirst_high</td></tr><tr><td>97</td><td>63</td><td>100</td><td>43</td><td></td><td>thirst_high</td></tr><tr><td>98</td><td>64</td><td>100</td><td>44</td><td></td><td>thirst_high</td></tr><tr><td>99</td><td>65</td><td>100</td><td>45</td><td></td><td>thirst_high</td></tr><tr><td>100</td><td>66</td><td>100</td><td>46</td><td></td><td>thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td>Autoplay Field Ration</td><td>1</td></tr><tr><td>Autoplay Waterskin</td><td>1</td></tr><tr><td>Autoplay Waterskin</td><td>1</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
       "source": "transcript.turn_contract.climate_survival.resource_changes.effect_result.survival_action"
     }
   ],
@@ -4273,37 +4111,37 @@
         {
           "turn_index": 27,
           "hunger": 27,
-          "thirst": 53,
+          "thirst": 23,
           "fatigue": 27,
           "hunger_delta": 1,
-          "thirst_delta": 2,
+          "thirst_delta": -28,
           "fatigue_delta": 1,
           "warning_count": 0,
           "warnings": [],
           "relief_action_kind": "drink_water",
-          "relief_applied": false,
-          "relief_blocked": true,
+          "relief_applied": true,
+          "relief_blocked": false,
           "source_present": true
         },
         {
           "turn_index": 28,
           "hunger": 28,
-          "thirst": 55,
+          "thirst": 25,
           "fatigue": 28,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
           "warning_count": 0,
           "warnings": [],
-          "relief_action_kind": "drink_water",
+          "relief_action_kind": "",
           "relief_applied": false,
-          "relief_blocked": true,
+          "relief_blocked": false,
           "source_present": true
         },
         {
           "turn_index": 29,
           "hunger": 29,
-          "thirst": 57,
+          "thirst": 27,
           "fatigue": 29,
           "hunger_delta": 1,
           "thirst_delta": 2,
@@ -4318,7 +4156,7 @@
         {
           "turn_index": 30,
           "hunger": 30,
-          "thirst": 59,
+          "thirst": 29,
           "fatigue": 30,
           "hunger_delta": 1,
           "thirst_delta": 2,
@@ -4333,7 +4171,7 @@
         {
           "turn_index": 31,
           "hunger": 31,
-          "thirst": 61,
+          "thirst": 31,
           "fatigue": 31,
           "hunger_delta": 1,
           "thirst_delta": 2,
@@ -4348,7 +4186,7 @@
         {
           "turn_index": 32,
           "hunger": 32,
-          "thirst": 63,
+          "thirst": 33,
           "fatigue": 32,
           "hunger_delta": 1,
           "thirst_delta": 2,
@@ -4363,7 +4201,7 @@
         {
           "turn_index": 33,
           "hunger": 33,
-          "thirst": 65,
+          "thirst": 35,
           "fatigue": 33,
           "hunger_delta": 1,
           "thirst_delta": 2,
@@ -4378,7 +4216,7 @@
         {
           "turn_index": 34,
           "hunger": 34,
-          "thirst": 67,
+          "thirst": 37,
           "fatigue": 34,
           "hunger_delta": 1,
           "thirst_delta": 2,
@@ -4393,7 +4231,7 @@
         {
           "turn_index": 35,
           "hunger": 35,
-          "thirst": 69,
+          "thirst": 39,
           "fatigue": 35,
           "hunger_delta": 1,
           "thirst_delta": 2,
@@ -4408,15 +4246,13 @@
         {
           "turn_index": 36,
           "hunger": 36,
-          "thirst": 71,
+          "thirst": 41,
           "fatigue": 36,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4425,15 +4261,13 @@
         {
           "turn_index": 37,
           "hunger": 37,
-          "thirst": 73,
+          "thirst": 43,
           "fatigue": 37,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4442,15 +4276,13 @@
         {
           "turn_index": 38,
           "hunger": 38,
-          "thirst": 75,
+          "thirst": 45,
           "fatigue": 38,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4459,15 +4291,13 @@
         {
           "turn_index": 39,
           "hunger": 39,
-          "thirst": 77,
+          "thirst": 47,
           "fatigue": 39,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4476,15 +4306,13 @@
         {
           "turn_index": 40,
           "hunger": 40,
-          "thirst": 79,
+          "thirst": 49,
           "fatigue": 40,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4493,15 +4321,13 @@
         {
           "turn_index": 41,
           "hunger": 41,
-          "thirst": 81,
+          "thirst": 51,
           "fatigue": 41,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4510,32 +4336,28 @@
         {
           "turn_index": 42,
           "hunger": 42,
-          "thirst": 83,
+          "thirst": 23,
           "fatigue": 42,
           "hunger_delta": 1,
-          "thirst_delta": 2,
+          "thirst_delta": -28,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
-          "relief_action_kind": "",
-          "relief_applied": false,
+          "warning_count": 0,
+          "warnings": [],
+          "relief_action_kind": "drink_water",
+          "relief_applied": true,
           "relief_blocked": false,
           "source_present": true
         },
         {
           "turn_index": 43,
           "hunger": 43,
-          "thirst": 85,
+          "thirst": 25,
           "fatigue": 43,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4544,15 +4366,13 @@
         {
           "turn_index": 44,
           "hunger": 44,
-          "thirst": 87,
+          "thirst": 27,
           "fatigue": 44,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4561,15 +4381,13 @@
         {
           "turn_index": 45,
           "hunger": 45,
-          "thirst": 89,
+          "thirst": 29,
           "fatigue": 45,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4578,15 +4396,13 @@
         {
           "turn_index": 46,
           "hunger": 46,
-          "thirst": 91,
+          "thirst": 31,
           "fatigue": 46,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4595,15 +4411,13 @@
         {
           "turn_index": 47,
           "hunger": 47,
-          "thirst": 93,
+          "thirst": 33,
           "fatigue": 47,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4642,15 +4456,13 @@
         {
           "turn_index": 50,
           "hunger": 48,
-          "thirst": 95,
+          "thirst": 35,
           "fatigue": 48,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4659,15 +4471,13 @@
         {
           "turn_index": 51,
           "hunger": 49,
-          "thirst": 97,
+          "thirst": 37,
           "fatigue": 49,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4676,15 +4486,13 @@
         {
           "turn_index": 52,
           "hunger": 50,
-          "thirst": 99,
+          "thirst": 39,
           "fatigue": 50,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4693,15 +4501,13 @@
         {
           "turn_index": 53,
           "hunger": 51,
-          "thirst": 100,
+          "thirst": 41,
           "fatigue": 26,
           "hunger_delta": 1,
-          "thirst_delta": 1,
+          "thirst_delta": 2,
           "fatigue_delta": -24,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "rest",
           "relief_applied": true,
           "relief_blocked": false,
@@ -4709,33 +4515,29 @@
         },
         {
           "turn_index": 54,
-          "hunger": 52,
-          "thirst": 100,
+          "hunger": 22,
+          "thirst": 43,
           "fatigue": 27,
-          "hunger_delta": 1,
-          "thirst_delta": 0,
+          "hunger_delta": -29,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "eat_food",
-          "relief_applied": false,
-          "relief_blocked": true,
+          "relief_applied": true,
+          "relief_blocked": false,
           "source_present": true
         },
         {
           "turn_index": 55,
-          "hunger": 53,
-          "thirst": 100,
+          "hunger": 23,
+          "thirst": 45,
           "fatigue": 28,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4743,16 +4545,14 @@
         },
         {
           "turn_index": 56,
-          "hunger": 54,
-          "thirst": 100,
+          "hunger": 24,
+          "thirst": 47,
           "fatigue": 29,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4775,16 +4575,14 @@
         },
         {
           "turn_index": 58,
-          "hunger": 55,
-          "thirst": 100,
+          "hunger": 25,
+          "thirst": 49,
           "fatigue": 30,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4792,16 +4590,14 @@
         },
         {
           "turn_index": 59,
-          "hunger": 56,
-          "thirst": 100,
+          "hunger": 26,
+          "thirst": 51,
           "fatigue": 31,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4809,16 +4605,14 @@
         },
         {
           "turn_index": 60,
-          "hunger": 57,
-          "thirst": 100,
+          "hunger": 27,
+          "thirst": 53,
           "fatigue": 32,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4826,16 +4620,14 @@
         },
         {
           "turn_index": 61,
-          "hunger": 58,
-          "thirst": 100,
+          "hunger": 28,
+          "thirst": 55,
           "fatigue": 33,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4843,16 +4635,14 @@
         },
         {
           "turn_index": 62,
-          "hunger": 59,
-          "thirst": 100,
+          "hunger": 29,
+          "thirst": 57,
           "fatigue": 34,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4860,16 +4650,14 @@
         },
         {
           "turn_index": 63,
-          "hunger": 60,
-          "thirst": 100,
+          "hunger": 30,
+          "thirst": 59,
           "fatigue": 35,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4877,16 +4665,14 @@
         },
         {
           "turn_index": 64,
-          "hunger": 61,
-          "thirst": 100,
+          "hunger": 31,
+          "thirst": 61,
           "fatigue": 36,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4894,16 +4680,14 @@
         },
         {
           "turn_index": 65,
-          "hunger": 62,
-          "thirst": 100,
+          "hunger": 32,
+          "thirst": 63,
           "fatigue": 37,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4911,16 +4695,14 @@
         },
         {
           "turn_index": 66,
-          "hunger": 63,
-          "thirst": 100,
+          "hunger": 33,
+          "thirst": 65,
           "fatigue": 38,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4928,16 +4710,14 @@
         },
         {
           "turn_index": 67,
-          "hunger": 64,
-          "thirst": 100,
+          "hunger": 34,
+          "thirst": 67,
           "fatigue": 39,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4945,16 +4725,14 @@
         },
         {
           "turn_index": 68,
-          "hunger": 65,
-          "thirst": 100,
+          "hunger": 35,
+          "thirst": 69,
           "fatigue": 40,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
+          "warning_count": 0,
+          "warnings": [],
           "relief_action_kind": "",
           "relief_applied": false,
           "relief_blocked": false,
@@ -4962,11 +4740,11 @@
         },
         {
           "turn_index": 69,
-          "hunger": 66,
-          "thirst": 100,
+          "hunger": 36,
+          "thirst": 71,
           "fatigue": 41,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
           "warning_count": 1,
           "warnings": [
@@ -4979,11 +4757,11 @@
         },
         {
           "turn_index": 70,
-          "hunger": 67,
-          "thirst": 100,
+          "hunger": 37,
+          "thirst": 73,
           "fatigue": 42,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
           "warning_count": 1,
           "warnings": [
@@ -4996,11 +4774,11 @@
         },
         {
           "turn_index": 71,
-          "hunger": 68,
-          "thirst": 100,
+          "hunger": 38,
+          "thirst": 75,
           "fatigue": 43,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
           "warning_count": 1,
           "warnings": [
@@ -5013,11 +4791,11 @@
         },
         {
           "turn_index": 72,
-          "hunger": 69,
-          "thirst": 100,
+          "hunger": 39,
+          "thirst": 77,
           "fatigue": 44,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
           "warning_count": 1,
           "warnings": [
@@ -5030,15 +4808,14 @@
         },
         {
           "turn_index": 73,
-          "hunger": 70,
-          "thirst": 100,
+          "hunger": 40,
+          "thirst": 79,
           "fatigue": 45,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5048,15 +4825,14 @@
         },
         {
           "turn_index": 74,
-          "hunger": 71,
-          "thirst": 100,
+          "hunger": 41,
+          "thirst": 81,
           "fatigue": 46,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5066,15 +4842,14 @@
         },
         {
           "turn_index": 75,
-          "hunger": 72,
-          "thirst": 100,
+          "hunger": 42,
+          "thirst": 83,
           "fatigue": 47,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5084,15 +4859,14 @@
         },
         {
           "turn_index": 76,
-          "hunger": 73,
-          "thirst": 100,
+          "hunger": 43,
+          "thirst": 85,
           "fatigue": 48,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5102,15 +4876,14 @@
         },
         {
           "turn_index": 77,
-          "hunger": 74,
-          "thirst": 100,
+          "hunger": 44,
+          "thirst": 87,
           "fatigue": 49,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5120,15 +4893,14 @@
         },
         {
           "turn_index": 78,
-          "hunger": 75,
-          "thirst": 100,
+          "hunger": 45,
+          "thirst": 89,
           "fatigue": 50,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5138,15 +4910,14 @@
         },
         {
           "turn_index": 79,
-          "hunger": 76,
-          "thirst": 100,
+          "hunger": 46,
+          "thirst": 91,
           "fatigue": 26,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": -24,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "rest",
@@ -5156,15 +4927,14 @@
         },
         {
           "turn_index": 80,
-          "hunger": 77,
-          "thirst": 100,
+          "hunger": 47,
+          "thirst": 93,
           "fatigue": 27,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5174,15 +4944,14 @@
         },
         {
           "turn_index": 81,
-          "hunger": 78,
-          "thirst": 100,
+          "hunger": 48,
+          "thirst": 95,
           "fatigue": 28,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5192,15 +4961,14 @@
         },
         {
           "turn_index": 82,
-          "hunger": 79,
-          "thirst": 100,
+          "hunger": 49,
+          "thirst": 97,
           "fatigue": 29,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5210,15 +4978,14 @@
         },
         {
           "turn_index": 83,
-          "hunger": 80,
-          "thirst": 100,
+          "hunger": 50,
+          "thirst": 99,
           "fatigue": 30,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 2,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5243,15 +5010,14 @@
         },
         {
           "turn_index": 85,
-          "hunger": 81,
+          "hunger": 51,
           "thirst": 100,
           "fatigue": 31,
           "hunger_delta": 1,
-          "thirst_delta": 0,
+          "thirst_delta": 1,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5261,15 +5027,14 @@
         },
         {
           "turn_index": 86,
-          "hunger": 82,
+          "hunger": 52,
           "thirst": 100,
           "fatigue": 32,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5279,15 +5044,14 @@
         },
         {
           "turn_index": 87,
-          "hunger": 83,
+          "hunger": 53,
           "thirst": 100,
           "fatigue": 33,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5297,15 +5061,14 @@
         },
         {
           "turn_index": 88,
-          "hunger": 84,
+          "hunger": 54,
           "thirst": 100,
           "fatigue": 34,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5315,15 +5078,14 @@
         },
         {
           "turn_index": 89,
-          "hunger": 85,
+          "hunger": 55,
           "thirst": 100,
           "fatigue": 35,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5333,15 +5095,14 @@
         },
         {
           "turn_index": 90,
-          "hunger": 86,
+          "hunger": 56,
           "thirst": 100,
           "fatigue": 36,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5351,15 +5112,14 @@
         },
         {
           "turn_index": 91,
-          "hunger": 87,
+          "hunger": 57,
           "thirst": 100,
           "fatigue": 37,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5369,15 +5129,14 @@
         },
         {
           "turn_index": 92,
-          "hunger": 88,
+          "hunger": 58,
           "thirst": 100,
           "fatigue": 38,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5387,15 +5146,14 @@
         },
         {
           "turn_index": 93,
-          "hunger": 89,
+          "hunger": 59,
           "thirst": 100,
           "fatigue": 39,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5405,15 +5163,14 @@
         },
         {
           "turn_index": 94,
-          "hunger": 90,
+          "hunger": 60,
           "thirst": 100,
           "fatigue": 40,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5423,15 +5180,14 @@
         },
         {
           "turn_index": 95,
-          "hunger": 91,
+          "hunger": 61,
           "thirst": 100,
           "fatigue": 41,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5441,15 +5197,14 @@
         },
         {
           "turn_index": 96,
-          "hunger": 92,
+          "hunger": 62,
           "thirst": 100,
           "fatigue": 42,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5459,15 +5214,14 @@
         },
         {
           "turn_index": 97,
-          "hunger": 93,
+          "hunger": 63,
           "thirst": 100,
           "fatigue": 43,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5477,15 +5231,14 @@
         },
         {
           "turn_index": 98,
-          "hunger": 94,
+          "hunger": 64,
           "thirst": 100,
           "fatigue": 44,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5495,15 +5248,14 @@
         },
         {
           "turn_index": 99,
-          "hunger": 95,
+          "hunger": 65,
           "thirst": 100,
           "fatigue": 45,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5513,15 +5265,14 @@
         },
         {
           "turn_index": 100,
-          "hunger": 96,
+          "hunger": 66,
           "thirst": 100,
           "fatigue": 46,
           "hunger_delta": 1,
           "thirst_delta": 0,
           "fatigue_delta": 1,
-          "warning_count": 2,
+          "warning_count": 1,
           "warnings": [
-            "hunger_high",
             "thirst_high"
           ],
           "relief_action_kind": "",
@@ -5532,36 +5283,48 @@
       ],
       "trend_row_count": 100,
       "pressure_turn_count": 95,
-      "survival_warning_count": 88,
+      "survival_warning_count": 31,
       "warning_counts_by_type": {
-        "thirst_high": 61,
-        "hunger_high": 27
+        "thirst_high": 31
       },
-      "relief_action_count": 2,
+      "relief_action_count": 5,
       "relief_counts_by_kind": {
         "drink_water": 2,
         "rest": 2,
         "eat_food": 1
       },
-      "blocked_relief_count": 3,
-      "blocked_counts_by_reason": {
-        "no_drink_item": 2,
-        "no_food_item": 1
-      },
-      "inventory_consumed_summary": [],
+      "blocked_relief_count": 0,
+      "blocked_counts_by_reason": {},
+      "inventory_consumed_summary": [
+        {
+          "item_id": "autoplay_field_ration_2",
+          "name": "Autoplay Field Ration",
+          "quantity": 1
+        },
+        {
+          "item_id": "autoplay_waterskin_1",
+          "name": "Autoplay Waterskin",
+          "quantity": 1
+        },
+        {
+          "item_id": "autoplay_waterskin_2",
+          "name": "Autoplay Waterskin",
+          "quantity": 1
+        }
+      ],
       "service_relief_purchases_summary": [],
       "net_resource_deltas": {
-        "hunger_delta": 94,
+        "hunger_delta": 64,
         "thirst_delta": 97,
         "fatigue_delta": 44
       },
       "max_needs": {
-        "hunger": 96,
+        "hunger": 66,
         "thirst": 100,
         "fatigue": 50
       },
       "final_needs": {
-        "hunger": 96,
+        "hunger": 66,
         "thirst": 100,
         "fatigue": 46
       },
@@ -5574,9 +5337,9 @@
           "resource_change_rows": 95,
           "climate_tick_source_rows": 95,
           "survival_action_rows": 5,
-          "survival_suggestion_rows": 4,
-          "relief_applied_rows": 2,
-          "warning_rows": 61,
+          "survival_suggestion_rows": 7,
+          "relief_applied_rows": 5,
+          "warning_rows": 31,
           "nonzero_need_rows": 95,
           "nonzero_delta_rows": 94
         },
@@ -5621,9 +5384,9 @@
           "resource_change_rows": 95,
           "climate_tick_source_rows": 95,
           "survival_action_rows": 5,
-          "survival_suggestion_rows": 4,
-          "relief_applied_rows": 2,
-          "warning_rows": 61,
+          "survival_suggestion_rows": 7,
+          "relief_applied_rows": 5,
+          "warning_rows": 31,
           "nonzero_need_rows": 95,
           "nonzero_delta_rows": 94
         },
@@ -6030,37 +5793,37 @@
       {
         "turn_index": 27,
         "hunger": 27,
-        "thirst": 53,
+        "thirst": 23,
         "fatigue": 27,
         "hunger_delta": 1,
-        "thirst_delta": 2,
+        "thirst_delta": -28,
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
         "relief_action_kind": "drink_water",
-        "relief_applied": false,
-        "relief_blocked": true,
+        "relief_applied": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 28,
         "hunger": 28,
-        "thirst": 55,
+        "thirst": 25,
         "fatigue": 28,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "drink_water",
+        "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 29,
         "hunger": 29,
-        "thirst": 57,
+        "thirst": 27,
         "fatigue": 29,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -6075,7 +5838,7 @@
       {
         "turn_index": 30,
         "hunger": 30,
-        "thirst": 59,
+        "thirst": 29,
         "fatigue": 30,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -6090,7 +5853,7 @@
       {
         "turn_index": 31,
         "hunger": 31,
-        "thirst": 61,
+        "thirst": 31,
         "fatigue": 31,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -6105,7 +5868,7 @@
       {
         "turn_index": 32,
         "hunger": 32,
-        "thirst": 63,
+        "thirst": 33,
         "fatigue": 32,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -6120,7 +5883,7 @@
       {
         "turn_index": 33,
         "hunger": 33,
-        "thirst": 65,
+        "thirst": 35,
         "fatigue": 33,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -6135,7 +5898,7 @@
       {
         "turn_index": 34,
         "hunger": 34,
-        "thirst": 67,
+        "thirst": 37,
         "fatigue": 34,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -6150,7 +5913,7 @@
       {
         "turn_index": 35,
         "hunger": 35,
-        "thirst": 69,
+        "thirst": 39,
         "fatigue": 35,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -6165,15 +5928,13 @@
       {
         "turn_index": 36,
         "hunger": 36,
-        "thirst": 71,
+        "thirst": 41,
         "fatigue": 36,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6182,15 +5943,13 @@
       {
         "turn_index": 37,
         "hunger": 37,
-        "thirst": 73,
+        "thirst": 43,
         "fatigue": 37,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6199,15 +5958,13 @@
       {
         "turn_index": 38,
         "hunger": 38,
-        "thirst": 75,
+        "thirst": 45,
         "fatigue": 38,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6216,15 +5973,13 @@
       {
         "turn_index": 39,
         "hunger": 39,
-        "thirst": 77,
+        "thirst": 47,
         "fatigue": 39,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6233,15 +5988,13 @@
       {
         "turn_index": 40,
         "hunger": 40,
-        "thirst": 79,
+        "thirst": 49,
         "fatigue": 40,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6250,15 +6003,13 @@
       {
         "turn_index": 41,
         "hunger": 41,
-        "thirst": 81,
+        "thirst": 51,
         "fatigue": 41,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6267,32 +6018,28 @@
       {
         "turn_index": 42,
         "hunger": 42,
-        "thirst": 83,
+        "thirst": 23,
         "fatigue": 42,
         "hunger_delta": 1,
-        "thirst_delta": 2,
+        "thirst_delta": -28,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "drink_water",
+        "relief_applied": true,
         "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 43,
         "hunger": 43,
-        "thirst": 85,
+        "thirst": 25,
         "fatigue": 43,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6301,15 +6048,13 @@
       {
         "turn_index": 44,
         "hunger": 44,
-        "thirst": 87,
+        "thirst": 27,
         "fatigue": 44,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6318,15 +6063,13 @@
       {
         "turn_index": 45,
         "hunger": 45,
-        "thirst": 89,
+        "thirst": 29,
         "fatigue": 45,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6335,15 +6078,13 @@
       {
         "turn_index": 46,
         "hunger": 46,
-        "thirst": 91,
+        "thirst": 31,
         "fatigue": 46,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6352,15 +6093,13 @@
       {
         "turn_index": 47,
         "hunger": 47,
-        "thirst": 93,
+        "thirst": 33,
         "fatigue": 47,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6399,15 +6138,13 @@
       {
         "turn_index": 50,
         "hunger": 48,
-        "thirst": 95,
+        "thirst": 35,
         "fatigue": 48,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6416,15 +6153,13 @@
       {
         "turn_index": 51,
         "hunger": 49,
-        "thirst": 97,
+        "thirst": 37,
         "fatigue": 49,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6433,15 +6168,13 @@
       {
         "turn_index": 52,
         "hunger": 50,
-        "thirst": 99,
+        "thirst": 39,
         "fatigue": 50,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6450,15 +6183,13 @@
       {
         "turn_index": 53,
         "hunger": 51,
-        "thirst": 100,
+        "thirst": 41,
         "fatigue": 26,
         "hunger_delta": 1,
-        "thirst_delta": 1,
+        "thirst_delta": 2,
         "fatigue_delta": -24,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "rest",
         "relief_applied": true,
         "relief_blocked": false,
@@ -6466,33 +6197,29 @@
       },
       {
         "turn_index": 54,
-        "hunger": 52,
-        "thirst": 100,
+        "hunger": 22,
+        "thirst": 43,
         "fatigue": 27,
-        "hunger_delta": 1,
-        "thirst_delta": 0,
+        "hunger_delta": -29,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "eat_food",
-        "relief_applied": false,
-        "relief_blocked": true,
+        "relief_applied": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 55,
-        "hunger": 53,
-        "thirst": 100,
+        "hunger": 23,
+        "thirst": 45,
         "fatigue": 28,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6500,16 +6227,14 @@
       },
       {
         "turn_index": 56,
-        "hunger": 54,
-        "thirst": 100,
+        "hunger": 24,
+        "thirst": 47,
         "fatigue": 29,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6532,16 +6257,14 @@
       },
       {
         "turn_index": 58,
-        "hunger": 55,
-        "thirst": 100,
+        "hunger": 25,
+        "thirst": 49,
         "fatigue": 30,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6549,16 +6272,14 @@
       },
       {
         "turn_index": 59,
-        "hunger": 56,
-        "thirst": 100,
+        "hunger": 26,
+        "thirst": 51,
         "fatigue": 31,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6566,16 +6287,14 @@
       },
       {
         "turn_index": 60,
-        "hunger": 57,
-        "thirst": 100,
+        "hunger": 27,
+        "thirst": 53,
         "fatigue": 32,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6583,16 +6302,14 @@
       },
       {
         "turn_index": 61,
-        "hunger": 58,
-        "thirst": 100,
+        "hunger": 28,
+        "thirst": 55,
         "fatigue": 33,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6600,16 +6317,14 @@
       },
       {
         "turn_index": 62,
-        "hunger": 59,
-        "thirst": 100,
+        "hunger": 29,
+        "thirst": 57,
         "fatigue": 34,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6617,16 +6332,14 @@
       },
       {
         "turn_index": 63,
-        "hunger": 60,
-        "thirst": 100,
+        "hunger": 30,
+        "thirst": 59,
         "fatigue": 35,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6634,16 +6347,14 @@
       },
       {
         "turn_index": 64,
-        "hunger": 61,
-        "thirst": 100,
+        "hunger": 31,
+        "thirst": 61,
         "fatigue": 36,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6651,16 +6362,14 @@
       },
       {
         "turn_index": 65,
-        "hunger": 62,
-        "thirst": 100,
+        "hunger": 32,
+        "thirst": 63,
         "fatigue": 37,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6668,16 +6377,14 @@
       },
       {
         "turn_index": 66,
-        "hunger": 63,
-        "thirst": 100,
+        "hunger": 33,
+        "thirst": 65,
         "fatigue": 38,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6685,16 +6392,14 @@
       },
       {
         "turn_index": 67,
-        "hunger": 64,
-        "thirst": 100,
+        "hunger": 34,
+        "thirst": 67,
         "fatigue": 39,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6702,16 +6407,14 @@
       },
       {
         "turn_index": 68,
-        "hunger": 65,
-        "thirst": 100,
+        "hunger": 35,
+        "thirst": 69,
         "fatigue": 40,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -6719,11 +6422,11 @@
       },
       {
         "turn_index": 69,
-        "hunger": 66,
-        "thirst": 100,
+        "hunger": 36,
+        "thirst": 71,
         "fatigue": 41,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -6736,11 +6439,11 @@
       },
       {
         "turn_index": 70,
-        "hunger": 67,
-        "thirst": 100,
+        "hunger": 37,
+        "thirst": 73,
         "fatigue": 42,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -6753,11 +6456,11 @@
       },
       {
         "turn_index": 71,
-        "hunger": 68,
-        "thirst": 100,
+        "hunger": 38,
+        "thirst": 75,
         "fatigue": 43,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -6770,11 +6473,11 @@
       },
       {
         "turn_index": 72,
-        "hunger": 69,
-        "thirst": 100,
+        "hunger": 39,
+        "thirst": 77,
         "fatigue": 44,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -6787,15 +6490,14 @@
       },
       {
         "turn_index": 73,
-        "hunger": 70,
-        "thirst": 100,
+        "hunger": 40,
+        "thirst": 79,
         "fatigue": 45,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6805,15 +6507,14 @@
       },
       {
         "turn_index": 74,
-        "hunger": 71,
-        "thirst": 100,
+        "hunger": 41,
+        "thirst": 81,
         "fatigue": 46,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6823,15 +6524,14 @@
       },
       {
         "turn_index": 75,
-        "hunger": 72,
-        "thirst": 100,
+        "hunger": 42,
+        "thirst": 83,
         "fatigue": 47,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6841,15 +6541,14 @@
       },
       {
         "turn_index": 76,
-        "hunger": 73,
-        "thirst": 100,
+        "hunger": 43,
+        "thirst": 85,
         "fatigue": 48,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6859,15 +6558,14 @@
       },
       {
         "turn_index": 77,
-        "hunger": 74,
-        "thirst": 100,
+        "hunger": 44,
+        "thirst": 87,
         "fatigue": 49,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6877,15 +6575,14 @@
       },
       {
         "turn_index": 78,
-        "hunger": 75,
-        "thirst": 100,
+        "hunger": 45,
+        "thirst": 89,
         "fatigue": 50,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6895,15 +6592,14 @@
       },
       {
         "turn_index": 79,
-        "hunger": 76,
-        "thirst": 100,
+        "hunger": 46,
+        "thirst": 91,
         "fatigue": 26,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": -24,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "rest",
@@ -6913,15 +6609,14 @@
       },
       {
         "turn_index": 80,
-        "hunger": 77,
-        "thirst": 100,
+        "hunger": 47,
+        "thirst": 93,
         "fatigue": 27,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6931,15 +6626,14 @@
       },
       {
         "turn_index": 81,
-        "hunger": 78,
-        "thirst": 100,
+        "hunger": 48,
+        "thirst": 95,
         "fatigue": 28,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6949,15 +6643,14 @@
       },
       {
         "turn_index": 82,
-        "hunger": 79,
-        "thirst": 100,
+        "hunger": 49,
+        "thirst": 97,
         "fatigue": 29,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -6967,15 +6660,14 @@
       },
       {
         "turn_index": 83,
-        "hunger": 80,
-        "thirst": 100,
+        "hunger": 50,
+        "thirst": 99,
         "fatigue": 30,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7000,15 +6692,14 @@
       },
       {
         "turn_index": 85,
-        "hunger": 81,
+        "hunger": 51,
         "thirst": 100,
         "fatigue": 31,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 1,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7018,15 +6709,14 @@
       },
       {
         "turn_index": 86,
-        "hunger": 82,
+        "hunger": 52,
         "thirst": 100,
         "fatigue": 32,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7036,15 +6726,14 @@
       },
       {
         "turn_index": 87,
-        "hunger": 83,
+        "hunger": 53,
         "thirst": 100,
         "fatigue": 33,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7054,15 +6743,14 @@
       },
       {
         "turn_index": 88,
-        "hunger": 84,
+        "hunger": 54,
         "thirst": 100,
         "fatigue": 34,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7072,15 +6760,14 @@
       },
       {
         "turn_index": 89,
-        "hunger": 85,
+        "hunger": 55,
         "thirst": 100,
         "fatigue": 35,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7090,15 +6777,14 @@
       },
       {
         "turn_index": 90,
-        "hunger": 86,
+        "hunger": 56,
         "thirst": 100,
         "fatigue": 36,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7108,15 +6794,14 @@
       },
       {
         "turn_index": 91,
-        "hunger": 87,
+        "hunger": 57,
         "thirst": 100,
         "fatigue": 37,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7126,15 +6811,14 @@
       },
       {
         "turn_index": 92,
-        "hunger": 88,
+        "hunger": 58,
         "thirst": 100,
         "fatigue": 38,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7144,15 +6828,14 @@
       },
       {
         "turn_index": 93,
-        "hunger": 89,
+        "hunger": 59,
         "thirst": 100,
         "fatigue": 39,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7162,15 +6845,14 @@
       },
       {
         "turn_index": 94,
-        "hunger": 90,
+        "hunger": 60,
         "thirst": 100,
         "fatigue": 40,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7180,15 +6862,14 @@
       },
       {
         "turn_index": 95,
-        "hunger": 91,
+        "hunger": 61,
         "thirst": 100,
         "fatigue": 41,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7198,15 +6879,14 @@
       },
       {
         "turn_index": 96,
-        "hunger": 92,
+        "hunger": 62,
         "thirst": 100,
         "fatigue": 42,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7216,15 +6896,14 @@
       },
       {
         "turn_index": 97,
-        "hunger": 93,
+        "hunger": 63,
         "thirst": 100,
         "fatigue": 43,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7234,15 +6913,14 @@
       },
       {
         "turn_index": 98,
-        "hunger": 94,
+        "hunger": 64,
         "thirst": 100,
         "fatigue": 44,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7252,15 +6930,14 @@
       },
       {
         "turn_index": 99,
-        "hunger": 95,
+        "hunger": 65,
         "thirst": 100,
         "fatigue": 45,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7270,15 +6947,14 @@
       },
       {
         "turn_index": 100,
-        "hunger": 96,
+        "hunger": 66,
         "thirst": 100,
         "fatigue": 46,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -7302,7 +6978,7 @@
           "survival_pressure_seen": true,
           "survival_suggestions_seen": true,
           "survival_relief_actions_seen": true,
-          "survival_inventory_consumed_seen": false,
+          "survival_inventory_consumed_seen": true,
           "survival_service_purchase_seen": false,
           "survival_non_inventory_relief_seen": true,
           "survival_negative_resource_response_seen": true,
@@ -7326,7 +7002,7 @@
         "survival_pressure_seen": true,
         "survival_suggestions_seen": true,
         "survival_relief_actions_seen": true,
-        "survival_inventory_consumed_seen": false,
+        "survival_inventory_consumed_seen": true,
         "survival_service_purchase_seen": false,
         "survival_non_inventory_relief_seen": true,
         "survival_negative_resource_response_seen": true,
@@ -7336,11 +7012,27 @@
       "failed_gates": [],
       "turn_count": 100,
       "pressure_turn_count": 95,
-      "survival_warning_count": 88,
-      "survival_suggestion_rows": 4,
-      "relief_action_count": 2,
-      "blocked_relief_count": 3,
-      "inventory_consumed_summary": [],
+      "survival_warning_count": 31,
+      "survival_suggestion_rows": 7,
+      "relief_action_count": 5,
+      "blocked_relief_count": 0,
+      "inventory_consumed_summary": [
+        {
+          "item_id": "autoplay_field_ration_2",
+          "name": "Autoplay Field Ration",
+          "quantity": 1
+        },
+        {
+          "item_id": "autoplay_waterskin_1",
+          "name": "Autoplay Waterskin",
+          "quantity": 1
+        },
+        {
+          "item_id": "autoplay_waterskin_2",
+          "name": "Autoplay Waterskin",
+          "quantity": 1
+        }
+      ],
       "service_relief_purchases_summary": [],
       "non_inventory_relief_summary": [
         {
@@ -7350,14 +7042,35 @@
       ],
       "carry_forward_evidence": {
         "ok": true,
-        "example_count": 2,
+        "example_count": 5,
         "examples": [
+          {
+            "turn_index": 27,
+            "need": "thirst",
+            "before_estimate": 51,
+            "after": 23,
+            "delta": -28
+          },
+          {
+            "turn_index": 42,
+            "need": "thirst",
+            "before_estimate": 51,
+            "after": 23,
+            "delta": -28
+          },
           {
             "turn_index": 53,
             "need": "fatigue",
             "before_estimate": 50,
             "after": 26,
             "delta": -24
+          },
+          {
+            "turn_index": 54,
+            "need": "hunger",
+            "before_estimate": 51,
+            "after": 22,
+            "delta": -29
           },
           {
             "turn_index": 79,
@@ -7369,17 +7082,17 @@
         ]
       },
       "net_resource_deltas": {
-        "hunger_delta": 94,
+        "hunger_delta": 64,
         "thirst_delta": 97,
         "fatigue_delta": 44
       },
       "max_needs": {
-        "hunger": 96,
+        "hunger": 66,
         "thirst": 100,
         "fatigue": 50
       },
       "final_needs": {
-        "hunger": 96,
+        "hunger": 66,
         "thirst": 100,
         "fatigue": 46
       },
@@ -7864,28 +7577,58 @@
         {
           "turn_index": 27,
           "action_kind": "drink_water",
-          "applied": false,
-          "blocked": true,
-          "blocked_reason": "no_drink_item",
+          "applied": true,
+          "blocked": false,
+          "blocked_reason": "",
           "inventory_consumed": [
             {
-              "consumed": false,
-              "item": {},
-              "quantity": 0
+              "consumed": true,
+              "item": {
+                "item_id": "autoplay_waterskin_1",
+                "name": "Autoplay Waterskin",
+                "quantity": 1,
+                "tags": [
+                  "drink",
+                  "water",
+                  "waterskin",
+                  "survival",
+                  "n1276_survival_hunger_thirst_relief_coverage",
+                  "n1277_survival_relief_supply_handoff"
+                ],
+                "source": "n1276_survival_hunger_thirst_relief_coverage"
+              },
+              "quantity": 1,
+              "item_id": "autoplay_waterskin_1",
+              "name": "Autoplay Waterskin"
             }
           ]
         },
         {
-          "turn_index": 28,
+          "turn_index": 42,
           "action_kind": "drink_water",
-          "applied": false,
-          "blocked": true,
-          "blocked_reason": "no_drink_item",
+          "applied": true,
+          "blocked": false,
+          "blocked_reason": "",
           "inventory_consumed": [
             {
-              "consumed": false,
-              "item": {},
-              "quantity": 0
+              "consumed": true,
+              "item": {
+                "item_id": "autoplay_waterskin_2",
+                "name": "Autoplay Waterskin",
+                "quantity": 1,
+                "tags": [
+                  "drink",
+                  "water",
+                  "waterskin",
+                  "survival",
+                  "n1276_survival_hunger_thirst_relief_coverage",
+                  "n1277_survival_relief_supply_handoff"
+                ],
+                "source": "n1276_survival_hunger_thirst_relief_coverage"
+              },
+              "quantity": 1,
+              "item_id": "autoplay_waterskin_2",
+              "name": "Autoplay Waterskin"
             }
           ]
         },
@@ -7900,14 +7643,28 @@
         {
           "turn_index": 54,
           "action_kind": "eat_food",
-          "applied": false,
-          "blocked": true,
-          "blocked_reason": "no_food_item",
+          "applied": true,
+          "blocked": false,
+          "blocked_reason": "",
           "inventory_consumed": [
             {
-              "consumed": false,
-              "item": {},
-              "quantity": 0
+              "consumed": true,
+              "item": {
+                "item_id": "autoplay_field_ration_2",
+                "name": "Autoplay Field Ration",
+                "quantity": 1,
+                "tags": [
+                  "food",
+                  "ration",
+                  "survival",
+                  "n1276_survival_hunger_thirst_relief_coverage",
+                  "n1277_survival_relief_supply_handoff"
+                ],
+                "source": "n1276_survival_hunger_thirst_relief_coverage"
+              },
+              "quantity": 1,
+              "item_id": "autoplay_field_ration_2",
+              "name": "Autoplay Field Ration"
             }
           ]
         },
@@ -7929,9 +7686,9 @@
           "resource_change_rows": 95,
           "climate_tick_source_rows": 95,
           "survival_action_rows": 5,
-          "survival_suggestion_rows": 4,
-          "relief_applied_rows": 2,
-          "warning_rows": 61,
+          "survival_suggestion_rows": 7,
+          "relief_applied_rows": 5,
+          "warning_rows": 31,
           "nonzero_need_rows": 95,
           "nonzero_delta_rows": 94
         },
@@ -7980,7 +7737,7 @@
         "survival_pressure_seen": true,
         "survival_suggestions_seen": true,
         "survival_relief_actions_seen": true,
-        "survival_inventory_consumed_seen": false,
+        "survival_inventory_consumed_seen": true,
         "survival_service_purchase_seen": false,
         "survival_non_inventory_relief_seen": true,
         "survival_negative_resource_response_seen": true,
@@ -8479,19 +8236,19 @@
     ],
     "survival-autoplay-response-metrics.json": {
       "format_version": "n1241_survival_autoplay_response_metrics_v1",
-      "survival_suggestion_seen_count": 4,
-      "survival_suggestion_taken_count": 2,
+      "survival_suggestion_seen_count": 7,
+      "survival_suggestion_taken_count": 5,
       "survival_suggestion_ignored_count": 2,
       "high_pressure_unanswered_turn_count": 0,
-      "blocked_relief_loop_count": 1,
-      "taken_rate": 0.5
+      "blocked_relief_loop_count": 0,
+      "taken_rate": 0.7142857142857143
     },
     "survival-supply-metrics.json": {
       "format_version": "n1243_survival_supply_metrics_v1",
       "food_available_turns": 0,
       "drink_available_turns": 0,
-      "starvation_risk_turns": 12,
-      "dehydration_risk_turns": 54
+      "starvation_risk_turns": 0,
+      "dehydration_risk_turns": 24
     },
     "survival-response-gate.json": {
       "gate": "survival_response_ok",
@@ -8501,12 +8258,12 @@
       "reasons": [],
       "metrics": {
         "format_version": "n1241_survival_autoplay_response_metrics_v1",
-        "survival_suggestion_seen_count": 4,
-        "survival_suggestion_taken_count": 2,
+        "survival_suggestion_seen_count": 7,
+        "survival_suggestion_taken_count": 5,
         "survival_suggestion_ignored_count": 2,
         "high_pressure_unanswered_turn_count": 0,
-        "blocked_relief_loop_count": 1,
-        "taken_rate": 0.5
+        "blocked_relief_loop_count": 0,
+        "taken_rate": 0.7142857142857143
       },
       "thresholds": {
         "max_high_pressure_unanswered_turns": 5,
@@ -8523,9 +8280,9 @@
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
         "survival_action_rows": 5,
-        "survival_suggestion_rows": 4,
-        "relief_applied_rows": 2,
-        "warning_rows": 61,
+        "survival_suggestion_rows": 7,
+        "relief_applied_rows": 5,
+        "warning_rows": 31,
         "nonzero_need_rows": 95,
         "nonzero_delta_rows": 94
       },
@@ -8570,9 +8327,9 @@
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
         "survival_action_rows": 5,
-        "survival_suggestion_rows": 4,
-        "relief_applied_rows": 2,
-        "warning_rows": 61,
+        "survival_suggestion_rows": 7,
+        "relief_applied_rows": 5,
+        "warning_rows": 31,
         "nonzero_need_rows": 95,
         "nonzero_delta_rows": 94
       },
@@ -8594,7 +8351,7 @@
         "survival_pressure_seen": true,
         "survival_suggestions_seen": true,
         "survival_relief_actions_seen": true,
-        "survival_inventory_consumed_seen": false,
+        "survival_inventory_consumed_seen": true,
         "survival_service_purchase_seen": false,
         "survival_non_inventory_relief_seen": true,
         "survival_negative_resource_response_seen": true,
@@ -8618,7 +8375,7 @@
       "survival_pressure_seen": true,
       "survival_suggestions_seen": true,
       "survival_relief_actions_seen": true,
-      "survival_inventory_consumed_seen": false,
+      "survival_inventory_consumed_seen": true,
       "survival_service_purchase_seen": false,
       "survival_non_inventory_relief_seen": true,
       "survival_negative_resource_response_seen": true,
@@ -8628,11 +8385,27 @@
     "failed_gates": [],
     "turn_count": 100,
     "pressure_turn_count": 95,
-    "survival_warning_count": 88,
-    "survival_suggestion_rows": 4,
-    "relief_action_count": 2,
-    "blocked_relief_count": 3,
-    "inventory_consumed_summary": [],
+    "survival_warning_count": 31,
+    "survival_suggestion_rows": 7,
+    "relief_action_count": 5,
+    "blocked_relief_count": 0,
+    "inventory_consumed_summary": [
+      {
+        "item_id": "autoplay_field_ration_2",
+        "name": "Autoplay Field Ration",
+        "quantity": 1
+      },
+      {
+        "item_id": "autoplay_waterskin_1",
+        "name": "Autoplay Waterskin",
+        "quantity": 1
+      },
+      {
+        "item_id": "autoplay_waterskin_2",
+        "name": "Autoplay Waterskin",
+        "quantity": 1
+      }
+    ],
     "service_relief_purchases_summary": [],
     "non_inventory_relief_summary": [
       {
@@ -8642,14 +8415,35 @@
     ],
     "carry_forward_evidence": {
       "ok": true,
-      "example_count": 2,
+      "example_count": 5,
       "examples": [
+        {
+          "turn_index": 27,
+          "need": "thirst",
+          "before_estimate": 51,
+          "after": 23,
+          "delta": -28
+        },
+        {
+          "turn_index": 42,
+          "need": "thirst",
+          "before_estimate": 51,
+          "after": 23,
+          "delta": -28
+        },
         {
           "turn_index": 53,
           "need": "fatigue",
           "before_estimate": 50,
           "after": 26,
           "delta": -24
+        },
+        {
+          "turn_index": 54,
+          "need": "hunger",
+          "before_estimate": 51,
+          "after": 22,
+          "delta": -29
         },
         {
           "turn_index": 79,
@@ -8661,17 +8455,17 @@
       ]
     },
     "net_resource_deltas": {
-      "hunger_delta": 94,
+      "hunger_delta": 64,
       "thirst_delta": 97,
       "fatigue_delta": 44
     },
     "max_needs": {
-      "hunger": 96,
+      "hunger": 66,
       "thirst": 100,
       "fatigue": 50
     },
     "final_needs": {
-      "hunger": 96,
+      "hunger": 66,
       "thirst": 100,
       "fatigue": 46
     },
@@ -9156,28 +8950,58 @@
       {
         "turn_index": 27,
         "action_kind": "drink_water",
-        "applied": false,
-        "blocked": true,
-        "blocked_reason": "no_drink_item",
+        "applied": true,
+        "blocked": false,
+        "blocked_reason": "",
         "inventory_consumed": [
           {
-            "consumed": false,
-            "item": {},
-            "quantity": 0
+            "consumed": true,
+            "item": {
+              "item_id": "autoplay_waterskin_1",
+              "name": "Autoplay Waterskin",
+              "quantity": 1,
+              "tags": [
+                "drink",
+                "water",
+                "waterskin",
+                "survival",
+                "n1276_survival_hunger_thirst_relief_coverage",
+                "n1277_survival_relief_supply_handoff"
+              ],
+              "source": "n1276_survival_hunger_thirst_relief_coverage"
+            },
+            "quantity": 1,
+            "item_id": "autoplay_waterskin_1",
+            "name": "Autoplay Waterskin"
           }
         ]
       },
       {
-        "turn_index": 28,
+        "turn_index": 42,
         "action_kind": "drink_water",
-        "applied": false,
-        "blocked": true,
-        "blocked_reason": "no_drink_item",
+        "applied": true,
+        "blocked": false,
+        "blocked_reason": "",
         "inventory_consumed": [
           {
-            "consumed": false,
-            "item": {},
-            "quantity": 0
+            "consumed": true,
+            "item": {
+              "item_id": "autoplay_waterskin_2",
+              "name": "Autoplay Waterskin",
+              "quantity": 1,
+              "tags": [
+                "drink",
+                "water",
+                "waterskin",
+                "survival",
+                "n1276_survival_hunger_thirst_relief_coverage",
+                "n1277_survival_relief_supply_handoff"
+              ],
+              "source": "n1276_survival_hunger_thirst_relief_coverage"
+            },
+            "quantity": 1,
+            "item_id": "autoplay_waterskin_2",
+            "name": "Autoplay Waterskin"
           }
         ]
       },
@@ -9192,14 +9016,28 @@
       {
         "turn_index": 54,
         "action_kind": "eat_food",
-        "applied": false,
-        "blocked": true,
-        "blocked_reason": "no_food_item",
+        "applied": true,
+        "blocked": false,
+        "blocked_reason": "",
         "inventory_consumed": [
           {
-            "consumed": false,
-            "item": {},
-            "quantity": 0
+            "consumed": true,
+            "item": {
+              "item_id": "autoplay_field_ration_2",
+              "name": "Autoplay Field Ration",
+              "quantity": 1,
+              "tags": [
+                "food",
+                "ration",
+                "survival",
+                "n1276_survival_hunger_thirst_relief_coverage",
+                "n1277_survival_relief_supply_handoff"
+              ],
+              "source": "n1276_survival_hunger_thirst_relief_coverage"
+            },
+            "quantity": 1,
+            "item_id": "autoplay_field_ration_2",
+            "name": "Autoplay Field Ration"
           }
         ]
       },
@@ -9221,9 +9059,9 @@
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
         "survival_action_rows": 5,
-        "survival_suggestion_rows": 4,
-        "relief_applied_rows": 2,
-        "warning_rows": 61,
+        "survival_suggestion_rows": 7,
+        "relief_applied_rows": 5,
+        "warning_rows": 31,
         "nonzero_need_rows": 95,
         "nonzero_delta_rows": 94
       },
@@ -9272,7 +9110,7 @@
       "survival_pressure_seen": true,
       "survival_suggestions_seen": true,
       "survival_relief_actions_seen": true,
-      "survival_inventory_consumed_seen": false,
+      "survival_inventory_consumed_seen": true,
       "survival_service_purchase_seen": false,
       "survival_non_inventory_relief_seen": true,
       "survival_negative_resource_response_seen": true,
@@ -9294,19 +9132,19 @@
   },
   "survival_autoplay_response_metrics": {
     "format_version": "n1241_survival_autoplay_response_metrics_v1",
-    "survival_suggestion_seen_count": 4,
-    "survival_suggestion_taken_count": 2,
+    "survival_suggestion_seen_count": 7,
+    "survival_suggestion_taken_count": 5,
     "survival_suggestion_ignored_count": 2,
     "high_pressure_unanswered_turn_count": 0,
-    "blocked_relief_loop_count": 1,
-    "taken_rate": 0.5
+    "blocked_relief_loop_count": 0,
+    "taken_rate": 0.7142857142857143
   },
   "survival_supply_metrics": {
     "format_version": "n1243_survival_supply_metrics_v1",
     "food_available_turns": 0,
     "drink_available_turns": 0,
-    "starvation_risk_turns": 12,
-    "dehydration_risk_turns": 54
+    "starvation_risk_turns": 0,
+    "dehydration_risk_turns": 24
   },
   "survival_balance_simulation": {
     "format_version": "n1242_survival_balance_simulation_v1",
@@ -10685,12 +10523,12 @@
     "reasons": [],
     "metrics": {
       "format_version": "n1241_survival_autoplay_response_metrics_v1",
-      "survival_suggestion_seen_count": 4,
-      "survival_suggestion_taken_count": 2,
+      "survival_suggestion_seen_count": 7,
+      "survival_suggestion_taken_count": 5,
       "survival_suggestion_ignored_count": 2,
       "high_pressure_unanswered_turn_count": 0,
-      "blocked_relief_loop_count": 1,
-      "taken_rate": 0.5
+      "blocked_relief_loop_count": 0,
+      "taken_rate": 0.7142857142857143
     },
     "thresholds": {
       "max_high_pressure_unanswered_turns": 5,
@@ -11096,37 +10934,37 @@
       {
         "turn_index": 27,
         "hunger": 27,
-        "thirst": 53,
+        "thirst": 23,
         "fatigue": 27,
         "hunger_delta": 1,
-        "thirst_delta": 2,
+        "thirst_delta": -28,
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
         "relief_action_kind": "drink_water",
-        "relief_applied": false,
-        "relief_blocked": true,
+        "relief_applied": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 28,
         "hunger": 28,
-        "thirst": 55,
+        "thirst": 25,
         "fatigue": 28,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "drink_water",
+        "relief_action_kind": "",
         "relief_applied": false,
-        "relief_blocked": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 29,
         "hunger": 29,
-        "thirst": 57,
+        "thirst": 27,
         "fatigue": 29,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -11141,7 +10979,7 @@
       {
         "turn_index": 30,
         "hunger": 30,
-        "thirst": 59,
+        "thirst": 29,
         "fatigue": 30,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -11156,7 +10994,7 @@
       {
         "turn_index": 31,
         "hunger": 31,
-        "thirst": 61,
+        "thirst": 31,
         "fatigue": 31,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -11171,7 +11009,7 @@
       {
         "turn_index": 32,
         "hunger": 32,
-        "thirst": 63,
+        "thirst": 33,
         "fatigue": 32,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -11186,7 +11024,7 @@
       {
         "turn_index": 33,
         "hunger": 33,
-        "thirst": 65,
+        "thirst": 35,
         "fatigue": 33,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -11201,7 +11039,7 @@
       {
         "turn_index": 34,
         "hunger": 34,
-        "thirst": 67,
+        "thirst": 37,
         "fatigue": 34,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -11216,7 +11054,7 @@
       {
         "turn_index": 35,
         "hunger": 35,
-        "thirst": 69,
+        "thirst": 39,
         "fatigue": 35,
         "hunger_delta": 1,
         "thirst_delta": 2,
@@ -11231,15 +11069,13 @@
       {
         "turn_index": 36,
         "hunger": 36,
-        "thirst": 71,
+        "thirst": 41,
         "fatigue": 36,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11248,15 +11084,13 @@
       {
         "turn_index": 37,
         "hunger": 37,
-        "thirst": 73,
+        "thirst": 43,
         "fatigue": 37,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11265,15 +11099,13 @@
       {
         "turn_index": 38,
         "hunger": 38,
-        "thirst": 75,
+        "thirst": 45,
         "fatigue": 38,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11282,15 +11114,13 @@
       {
         "turn_index": 39,
         "hunger": 39,
-        "thirst": 77,
+        "thirst": 47,
         "fatigue": 39,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11299,15 +11129,13 @@
       {
         "turn_index": 40,
         "hunger": 40,
-        "thirst": 79,
+        "thirst": 49,
         "fatigue": 40,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11316,15 +11144,13 @@
       {
         "turn_index": 41,
         "hunger": 41,
-        "thirst": 81,
+        "thirst": 51,
         "fatigue": 41,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11333,32 +11159,28 @@
       {
         "turn_index": 42,
         "hunger": 42,
-        "thirst": 83,
+        "thirst": 23,
         "fatigue": 42,
         "hunger_delta": 1,
-        "thirst_delta": 2,
+        "thirst_delta": -28,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "drink_water",
+        "relief_applied": true,
         "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 43,
         "hunger": 43,
-        "thirst": 85,
+        "thirst": 25,
         "fatigue": 43,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11367,15 +11189,13 @@
       {
         "turn_index": 44,
         "hunger": 44,
-        "thirst": 87,
+        "thirst": 27,
         "fatigue": 44,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11384,15 +11204,13 @@
       {
         "turn_index": 45,
         "hunger": 45,
-        "thirst": 89,
+        "thirst": 29,
         "fatigue": 45,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11401,15 +11219,13 @@
       {
         "turn_index": 46,
         "hunger": 46,
-        "thirst": 91,
+        "thirst": 31,
         "fatigue": 46,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11418,15 +11234,13 @@
       {
         "turn_index": 47,
         "hunger": 47,
-        "thirst": 93,
+        "thirst": 33,
         "fatigue": 47,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11465,15 +11279,13 @@
       {
         "turn_index": 50,
         "hunger": 48,
-        "thirst": 95,
+        "thirst": 35,
         "fatigue": 48,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11482,15 +11294,13 @@
       {
         "turn_index": 51,
         "hunger": 49,
-        "thirst": 97,
+        "thirst": 37,
         "fatigue": 49,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11499,15 +11309,13 @@
       {
         "turn_index": 52,
         "hunger": 50,
-        "thirst": 99,
+        "thirst": 39,
         "fatigue": 50,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11516,15 +11324,13 @@
       {
         "turn_index": 53,
         "hunger": 51,
-        "thirst": 100,
+        "thirst": 41,
         "fatigue": 26,
         "hunger_delta": 1,
-        "thirst_delta": 1,
+        "thirst_delta": 2,
         "fatigue_delta": -24,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "rest",
         "relief_applied": true,
         "relief_blocked": false,
@@ -11532,33 +11338,29 @@
       },
       {
         "turn_index": 54,
-        "hunger": 52,
-        "thirst": 100,
+        "hunger": 22,
+        "thirst": 43,
         "fatigue": 27,
-        "hunger_delta": 1,
-        "thirst_delta": 0,
+        "hunger_delta": -29,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "eat_food",
-        "relief_applied": false,
-        "relief_blocked": true,
+        "relief_applied": true,
+        "relief_blocked": false,
         "source_present": true
       },
       {
         "turn_index": 55,
-        "hunger": 53,
-        "thirst": 100,
+        "hunger": 23,
+        "thirst": 45,
         "fatigue": 28,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11566,16 +11368,14 @@
       },
       {
         "turn_index": 56,
-        "hunger": 54,
-        "thirst": 100,
+        "hunger": 24,
+        "thirst": 47,
         "fatigue": 29,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11598,16 +11398,14 @@
       },
       {
         "turn_index": 58,
-        "hunger": 55,
-        "thirst": 100,
+        "hunger": 25,
+        "thirst": 49,
         "fatigue": 30,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11615,16 +11413,14 @@
       },
       {
         "turn_index": 59,
-        "hunger": 56,
-        "thirst": 100,
+        "hunger": 26,
+        "thirst": 51,
         "fatigue": 31,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11632,16 +11428,14 @@
       },
       {
         "turn_index": 60,
-        "hunger": 57,
-        "thirst": 100,
+        "hunger": 27,
+        "thirst": 53,
         "fatigue": 32,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11649,16 +11443,14 @@
       },
       {
         "turn_index": 61,
-        "hunger": 58,
-        "thirst": 100,
+        "hunger": 28,
+        "thirst": 55,
         "fatigue": 33,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11666,16 +11458,14 @@
       },
       {
         "turn_index": 62,
-        "hunger": 59,
-        "thirst": 100,
+        "hunger": 29,
+        "thirst": 57,
         "fatigue": 34,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11683,16 +11473,14 @@
       },
       {
         "turn_index": 63,
-        "hunger": 60,
-        "thirst": 100,
+        "hunger": 30,
+        "thirst": 59,
         "fatigue": 35,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11700,16 +11488,14 @@
       },
       {
         "turn_index": 64,
-        "hunger": 61,
-        "thirst": 100,
+        "hunger": 31,
+        "thirst": 61,
         "fatigue": 36,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11717,16 +11503,14 @@
       },
       {
         "turn_index": 65,
-        "hunger": 62,
-        "thirst": 100,
+        "hunger": 32,
+        "thirst": 63,
         "fatigue": 37,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11734,16 +11518,14 @@
       },
       {
         "turn_index": 66,
-        "hunger": 63,
-        "thirst": 100,
+        "hunger": 33,
+        "thirst": 65,
         "fatigue": 38,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11751,16 +11533,14 @@
       },
       {
         "turn_index": 67,
-        "hunger": 64,
-        "thirst": 100,
+        "hunger": 34,
+        "thirst": 67,
         "fatigue": 39,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11768,16 +11548,14 @@
       },
       {
         "turn_index": 68,
-        "hunger": 65,
-        "thirst": 100,
+        "hunger": 35,
+        "thirst": 69,
         "fatigue": 40,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
+        "warning_count": 0,
+        "warnings": [],
         "relief_action_kind": "",
         "relief_applied": false,
         "relief_blocked": false,
@@ -11785,11 +11563,11 @@
       },
       {
         "turn_index": 69,
-        "hunger": 66,
-        "thirst": 100,
+        "hunger": 36,
+        "thirst": 71,
         "fatigue": 41,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -11802,11 +11580,11 @@
       },
       {
         "turn_index": 70,
-        "hunger": 67,
-        "thirst": 100,
+        "hunger": 37,
+        "thirst": 73,
         "fatigue": 42,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -11819,11 +11597,11 @@
       },
       {
         "turn_index": 71,
-        "hunger": 68,
-        "thirst": 100,
+        "hunger": 38,
+        "thirst": 75,
         "fatigue": 43,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -11836,11 +11614,11 @@
       },
       {
         "turn_index": 72,
-        "hunger": 69,
-        "thirst": 100,
+        "hunger": 39,
+        "thirst": 77,
         "fatigue": 44,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
         "warning_count": 1,
         "warnings": [
@@ -11853,15 +11631,14 @@
       },
       {
         "turn_index": 73,
-        "hunger": 70,
-        "thirst": 100,
+        "hunger": 40,
+        "thirst": 79,
         "fatigue": 45,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -11871,15 +11648,14 @@
       },
       {
         "turn_index": 74,
-        "hunger": 71,
-        "thirst": 100,
+        "hunger": 41,
+        "thirst": 81,
         "fatigue": 46,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -11889,15 +11665,14 @@
       },
       {
         "turn_index": 75,
-        "hunger": 72,
-        "thirst": 100,
+        "hunger": 42,
+        "thirst": 83,
         "fatigue": 47,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -11907,15 +11682,14 @@
       },
       {
         "turn_index": 76,
-        "hunger": 73,
-        "thirst": 100,
+        "hunger": 43,
+        "thirst": 85,
         "fatigue": 48,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -11925,15 +11699,14 @@
       },
       {
         "turn_index": 77,
-        "hunger": 74,
-        "thirst": 100,
+        "hunger": 44,
+        "thirst": 87,
         "fatigue": 49,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -11943,15 +11716,14 @@
       },
       {
         "turn_index": 78,
-        "hunger": 75,
-        "thirst": 100,
+        "hunger": 45,
+        "thirst": 89,
         "fatigue": 50,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -11961,15 +11733,14 @@
       },
       {
         "turn_index": 79,
-        "hunger": 76,
-        "thirst": 100,
+        "hunger": 46,
+        "thirst": 91,
         "fatigue": 26,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": -24,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "rest",
@@ -11979,15 +11750,14 @@
       },
       {
         "turn_index": 80,
-        "hunger": 77,
-        "thirst": 100,
+        "hunger": 47,
+        "thirst": 93,
         "fatigue": 27,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -11997,15 +11767,14 @@
       },
       {
         "turn_index": 81,
-        "hunger": 78,
-        "thirst": 100,
+        "hunger": 48,
+        "thirst": 95,
         "fatigue": 28,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12015,15 +11784,14 @@
       },
       {
         "turn_index": 82,
-        "hunger": 79,
-        "thirst": 100,
+        "hunger": 49,
+        "thirst": 97,
         "fatigue": 29,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12033,15 +11801,14 @@
       },
       {
         "turn_index": 83,
-        "hunger": 80,
-        "thirst": 100,
+        "hunger": 50,
+        "thirst": 99,
         "fatigue": 30,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 2,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12066,15 +11833,14 @@
       },
       {
         "turn_index": 85,
-        "hunger": 81,
+        "hunger": 51,
         "thirst": 100,
         "fatigue": 31,
         "hunger_delta": 1,
-        "thirst_delta": 0,
+        "thirst_delta": 1,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12084,15 +11850,14 @@
       },
       {
         "turn_index": 86,
-        "hunger": 82,
+        "hunger": 52,
         "thirst": 100,
         "fatigue": 32,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12102,15 +11867,14 @@
       },
       {
         "turn_index": 87,
-        "hunger": 83,
+        "hunger": 53,
         "thirst": 100,
         "fatigue": 33,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12120,15 +11884,14 @@
       },
       {
         "turn_index": 88,
-        "hunger": 84,
+        "hunger": 54,
         "thirst": 100,
         "fatigue": 34,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12138,15 +11901,14 @@
       },
       {
         "turn_index": 89,
-        "hunger": 85,
+        "hunger": 55,
         "thirst": 100,
         "fatigue": 35,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12156,15 +11918,14 @@
       },
       {
         "turn_index": 90,
-        "hunger": 86,
+        "hunger": 56,
         "thirst": 100,
         "fatigue": 36,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12174,15 +11935,14 @@
       },
       {
         "turn_index": 91,
-        "hunger": 87,
+        "hunger": 57,
         "thirst": 100,
         "fatigue": 37,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12192,15 +11952,14 @@
       },
       {
         "turn_index": 92,
-        "hunger": 88,
+        "hunger": 58,
         "thirst": 100,
         "fatigue": 38,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12210,15 +11969,14 @@
       },
       {
         "turn_index": 93,
-        "hunger": 89,
+        "hunger": 59,
         "thirst": 100,
         "fatigue": 39,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12228,15 +11986,14 @@
       },
       {
         "turn_index": 94,
-        "hunger": 90,
+        "hunger": 60,
         "thirst": 100,
         "fatigue": 40,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12246,15 +12003,14 @@
       },
       {
         "turn_index": 95,
-        "hunger": 91,
+        "hunger": 61,
         "thirst": 100,
         "fatigue": 41,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12264,15 +12020,14 @@
       },
       {
         "turn_index": 96,
-        "hunger": 92,
+        "hunger": 62,
         "thirst": 100,
         "fatigue": 42,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12282,15 +12037,14 @@
       },
       {
         "turn_index": 97,
-        "hunger": 93,
+        "hunger": 63,
         "thirst": 100,
         "fatigue": 43,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12300,15 +12054,14 @@
       },
       {
         "turn_index": 98,
-        "hunger": 94,
+        "hunger": 64,
         "thirst": 100,
         "fatigue": 44,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12318,15 +12071,14 @@
       },
       {
         "turn_index": 99,
-        "hunger": 95,
+        "hunger": 65,
         "thirst": 100,
         "fatigue": 45,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12336,15 +12088,14 @@
       },
       {
         "turn_index": 100,
-        "hunger": 96,
+        "hunger": 66,
         "thirst": 100,
         "fatigue": 46,
         "hunger_delta": 1,
         "thirst_delta": 0,
         "fatigue_delta": 1,
-        "warning_count": 2,
+        "warning_count": 1,
         "warnings": [
-          "hunger_high",
           "thirst_high"
         ],
         "relief_action_kind": "",
@@ -12355,36 +12106,48 @@
     ],
     "trend_row_count": 100,
     "pressure_turn_count": 95,
-    "survival_warning_count": 88,
+    "survival_warning_count": 31,
     "warning_counts_by_type": {
-      "thirst_high": 61,
-      "hunger_high": 27
+      "thirst_high": 31
     },
-    "relief_action_count": 2,
+    "relief_action_count": 5,
     "relief_counts_by_kind": {
       "drink_water": 2,
       "rest": 2,
       "eat_food": 1
     },
-    "blocked_relief_count": 3,
-    "blocked_counts_by_reason": {
-      "no_drink_item": 2,
-      "no_food_item": 1
-    },
-    "inventory_consumed_summary": [],
+    "blocked_relief_count": 0,
+    "blocked_counts_by_reason": {},
+    "inventory_consumed_summary": [
+      {
+        "item_id": "autoplay_field_ration_2",
+        "name": "Autoplay Field Ration",
+        "quantity": 1
+      },
+      {
+        "item_id": "autoplay_waterskin_1",
+        "name": "Autoplay Waterskin",
+        "quantity": 1
+      },
+      {
+        "item_id": "autoplay_waterskin_2",
+        "name": "Autoplay Waterskin",
+        "quantity": 1
+      }
+    ],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
-      "hunger_delta": 94,
+      "hunger_delta": 64,
       "thirst_delta": 97,
       "fatigue_delta": 44
     },
     "max_needs": {
-      "hunger": 96,
+      "hunger": 66,
       "thirst": 100,
       "fatigue": 50
     },
     "final_needs": {
-      "hunger": 96,
+      "hunger": 66,
       "thirst": 100,
       "fatigue": 46
     },
@@ -12397,9 +12160,9 @@
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
         "survival_action_rows": 5,
-        "survival_suggestion_rows": 4,
-        "relief_applied_rows": 2,
-        "warning_rows": 61,
+        "survival_suggestion_rows": 7,
+        "relief_applied_rows": 5,
+        "warning_rows": 31,
         "nonzero_need_rows": 95,
         "nonzero_delta_rows": 94
       },
@@ -12444,9 +12207,9 @@
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
         "survival_action_rows": 5,
-        "survival_suggestion_rows": 4,
-        "relief_applied_rows": 2,
-        "warning_rows": 61,
+        "survival_suggestion_rows": 7,
+        "relief_applied_rows": 5,
+        "warning_rows": 31,
         "nonzero_need_rows": 95,
         "nonzero_delta_rows": 94
       },
@@ -13837,9 +13600,9 @@
       "resource_change_rows": 95,
       "climate_tick_source_rows": 95,
       "survival_action_rows": 5,
-      "survival_suggestion_rows": 4,
-      "relief_applied_rows": 2,
-      "warning_rows": 61,
+      "survival_suggestion_rows": 7,
+      "relief_applied_rows": 5,
+      "warning_rows": 31,
       "nonzero_need_rows": 95,
       "nonzero_delta_rows": 94
     },
@@ -13884,9 +13647,9 @@
       "resource_change_rows": 95,
       "climate_tick_source_rows": 95,
       "survival_action_rows": 5,
-      "survival_suggestion_rows": 4,
-      "relief_applied_rows": 2,
-      "warning_rows": 61,
+      "survival_suggestion_rows": 7,
+      "relief_applied_rows": 5,
+      "warning_rows": 31,
       "nonzero_need_rows": 95,
       "nonzero_delta_rows": 94
     },
