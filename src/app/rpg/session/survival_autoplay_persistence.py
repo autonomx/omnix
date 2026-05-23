@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 NEEDS = ("hunger", "thirst", "fatigue")
 TICK_DELTAS = {"hunger": 1, "thirst": 2, "fatigue": 1}
@@ -19,6 +19,8 @@ RELIEF_FALLBACK_DELTAS = {
 SOURCE = "n1272_survival_autoplay_persistence"
 CALIBRATION_SOURCE = "n1273_long_run_survival_pressure_calibration"
 ACCUMULATOR_SOURCE = "n1273_1_in_process_survival_accumulator"
+SUGGESTION_PROJECTION_SOURCE = "n1274_survival_suggestion_projection"
+RELIEF_TRIGGER_SOURCE = "n1274_survival_autoplay_relief_trigger"
 
 _IN_PROCESS_SURVIVAL_ACCUMULATORS: Dict[str, Dict[str, Any]] = {}
 
@@ -411,6 +413,227 @@ def patch_result_survival_state(result: Dict[str, Any], climate: Dict[str, Any],
     return result
 
 
+def _simulation_state_from_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    session = safe_dict(session)
+    simulation_state = safe_dict(session.get("simulation_state"))
+    if simulation_state:
+        return simulation_state
+    state = safe_dict(session.get("state"))
+    return safe_dict(state.get("simulation_state")) or state
+
+
+def _runtime_state_from_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    return safe_dict(safe_dict(session).get("runtime_state"))
+
+
+def _build_survival_suggestions(session: Dict[str, Any]) -> List[Dict[str, Any]]:
+    simulation_state = _simulation_state_from_session(session)
+    if not simulation_state:
+        return []
+    try:
+        from app.rpg.session.survival_actions import build_survival_suggested_actions
+
+        rows = build_survival_suggested_actions(simulation_state, _runtime_state_from_session(session))
+    except Exception:
+        rows = []
+    suggestions: List[Dict[str, Any]] = []
+    for item in safe_list(rows):
+        item = dict(safe_dict(item))
+        if not item:
+            continue
+        item.setdefault("type", "survival_relief")
+        item.setdefault("source", "n1233_survival_suggestion")
+        item["projection_source"] = SUGGESTION_PROJECTION_SOURCE
+        suggestions.append(item)
+    return suggestions[:8]
+
+
+def _merge_suggestions(existing: Any, suggestions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    seen = set()
+    for item in list(safe_list(existing)) + list(suggestions):
+        item = dict(safe_dict(item))
+        if not item:
+            continue
+        key = (
+            safe_str(item.get("type")),
+            safe_str(item.get("action_kind")),
+            safe_str(item.get("item_id")),
+            safe_str(item.get("offer_id")),
+            safe_str(item.get("command")),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged[:12]
+
+
+def _patch_survival_suggestions(result: Dict[str, Any], suggestions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    result = dict(safe_dict(result))
+    suggestions = [dict(safe_dict(item)) for item in safe_list(suggestions) if safe_dict(item)]
+    if not suggestions:
+        return result
+
+    def patch_container(container: Dict[str, Any]) -> Dict[str, Any]:
+        container = dict(safe_dict(container))
+        if not container:
+            return container
+        container["survival_suggested_actions"] = _merge_suggestions(container.get("survival_suggested_actions"), suggestions)
+        container["suggested_actions"] = _merge_suggestions(container.get("suggested_actions"), suggestions)
+        climate = dict(safe_dict(container.get("climate_survival")))
+        if climate:
+            climate["survival_suggestions"] = _merge_suggestions(climate.get("survival_suggestions"), suggestions)
+            climate["suggestions"] = _merge_suggestions(climate.get("suggestions"), suggestions)
+            climate["suggestion_projection_source"] = SUGGESTION_PROJECTION_SOURCE
+            container["climate_survival"] = climate
+        presentation = dict(safe_dict(container.get("presentation")))
+        presentation["survival_suggested_actions"] = _merge_suggestions(presentation.get("survival_suggested_actions"), suggestions)
+        presentation["available_actions"] = _merge_suggestions(presentation.get("available_actions"), suggestions)
+        container["presentation"] = presentation
+        return container
+
+    result = patch_container(result)
+    contract = patch_container(safe_dict(result.get("turn_contract")))
+    if contract:
+        result["turn_contract"] = contract
+    payload = patch_container(safe_dict(result.get("result")))
+    if payload:
+        resolved_key = "resolved_result" if isinstance(payload.get("resolved_result"), dict) else "resolved_action"
+        resolved = patch_container(safe_dict(payload.get(resolved_key)))
+        if resolved:
+            payload[resolved_key] = resolved
+        result["result"] = payload
+    return result
+
+
+def _promotion_from_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = safe_dict(result)
+    contract = safe_dict(result.get("turn_contract"))
+    payload = safe_dict(result.get("result"))
+    return _first_dict(
+        result.get("survival_autoplay_promotion"),
+        result.get("survival_autoplay_player_agent"),
+        contract.get("survival_autoplay_promotion"),
+        contract.get("survival_autoplay_player_agent"),
+        payload.get("survival_autoplay_promotion"),
+        payload.get("survival_autoplay_player_agent"),
+    )
+
+
+def _promotion_command(promotion: Dict[str, Any]) -> str:
+    promotion = safe_dict(promotion)
+    return safe_str(
+        promotion.get("effective_player_input")
+        or promotion.get("promoted_player_input")
+        or promotion.get("command")
+    ).strip()
+
+
+def _merge_action_resource_changes(existing: Dict[str, Any], action: Dict[str, Any], trigger: Dict[str, Any]) -> Dict[str, Any]:
+    existing = copy.deepcopy(safe_dict(existing))
+    action = copy.deepcopy(safe_dict(action))
+    action_changes = safe_dict(action.get("resource_changes"))
+    if not existing:
+        existing = {"source": "merged_turn_resource_changes", "sources": []}
+    existing["source"] = "merged_turn_resource_changes"
+    sources = safe_list(existing.get("sources"))
+    for source in ("n1232_survival_action_resolution", RELIEF_TRIGGER_SOURCE):
+        if source not in sources:
+            sources.append(source)
+    existing["sources"] = sources
+    existing["survival_action"] = copy.deepcopy(action_changes or action)
+    existing["survival_relief_trigger"] = copy.deepcopy(trigger)
+    for key in ("hunger_delta", "thirst_delta", "fatigue_delta"):
+        existing[key] = safe_int(existing.get(key), 0) + safe_int(action_changes.get(key), 0)
+    return existing
+
+
+def _patch_survival_action_result(result: Dict[str, Any], action: Dict[str, Any], trigger: Dict[str, Any], climate: Dict[str, Any]) -> Dict[str, Any]:
+    result = dict(safe_dict(result))
+    action = copy.deepcopy(safe_dict(action))
+    trigger = copy.deepcopy(safe_dict(trigger))
+    climate = copy.deepcopy(safe_dict(climate))
+    if not action:
+        return result
+
+    def patch_container(container: Dict[str, Any]) -> Dict[str, Any]:
+        container = dict(safe_dict(container))
+        if not container:
+            return container
+        if climate:
+            container["climate_survival"] = copy.deepcopy(climate)
+        container["survival_action"] = copy.deepcopy(action)
+        container["resource_changes"] = _merge_action_resource_changes(container.get("resource_changes"), action, trigger)
+        effect = dict(safe_dict(container.get("effect_result")))
+        effect["source"] = "merged_turn_effect_result"
+        effect["survival_action"] = copy.deepcopy(action)
+        effect["survival_relief_trigger"] = copy.deepcopy(trigger)
+        action_effect = safe_dict(action.get("effect_result"))
+        if action_effect.get("warnings") is not None:
+            effect["warnings"] = safe_list(action_effect.get("warnings"))
+        container["effect_result"] = effect
+        return container
+
+    result = patch_container(result)
+    contract = patch_container(safe_dict(result.get("turn_contract")))
+    if contract:
+        result["turn_contract"] = contract
+    payload = patch_container(safe_dict(result.get("result")))
+    if payload:
+        resolved_key = "resolved_result" if isinstance(payload.get("resolved_result"), dict) else "resolved_action"
+        resolved = patch_container(safe_dict(payload.get(resolved_key)))
+        if resolved:
+            payload[resolved_key] = resolved
+        result["result"] = payload
+    return result
+
+
+def _maybe_apply_promoted_survival_relief(result: Dict[str, Any], session: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    result = dict(safe_dict(result))
+    session = copy.deepcopy(safe_dict(session))
+    promotion = _promotion_from_result(result)
+    if not promotion.get("promoted"):
+        return result, session, {"applied": False, "reason": "no_promotion", "source": RELIEF_TRIGGER_SOURCE}
+    if _survival_action(result).get("applied"):
+        return result, session, {"applied": False, "reason": "survival_action_already_applied", "source": RELIEF_TRIGGER_SOURCE}
+    command = _promotion_command(promotion)
+    if not command:
+        return result, session, {"applied": False, "reason": "missing_promoted_command", "source": RELIEF_TRIGGER_SOURCE}
+    simulation_state = _simulation_state_from_session(session)
+    if not simulation_state:
+        return result, session, {"applied": False, "reason": "missing_simulation_state", "source": RELIEF_TRIGGER_SOURCE}
+    try:
+        from app.rpg.session.survival_actions import resolve_survival_action
+
+        action = resolve_survival_action(player_input=command, simulation_state=simulation_state)
+    except Exception as exc:
+        return result, session, {"applied": False, "reason": "relief_resolution_exception", "error": repr(exc), "source": RELIEF_TRIGGER_SOURCE}
+    action = dict(safe_dict(action))
+    trigger = {
+        "applied": bool(action.get("applied")),
+        "matched": bool(action.get("matched")),
+        "promoted_command": command,
+        "promotion": copy.deepcopy(promotion),
+        "action_kind": safe_str(action.get("action_kind")),
+        "blocked": bool(action.get("blocked")),
+        "blocked_reason": safe_str(action.get("blocked_reason")),
+        "source": RELIEF_TRIGGER_SOURCE,
+    }
+    if not action.get("matched"):
+        trigger["reason"] = "promoted_command_not_survival_action"
+        result["survival_autoplay_relief_trigger"] = trigger
+        return result, session, trigger
+    climate = safe_dict(simulation_state.get("climate_survival"))
+    if climate:
+        session = mirror_survival_state_into_session(session, climate)
+    result = _patch_survival_action_result(result, action, trigger, _climate_from_session(session) or climate)
+    result["session"] = session
+    result["simulation_state"] = safe_dict(session.get("simulation_state"))
+    result["survival_autoplay_relief_trigger"] = trigger
+    return result, session, trigger
+
+
 def mirror_survival_state_into_session(session: Dict[str, Any], climate_survival: Dict[str, Any]) -> Dict[str, Any]:
     session = copy.deepcopy(safe_dict(session))
     climate_survival = copy.deepcopy(safe_dict(climate_survival))
@@ -478,16 +701,29 @@ def persist_result_survival_state(
 
     result = patch_result_survival_state(result, climate, calibration)
     session = mirror_survival_state_into_session(session, climate)
-    _record_survival_accumulator(accumulator_key, climate, calibration)
+    suggestions = _build_survival_suggestions(session)
+    result = _patch_survival_suggestions(result, suggestions)
+    runtime_state = safe_dict(session.get("runtime_state"))
+    runtime_state["last_survival_suggested_actions"] = copy.deepcopy(suggestions)
+    runtime_state["last_survival_suggestion_projection_source"] = SUGGESTION_PROJECTION_SOURCE if suggestions else ""
+    session["runtime_state"] = runtime_state
+    result, session, relief_trigger = _maybe_apply_promoted_survival_relief(result, session)
+    final_climate = _climate_from_session(session) or climate
+    _record_survival_accumulator(accumulator_key, final_climate, calibration)
     result["session"] = session
     result["simulation_state"] = safe_dict(session.get("simulation_state"))
     result["survival_autoplay_persistence"] = {
         "applied": True,
-        "needs": dict(safe_dict(climate.get("survival"))),
+        "needs": dict(safe_dict(final_climate.get("survival"))),
         "source": SOURCE,
         "calibration": calibration,
         "accumulator_key": _accumulator_key(accumulator_key),
         "accumulator_source": ACCUMULATOR_SOURCE if _accumulator_key(accumulator_key) else "",
+        "suggestion_projection": {
+            "source": SUGGESTION_PROJECTION_SOURCE,
+            "suggestion_count": len(suggestions),
+        },
+        "relief_trigger": relief_trigger,
     }
 
     if save:
