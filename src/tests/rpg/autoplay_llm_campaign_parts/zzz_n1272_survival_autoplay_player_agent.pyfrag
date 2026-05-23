@@ -5,6 +5,7 @@ _N1272_GLOBAL_APPLY_TURN_PREV = globals().get("apply_turn")
 
 from app.rpg.session.service import load_session as _n1272_load_session  # noqa: E402
 from app.rpg.session.survival_autoplay_persistence import (  # noqa: E402
+    merge_survival_accumulator_into_session as _n1272_merge_survival_accumulator_into_session,
     persist_result_survival_state as _n1272_persist_result_survival_state,
 )
 from app.rpg.session.survival_autoplay_player_agent import (  # noqa: E402
@@ -57,11 +58,13 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
 
     def _wrapped_apply_turn(session_id, player_input, action=None, *, performance_override=None):
         original_player_input = _n1272_str(player_input)
+        session_key = _n1272_str(session_id)
         promotion = {"promoted": False, "reason": "not_evaluated", "source": "n1272_survival_autoplay_player_agent"}
         promoted_player_input = original_player_input
         prior_session = {}
         try:
             prior_session = _n1272_load_session(session_id) or {}
+            prior_session = _n1272_merge_survival_accumulator_into_session(prior_session, session_key)
             promoted_player_input, promotion = _n1272_promote_survival_suggestion_for_autoplay(prior_session, original_player_input)
         except Exception as exc:
             promotion = {
@@ -87,7 +90,12 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
         promotion["effective_player_input"] = promoted_player_input
         promotion["input_was_replaced"] = promoted_player_input != original_player_input
         result = _n1272_attach_promotion(result, promotion)
-        result = _n1272_persist_result_survival_state(result, save=True, prior_session=prior_session)
+        result = _n1272_persist_result_survival_state(
+            result,
+            save=True,
+            prior_session=prior_session,
+            accumulator_key=session_key,
+        )
         return result
 
     _wrapped_apply_turn._n1272_survival_autoplay_wrapped = True
