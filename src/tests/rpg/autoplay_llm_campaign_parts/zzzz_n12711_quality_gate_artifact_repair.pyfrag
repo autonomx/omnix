@@ -13,6 +13,10 @@ from app.rpg.session.bundle_a_artifacts import (  # noqa: E402
 from app.rpg.session.bundle_a_manifest_repair import (  # noqa: E402
     repair_bundle_a_manifest as _bundle_a_repair_manifest,
 )
+from app.rpg.session.bundle_ab_late_manifest_hook import (  # noqa: E402
+    register_late_manifest_repair as _bundle_ab_register_late_manifest_repair,
+    run_late_manifest_repair as _bundle_ab_run_late_manifest_repair,
+)
 from app.rpg.session.bundle_b_artifacts import (  # noqa: E402
     write_bundle_b_artifacts as _bundle_b_write_bundle_b_artifacts,
 )
@@ -53,18 +57,15 @@ def _n12711_candidate_result_dirs():
 
 def _n12711_finalize_latest_bundle_artifacts():
     repairs = []
-    for path in _n12711_candidate_result_dirs():
+    candidates = _n12711_candidate_result_dirs()
+    _bundle_ab_register_late_manifest_repair(candidates)
+    for path in candidates:
         quality = _n12711_repair_quality_gate_artifacts_if_present(path)
-        # Bundle A.1 must not depend on quality.get("applied"). In green reruns,
-        # quality-gate-summary.json can already be present/valid, but the manifest
-        # may still be empty. Always regenerate Bundle A summaries and then run
-        # the final manifest repair for each candidate result directory.
         bundle_a = _bundle_a_write_bundle_a_artifacts(path)
         manifest_a = _bundle_a_repair_manifest(path)
         bundle_b = _bundle_b_write_bundle_b_artifacts(path)
-        # Bundle B appends to the manifest after Bundle A. Re-run the manifest
-        # repair so the base manifest stays complete if an earlier writer left it empty.
         manifest_b = _bundle_a_repair_manifest(path)
+        late = _bundle_ab_run_late_manifest_repair([path])
         repairs.append({
             "path": str(path),
             "quality": quality,
@@ -72,8 +73,9 @@ def _n12711_finalize_latest_bundle_artifacts():
             "manifest_a": manifest_a,
             "bundle_b": bundle_b,
             "manifest_b": manifest_b,
+            "late_manifest_repair": late,
         })
-        if any(item.get("applied") for item in (quality, bundle_a, manifest_a, bundle_b, manifest_b)):
+        if any(item.get("applied") for item in (quality, bundle_a, manifest_a, bundle_b, manifest_b, late)):
             break
     return {
         "source": "bundle_ab_final_artifact_wrapper",
@@ -84,8 +86,10 @@ def _n12711_finalize_latest_bundle_artifacts():
             or item.get("manifest_a", {}).get("applied")
             or item.get("bundle_b", {}).get("applied")
             or item.get("manifest_b", {}).get("applied")
+            or item.get("late_manifest_repair", {}).get("applied")
             for item in repairs
         ),
+        "late_manifest_repair_registered": True,
     }
 
 
