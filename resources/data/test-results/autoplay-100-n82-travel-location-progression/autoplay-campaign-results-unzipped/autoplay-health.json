@@ -20,5 +20,12 @@
   "unsupported_combat_claim_suppressed_count": 0,
   "unsupported_combat_claim_preselection_suppressed_count": 5,
   "raw_unsupported_combat_claim_count": 5,
-  "unsupported_combat_claim_preselection_suppression_match_ok": true
+  "unsupported_combat_claim_preselection_suppression_match_ok": true,
+  "quality_gate_summary_path": "quality-gate-summary.json",
+  "quality_gate_artifact_repair": {
+    "applied": true,
+    "source": "n127111_quality_gate_summary_artifact_path_finalization",
+    "quality_summary_path": "quality-gate-summary.json",
+    "result_dir": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped"
+  }
 }
