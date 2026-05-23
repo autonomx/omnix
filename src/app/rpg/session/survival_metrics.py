@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List
 
 SURVIVAL_METRIC_SOURCE_FORMAT = "n1251_survival_metric_source_summary_v1"
 BALANCE_SUMMARY_SOURCE = "n1278_survival_relief_balance_tuning"
+RUNTIME_PROBE_SOURCE = "n127101_critical_thirst_override_runtime_attachment_probe"
 
 
 def safe_dict(value: Any) -> Dict[str, Any]:
@@ -198,6 +199,106 @@ def survival_action(row: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def survival_runtime_probe(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = safe_dict(row)
+    contract = row_contract(row)
+    changes = resource_changes(row)
+    effect = effect_result(row)
+    result = safe_dict(row.get("result"))
+    candidates = [
+        row.get("survival_autoplay_runtime_probe"),
+        row.get("n12710_critical_thirst_runtime_probe"),
+        contract.get("survival_autoplay_runtime_probe"),
+        contract.get("n12710_critical_thirst_runtime_probe"),
+        changes.get("survival_autoplay_runtime_probe"),
+        changes.get("n12710_critical_thirst_runtime_probe"),
+        effect.get("survival_autoplay_runtime_probe"),
+        result.get("survival_autoplay_runtime_probe"),
+        _get_path(result, ["turn_contract", "survival_autoplay_runtime_probe"]),
+        _get_path(row, ["raw_result", "survival_autoplay_runtime_probe"]),
+        _get_path(row, ["authoritative_result", "turn_contract", "survival_autoplay_runtime_probe"]),
+    ]
+    for value in candidates:
+        if isinstance(value, dict) and value:
+            return value
+    return {}
+
+
+def build_survival_runtime_probe_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = safe_list(transcript)
+    counters = {
+        "probe_rows": 0,
+        "wrapper_called_rows": 0,
+        "previous_apply_turn_called_rows": 0,
+        "previous_apply_turn_returned_rows": 0,
+        "promotion_called_rows": 0,
+        "promotion_promoted_rows": 0,
+        "persistence_called_rows": 0,
+        "persistence_applied_rows": 0,
+        "override_called_rows": 0,
+        "override_applied_rows": 0,
+        "turn_contract_attached_rows": 0,
+        "runtime_state_attached_rows": 0,
+    }
+    override_skip_reasons: Dict[str, int] = {}
+    promotion_reasons: Dict[str, int] = {}
+    samples: List[Dict[str, Any]] = []
+    applied_samples: List[Dict[str, Any]] = []
+    for index, row in enumerate(rows, start=1):
+        probe = survival_runtime_probe(row)
+        if not probe:
+            continue
+        turn_index = safe_int(row.get("turn_index") or row.get("turn"), index)
+        counters["probe_rows"] += 1
+        for key in (
+            "wrapper_called",
+            "previous_apply_turn_called",
+            "previous_apply_turn_returned",
+            "promotion_called",
+            "promotion_promoted",
+            "persistence_called",
+            "persistence_applied",
+            "override_called",
+            "override_applied",
+            "turn_contract_attached",
+            "runtime_state_attached",
+        ):
+            if probe.get(key):
+                counters[f"{key}_rows"] += 1
+        reason = _safe_str(probe.get("override_reason") or "unknown")
+        override_skip_reasons[reason] = override_skip_reasons.get(reason, 0) + 1
+        promo_reason = _safe_str(probe.get("promotion_reason") or "unknown")
+        promotion_reasons[promo_reason] = promotion_reasons.get(promo_reason, 0) + 1
+        sample = {
+            "turn_index": turn_index,
+            "override_called": bool(probe.get("override_called")),
+            "override_applied": bool(probe.get("override_applied")),
+            "override_reason": reason,
+            "override_action_kind": _safe_str(probe.get("override_action_kind")),
+            "promotion_promoted": bool(probe.get("promotion_promoted")),
+            "promotion_reason": promo_reason,
+            "override_needs_before": safe_dict(probe.get("override_needs_before")),
+            "override_needs_after": safe_dict(probe.get("override_needs_after")),
+        }
+        if len(samples) < 20:
+            samples.append(sample)
+        if probe.get("override_applied") and len(applied_samples) < 20:
+            applied_samples.append(sample)
+    return {
+        "format_version": "n127101_survival_runtime_probe_summary_v1",
+        "source": RUNTIME_PROBE_SOURCE,
+        "turn_count": len(rows),
+        **counters,
+        "wrapper_attached_ok": counters["wrapper_called_rows"] > 0,
+        "override_invoked_ok": counters["override_called_rows"] > 0,
+        "override_applied_ok": counters["override_applied_rows"] > 0,
+        "override_skip_reasons": override_skip_reasons,
+        "promotion_reasons": promotion_reasons,
+        "samples": samples,
+        "applied_samples": applied_samples,
+    }
+
+
 def survival_suggestions(row: Dict[str, Any]) -> List[Dict[str, Any]]:
     row = safe_dict(row)
     contract = row_contract(row)
@@ -293,6 +394,9 @@ def build_survival_metric_source_summary(transcript: List[Dict[str, Any]]) -> Di
         "warning_rows": 0,
         "nonzero_need_rows": 0,
         "nonzero_delta_rows": 0,
+        "runtime_probe_rows": 0,
+        "critical_thirst_override_called_rows": 0,
+        "critical_thirst_override_applied_rows": 0,
     }
     example_missing = []
     for index, row in enumerate(rows, start=1):
@@ -301,6 +405,7 @@ def build_survival_metric_source_summary(transcript: List[Dict[str, Any]]) -> Di
         action = survival_action(row)
         suggestions = survival_suggestions(row)
         warnings = warning_types(row)
+        probe = survival_runtime_probe(row)
         if climate_survival(row):
             coverage["climate_survival_rows"] += 1
         if changes:
@@ -319,6 +424,12 @@ def build_survival_metric_source_summary(transcript: List[Dict[str, Any]]) -> Di
             coverage["nonzero_need_rows"] += 1
         if any(flat_delta(row, key) for key in ("hunger_delta", "thirst_delta", "fatigue_delta")):
             coverage["nonzero_delta_rows"] += 1
+        if probe:
+            coverage["runtime_probe_rows"] += 1
+            if probe.get("override_called"):
+                coverage["critical_thirst_override_called_rows"] += 1
+            if probe.get("override_applied"):
+                coverage["critical_thirst_override_applied_rows"] += 1
         if len(example_missing) < 5 and climate_survival(row) and not changes:
             example_missing.append({"turn_index": safe_int(row.get("turn_index") or row.get("turn"), index), "missing": "resource_changes"})
     return {
@@ -331,6 +442,7 @@ def build_survival_metric_source_summary(transcript: List[Dict[str, Any]]) -> Di
             "climate_survival_rows proves values are projected into transcript rows.",
             "climate_tick_source_rows proves authoritative N123.1 tick evidence is measurable from resource_changes/effect_result or persisted climate_survival state.",
             "survival_suggestion_rows and relief_applied_rows prove autoplay response evidence is measurable.",
+            "runtime_probe_rows proves N127.10.1 wrapper/override attachment evidence is projected into transcript rows.",
         ],
     }
 
@@ -442,6 +554,7 @@ def build_survival_pressure_relief_summary(transcript: List[Dict[str, Any]]) -> 
         changes = resource_changes(row)
         action_changes = safe_dict(action.get("resource_changes")) or safe_dict(changes.get("survival_action"))
         warnings = warning_types(row)
+        probe = survival_runtime_probe(row)
         for warning in warnings:
             warnings_by_type[warning] = warnings_by_type.get(warning, 0) + 1
         warning_count += len(warnings)
@@ -486,10 +599,15 @@ def build_survival_pressure_relief_summary(transcript: List[Dict[str, Any]]) -> 
             "relief_applied": bool(action.get("applied")),
             "relief_blocked": bool(action.get("blocked") or action.get("blocked_reason")),
             "source_present": has_climate_tick_source(row),
+            "runtime_probe_present": bool(probe),
+            "critical_thirst_override_called": bool(probe.get("override_called")),
+            "critical_thirst_override_applied": bool(probe.get("override_applied")),
+            "critical_thirst_override_reason": _safe_str(probe.get("override_reason")),
         })
     max_needs = {key: max([safe_int(row.get(key), 0) for row in trend_rows] or [0]) for key in ("hunger", "thirst", "fatigue")}
     source_summary = build_survival_metric_source_summary(rows)
     inventory_summary = sorted(inventory_consumed.values(), key=lambda item: item["item_id"])
+    runtime_probe_summary = build_survival_runtime_probe_summary(rows)
     return {
         "format_version": "n1234_survival_pressure_relief_summary_v2_n1251",
         "source": "final_transcript_rows.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
@@ -509,8 +627,9 @@ def build_survival_pressure_relief_summary(transcript: List[Dict[str, Any]]) -> 
         "max_needs": max_needs,
         "final_needs": final_needs,
         "balance_summary": build_survival_balance_summary(trend_rows, inventory_summary),
+        "runtime_probe_summary": runtime_probe_summary,
         "source_coverage_summary": source_summary,
         "source_gate": build_survival_metric_source_gate(source_summary),
-        "artifact_files": {"summary": "survival-pressure-relief-summary.json", "trend_rows": "survival-pressure-trend-rows.json", "source_summary": "survival-metric-source-summary.json"},
+        "artifact_files": {"summary": "survival-pressure-relief-summary.json", "trend_rows": "survival-pressure-trend-rows.json", "source_summary": "survival-metric-source-summary.json", "runtime_probe_summary": "survival-runtime-probe-summary.json"},
         "report_section_title": "N125.1 Real Survival Metric Source Evidence",
     }
