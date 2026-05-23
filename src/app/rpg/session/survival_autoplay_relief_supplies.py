@@ -13,6 +13,7 @@ import copy
 from typing import Any, Dict, Tuple
 
 SOURCE = "n1276_survival_hunger_thirst_relief_coverage"
+HANDOFF_SOURCE = "n1277_survival_relief_supply_handoff"
 NEEDS = ("hunger", "thirst", "fatigue")
 MAX_GRANTS_PER_SESSION = {"food": 2, "drink": 2}
 PRESSURE_THRESHOLD = 50
@@ -180,6 +181,69 @@ def _add_item(simulation_state: Dict[str, Any], *, kind: str, ordinal: int) -> D
     return item
 
 
+def _is_autoplay_supply_item(item: Dict[str, Any]) -> bool:
+    item = _safe_dict(item)
+    if _safe_str(item.get("source")) in (SOURCE, HANDOFF_SOURCE):
+        return True
+    item_id = _item_identity(item)
+    if item_id.startswith("autoplay_field_ration_") or item_id.startswith("autoplay_waterskin_"):
+        return True
+    return SOURCE.lower() in _item_tags(item)
+
+
+def _item_key(item: Dict[str, Any]) -> str:
+    key = _item_identity(item)
+    return key or _safe_str(item.get("name")).lower()
+
+
+def _copy_supply_items(source_session: Dict[str, Any], target_session: Dict[str, Any]) -> list[Dict[str, Any]]:
+    source_sim = _simulation_state(source_session)
+    target_sim = _simulation_state(target_session)
+    if not source_sim or not target_sim:
+        return []
+    source_items = _safe_list(_inventory_state(source_sim).get("items"))
+    target_inventory = _inventory_state(target_sim)
+    target_items = list(_safe_list(target_inventory.get("items")))
+    existing_keys = {_item_key(_safe_dict(item)) for item in target_items if _item_key(_safe_dict(item))}
+    copied: list[Dict[str, Any]] = []
+    for raw in source_items:
+        item = copy.deepcopy(_safe_dict(raw))
+        if not item or _item_quantity(item) <= 0 or not _is_autoplay_supply_item(item):
+            continue
+        key = _item_key(item)
+        if key and key in existing_keys:
+            continue
+        item.setdefault("source", SOURCE)
+        tags = list(_safe_list(item.get("tags")))
+        if HANDOFF_SOURCE not in tags:
+            tags.append(HANDOFF_SOURCE)
+        item["tags"] = tags
+        target_items.append(item)
+        if key:
+            existing_keys.add(key)
+        copied.append(item)
+    target_inventory["items"] = target_items
+    return copied
+
+
+def _merge_counters_from_source(source_session: Dict[str, Any], target_session: Dict[str, Any], session_key: str | None) -> Dict[str, int]:
+    source_runtime = _runtime_state(source_session)
+    target_runtime = _runtime_state(target_session)
+    source_counters = _safe_dict(source_runtime.get("survival_autoplay_relief_supply_grants"))
+    target_counters = _safe_dict(target_runtime.get("survival_autoplay_relief_supply_grants"))
+    key = _session_key(session_key)
+    live = _IN_PROCESS_SUPPLY_GRANTS.setdefault(key, {}) if key else {}
+    counters = {
+        "food": max(_safe_int(source_counters.get("food"), 0), _safe_int(target_counters.get("food"), 0), _safe_int(live.get("food"), 0)),
+        "drink": max(_safe_int(source_counters.get("drink"), 0), _safe_int(target_counters.get("drink"), 0), _safe_int(live.get("drink"), 0)),
+    }
+    target_runtime["survival_autoplay_relief_supply_grants"] = dict(counters)
+    target_runtime["survival_autoplay_relief_supply_source"] = SOURCE
+    if key:
+        _IN_PROCESS_SUPPLY_GRANTS[key] = dict(counters)
+    return counters
+
+
 def _mirror_session_roots(session: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     session["simulation_state"] = simulation_state
     state = _safe_dict(session.get("state"))
@@ -193,6 +257,44 @@ def _mirror_session_roots(session: Dict[str, Any], simulation_state: Dict[str, A
     setup_payload["metadata"] = metadata
     session["setup_payload"] = setup_payload
     return session
+
+
+def merge_survival_autoplay_relief_supplies_into_session(
+    session: Dict[str, Any],
+    source_session: Dict[str, Any],
+    *,
+    session_key: str | None = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Copy transient N127.6 supply items across a runtime reload boundary.
+
+    The autoplay wrapper seeds supplies in the pre-turn selector session, but the
+    authoritative runtime may reload the saved session before resolving the
+    promoted command.  This handoff preserves only explicit N127.6 supply items
+    and counters, keeping the deterministic resolver backed by real inventory.
+    """
+
+    session = copy.deepcopy(_safe_dict(session))
+    source_session = _safe_dict(source_session)
+    if not session or not source_session:
+        return session, {"applied": False, "reason": "missing_session_or_source_session", "source": HANDOFF_SOURCE}
+    simulation_state = _simulation_state(session)
+    if not simulation_state:
+        return session, {"applied": False, "reason": "missing_target_simulation_state", "source": HANDOFF_SOURCE}
+    copied = _copy_supply_items(source_session, session)
+    counters = _merge_counters_from_source(source_session, session, session_key)
+    session = _mirror_session_roots(session, _simulation_state(session))
+    summary = {
+        "applied": bool(copied),
+        "source": HANDOFF_SOURCE,
+        "session_key": _session_key(session_key),
+        "copied_count": len(copied),
+        "copied_items": copied,
+        "grant_counters": dict(counters),
+    }
+    runtime = _runtime_state(session)
+    runtime["last_survival_autoplay_relief_supply_handoff_summary"] = copy.deepcopy(summary)
+    session["runtime_state"] = runtime
+    return session, summary
 
 
 def ensure_survival_autoplay_relief_supplies(
