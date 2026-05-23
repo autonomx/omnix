@@ -176,7 +176,13 @@ def merge_survival_accumulator_into_session(session: Dict[str, Any], accumulator
         )
     if not use_accumulator:
         return session
-    return mirror_survival_state_into_session(session, accumulator_climate)
+    merged = mirror_survival_state_into_session(session, accumulator_climate)
+    accumulator = safe_dict(_IN_PROCESS_SURVIVAL_ACCUMULATORS.get(_accumulator_key(accumulator_key)))
+    if accumulator:
+        runtime_state = safe_dict(merged.get("runtime_state"))
+        runtime_state["survival_autoplay_accumulator"] = copy.deepcopy(accumulator)
+        merged["runtime_state"] = runtime_state
+    return merged
 
 
 def extract_turn_survival_state(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -276,9 +282,6 @@ def calibrate_turn_survival_state(result: Dict[str, Any], prior_session: Dict[st
     if prior_survival:
         tick_after = {need: _clamp_need(tick_before.get(need, 0) + TICK_DELTAS[need]) for need in NEEDS}
     else:
-        # No prior state means the current turn climate is already authoritative.
-        # Do not double-advance it here; the next turn will use the persisted
-        # accumulator/session state as its prior and apply the deterministic tick.
         tick_after = dict(tick_before)
     climate_before = current_needs if not calibrated else tick_before
     final_needs = dict(tick_after)
