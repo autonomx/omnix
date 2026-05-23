@@ -11,6 +11,9 @@ from app.rpg.session.survival_autoplay_persistence import (  # noqa: E402
 from app.rpg.session.survival_autoplay_player_agent import (  # noqa: E402
     promote_survival_suggestion_for_autoplay as _n1272_promote_survival_suggestion_for_autoplay,
 )
+from app.rpg.session.survival_autoplay_relief_supplies import (  # noqa: E402
+    ensure_survival_autoplay_relief_supplies as _n1276_ensure_survival_autoplay_relief_supplies,
+)
 
 
 def _n1272_dict(value):
@@ -50,6 +53,26 @@ def _n1272_attach_promotion(result, promotion):
     return result
 
 
+def _n1276_attach_supply_summary(result, supply_summary, *, phase):
+    result = _n1272_dict(result)
+    summary = dict(_n1272_dict(supply_summary))
+    if not summary:
+        return result
+    summary["phase"] = phase
+    result["survival_autoplay_relief_supply_summary"] = summary
+    turn_contract = dict(_n1272_dict(result.get("turn_contract")))
+    if turn_contract:
+        turn_contract["survival_autoplay_relief_supply_summary"] = summary
+        result["turn_contract"] = turn_contract
+    session = dict(_n1272_dict(result.get("session")))
+    if session:
+        runtime_state = dict(_n1272_dict(session.get("runtime_state")))
+        runtime_state["last_survival_autoplay_relief_supply_summary"] = summary
+        session["runtime_state"] = runtime_state
+        result["session"] = session
+    return result
+
+
 def _n1272_apply_turn_wrapper(previous_apply_turn):
     if not callable(previous_apply_turn):
         return previous_apply_turn
@@ -62,9 +85,15 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
         promotion = {"promoted": False, "reason": "not_evaluated", "source": "n1272_survival_autoplay_player_agent"}
         promoted_player_input = original_player_input
         prior_session = {}
+        pre_turn_supply_summary = {"applied": False, "reason": "not_evaluated", "source": "n1276_survival_hunger_thirst_relief_coverage"}
+        post_turn_supply_summary = {"applied": False, "reason": "not_evaluated", "source": "n1276_survival_hunger_thirst_relief_coverage"}
         try:
             prior_session = _n1272_load_session(session_id) or {}
             prior_session = _n1272_merge_survival_accumulator_into_session(prior_session, session_key)
+            prior_session, pre_turn_supply_summary = _n1276_ensure_survival_autoplay_relief_supplies(
+                prior_session,
+                session_key=session_key,
+            )
             promoted_player_input, promotion = _n1272_promote_survival_suggestion_for_autoplay(prior_session, original_player_input)
         except Exception as exc:
             promotion = {
@@ -89,7 +118,25 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
         promotion.setdefault("promoted_player_input", promoted_player_input)
         promotion["effective_player_input"] = promoted_player_input
         promotion["input_was_replaced"] = promoted_player_input != original_player_input
+        promotion["pre_turn_relief_supply_summary"] = pre_turn_supply_summary
         result = _n1272_attach_promotion(result, promotion)
+        session = dict(_n1272_dict(result.get("session")))
+        if session:
+            try:
+                session, post_turn_supply_summary = _n1276_ensure_survival_autoplay_relief_supplies(
+                    session,
+                    session_key=session_key,
+                )
+                result["session"] = session
+            except Exception as exc:
+                post_turn_supply_summary = {
+                    "applied": False,
+                    "reason": "post_turn_supply_exception",
+                    "error": repr(exc),
+                    "source": "n1276_survival_hunger_thirst_relief_coverage",
+                }
+        result = _n1276_attach_supply_summary(result, pre_turn_supply_summary, phase="pre_turn_selection")
+        result = _n1276_attach_supply_summary(result, post_turn_supply_summary, phase="post_turn_persistence")
         result = _n1272_persist_result_survival_state(
             result,
             save=True,
