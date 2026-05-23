@@ -1,46 +1,72 @@
-# N127.11 quality-gate artifact repair wrapper.
-# Runs after the normal autoplay main() completes and repairs only the latest
-# result directory whose evaluation/readiness artifacts are green.
+# Bundle A final artifact wrapper.
+# Runs after the normal autoplay main() completes and finalizes quality-gate,
+# survival-exit, and transcript-payload-budget artifacts for the latest green run.
 
 _N12711_PREV_MAIN = globals().get("main")
 
 from pathlib import Path as _N12711_Path  # noqa: E402
 
+from app.rpg.session.bundle_a_artifacts import (  # noqa: E402
+    write_bundle_a_artifacts as _bundle_a_write_bundle_a_artifacts,
+)
 from app.rpg.session.quality_gate_artifact_repair import (  # noqa: E402
     repair_quality_gate_artifacts_if_present as _n12711_repair_quality_gate_artifacts_if_present,
 )
 
 
-def _n12711_candidate_result_dirs():
+def _n12711_repo_root():
     here = _N12711_Path(__file__).resolve()
-    repo_root = here.parents[4] if len(here.parents) > 4 else _N12711_Path.cwd()
-    base = repo_root / "resources" / "data" / "test-results"
-    if not base.exists():
-        return []
-    candidates = sorted(
-        {path.parent for path in base.rglob("hundred-turn-evaluation.json")},
-        key=lambda path: path.stat().st_mtime if path.exists() else 0,
-        reverse=True,
-    )
+    for parent in [here.parent, *here.parents]:
+        if (parent / "resources").exists() or (parent / "src").exists():
+            if (parent / "src" / "tests" / "rpg").exists() or (parent / "resources" / "data").exists():
+                return parent
+    return _N12711_Path.cwd()
+
+
+def _n12711_candidate_result_dirs():
+    repo_root = _n12711_repo_root()
+    bases = [
+        repo_root / "resources" / "data" / "test-results",
+        _N12711_Path.cwd() / "resources" / "data" / "test-results",
+    ]
+    seen = set()
+    candidates = []
+    for base in bases:
+        if not base.exists():
+            continue
+        for path in base.rglob("hundred-turn-evaluation.json"):
+            parent = path.parent.resolve()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            candidates.append(parent)
+    candidates.sort(key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
     return candidates[:5]
 
 
-def _n12711_repair_latest_quality_gate_artifact():
+def _n12711_finalize_latest_bundle_a_artifacts():
     repairs = []
     for path in _n12711_candidate_result_dirs():
-        repair = _n12711_repair_quality_gate_artifacts_if_present(path)
-        repairs.append({"path": str(path), "repair": repair})
-        if repair.get("applied"):
+        quality = _n12711_repair_quality_gate_artifacts_if_present(path)
+        bundle = _bundle_a_write_bundle_a_artifacts(path) if quality.get("applied") else {"applied": False, "reason": "quality_repair_not_applied"}
+        repairs.append({"path": str(path), "quality": quality, "bundle_a": bundle})
+        if quality.get("applied") or bundle.get("applied"):
             break
-    return {"source": "n12711_quality_gate_artifact_repair", "repairs": repairs, "applied": any(item.get("repair", {}).get("applied") for item in repairs)}
+    return {
+        "source": "bundle_a_final_artifact_wrapper",
+        "repairs": repairs,
+        "applied": any(item.get("quality", {}).get("applied") or item.get("bundle_a", {}).get("applied") for item in repairs),
+    }
 
 
 def main(argv=None):
     if not callable(_N12711_PREV_MAIN):
-        raise RuntimeError("n12711_previous_main_missing")
+        raise RuntimeError("bundle_a_previous_main_missing")
     exit_code = _N12711_PREV_MAIN(argv)
     try:
-        globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = _n12711_repair_latest_quality_gate_artifact()
+        globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"] = _n12711_finalize_latest_bundle_a_artifacts()
+        globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
     except Exception as exc:
-        globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = {"source": "n12711_quality_gate_artifact_repair", "applied": False, "error": repr(exc)}
+        globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"] = {"source": "bundle_a_final_artifact_wrapper", "applied": False, "error": repr(exc)}
+        globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
     return exit_code
