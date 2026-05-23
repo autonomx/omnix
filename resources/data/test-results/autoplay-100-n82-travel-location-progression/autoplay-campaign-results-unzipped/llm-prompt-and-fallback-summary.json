@@ -3,34 +3,97 @@
   "turn_count": 100,
   "with_prompt_contract": 100,
   "with_prompt_debug": 100,
-  "with_prompt_contract_ack": 100,
+  "with_prompt_contract_ack": 87,
   "fallback_source_counts": {
-    "llm_valid": 100
+    "llm_valid": 87,
+    "provider_unavailable_or_invalid": 13
   },
   "fallback_reason_counts": {
-    "llm_valid": 100
+    "llm_valid": 87,
+    "final_drain_timeout": 13
   },
-  "invalid_fallback_reason_turns": [],
+  "invalid_fallback_reason_turns": [
+    {
+      "turn_index": 88,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 89,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 90,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 91,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 92,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 93,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 94,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 95,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 96,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 97,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 98,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 99,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    },
+    {
+      "turn_index": 100,
+      "source": "provider_unavailable_or_invalid",
+      "reason": "final_drain_timeout"
+    }
+  ],
   "missing_prompt_contract_turns": [],
   "missing_prompt_debug_turns": [],
-  "ok": true,
+  "ok": false,
   "service_resolver_veto_summary": {
     "format_version": "n11619_service_veto_regression_summary_v1",
     "ok": true,
     "candidate_document_service_false_positive_action_count": 36,
-    "vetoed_count": 2,
+    "vetoed_count": 1,
     "remaining_violation_count": 0,
-    "prompt_only_service_category_block_count": 34,
-    "vetoed_rate": 0.02,
+    "prompt_only_service_category_block_count": 35,
+    "vetoed_rate": 0.01,
     "vetoed_turns": [
       {
         "turn_index": 27,
         "player_action": "I read the wax-sealed order from the hidden smuggler cache.",
-        "reason": "service_false_positive_vetoed"
-      },
-      {
-        "turn_index": 42,
-        "player_action": "I present the tollhouse manifest and marked evidence to the magistrate.",
         "reason": "service_false_positive_vetoed"
       }
     ],
@@ -39,21 +102,21 @@
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 66,
-    "category_reclassified_count": 49,
-    "dialogue_relevance_repaired_count": 33,
-    "service_resolver_veto_count": 2,
+    "metadata_repaired_count": 72,
+    "category_reclassified_count": 55,
+    "dialogue_relevance_repaired_count": 34,
+    "service_resolver_veto_count": 1,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 66,
-      "provider_category_reclassification": 49,
-      "dialogue_action_relevance_repair": 33,
-      "service_resolver_veto": 2,
+      "provider_metadata_or_shape_repair": 72,
+      "provider_category_reclassification": 55,
+      "dialogue_action_relevance_repair": 34,
+      "service_resolver_veto": 1,
       "unsupported_combat_claim_suppressed": 0,
       "unsupported_combat_claim_preselection_suppressed": 5
     },
     "note": "Counts are diagnostic repair pressure, not additional authoritative simulation outcomes.",
     "dialogue_relevance_repair_count_source": "dialogue_action_relevance_summary",
-    "service_resolver_veto_rate": 0.02,
+    "service_resolver_veto_rate": 0.01,
     "repair_pressure_by_category": {
       "format_version": "n11620_repair_pressure_by_category_v1",
       "categories": {},
