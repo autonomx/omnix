@@ -18,6 +18,9 @@ RELIEF_FALLBACK_DELTAS = {
 }
 SOURCE = "n1272_survival_autoplay_persistence"
 CALIBRATION_SOURCE = "n1273_long_run_survival_pressure_calibration"
+ACCUMULATOR_SOURCE = "n1273_1_in_process_survival_accumulator"
+
+_IN_PROCESS_SURVIVAL_ACCUMULATORS: Dict[str, Dict[str, Any]] = {}
 
 
 def safe_dict(value: Any) -> Dict[str, Any]:
@@ -93,6 +96,91 @@ def _climate_from_session(session: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+def _action_count_from_climate(climate: Dict[str, Any]) -> int:
+    return safe_int(safe_dict(safe_dict(climate).get("survival")).get("action_count"), 0)
+
+
+def _max_need_from_climate(climate: Dict[str, Any]) -> int:
+    needs = _needs_from_survival(safe_dict(safe_dict(climate).get("survival")))
+    return max(needs.values() or [0])
+
+
+def _accumulator_key(value: Any) -> str:
+    return safe_str(value).strip()
+
+
+def reset_survival_autoplay_accumulator(accumulator_key: str | None = None) -> None:
+    key = _accumulator_key(accumulator_key)
+    if key:
+        _IN_PROCESS_SURVIVAL_ACCUMULATORS.pop(key, None)
+    else:
+        _IN_PROCESS_SURVIVAL_ACCUMULATORS.clear()
+
+
+def _record_survival_accumulator(accumulator_key: str | None, climate: Dict[str, Any], meta: Dict[str, Any]) -> None:
+    key = _accumulator_key(accumulator_key)
+    climate = copy.deepcopy(safe_dict(climate))
+    if not key or not climate:
+        return
+    survival = safe_dict(climate.get("survival"))
+    _IN_PROCESS_SURVIVAL_ACCUMULATORS[key] = {
+        "source": ACCUMULATOR_SOURCE,
+        "climate_survival": climate,
+        "needs": _needs_from_survival(survival),
+        "action_count": safe_int(survival.get("action_count"), 0),
+        "last_calibration": copy.deepcopy(safe_dict(meta)),
+    }
+
+
+def _accumulator_as_session(accumulator_key: str | None) -> Dict[str, Any]:
+    key = _accumulator_key(accumulator_key)
+    accumulator = safe_dict(_IN_PROCESS_SURVIVAL_ACCUMULATORS.get(key))
+    climate = safe_dict(accumulator.get("climate_survival"))
+    if not key or not climate:
+        return {}
+    survival = safe_dict(climate.get("survival"))
+    needs = _needs_from_survival(survival)
+    action_count = safe_int(survival.get("action_count"), 0)
+    return {
+        "simulation_state": {
+            "climate_survival": copy.deepcopy(climate),
+            "needs": dict(needs),
+            "player_state": {
+                "resources": {**dict(needs), "action_count": action_count},
+            },
+        },
+        "runtime_state": {
+            "climate_survival": copy.deepcopy(climate),
+            "survival_autoplay_accumulator": copy.deepcopy(accumulator),
+        },
+        "state": {
+            "climate_survival": copy.deepcopy(climate),
+            "needs": dict(needs),
+        },
+        "setup_payload": {"metadata": {"climate_survival": copy.deepcopy(climate), "needs": dict(needs)}},
+    }
+
+
+def merge_survival_accumulator_into_session(session: Dict[str, Any], accumulator_key: str | None) -> Dict[str, Any]:
+    session = copy.deepcopy(safe_dict(session))
+    accumulator_session = _accumulator_as_session(accumulator_key)
+    accumulator_climate = _climate_from_session(accumulator_session)
+    if not accumulator_climate:
+        return session
+    session_climate = _climate_from_session(session)
+    use_accumulator = not session_climate
+    if session_climate:
+        use_accumulator = (
+            _action_count_from_climate(accumulator_climate) > _action_count_from_climate(session_climate)
+            or _max_need_from_climate(accumulator_climate) > _max_need_from_climate(session_climate)
+        )
+    if not use_accumulator:
+        return session
+    if not session:
+        session = {}
+    return mirror_survival_state_into_session(session, accumulator_climate)
+
+
 def extract_turn_survival_state(result: Dict[str, Any]) -> Dict[str, Any]:
     result = safe_dict(result)
     turn_contract = safe_dict(result.get("turn_contract"))
@@ -156,15 +244,7 @@ def _needs_after_deltas(before: Dict[str, int], deltas: Dict[str, int]) -> Dict[
 
 
 def calibrate_turn_survival_state(result: Dict[str, Any], prior_session: Dict[str, Any] | None = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Return a calibrated climate state plus metadata for long autoplay runs.
-
-    The live runtime can hand back a low/default climate row when a later session
-    sync overwrote the previous survival state.  For autoplay we have the prior
-    durable session immediately before the turn.  If the returned turn state
-    regresses below that prior state, carry the prior state forward with the
-    deterministic N123.1 per-turn deltas, then apply any deterministic relief
-    deltas from the current turn.
-    """
+    """Return a calibrated climate state plus metadata for long autoplay runs."""
 
     result = safe_dict(result)
     climate = extract_turn_survival_state(result)
@@ -369,8 +449,15 @@ def mirror_survival_state_into_session(session: Dict[str, Any], climate_survival
     return session
 
 
-def persist_result_survival_state(result: Dict[str, Any], *, save: bool = True, prior_session: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def persist_result_survival_state(
+    result: Dict[str, Any],
+    *,
+    save: bool = True,
+    prior_session: Dict[str, Any] | None = None,
+    accumulator_key: str | None = None,
+) -> Dict[str, Any]:
     result = dict(safe_dict(result))
+    prior_session = merge_survival_accumulator_into_session(safe_dict(prior_session or {}), accumulator_key)
     climate, calibration = calibrate_turn_survival_state(result, prior_session=prior_session)
     session = safe_dict(result.get("session"))
     if not climate or not session:
@@ -384,6 +471,7 @@ def persist_result_survival_state(result: Dict[str, Any], *, save: bool = True, 
 
     result = patch_result_survival_state(result, climate, calibration)
     session = mirror_survival_state_into_session(session, climate)
+    _record_survival_accumulator(accumulator_key, climate, calibration)
     result["session"] = session
     result["simulation_state"] = safe_dict(session.get("simulation_state"))
     result["survival_autoplay_persistence"] = {
@@ -391,6 +479,8 @@ def persist_result_survival_state(result: Dict[str, Any], *, save: bool = True, 
         "needs": dict(safe_dict(climate.get("survival"))),
         "source": SOURCE,
         "calibration": calibration,
+        "accumulator_key": _accumulator_key(accumulator_key),
+        "accumulator_source": ACCUMULATOR_SOURCE if _accumulator_key(accumulator_key) else "",
     }
 
     if save:
