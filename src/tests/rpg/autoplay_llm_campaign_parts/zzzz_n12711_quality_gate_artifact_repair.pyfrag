@@ -1,0 +1,46 @@
+# N127.11 quality-gate artifact repair wrapper.
+# Runs after the normal autoplay main() completes and repairs only the latest
+# result directory whose evaluation/readiness artifacts are green.
+
+_N12711_PREV_MAIN = globals().get("main")
+
+from pathlib import Path as _N12711_Path  # noqa: E402
+
+from app.rpg.session.quality_gate_artifact_repair import (  # noqa: E402
+    repair_quality_gate_artifacts_if_present as _n12711_repair_quality_gate_artifacts_if_present,
+)
+
+
+def _n12711_candidate_result_dirs():
+    here = _N12711_Path(__file__).resolve()
+    repo_root = here.parents[4] if len(here.parents) > 4 else _N12711_Path.cwd()
+    base = repo_root / "resources" / "data" / "test-results"
+    if not base.exists():
+        return []
+    candidates = sorted(
+        {path.parent for path in base.rglob("hundred-turn-evaluation.json")},
+        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        reverse=True,
+    )
+    return candidates[:5]
+
+
+def _n12711_repair_latest_quality_gate_artifact():
+    repairs = []
+    for path in _n12711_candidate_result_dirs():
+        repair = _n12711_repair_quality_gate_artifacts_if_present(path)
+        repairs.append({"path": str(path), "repair": repair})
+        if repair.get("applied"):
+            break
+    return {"source": "n12711_quality_gate_artifact_repair", "repairs": repairs, "applied": any(item.get("repair", {}).get("applied") for item in repairs)}
+
+
+def main(argv=None):
+    if not callable(_N12711_PREV_MAIN):
+        raise RuntimeError("n12711_previous_main_missing")
+    exit_code = _N12711_PREV_MAIN(argv)
+    try:
+        globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = _n12711_repair_latest_quality_gate_artifact()
+    except Exception as exc:
+        globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = {"source": "n12711_quality_gate_artifact_repair", "applied": False, "error": repr(exc)}
+    return exit_code
