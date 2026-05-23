@@ -12,9 +12,9 @@
   },
   "meaningful_category_counts": {
     "story_beat": 100,
-    "npc_signal": 84,
+    "npc_signal": 92,
     "quest_progress": 12,
-    "journal_progress": 16,
+    "journal_progress": 7,
     "location_progression": 13
   },
   "churn_category_counts": {},
