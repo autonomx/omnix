@@ -111,6 +111,34 @@ def test_bundle_a_writes_expected_artifacts(tmp_path) -> None:
     assert (result_dir / "quality-gate-summary.json").exists()
     assert (result_dir / "survival-exit-criteria-summary.json").exists()
     assert (result_dir / "transcript-payload-budget-summary.json").exists()
+    assert (result_dir / "artifact-manifest.json").exists()
+
+    manifest = json.loads((result_dir / "artifact-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["ok"] is True
+    assert manifest["physical_presence"] == {
+        "quality-gate-summary.json": True,
+        "survival-exit-criteria-summary.json": True,
+        "transcript-payload-budget-summary.json": True,
+    }
+    assert "quality-gate-summary.json" in manifest["files"]
+    assert "survival-exit-criteria-summary.json" in manifest["files"]
+    assert "transcript-payload-budget-summary.json" in manifest["files"]
+    assert manifest["embedded_artifacts"]["survival-exit-criteria-summary.json"]["ok"] is True
+    assert manifest["embedded_artifacts"]["transcript-payload-budget-summary.json"]["advisory_ok"] is True
+
     health = json.loads((result_dir / "autoplay-health.json").read_text(encoding="utf-8"))
     assert health["ok"] is True
     assert health["quality_gate_summary_path"] == "quality-gate-summary.json"
+    assert health["bundle_a_artifact_manifest_path"] == "artifact-manifest.json"
+    assert health["survival_exit_criteria_ok"] is True
+    assert health["transcript_payload_budget_advisory_ok"] is True
+
+    evaluation = json.loads((result_dir / "hundred-turn-evaluation.json").read_text(encoding="utf-8"))
+    summaries = evaluation["artifact_level_summaries"]
+    assert summaries["survival-exit-criteria-summary.json"]["ok"] is True
+    assert summaries["transcript-payload-budget-summary.json"]["advisory_ok"] is True
+    assert summaries["artifact-manifest.json"]["ok"] is True
+
+    readiness = json.loads((result_dir / "hundred-turn-readiness-summary.json").read_text(encoding="utf-8"))
+    assert readiness["bundle_a_artifacts"]["survival_exit_criteria_ok"] is True
+    assert readiness["bundle_a_artifacts"]["transcript_payload_budget_advisory_ok"] is True
