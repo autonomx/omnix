@@ -18,31 +18,37 @@
     "format_version": "n11619_service_veto_regression_summary_v1",
     "ok": true,
     "candidate_document_service_false_positive_action_count": 36,
-    "vetoed_count": 0,
+    "vetoed_count": 1,
     "remaining_violation_count": 0,
-    "prompt_only_service_category_block_count": 36,
-    "vetoed_rate": 0.0,
-    "vetoed_turns": [],
+    "prompt_only_service_category_block_count": 35,
+    "vetoed_rate": 0.01,
+    "vetoed_turns": [
+      {
+        "turn_index": 27,
+        "player_action": "I read the wax-sealed order from the hidden smuggler cache.",
+        "reason": "service_false_positive_vetoed"
+      }
+    ],
     "remaining_violations": [],
     "policy": "veto_only_no_forced_investigation_classification"
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 68,
+    "metadata_repaired_count": 67,
     "category_reclassified_count": 49,
-    "dialogue_relevance_repaired_count": 34,
-    "service_resolver_veto_count": 0,
+    "dialogue_relevance_repaired_count": 33,
+    "service_resolver_veto_count": 1,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 68,
+      "provider_metadata_or_shape_repair": 67,
       "provider_category_reclassification": 49,
-      "dialogue_action_relevance_repair": 34,
-      "service_resolver_veto": 0,
+      "dialogue_action_relevance_repair": 33,
+      "service_resolver_veto": 1,
       "unsupported_combat_claim_suppressed": 0,
       "unsupported_combat_claim_preselection_suppressed": 5
     },
     "note": "Counts are diagnostic repair pressure, not additional authoritative simulation outcomes.",
     "dialogue_relevance_repair_count_source": "dialogue_action_relevance_summary",
-    "service_resolver_veto_rate": 0.0,
+    "service_resolver_veto_rate": 0.01,
     "repair_pressure_by_category": {
       "format_version": "n11620_repair_pressure_by_category_v1",
       "categories": {},

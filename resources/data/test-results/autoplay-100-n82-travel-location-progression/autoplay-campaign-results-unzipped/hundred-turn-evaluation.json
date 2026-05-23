@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.290557,
-        "p95_turn_seconds": 9.203937
+        "avg_turn_seconds": 6.232219,
+        "p95_turn_seconds": 9.163021
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.29s, p95 9.20s."
+      "message": "Average turn latency 6.23s, p95 9.16s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -407,7 +407,7 @@
         "checked_count": 100,
         "mismatch_count": 0,
         "mismatch_rate": 0.0,
-        "repaired_count": 34,
+        "repaired_count": 33,
         "unrepaired_count": 0,
         "source_gate_block_count": 0,
         "by_reason": {}
@@ -848,9 +848,9 @@
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "",
+        "relief_action_kind": "drink_water",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -863,9 +863,9 @@
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "",
+        "relief_action_kind": "drink_water",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -1287,9 +1287,9 @@
         "warnings": [
           "thirst_high"
         ],
-        "relief_action_kind": "",
+        "relief_action_kind": "eat_food",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -2107,10 +2107,15 @@
     },
     "relief_action_count": 2,
     "relief_counts_by_kind": {
-      "rest": 2
+      "drink_water": 2,
+      "rest": 2,
+      "eat_food": 1
     },
-    "blocked_relief_count": 0,
-    "blocked_counts_by_reason": {},
+    "blocked_relief_count": 3,
+    "blocked_counts_by_reason": {
+      "no_drink_item": 2,
+      "no_food_item": 1
+    },
     "inventory_consumed_summary": [],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
@@ -2136,7 +2141,7 @@
         "climate_survival_rows": 100,
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
-        "survival_action_rows": 2,
+        "survival_action_rows": 5,
         "survival_suggestion_rows": 4,
         "relief_applied_rows": 2,
         "warning_rows": 61,
@@ -2183,7 +2188,7 @@
         "climate_survival_rows": 100,
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
-        "survival_action_rows": 2,
+        "survival_action_rows": 5,
         "survival_suggestion_rows": 4,
         "relief_applied_rows": 2,
         "warning_rows": 61,
@@ -2600,9 +2605,9 @@
       "fatigue_delta": 1,
       "warning_count": 0,
       "warnings": [],
-      "relief_action_kind": "",
+      "relief_action_kind": "drink_water",
       "relief_applied": false,
-      "relief_blocked": false,
+      "relief_blocked": true,
       "source_present": true
     },
     {
@@ -2615,9 +2620,9 @@
       "fatigue_delta": 1,
       "warning_count": 0,
       "warnings": [],
-      "relief_action_kind": "",
+      "relief_action_kind": "drink_water",
       "relief_applied": false,
-      "relief_blocked": false,
+      "relief_blocked": true,
       "source_present": true
     },
     {
@@ -3039,9 +3044,9 @@
       "warnings": [
         "thirst_high"
       ],
-      "relief_action_kind": "",
+      "relief_action_kind": "eat_food",
       "relief_applied": false,
-      "relief_blocked": false,
+      "relief_blocked": true,
       "source_present": true
     },
     {
@@ -3859,13 +3864,13 @@
     {
       "id": "n1251-survival-source",
       "title": "N125.1 Real Survival Metric Source Evidence",
-      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>95</td></tr><tr><td>climate_tick_source_rows</td><td>95</td></tr><tr><td>survival_action_rows</td><td>2</td></tr><tr><td>survival_suggestion_rows</td><td>4</td></tr><tr><td>relief_applied_rows</td><td>2</td></tr><tr><td>warning_rows</td><td>61</td></tr><tr><td>nonzero_need_rows</td><td>95</td></tr><tr><td>nonzero_delta_rows</td><td>94</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>95</td></tr><tr><td>climate_tick_source_rows</td><td>95</td></tr><tr><td>survival_action_rows</td><td>5</td></tr><tr><td>survival_suggestion_rows</td><td>4</td></tr><tr><td>relief_applied_rows</td><td>2</td></tr><tr><td>warning_rows</td><td>61</td></tr><tr><td>nonzero_need_rows</td><td>95</td></tr><tr><td>nonzero_delta_rows</td><td>94</td></tr></tbody></table>\n</section>",
       "source": "survival-metric-source-summary.json"
     },
     {
       "id": "n1234-survival-pressure",
       "title": "N123.4 Survival Pressure vs Player Response",
-      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>95</span></div>\n    <div><strong>Warnings</strong><span>88</span></div>\n    <div><strong>Relief actions</strong><span>2</span></div>\n    <div><strong>Blocked relief</strong><span>0</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>85</td><td>100</td><td>35</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>90</td><td>86</td><td>100</td><td>36</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>91</td><td>87</td><td>100</td><td>37</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>92</td><td>88</td><td>100</td><td>38</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>93</td><td>89</td><td>100</td><td>39</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>94</td><td>90</td><td>100</td><td>40</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>95</td><td>91</td><td>100</td><td>41</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>96</td><td>92</td><td>100</td><td>42</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>97</td><td>93</td><td>100</td><td>43</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>98</td><td>94</td><td>100</td><td>44</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>99</td><td>95</td><td>100</td><td>45</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>100</td><td>96</td><td>100</td><td>46</td><td></td><td>hunger_high, thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td colspan='2'>None</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>95</span></div>\n    <div><strong>Warnings</strong><span>88</span></div>\n    <div><strong>Relief actions</strong><span>2</span></div>\n    <div><strong>Blocked relief</strong><span>3</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>85</td><td>100</td><td>35</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>90</td><td>86</td><td>100</td><td>36</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>91</td><td>87</td><td>100</td><td>37</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>92</td><td>88</td><td>100</td><td>38</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>93</td><td>89</td><td>100</td><td>39</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>94</td><td>90</td><td>100</td><td>40</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>95</td><td>91</td><td>100</td><td>41</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>96</td><td>92</td><td>100</td><td>42</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>97</td><td>93</td><td>100</td><td>43</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>98</td><td>94</td><td>100</td><td>44</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>99</td><td>95</td><td>100</td><td>45</td><td></td><td>hunger_high, thirst_high</td></tr><tr><td>100</td><td>96</td><td>100</td><td>46</td><td></td><td>hunger_high, thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td colspan='2'>None</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
       "source": "transcript.turn_contract.climate_survival.resource_changes.effect_result.survival_action"
     }
   ],
@@ -4275,9 +4280,9 @@
           "fatigue_delta": 1,
           "warning_count": 0,
           "warnings": [],
-          "relief_action_kind": "",
+          "relief_action_kind": "drink_water",
           "relief_applied": false,
-          "relief_blocked": false,
+          "relief_blocked": true,
           "source_present": true
         },
         {
@@ -4290,9 +4295,9 @@
           "fatigue_delta": 1,
           "warning_count": 0,
           "warnings": [],
-          "relief_action_kind": "",
+          "relief_action_kind": "drink_water",
           "relief_applied": false,
-          "relief_blocked": false,
+          "relief_blocked": true,
           "source_present": true
         },
         {
@@ -4714,9 +4719,9 @@
           "warnings": [
             "thirst_high"
           ],
-          "relief_action_kind": "",
+          "relief_action_kind": "eat_food",
           "relief_applied": false,
-          "relief_blocked": false,
+          "relief_blocked": true,
           "source_present": true
         },
         {
@@ -5534,10 +5539,15 @@
       },
       "relief_action_count": 2,
       "relief_counts_by_kind": {
-        "rest": 2
+        "drink_water": 2,
+        "rest": 2,
+        "eat_food": 1
       },
-      "blocked_relief_count": 0,
-      "blocked_counts_by_reason": {},
+      "blocked_relief_count": 3,
+      "blocked_counts_by_reason": {
+        "no_drink_item": 2,
+        "no_food_item": 1
+      },
       "inventory_consumed_summary": [],
       "service_relief_purchases_summary": [],
       "net_resource_deltas": {
@@ -5563,7 +5573,7 @@
           "climate_survival_rows": 100,
           "resource_change_rows": 95,
           "climate_tick_source_rows": 95,
-          "survival_action_rows": 2,
+          "survival_action_rows": 5,
           "survival_suggestion_rows": 4,
           "relief_applied_rows": 2,
           "warning_rows": 61,
@@ -5610,7 +5620,7 @@
           "climate_survival_rows": 100,
           "resource_change_rows": 95,
           "climate_tick_source_rows": 95,
-          "survival_action_rows": 2,
+          "survival_action_rows": 5,
           "survival_suggestion_rows": 4,
           "relief_applied_rows": 2,
           "warning_rows": 61,
@@ -6027,9 +6037,9 @@
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "",
+        "relief_action_kind": "drink_water",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -6042,9 +6052,9 @@
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "",
+        "relief_action_kind": "drink_water",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -6466,9 +6476,9 @@
         "warnings": [
           "thirst_high"
         ],
-        "relief_action_kind": "",
+        "relief_action_kind": "eat_food",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -7329,7 +7339,7 @@
       "survival_warning_count": 88,
       "survival_suggestion_rows": 4,
       "relief_action_count": 2,
-      "blocked_relief_count": 0,
+      "blocked_relief_count": 3,
       "inventory_consumed_summary": [],
       "service_relief_purchases_summary": [],
       "non_inventory_relief_summary": [
@@ -7852,12 +7862,54 @@
       ],
       "relief_action_rows": [
         {
+          "turn_index": 27,
+          "action_kind": "drink_water",
+          "applied": false,
+          "blocked": true,
+          "blocked_reason": "no_drink_item",
+          "inventory_consumed": [
+            {
+              "consumed": false,
+              "item": {},
+              "quantity": 0
+            }
+          ]
+        },
+        {
+          "turn_index": 28,
+          "action_kind": "drink_water",
+          "applied": false,
+          "blocked": true,
+          "blocked_reason": "no_drink_item",
+          "inventory_consumed": [
+            {
+              "consumed": false,
+              "item": {},
+              "quantity": 0
+            }
+          ]
+        },
+        {
           "turn_index": 53,
           "action_kind": "rest",
           "applied": true,
           "blocked": false,
           "blocked_reason": "",
           "inventory_consumed": []
+        },
+        {
+          "turn_index": 54,
+          "action_kind": "eat_food",
+          "applied": false,
+          "blocked": true,
+          "blocked_reason": "no_food_item",
+          "inventory_consumed": [
+            {
+              "consumed": false,
+              "item": {},
+              "quantity": 0
+            }
+          ]
         },
         {
           "turn_index": 79,
@@ -7876,7 +7928,7 @@
           "climate_survival_rows": 100,
           "resource_change_rows": 95,
           "climate_tick_source_rows": 95,
-          "survival_action_rows": 2,
+          "survival_action_rows": 5,
           "survival_suggestion_rows": 4,
           "relief_applied_rows": 2,
           "warning_rows": 61,
@@ -8431,7 +8483,7 @@
       "survival_suggestion_taken_count": 2,
       "survival_suggestion_ignored_count": 2,
       "high_pressure_unanswered_turn_count": 0,
-      "blocked_relief_loop_count": 0,
+      "blocked_relief_loop_count": 1,
       "taken_rate": 0.5
     },
     "survival-supply-metrics.json": {
@@ -8453,7 +8505,7 @@
         "survival_suggestion_taken_count": 2,
         "survival_suggestion_ignored_count": 2,
         "high_pressure_unanswered_turn_count": 0,
-        "blocked_relief_loop_count": 0,
+        "blocked_relief_loop_count": 1,
         "taken_rate": 0.5
       },
       "thresholds": {
@@ -8470,7 +8522,7 @@
         "climate_survival_rows": 100,
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
-        "survival_action_rows": 2,
+        "survival_action_rows": 5,
         "survival_suggestion_rows": 4,
         "relief_applied_rows": 2,
         "warning_rows": 61,
@@ -8517,7 +8569,7 @@
         "climate_survival_rows": 100,
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
-        "survival_action_rows": 2,
+        "survival_action_rows": 5,
         "survival_suggestion_rows": 4,
         "relief_applied_rows": 2,
         "warning_rows": 61,
@@ -8579,7 +8631,7 @@
     "survival_warning_count": 88,
     "survival_suggestion_rows": 4,
     "relief_action_count": 2,
-    "blocked_relief_count": 0,
+    "blocked_relief_count": 3,
     "inventory_consumed_summary": [],
     "service_relief_purchases_summary": [],
     "non_inventory_relief_summary": [
@@ -9102,12 +9154,54 @@
     ],
     "relief_action_rows": [
       {
+        "turn_index": 27,
+        "action_kind": "drink_water",
+        "applied": false,
+        "blocked": true,
+        "blocked_reason": "no_drink_item",
+        "inventory_consumed": [
+          {
+            "consumed": false,
+            "item": {},
+            "quantity": 0
+          }
+        ]
+      },
+      {
+        "turn_index": 28,
+        "action_kind": "drink_water",
+        "applied": false,
+        "blocked": true,
+        "blocked_reason": "no_drink_item",
+        "inventory_consumed": [
+          {
+            "consumed": false,
+            "item": {},
+            "quantity": 0
+          }
+        ]
+      },
+      {
         "turn_index": 53,
         "action_kind": "rest",
         "applied": true,
         "blocked": false,
         "blocked_reason": "",
         "inventory_consumed": []
+      },
+      {
+        "turn_index": 54,
+        "action_kind": "eat_food",
+        "applied": false,
+        "blocked": true,
+        "blocked_reason": "no_food_item",
+        "inventory_consumed": [
+          {
+            "consumed": false,
+            "item": {},
+            "quantity": 0
+          }
+        ]
       },
       {
         "turn_index": 79,
@@ -9126,7 +9220,7 @@
         "climate_survival_rows": 100,
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
-        "survival_action_rows": 2,
+        "survival_action_rows": 5,
         "survival_suggestion_rows": 4,
         "relief_applied_rows": 2,
         "warning_rows": 61,
@@ -9204,7 +9298,7 @@
     "survival_suggestion_taken_count": 2,
     "survival_suggestion_ignored_count": 2,
     "high_pressure_unanswered_turn_count": 0,
-    "blocked_relief_loop_count": 0,
+    "blocked_relief_loop_count": 1,
     "taken_rate": 0.5
   },
   "survival_supply_metrics": {
@@ -10595,7 +10689,7 @@
       "survival_suggestion_taken_count": 2,
       "survival_suggestion_ignored_count": 2,
       "high_pressure_unanswered_turn_count": 0,
-      "blocked_relief_loop_count": 0,
+      "blocked_relief_loop_count": 1,
       "taken_rate": 0.5
     },
     "thresholds": {
@@ -11009,9 +11103,9 @@
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "",
+        "relief_action_kind": "drink_water",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -11024,9 +11118,9 @@
         "fatigue_delta": 1,
         "warning_count": 0,
         "warnings": [],
-        "relief_action_kind": "",
+        "relief_action_kind": "drink_water",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -11448,9 +11542,9 @@
         "warnings": [
           "thirst_high"
         ],
-        "relief_action_kind": "",
+        "relief_action_kind": "eat_food",
         "relief_applied": false,
-        "relief_blocked": false,
+        "relief_blocked": true,
         "source_present": true
       },
       {
@@ -12268,10 +12362,15 @@
     },
     "relief_action_count": 2,
     "relief_counts_by_kind": {
-      "rest": 2
+      "drink_water": 2,
+      "rest": 2,
+      "eat_food": 1
     },
-    "blocked_relief_count": 0,
-    "blocked_counts_by_reason": {},
+    "blocked_relief_count": 3,
+    "blocked_counts_by_reason": {
+      "no_drink_item": 2,
+      "no_food_item": 1
+    },
     "inventory_consumed_summary": [],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
@@ -12297,7 +12396,7 @@
         "climate_survival_rows": 100,
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
-        "survival_action_rows": 2,
+        "survival_action_rows": 5,
         "survival_suggestion_rows": 4,
         "relief_applied_rows": 2,
         "warning_rows": 61,
@@ -12344,7 +12443,7 @@
         "climate_survival_rows": 100,
         "resource_change_rows": 95,
         "climate_tick_source_rows": 95,
-        "survival_action_rows": 2,
+        "survival_action_rows": 5,
         "survival_suggestion_rows": 4,
         "relief_applied_rows": 2,
         "warning_rows": 61,
@@ -13737,7 +13836,7 @@
       "climate_survival_rows": 100,
       "resource_change_rows": 95,
       "climate_tick_source_rows": 95,
-      "survival_action_rows": 2,
+      "survival_action_rows": 5,
       "survival_suggestion_rows": 4,
       "relief_applied_rows": 2,
       "warning_rows": 61,
@@ -13784,7 +13883,7 @@
       "climate_survival_rows": 100,
       "resource_change_rows": 95,
       "climate_tick_source_rows": 95,
-      "survival_action_rows": 2,
+      "survival_action_rows": 5,
       "survival_suggestion_rows": 4,
       "relief_applied_rows": 2,
       "warning_rows": 61,
