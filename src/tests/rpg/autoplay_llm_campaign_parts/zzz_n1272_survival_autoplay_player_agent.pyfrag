@@ -13,6 +13,7 @@ from app.rpg.session.survival_autoplay_player_agent import (  # noqa: E402
 )
 from app.rpg.session.survival_autoplay_relief_supplies import (  # noqa: E402
     ensure_survival_autoplay_relief_supplies as _n1276_ensure_survival_autoplay_relief_supplies,
+    merge_survival_autoplay_relief_supplies_into_session as _n1277_merge_survival_autoplay_relief_supplies_into_session,
 )
 
 
@@ -60,14 +61,19 @@ def _n1276_attach_supply_summary(result, supply_summary, *, phase):
         return result
     summary["phase"] = phase
     result["survival_autoplay_relief_supply_summary"] = summary
+    summaries = list(result.get("survival_autoplay_relief_supply_summaries") or [])
+    summaries.append(summary)
+    result["survival_autoplay_relief_supply_summaries"] = summaries[-8:]
     turn_contract = dict(_n1272_dict(result.get("turn_contract")))
     if turn_contract:
         turn_contract["survival_autoplay_relief_supply_summary"] = summary
+        turn_contract["survival_autoplay_relief_supply_summaries"] = summaries[-8:]
         result["turn_contract"] = turn_contract
     session = dict(_n1272_dict(result.get("session")))
     if session:
         runtime_state = dict(_n1272_dict(session.get("runtime_state")))
         runtime_state["last_survival_autoplay_relief_supply_summary"] = summary
+        runtime_state["survival_autoplay_relief_supply_summaries"] = summaries[-8:]
         session["runtime_state"] = runtime_state
         result["session"] = session
     return result
@@ -86,6 +92,7 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
         promoted_player_input = original_player_input
         prior_session = {}
         pre_turn_supply_summary = {"applied": False, "reason": "not_evaluated", "source": "n1276_survival_hunger_thirst_relief_coverage"}
+        handoff_supply_summary = {"applied": False, "reason": "not_evaluated", "source": "n1277_survival_relief_supply_handoff"}
         post_turn_supply_summary = {"applied": False, "reason": "not_evaluated", "source": "n1276_survival_hunger_thirst_relief_coverage"}
         try:
             prior_session = _n1272_load_session(session_id) or {}
@@ -123,6 +130,11 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
         session = dict(_n1272_dict(result.get("session")))
         if session:
             try:
+                session, handoff_supply_summary = _n1277_merge_survival_autoplay_relief_supplies_into_session(
+                    session,
+                    prior_session,
+                    session_key=session_key,
+                )
                 session, post_turn_supply_summary = _n1276_ensure_survival_autoplay_relief_supplies(
                     session,
                     session_key=session_key,
@@ -136,6 +148,7 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
                     "source": "n1276_survival_hunger_thirst_relief_coverage",
                 }
         result = _n1276_attach_supply_summary(result, pre_turn_supply_summary, phase="pre_turn_selection")
+        result = _n1276_attach_supply_summary(result, handoff_supply_summary, phase="runtime_handoff")
         result = _n1276_attach_supply_summary(result, post_turn_supply_summary, phase="post_turn_persistence")
         result = _n1272_persist_result_survival_state(
             result,
