@@ -18,6 +18,7 @@ rows.
 from typing import Any, Dict, Iterable, List
 
 SURVIVAL_METRIC_SOURCE_FORMAT = "n1251_survival_metric_source_summary_v1"
+BALANCE_SUMMARY_SOURCE = "n1278_survival_relief_balance_tuning"
 
 
 def safe_dict(value: Any) -> Dict[str, Any]:
@@ -267,10 +268,6 @@ def has_climate_tick_source(row: Dict[str, Any]) -> bool:
         return True
     if safe_dict(effect.get("climate_survival")).get("source") == "n1231_climate_survival_tick":
         return True
-    # N125.2: compact final transcript rows can preserve climate values and
-    # merged resource_changes while stripping the specific N123.1 source marker.
-    # Treat that combination as source-backed, but do not bless climate-only
-    # value rows.
     if climate and changes and _climate_has_need_values(climate):
         return True
     return False
@@ -366,6 +363,63 @@ def build_survival_metric_source_gate(summary: Dict[str, Any]) -> Dict[str, Any]
     }
 
 
+def _longest_capped_streak(rows: List[Dict[str, Any]], need: str, cap: int = 100) -> int:
+    longest = 0
+    current = 0
+    for row in rows:
+        if safe_int(row.get(need), 0) >= cap:
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+    return longest
+
+
+def _relief_rows_by_need(rows: List[Dict[str, Any]], need: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        kind = _safe_str(row.get("relief_action_kind"))
+        applied = bool(row.get("relief_applied"))
+        if not applied:
+            continue
+        if need == "thirst" and kind in {"drink_water", "drink_waterskin", "buy_drink"}:
+            out.append(row)
+        if need == "hunger" and kind in {"eat_food", "eat_trail_ration", "buy_meal"}:
+            out.append(row)
+        if need == "fatigue" and kind in {"rest", "sleep", "buy_lodging"}:
+            out.append(row)
+    return out
+
+
+def build_survival_balance_summary(trend_rows: List[Dict[str, Any]], inventory_consumed_summary: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = safe_list(trend_rows)
+    capped = {need: sum(1 for row in rows if safe_int(safe_dict(row).get(need), 0) >= 100) for need in ("hunger", "thirst", "fatigue")}
+    longest = {need: _longest_capped_streak([safe_dict(row) for row in rows], need) for need in ("hunger", "thirst", "fatigue")}
+    applied = {need: len(_relief_rows_by_need([safe_dict(row) for row in rows], need)) for need in ("hunger", "thirst", "fatigue")}
+    consumed_ids = [_safe_str(safe_dict(item).get("item_id")) for item in safe_list(inventory_consumed_summary)]
+    drink_consumed = [item for item in consumed_ids if "water" in item or "drink" in item or "waterskin" in item]
+    food_consumed = [item for item in consumed_ids if "ration" in item or "food" in item or "meal" in item]
+    thirst_relieved = applied["thirst"] > 0 and bool(drink_consumed)
+    hunger_relieved = applied["hunger"] > 0 and bool(food_consumed)
+    return {
+        "format_version": "n1278_survival_balance_summary_v1",
+        "source": BALANCE_SUMMARY_SOURCE,
+        "turn_count": len(rows),
+        "capped_turn_counts": capped,
+        "longest_capped_streaks": longest,
+        "applied_relief_counts_by_need": applied,
+        "drink_inventory_consumed_count": len(drink_consumed),
+        "food_inventory_consumed_count": len(food_consumed),
+        "thirst_relieved_by_consumption": thirst_relieved,
+        "hunger_relieved_by_consumption": hunger_relieved,
+        "thirst_balance_attention": longest.get("thirst", 0) >= 10 or capped.get("thirst", 0) >= 15,
+        "notes": [
+            "N127.8 keeps this advisory: capped thirst can still be acceptable in stress tests, but it should be visible.",
+            "drink/food consumption must be explicit inventory-backed evidence, not simulated-only relief.",
+        ],
+    }
+
+
 def build_survival_pressure_relief_summary(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
     rows = safe_list(transcript)
     trend_rows: List[Dict[str, Any]] = []
@@ -435,6 +489,7 @@ def build_survival_pressure_relief_summary(transcript: List[Dict[str, Any]]) -> 
         })
     max_needs = {key: max([safe_int(row.get(key), 0) for row in trend_rows] or [0]) for key in ("hunger", "thirst", "fatigue")}
     source_summary = build_survival_metric_source_summary(rows)
+    inventory_summary = sorted(inventory_consumed.values(), key=lambda item: item["item_id"])
     return {
         "format_version": "n1234_survival_pressure_relief_summary_v2_n1251",
         "source": "final_transcript_rows.turn_contract.climate_survival.resource_changes.effect_result.survival_action",
@@ -448,11 +503,12 @@ def build_survival_pressure_relief_summary(transcript: List[Dict[str, Any]]) -> 
         "relief_counts_by_kind": relief_by_kind,
         "blocked_relief_count": blocked_count,
         "blocked_counts_by_reason": blocked_by_reason,
-        "inventory_consumed_summary": sorted(inventory_consumed.values(), key=lambda item: item["item_id"]),
+        "inventory_consumed_summary": inventory_summary,
         "service_relief_purchases_summary": sorted(service_purchases.values(), key=lambda item: item["service_kind"]),
         "net_resource_deltas": net_deltas,
         "max_needs": max_needs,
         "final_needs": final_needs,
+        "balance_summary": build_survival_balance_summary(trend_rows, inventory_summary),
         "source_coverage_summary": source_summary,
         "source_gate": build_survival_metric_source_gate(source_summary),
         "artifact_files": {"summary": "survival-pressure-relief-summary.json", "trend_rows": "survival-pressure-trend-rows.json", "source_summary": "survival-metric-source-summary.json"},
