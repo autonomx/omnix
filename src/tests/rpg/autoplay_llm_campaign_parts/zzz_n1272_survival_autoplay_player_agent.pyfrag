@@ -19,6 +19,8 @@ from app.rpg.session.survival_autoplay_relief_supplies import (  # noqa: E402
     merge_survival_autoplay_relief_supplies_into_session as _n1277_merge_survival_autoplay_relief_supplies_into_session,
 )
 
+_N127101_PROBE_SOURCE = "n127101_critical_thirst_override_runtime_attachment_probe"
+
 
 def _n1272_dict(value):
     return value if isinstance(value, dict) else {}
@@ -26,6 +28,82 @@ def _n1272_dict(value):
 
 def _n1272_str(value):
     return "" if value is None else str(value)
+
+
+def _n127101_probe(session_id, original_player_input):
+    return {
+        "format_version": "n127101_runtime_attachment_probe_v1",
+        "source": _N127101_PROBE_SOURCE,
+        "session_id": _n1272_str(session_id),
+        "original_player_input": _n1272_str(original_player_input),
+        "wrapper_called": True,
+        "previous_apply_turn_called": False,
+        "previous_apply_turn_returned": False,
+        "promotion_called": False,
+        "promotion_promoted": False,
+        "promotion_reason": "not_evaluated",
+        "persistence_called": False,
+        "persistence_applied": False,
+        "override_called": False,
+        "override_applied": False,
+        "override_reason": "not_called",
+        "override_action_kind": "",
+        "override_blocked_reason": "",
+        "turn_contract_attached": False,
+        "result_attached": False,
+        "runtime_state_attached": False,
+    }
+
+
+def _n127101_attach_probe(result, probe):
+    result = _n1272_dict(result)
+    probe = dict(_n1272_dict(probe))
+    if not probe:
+        return result
+    probe["result_attached"] = True
+    result["survival_autoplay_runtime_probe"] = probe
+    result["n12710_critical_thirst_runtime_probe"] = probe
+
+    turn_contract = dict(_n1272_dict(result.get("turn_contract")))
+    turn_contract["survival_autoplay_runtime_probe"] = probe
+    turn_contract["n12710_critical_thirst_runtime_probe"] = probe
+    resource_changes = dict(_n1272_dict(turn_contract.get("resource_changes")))
+    resource_changes["survival_autoplay_runtime_probe"] = probe
+    turn_contract["resource_changes"] = resource_changes
+    effect_result = dict(_n1272_dict(turn_contract.get("effect_result")))
+    effect_result["survival_autoplay_runtime_probe"] = probe
+    turn_contract["effect_result"] = effect_result
+    probe["turn_contract_attached"] = True
+    turn_contract["survival_autoplay_runtime_probe"] = probe
+    turn_contract["n12710_critical_thirst_runtime_probe"] = probe
+    resource_changes["survival_autoplay_runtime_probe"] = probe
+    effect_result["survival_autoplay_runtime_probe"] = probe
+    result["turn_contract"] = turn_contract
+
+    result_payload = dict(_n1272_dict(result.get("result")))
+    if result_payload:
+        result_payload["survival_autoplay_runtime_probe"] = probe
+        result_payload["n12710_critical_thirst_runtime_probe"] = probe
+        payload_contract = dict(_n1272_dict(result_payload.get("turn_contract")))
+        if payload_contract:
+            payload_contract["survival_autoplay_runtime_probe"] = probe
+            payload_contract["n12710_critical_thirst_runtime_probe"] = probe
+            result_payload["turn_contract"] = payload_contract
+        result["result"] = result_payload
+
+    session = dict(_n1272_dict(result.get("session")))
+    if session:
+        runtime_state = dict(_n1272_dict(session.get("runtime_state")))
+        runtime_state["last_survival_autoplay_runtime_probe"] = probe
+        history = list(runtime_state.get("survival_autoplay_runtime_probe_history") or [])
+        history.append(probe)
+        runtime_state["survival_autoplay_runtime_probe_history"] = history[-64:]
+        session["runtime_state"] = runtime_state
+        result["session"] = session
+        probe["runtime_state_attached"] = True
+        result["survival_autoplay_runtime_probe"] = probe
+        result["turn_contract"]["survival_autoplay_runtime_probe"] = probe
+    return result
 
 
 def _n1272_attach_promotion(result, promotion):
@@ -91,6 +169,7 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
     def _wrapped_apply_turn(session_id, player_input, action=None, *, performance_override=None):
         original_player_input = _n1272_str(player_input)
         session_key = _n1272_str(session_id)
+        probe = _n127101_probe(session_key, original_player_input)
         promotion = {"promoted": False, "reason": "not_evaluated", "source": "n1272_survival_autoplay_player_agent"}
         promoted_player_input = original_player_input
         prior_session = {}
@@ -104,7 +183,11 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
                 prior_session,
                 session_key=session_key,
             )
+            probe["promotion_called"] = True
             promoted_player_input, promotion = _n1272_promote_survival_suggestion_for_autoplay(prior_session, original_player_input)
+            probe["promotion_promoted"] = bool(_n1272_dict(promotion).get("promoted"))
+            probe["promotion_reason"] = _n1272_str(_n1272_dict(promotion).get("reason"))
+            probe["promoted_player_input"] = promoted_player_input
         except Exception as exc:
             promotion = {
                 "promoted": False,
@@ -112,8 +195,12 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
                 "error": repr(exc),
                 "source": "n1272_survival_autoplay_player_agent",
             }
+            probe["promotion_called"] = True
+            probe["promotion_reason"] = "promotion_exception"
+            probe["promotion_error"] = repr(exc)
             promoted_player_input = original_player_input
 
+        probe["previous_apply_turn_called"] = True
         if performance_override is None:
             result = previous_apply_turn(session_id, promoted_player_input, action=action)
         else:
@@ -123,6 +210,7 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
                 action=action,
                 performance_override=performance_override,
             )
+        probe["previous_apply_turn_returned"] = True
         promotion = dict(_n1272_dict(promotion))
         promotion.setdefault("original_player_input", original_player_input)
         promotion.setdefault("promoted_player_input", promoted_player_input)
@@ -150,20 +238,32 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
                     "error": repr(exc),
                     "source": "n1276_survival_hunger_thirst_relief_coverage",
                 }
+                probe["post_turn_supply_error"] = repr(exc)
         result = _n1276_attach_supply_summary(result, pre_turn_supply_summary, phase="pre_turn_selection")
         result = _n1276_attach_supply_summary(result, handoff_supply_summary, phase="runtime_handoff")
         result = _n1276_attach_supply_summary(result, post_turn_supply_summary, phase="post_turn_persistence")
+        probe["persistence_called"] = True
         result = _n1272_persist_result_survival_state(
             result,
             save=True,
             prior_session=prior_session,
             accumulator_key=session_key,
         )
+        probe["persistence_applied"] = bool(_n1272_dict(result.get("survival_autoplay_persistence")).get("applied"))
+        probe["override_called"] = True
         result = _n12710_apply_critical_thirst_hard_override(
             result,
             save=True,
             session_key=session_key,
         )
+        override = _n1272_dict(result.get("survival_autoplay_critical_thirst_override"))
+        probe["override_applied"] = bool(override.get("applied"))
+        probe["override_reason"] = _n1272_str(override.get("reason") or "missing_override_result")
+        probe["override_action_kind"] = _n1272_str(override.get("action_kind"))
+        probe["override_blocked_reason"] = _n1272_str(override.get("blocked_reason"))
+        probe["override_needs_before"] = _n1272_dict(override.get("needs_before") or override.get("needs"))
+        probe["override_needs_after"] = _n1272_dict(override.get("needs_after"))
+        result = _n127101_attach_probe(result, probe)
         return result
 
     _wrapped_apply_turn._n1272_survival_autoplay_wrapped = True
