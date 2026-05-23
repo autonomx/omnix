@@ -64,5 +64,15 @@
       "content-exhaustion-forecast-summary.json": true
     },
     "manifest_file": "artifact-manifest.json"
+  },
+  "bundle_a_manifest_repair": {
+    "applied": true,
+    "source": "bundle_ab_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json"
+  },
+  "bundle_b_manifest_repair": {
+    "applied": true,
+    "source": "bundle_ab_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json"
   }
 }
