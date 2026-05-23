@@ -3,8 +3,10 @@ from __future__ import annotations
 from app.rpg.session.survival_autoplay_persistence import (
     calibrate_turn_survival_state,
     extract_turn_survival_state,
+    merge_survival_accumulator_into_session,
     mirror_survival_state_into_session,
     persist_result_survival_state,
+    reset_survival_autoplay_accumulator,
 )
 
 
@@ -137,3 +139,42 @@ def test_n1273_patches_return_payload_and_resource_deltas_for_calibrated_turn() 
     assert changes["thirst_delta"] == 2
     assert changes["fatigue_delta"] == 1
     assert result["session"]["simulation_state"]["needs"] == {"hunger": 69, "thirst": 71, "fatigue": 69}
+
+
+def test_n1273_1_accumulator_carries_pressure_when_session_snapshot_stays_low() -> None:
+    key = "test-n1273-accumulator"
+    reset_survival_autoplay_accumulator(key)
+    low_result = _regressed_result()
+    prior_session = {}
+
+    for _ in range(10):
+        patched = persist_result_survival_state(
+            low_result,
+            save=False,
+            prior_session=prior_session,
+            accumulator_key=key,
+        )
+        prior_session = merge_survival_accumulator_into_session({}, key)
+
+    needs = patched["session"]["simulation_state"]["needs"]
+    assert needs["hunger"] >= 12
+    assert needs["thirst"] >= 23
+    assert needs["fatigue"] >= 12
+    assert patched["survival_autoplay_persistence"]["accumulator_source"] == "n1273_1_in_process_survival_accumulator"
+    assert patched["turn_contract"]["resource_changes"]["thirst_delta"] == 2
+
+
+def test_n1273_1_accumulator_state_can_seed_selector_session() -> None:
+    key = "test-n1273-selector-seed"
+    reset_survival_autoplay_accumulator(key)
+    result = persist_result_survival_state(
+        _regressed_result(),
+        save=False,
+        prior_session=_prior_session(hunger=68, thirst=69, fatigue=68, action_count=68),
+        accumulator_key=key,
+    )
+    seeded = merge_survival_accumulator_into_session({}, key)
+
+    assert result["session"]["simulation_state"]["needs"]["thirst"] == 71
+    assert seeded["simulation_state"]["needs"]["thirst"] == 71
+    assert seeded["runtime_state"]["survival_autoplay_accumulator"]["source"] == "n1273_1_in_process_survival_accumulator"
