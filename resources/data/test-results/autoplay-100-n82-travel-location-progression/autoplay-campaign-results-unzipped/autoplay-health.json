@@ -46,5 +46,23 @@
       "transcript-payload-budget-summary.json": true
     },
     "manifest_file": "artifact-manifest.json"
+  },
+  "bundle_b_artifacts_ok": true,
+  "long_run_projection_ok": true,
+  "long_run_projection_advisory_ok": true,
+  "content_exhaustion_forecast_ok": true,
+  "content_exhaustion_forecast_advisory_ok": true,
+  "bundle_b_artifact_manifest_path": "artifact-manifest.json",
+  "bundle_b_artifacts": {
+    "source": "bundle_b_long_run_projection_manifest",
+    "files": [
+      "long-run-dry-run-projection-summary.json",
+      "content-exhaustion-forecast-summary.json"
+    ],
+    "physical_presence": {
+      "long-run-dry-run-projection-summary.json": true,
+      "content-exhaustion-forecast-summary.json": true
+    },
+    "manifest_file": "artifact-manifest.json"
   }
 }

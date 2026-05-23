@@ -220,9 +220,9 @@
         "ok": true,
         "severity": "advisory",
         "value": {
-          "real_round_event_count": 2,
-          "real_attack_event_count": 363,
-          "real_damage_event_count": 3985,
+          "real_round_event_count": 69,
+          "real_attack_event_count": 541,
+          "real_damage_event_count": 4870,
           "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
           "abstract_round_event_count": 2,
@@ -266,11 +266,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 2952076,
-          "operational_bytes_per_turn": 29520.76,
-          "operational_projected_1000_turn_bytes": 29520760,
-          "full_debug_bytes_sampled": 306088124,
-          "full_debug_projected_1000_turn_bytes": 3060881240,
+          "operational_bytes_sampled": 3056779,
+          "operational_bytes_per_turn": 30567.79,
+          "operational_projected_1000_turn_bytes": 30567790,
+          "full_debug_bytes_sampled": 326884962,
+          "full_debug_projected_1000_turn_bytes": 3268849620,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -1071,7 +1071,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_075df0d94481"
+              "session_key": "autoplay_7d89177f7624"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1102,7 +1102,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_075df0d94481"
+              "session_key": "autoplay_7d89177f7624"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1163,7 +1163,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_075df0d94481"
+              "session_key": "autoplay_7d89177f7624"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -15618,6 +15618,24 @@
       "quality-gate-summary.json",
       "survival-exit-criteria-summary.json",
       "transcript-payload-budget-summary.json"
+    ],
+    "manifest_file": "artifact-manifest.json"
+  },
+  "bundle_b_artifacts": {
+    "source": "bundle_b_long_run_projection_manifest",
+    "long_run_projection_ok": true,
+    "long_run_projection_advisory_ok": true,
+    "content_exhaustion_forecast_ok": true,
+    "content_exhaustion_forecast_advisory_ok": true,
+    "recommended_next_run": {
+      "profile": "dry_run_300",
+      "turns": 300,
+      "reason": "Intermediate endurance profile before a full 1000-turn LLM run."
+    },
+    "turns_until_content_exhaustion_estimate": 200,
+    "files": [
+      "long-run-dry-run-projection-summary.json",
+      "content-exhaustion-forecast-summary.json"
     ],
     "manifest_file": "artifact-manifest.json"
   }

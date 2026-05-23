@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 10.812194,
-        "p95_turn_seconds": 19.736752
+        "avg_turn_seconds": 6.115064,
+        "p95_turn_seconds": 8.548847
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 10.81s, p95 19.74s."
+      "message": "Average turn latency 6.12s, p95 8.55s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -10133,7 +10133,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_075df0d94481"
+                "session_key": "autoplay_7d89177f7624"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10164,7 +10164,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_075df0d94481"
+                "session_key": "autoplay_7d89177f7624"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10225,7 +10225,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_075df0d94481"
+                "session_key": "autoplay_7d89177f7624"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -11345,17 +11345,201 @@
       ]
     },
     "artifact-manifest.json": {
-      "source": "bundle_a1_final_artifact_inclusion_manifest",
+      "source": "bundle_b_long_run_projection_manifest",
       "ok": true,
-      "bundle_a_files": [
-        "quality-gate-summary.json",
-        "survival-exit-criteria-summary.json",
-        "transcript-payload-budget-summary.json"
+      "bundle_b_files": [
+        "long-run-dry-run-projection-summary.json",
+        "content-exhaustion-forecast-summary.json"
       ],
-      "physical_presence": {
-        "quality-gate-summary.json": true,
-        "survival-exit-criteria-summary.json": true,
-        "transcript-payload-budget-summary.json": true
+      "bundle_b_physical_presence": {
+        "long-run-dry-run-projection-summary.json": true,
+        "content-exhaustion-forecast-summary.json": true
+      }
+    },
+    "long-run-dry-run-projection-summary.json": {
+      "format_version": "n130_long_run_dry_run_projection_summary_v1",
+      "source": "n130_long_run_dry_run_profile_projection",
+      "ok": true,
+      "advisory_ok": true,
+      "failed_checks": [],
+      "checks": {
+        "hundred_turn_evaluation_ok": true,
+        "hundred_turn_readiness_ok": true,
+        "survival_exit_criteria_ok": true,
+        "payload_budget_advisory_ok": true,
+        "state_budget_ok": true,
+        "profile_300_wall_time_ok": true,
+        "profile_1000_wall_time_advisory_ok": true,
+        "profile_1000_transcript_budget_ok": true,
+        "profile_1000_review_budget_ok": true
+      },
+      "base_turns": 100,
+      "target_profiles": [
+        {
+          "target_turns": 250,
+          "base_turns": 100,
+          "turn_ratio": 2.5,
+          "projected_wall_seconds_avg": 1528.766,
+          "projected_wall_hours_avg": 0.425,
+          "projected_p95_cumulative_seconds": 2137.212,
+          "projected_transcript_bytes": 111000,
+          "projected_state_bytes_bounded": 5960,
+          "projected_state_bytes_linear_risk": 14900,
+          "state_budget_ok": true
+        },
+        {
+          "target_turns": 300,
+          "base_turns": 100,
+          "turn_ratio": 3.0,
+          "projected_wall_seconds_avg": 1834.519,
+          "projected_wall_hours_avg": 0.51,
+          "projected_p95_cumulative_seconds": 2564.654,
+          "projected_transcript_bytes": 133200,
+          "projected_state_bytes_bounded": 5960,
+          "projected_state_bytes_linear_risk": 17880,
+          "state_budget_ok": true
+        },
+        {
+          "target_turns": 1000,
+          "base_turns": 100,
+          "turn_ratio": 10.0,
+          "projected_wall_seconds_avg": 6115.064,
+          "projected_wall_hours_avg": 1.699,
+          "projected_p95_cumulative_seconds": 8548.847,
+          "projected_transcript_bytes": 444000,
+          "projected_state_bytes_bounded": 5960,
+          "projected_state_bytes_linear_risk": 59600,
+          "state_budget_ok": true
+        }
+      ],
+      "performance_source": {
+        "avg_turn_seconds": 6.115064,
+        "p95_turn_seconds": 8.548847
+      },
+      "payload_budget_source": {
+        "average_row_bytes": 444,
+        "projected_1000_turn_transcript_bytes": 444000,
+        "payload_budget_ok": true,
+        "payload_budget_advisory_ok": true
+      },
+      "state_budget_source": {
+        "format_version": "state_budget_summary_v1",
+        "ok": true,
+        "sections": {
+          "summary": {
+            "bytes": 3021,
+            "budget_bytes": 2000000,
+            "ok": true
+          },
+          "story_arcs": {
+            "bytes": 1529,
+            "budget_bytes": 250000,
+            "ok": true
+          },
+          "world_signals": {
+            "bytes": 1166,
+            "budget_bytes": 200000,
+            "ok": true
+          },
+          "faction_state": {
+            "bytes": 242,
+            "budget_bytes": 100000,
+            "ok": true
+          },
+          "npc_memory_events": {
+            "bytes": 2,
+            "budget_bytes": 150000,
+            "ok": true
+          }
+        },
+        "budgets": {
+          "summary_bytes": 2000000,
+          "story_arcs_bytes": 250000,
+          "world_signals_bytes": 200000,
+          "faction_state_bytes": 100000,
+          "npc_memory_events_bytes": 150000
+        }
+      },
+      "recommended_next_run": {
+        "profile": "dry_run_300",
+        "turns": 300,
+        "reason": "Intermediate endurance profile before a full 1000-turn LLM run."
+      },
+      "artifact_files": {
+        "summary": "long-run-dry-run-projection-summary.json"
+      }
+    },
+    "content-exhaustion-forecast-summary.json": {
+      "format_version": "n131_content_exhaustion_forecast_summary_v1",
+      "source": "n131_story_content_graph_exhaustion_forecast",
+      "ok": true,
+      "advisory_ok": true,
+      "failed_checks": [],
+      "checks": {
+        "readiness_content_classification_ok": true,
+        "graph_progression_density_ok": true,
+        "unique_node_density_ok": true,
+        "waiting_for_next_graph_pack_ok": true,
+        "campaign_graphs_not_fully_exhausted_ok": true,
+        "available_next_graph_count_ok": true,
+        "story_arc_resolution_present": true,
+        "followup_arc_progression_present": true,
+        "escalation_arc_progression_present": true,
+        "pressure_pacing_active": true
+      },
+      "requested_turns": 100,
+      "turns_executed": 100,
+      "classification": "content_sufficient_for_requested_turns",
+      "graph_count": 9,
+      "completed_graph_count": 8,
+      "active_graph_count": 1,
+      "available_next_graph_count": 1,
+      "campaign_graphs_complete": false,
+      "waiting_for_next_graph_pack": false,
+      "progression_changed_count": 100,
+      "unique_progression_node_count": 100,
+      "graph_progression_density": 1.0,
+      "unique_node_density": 1.0,
+      "completed_graph_ratio": 0.8888888888888888,
+      "turns_until_content_exhaustion_estimate": 200,
+      "story_arc_resolution": {
+        "completed_count": 2,
+        "failed_count": 0,
+        "active_count": 0,
+        "status_counts": {
+          "failed": 2
+        }
+      },
+      "followup_arc_progression": {
+        "progression_event_count": 554,
+        "direct_graph_progression_count": 554,
+        "progressed_count": 0,
+        "progressed_arc_ids": [],
+        "world_signal_count": 0
+      },
+      "escalation_arc_progression": {
+        "progression_event_count": 194,
+        "direct_graph_escalation_count": 194,
+        "progressed_count": 0,
+        "progressed_arc_ids": [],
+        "pressure_event_count": 0,
+        "world_signal_count": 0
+      },
+      "pressure_pacing": {
+        "accepted_pressure_count": 190,
+        "accepted_pressure_event_count": 190,
+        "direct_graph_pressure_count": 190,
+        "direct_graph_pacing_bridge_active": true,
+        "rejected_pressure_event_count": 0,
+        "rejected_by_reason": {}
+      },
+      "recommended_next_actions": [
+        "Run a 250/300-turn dry profile before a full 1000-turn run.",
+        "If available_next_graph_count drops to zero, add graph packs or explicit waiting-for-next-graph handling.",
+        "Track unique node density to catch repeated graph-content reuse before it becomes a loop."
+      ],
+      "artifact_files": {
+        "summary": "content-exhaustion-forecast-summary.json"
       }
     }
   },
@@ -12081,7 +12265,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_075df0d94481"
+              "session_key": "autoplay_7d89177f7624"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12112,7 +12296,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_075df0d94481"
+              "session_key": "autoplay_7d89177f7624"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12173,7 +12357,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_075df0d94481"
+              "session_key": "autoplay_7d89177f7624"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -17587,5 +17771,15 @@
       "survival-exit-criteria-summary.json": true,
       "transcript-payload-budget-summary.json": true
     }
+  },
+  "bundle_b_artifacts": {
+    "source": "bundle_b_long_run_projection_manifest",
+    "long_run_projection_ok": true,
+    "content_exhaustion_forecast_ok": true,
+    "files": [
+      "long-run-dry-run-projection-summary.json",
+      "content-exhaustion-forecast-summary.json"
+    ],
+    "manifest_file": "artifact-manifest.json"
   }
 }
