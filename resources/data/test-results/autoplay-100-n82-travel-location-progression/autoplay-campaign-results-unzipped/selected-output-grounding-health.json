@@ -5,20 +5,20 @@
   "selected_output_invalid_count": 0,
   "provider_json_parse_failed_count": 0,
   "provider_invalid_count": 0,
-  "fallback_used_count": 5,
-  "fallback_used_rate": 0.05,
+  "fallback_used_count": 1,
+  "fallback_used_rate": 0.01,
   "deterministic_fallback_count": 0,
   "deterministic_fallback_rate": 0.0,
-  "llm_safe_fallback_count": 15,
+  "llm_safe_fallback_count": 3,
   "fallback_source_counts": {
     "deterministic_fallback": 0,
-    "llm_safe_fallback": 15,
-    "none": 95
+    "llm_safe_fallback": 3,
+    "none": 99
   },
   "selected_candidate_counts": {
     "deterministic_fallback": 0,
-    "llm_safe_fallback": 15,
-    "primary": 95
+    "llm_safe_fallback": 3,
+    "primary": 99
   },
   "violation_counts": {},
   "notes": [
@@ -26,7 +26,7 @@
     "selected output is considered safe if deterministic fallback or safe_fallback was selected and no selected_output_invalid_count is reported.",
     "deterministic fallback is allowed up to 10% for 100-turn smoke evaluation."
   ],
-  "unsupported_combat_claim_preselection_suppressed_count": 5,
-  "raw_unsupported_combat_claim_count": 5,
+  "unsupported_combat_claim_preselection_suppressed_count": 1,
+  "raw_unsupported_combat_claim_count": 1,
   "unsupported_combat_claim_preselection_suppression_match_ok": true
 }

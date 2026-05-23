@@ -3,30 +3,17 @@
   "turn_count": 100,
   "with_prompt_contract": 100,
   "with_prompt_debug": 100,
-  "with_prompt_contract_ack": 98,
+  "with_prompt_contract_ack": 100,
   "fallback_source_counts": {
-    "llm_valid": 98,
-    "provider_unavailable_or_invalid": 2
+    "llm_valid": 100
   },
   "fallback_reason_counts": {
-    "llm_valid": 98,
-    "final_drain_timeout": 2
+    "llm_valid": 100
   },
-  "invalid_fallback_reason_turns": [
-    {
-      "turn_index": 99,
-      "source": "provider_unavailable_or_invalid",
-      "reason": "final_drain_timeout"
-    },
-    {
-      "turn_index": 100,
-      "source": "provider_unavailable_or_invalid",
-      "reason": "final_drain_timeout"
-    }
-  ],
+  "invalid_fallback_reason_turns": [],
   "missing_prompt_contract_turns": [],
   "missing_prompt_debug_turns": [],
-  "ok": false,
+  "ok": true,
   "service_resolver_veto_summary": {
     "format_version": "n11619_service_veto_regression_summary_v1",
     "ok": true,
@@ -41,17 +28,17 @@
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 68,
-    "category_reclassified_count": 47,
-    "dialogue_relevance_repaired_count": 36,
+    "metadata_repaired_count": 62,
+    "category_reclassified_count": 48,
+    "dialogue_relevance_repaired_count": 21,
     "service_resolver_veto_count": 0,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 68,
-      "provider_category_reclassification": 47,
-      "dialogue_action_relevance_repair": 36,
+      "provider_metadata_or_shape_repair": 62,
+      "provider_category_reclassification": 48,
+      "dialogue_action_relevance_repair": 21,
       "service_resolver_veto": 0,
       "unsupported_combat_claim_suppressed": 0,
-      "unsupported_combat_claim_preselection_suppressed": 5
+      "unsupported_combat_claim_preselection_suppressed": 1
     },
     "note": "Counts are diagnostic repair pressure, not additional authoritative simulation outcomes.",
     "dialogue_relevance_repair_count_source": "dialogue_action_relevance_summary",
@@ -62,8 +49,8 @@
       "category_count": 0
     },
     "unsupported_combat_claim_suppressed_count": 0,
-    "unsupported_combat_claim_preselection_suppressed_count": 5,
-    "raw_unsupported_combat_claim_count": 5,
+    "unsupported_combat_claim_preselection_suppressed_count": 1,
+    "raw_unsupported_combat_claim_count": 1,
     "unsupported_combat_claim_preselection_suppression_match_ok": true,
     "metadata_repair_count_source": "background_presentation_attachment_summary",
     "category_reclassified_count_source": "background_presentation_attachment_summary"
@@ -226,8 +213,8 @@
   },
   "unsupported_combat_claim_cleanup": {
     "format_version": "unsupported_combat_claim_cleanup_v2_n11621",
-    "preselection_suppressed_count": 5,
-    "raw_unsupported_combat_claim_count": 5,
+    "preselection_suppressed_count": 1,
+    "raw_unsupported_combat_claim_count": 1,
     "suppression_match_ok": true,
     "ok": true,
     "policy": "unsupported combat claims are sanitized into llm_safe_fallback before deterministic fallback selection"
