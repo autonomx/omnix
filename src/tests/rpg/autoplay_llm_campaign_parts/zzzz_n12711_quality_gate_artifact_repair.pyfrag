@@ -1,6 +1,6 @@
 # Bundle A final artifact wrapper.
 # Runs after the normal autoplay main() completes and finalizes quality-gate,
-# survival-exit, and transcript-payload-budget artifacts for the latest green run.
+# survival-exit, transcript-payload-budget, and manifest artifacts for the latest green run.
 
 _N12711_PREV_MAIN = globals().get("main")
 
@@ -8,6 +8,9 @@ from pathlib import Path as _N12711_Path  # noqa: E402
 
 from app.rpg.session.bundle_a_artifacts import (  # noqa: E402
     write_bundle_a_artifacts as _bundle_a_write_bundle_a_artifacts,
+)
+from app.rpg.session.bundle_a_manifest_repair import (  # noqa: E402
+    repair_bundle_a_manifest as _bundle_a_repair_manifest,
 )
 from app.rpg.session.quality_gate_artifact_repair import (  # noqa: E402
     repair_quality_gate_artifacts_if_present as _n12711_repair_quality_gate_artifacts_if_present,
@@ -49,13 +52,19 @@ def _n12711_finalize_latest_bundle_a_artifacts():
     for path in _n12711_candidate_result_dirs():
         quality = _n12711_repair_quality_gate_artifacts_if_present(path)
         bundle = _bundle_a_write_bundle_a_artifacts(path) if quality.get("applied") else {"applied": False, "reason": "quality_repair_not_applied"}
-        repairs.append({"path": str(path), "quality": quality, "bundle_a": bundle})
-        if quality.get("applied") or bundle.get("applied"):
+        manifest = _bundle_a_repair_manifest(path) if (quality.get("applied") or bundle.get("applied")) else {"applied": False, "reason": "bundle_not_applied"}
+        repairs.append({"path": str(path), "quality": quality, "bundle_a": bundle, "manifest": manifest})
+        if quality.get("applied") or bundle.get("applied") or manifest.get("applied"):
             break
     return {
         "source": "bundle_a_final_artifact_wrapper",
         "repairs": repairs,
-        "applied": any(item.get("quality", {}).get("applied") or item.get("bundle_a", {}).get("applied") for item in repairs),
+        "applied": any(
+            item.get("quality", {}).get("applied")
+            or item.get("bundle_a", {}).get("applied")
+            or item.get("manifest", {}).get("applied")
+            for item in repairs
+        ),
     }
 
 
