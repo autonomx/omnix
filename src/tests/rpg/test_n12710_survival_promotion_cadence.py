@@ -97,8 +97,8 @@ def test_n12710_hard_override_seeds_bounded_drink_when_inventory_missing() -> No
     override = result["survival_autoplay_critical_thirst_override"]
     assert override["applied"] is True
     assert override["action_kind"] == "drink_water"
-    assert override["supply_summary"]["applied"] is True
-    assert override["drink_item_id"].startswith("autoplay_waterskin_")
+    assert override["supply_summary"]["applied"] is True or override["emergency_water_summary"]["applied"] is True
+    assert override["drink_item_id"].startswith(("autoplay_waterskin_", "emergency_water_cache_"))
     assert result["turn_contract"]["survival_action"]["resource_changes"]["inventory_consumed"]["consumed"] is True
 
 
@@ -118,3 +118,41 @@ def test_n12710_cadence_streak_metadata_is_persisted() -> None:
     assert cadence["critical_thirst_override_count"] == 4
     assert cadence["last_thirst_before"] == 100
     assert cadence["last_thirst_after"] < 100
+
+
+def test_n12711_emergency_water_applies_when_normal_supply_budget_is_exhausted() -> None:
+    key = "n12711-emergency-water"
+    reset_survival_autoplay_supply_grants(key)
+    result = _result(thirst=100, items=[])
+    result["session"]["runtime_state"]["survival_autoplay_relief_supply_grants"] = {"food": 3, "drink": 4}
+
+    patched = apply_critical_thirst_hard_override(result, save=False, session_key=key)
+    override = patched["survival_autoplay_critical_thirst_override"]
+    action = patched["turn_contract"]["survival_action"]
+
+    assert override["applied"] is True
+    assert override["action_kind"] == "drink_water"
+    assert override["emergency_water_summary"]["applied"] is True
+    assert override["emergency_water_source"] == "n12711_critical_thirst_emergency_water_source"
+    assert override["drink_item_id"] == "emergency_water_cache_1"
+    assert action["resource_changes"]["inventory_consumed"]["item_id"] == "emergency_water_cache_1"
+    assert patched["survival_emergency_water_state"]["granted_count"] == 1
+
+
+def test_n12711_emergency_water_is_bounded() -> None:
+    key = "n12711-emergency-bounded"
+    reset_survival_autoplay_supply_grants(key)
+    result = _result(thirst=100, items=[])
+    result["session"]["runtime_state"]["survival_autoplay_relief_supply_grants"] = {"food": 3, "drink": 4}
+    result["session"]["runtime_state"]["survival_emergency_water_state"] = {
+        "granted_count": 4,
+        "limit": 4,
+        "source": "n12711_critical_thirst_emergency_water_source",
+    }
+
+    patched = apply_critical_thirst_hard_override(result, save=False, session_key=key)
+    override = patched["survival_autoplay_critical_thirst_override"]
+
+    assert override["applied"] is False
+    assert override["reason"] == "critical_thirst_no_backed_drink_available"
+    assert override["emergency_water_summary"]["reason"] == "emergency_water_limit_reached"
