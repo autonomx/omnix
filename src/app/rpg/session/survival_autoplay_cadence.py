@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-"""N127.10 survival promotion cadence and critical-thirst hard override.
+"""N127.10/N127.11 survival cadence and critical-thirst override.
 
 Selector-only fixes were insufficient in 100-turn runs because survival
 suggestions could exist without being promoted frequently enough.  This module
 runs after calibrated survival persistence, where authoritative needs, explicit
 inventory supplies, and the deterministic resolver are all visible together.
 It does not use an LLM and does not fabricate hidden effects: drink relief is
-applied only by adding/using explicit N127.6/N127.8 inventory items and the
-existing N123.2 resolver.
+applied only by explicit inventory items and the existing N123.2 resolver.
+
+N127.11 adds a bounded emergency water source for the specific case proven by
+N127.10.1: the override is called, thirst is critical, but normal drink supply
+coverage has been exhausted.  Emergency water is explicit inventory, counted in
+runtime_state, and consumed by resolve_survival_action like any other drink.
 """
 
 import copy
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 from app.rpg.session.survival_actions import resolve_survival_action
 from app.rpg.session.survival_autoplay_relief_supplies import ensure_survival_autoplay_relief_supplies
@@ -25,9 +29,11 @@ from app.rpg.session.survival_autoplay_persistence import (
 
 SOURCE = "n12710_survival_promotion_cadence"
 OVERRIDE_SOURCE = "n12710_critical_thirst_hard_override"
+EMERGENCY_WATER_SOURCE = "n12711_critical_thirst_emergency_water_source"
 THIRST_CRITICAL_THRESHOLD = 90
 THIRST_CAPPED_THRESHOLD = 100
 CAPPED_HARD_OVERRIDE_STREAK = 3
+MAX_EMERGENCY_WATER_PER_SESSION = 4
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -129,10 +135,20 @@ def _is_drink_item(item: Dict[str, Any]) -> bool:
     return any(term in haystack for term in ("drink", "water", "waterskin", "canteen", "ale", "wine", "beer"))
 
 
-def _drink_item(session: Dict[str, Any]) -> Dict[str, Any]:
+def _inventory(session: Dict[str, Any]) -> Dict[str, Any]:
     sim = _simulation_state(session)
-    inventory = _safe_dict(_safe_dict(sim.get("player_state")).get("inventory_state"))
-    for raw in _safe_list(inventory.get("items")):
+    player = _safe_dict(sim.get("player_state"))
+    inventory = _safe_dict(player.get("inventory_state"))
+    inventory.setdefault("items", [])
+    inventory.setdefault("currency", _safe_dict(inventory.get("currency")))
+    player["inventory_state"] = inventory
+    sim["player_state"] = player
+    session["simulation_state"] = sim
+    return inventory
+
+
+def _drink_item(session: Dict[str, Any]) -> Dict[str, Any]:
+    for raw in _safe_list(_inventory(session).get("items")):
         item = _safe_dict(raw)
         if _is_drink_item(item):
             return dict(item)
@@ -156,10 +172,22 @@ def _cadence_state(session: Dict[str, Any]) -> Dict[str, Any]:
     return dict(_safe_dict(_runtime_state(session).get("survival_autoplay_cadence_state")))
 
 
+def _emergency_state(session: Dict[str, Any]) -> Dict[str, Any]:
+    return dict(_safe_dict(_runtime_state(session).get("survival_emergency_water_state")))
+
+
 def _write_cadence_state(session: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
     runtime = _runtime_state(session)
     runtime["survival_autoplay_cadence_state"] = copy.deepcopy(state)
     runtime["last_survival_autoplay_cadence_source"] = SOURCE
+    session["runtime_state"] = runtime
+    return session
+
+
+def _write_emergency_state(session: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime = _runtime_state(session)
+    runtime["survival_emergency_water_state"] = copy.deepcopy(state)
+    runtime["last_survival_emergency_water_source"] = EMERGENCY_WATER_SOURCE
     session["runtime_state"] = runtime
     return session
 
@@ -199,22 +227,27 @@ def _patch_override_metadata(result: Dict[str, Any], override: Dict[str, Any], s
     result = dict(_safe_dict(result))
     override = copy.deepcopy(_safe_dict(override))
     cadence = copy.deepcopy(_cadence_state(session))
+    emergency = copy.deepcopy(_emergency_state(session))
     result["survival_autoplay_critical_thirst_override"] = override
     result["survival_autoplay_cadence_state"] = cadence
+    result["survival_emergency_water_state"] = emergency
     contract = dict(_safe_dict(result.get("turn_contract")))
     if contract:
         contract["survival_autoplay_critical_thirst_override"] = override
         contract["survival_autoplay_cadence_state"] = cadence
+        contract["survival_emergency_water_state"] = emergency
         result["turn_contract"] = contract
     payload = dict(_safe_dict(result.get("result")))
     if payload:
         payload["survival_autoplay_critical_thirst_override"] = override
         payload["survival_autoplay_cadence_state"] = cadence
+        payload["survival_emergency_water_state"] = emergency
         result["result"] = payload
     persistence = dict(_safe_dict(result.get("survival_autoplay_persistence")))
     if persistence:
         persistence["critical_thirst_override"] = override
         persistence["cadence_state"] = cadence
+        persistence["emergency_water_state"] = emergency
         result["survival_autoplay_persistence"] = persistence
     return result
 
@@ -230,20 +263,67 @@ def _maybe_save_session(session: Dict[str, Any], save: bool) -> None:
         pass
 
 
+def _mirror_roots(session: Dict[str, Any]) -> Dict[str, Any]:
+    sim = _simulation_state(session)
+    session["simulation_state"] = sim
+    state = _safe_dict(session.get("state"))
+    state["simulation_state"] = copy.deepcopy(sim)
+    state["player_state"] = copy.deepcopy(_safe_dict(sim.get("player_state")))
+    session["state"] = state
+    setup = _safe_dict(session.get("setup_payload"))
+    metadata = _safe_dict(setup.get("metadata"))
+    metadata["simulation_state"] = copy.deepcopy(sim)
+    metadata["player_state"] = copy.deepcopy(_safe_dict(sim.get("player_state")))
+    setup["metadata"] = metadata
+    session["setup_payload"] = setup
+    return session
+
+
+def _ensure_emergency_water(session: Dict[str, Any], *, session_key: str | None, needs: Dict[str, int]) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    state = _emergency_state(session)
+    used = _safe_int(state.get("granted_count"), 0)
+    if _drink_item(session):
+        summary = {"applied": False, "reason": "drink_already_available", "source": EMERGENCY_WATER_SOURCE, "granted_count": used, "limit": MAX_EMERGENCY_WATER_PER_SESSION}
+        return session, summary
+    if used >= MAX_EMERGENCY_WATER_PER_SESSION:
+        summary = {"applied": False, "reason": "emergency_water_limit_reached", "source": EMERGENCY_WATER_SOURCE, "granted_count": used, "limit": MAX_EMERGENCY_WATER_PER_SESSION}
+        return session, summary
+    used += 1
+    item = {
+        "item_id": f"emergency_water_cache_{used}",
+        "name": "Emergency Water Cache",
+        "quantity": 1,
+        "tags": ["drink", "water", "emergency", "survival", EMERGENCY_WATER_SOURCE],
+        "source": EMERGENCY_WATER_SOURCE,
+        "need": "thirst",
+        "need_value": _safe_int(needs.get("thirst"), 0),
+        "session_key": _safe_str(session_key),
+    }
+    inventory = _inventory(session)
+    items = list(_safe_list(inventory.get("items")))
+    items.append(item)
+    inventory["items"] = items
+    state.update({
+        "format_version": "n12711_emergency_water_state_v1",
+        "source": EMERGENCY_WATER_SOURCE,
+        "granted_count": used,
+        "limit": MAX_EMERGENCY_WATER_PER_SESSION,
+        "last_item_id": item["item_id"],
+        "last_need_value": _safe_int(needs.get("thirst"), 0),
+    })
+    session = _write_emergency_state(session, state)
+    session = _mirror_roots(session)
+    summary = {"applied": True, "reason": "critical_thirst_emergency_water_granted", "source": EMERGENCY_WATER_SOURCE, "item": item, "granted_count": used, "limit": MAX_EMERGENCY_WATER_PER_SESSION}
+    return session, summary
+
+
 def apply_critical_thirst_hard_override(
     result: Dict[str, Any],
     *,
     session_key: str | None = None,
     save: bool = True,
 ) -> Dict[str, Any]:
-    """Apply deterministic drink relief when critical thirst was missed.
-
-    This is intentionally post-persistence: calibrated needs, explicit autoplay
-    supplies, and the deterministic resolver are now all present.  The helper is
-    conservative: it skips if thirst is below the critical threshold or if the
-    current row already applied drink relief, but it may supersede rest/eat when
-    thirst is at/near cap.
-    """
+    """Apply deterministic drink relief when critical thirst was missed."""
 
     result = dict(_safe_dict(result))
     session = copy.deepcopy(_safe_dict(result.get("session")))
@@ -283,11 +363,12 @@ def apply_critical_thirst_hard_override(
         result["session"] = session
         return _patch_override_metadata(result, override, session)
 
-    # Make sure a backed explicit drink exists.  This uses the bounded N127.6 /
-    # N127.8 supply helper; if the per-session drink budget is exhausted, no
-    # hidden relief is created.
     session, supply_summary = ensure_survival_autoplay_relief_supplies(session, session_key=session_key)
+    emergency_summary = {"applied": False, "reason": "not_needed", "source": EMERGENCY_WATER_SOURCE}
     drink = _drink_item(session)
+    if not drink:
+        session, emergency_summary = _ensure_emergency_water(session, session_key=session_key, needs=before_needs)
+        drink = _drink_item(session)
     if not drink:
         override = {
             "applied": False,
@@ -295,6 +376,7 @@ def apply_critical_thirst_hard_override(
             "source": OVERRIDE_SOURCE,
             "needs": before_needs,
             "supply_summary": supply_summary,
+            "emergency_water_summary": emergency_summary,
             "consecutive_thirst_capped_turns": capped_streak,
         }
         session = _update_cadence_state(session, result, before_needs=before_needs, after_needs=before_needs, override=override)
@@ -315,6 +397,7 @@ def apply_critical_thirst_hard_override(
         "reason": "critical_thirst_hard_override" if not hard_due_to_streak else "critical_thirst_capped_streak_hard_override",
         "source": OVERRIDE_SOURCE,
         "cadence_source": SOURCE,
+        "emergency_water_source": EMERGENCY_WATER_SOURCE if emergency_summary.get("applied") else "",
         "needs_before": before_needs,
         "needs_after": after_needs,
         "command": command,
@@ -323,6 +406,7 @@ def apply_critical_thirst_hard_override(
         "blocked_reason": _safe_str(action.get("blocked_reason")),
         "drink_item_id": _safe_str(drink.get("item_id") or drink.get("id") or drink.get("name")),
         "supply_summary": supply_summary,
+        "emergency_water_summary": emergency_summary,
         "consecutive_thirst_capped_turns_before": capped_streak,
         "hard_due_to_streak": hard_due_to_streak,
         "existing_action_kind": existing_kind,
