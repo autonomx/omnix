@@ -1,9 +1,21 @@
 {
-  "format_version": "bundle_a1_tracked_artifact_placeholder_v1",
-  "source": "bundle_a1_final_artifact_inclusion_manifest",
-  "ok": false,
-  "placeholder": true,
+  "format_version": "n127111_quality_gate_summary_v1",
+  "source": "n127111_quality_gate_summary_artifact_path_finalization",
+  "ok": true,
+  "advisory": true,
+  "generated_by_repair": true,
+  "hundred_turn_evaluation_ok": true,
+  "hundred_turn_readiness_ok": true,
+  "autoplay_health_ok_before_repair": true,
+  "failed_evaluation_gates": [],
+  "failed_readiness_gates": [],
+  "passed_gate_count": 31,
+  "failed_gate_count": 0,
+  "quality_gate_summary_source_ok": null,
+  "readiness_gate_count": 31,
+  "artifact_path_finalized": "quality-gate-summary.json",
   "notes": [
-    "This tracked placeholder ensures future 100-turn result commits update the final quality gate summary instead of leaving it untracked."
+    "Generated only after hundred-turn evaluation and readiness artifacts are green.",
+    "This file exists so autoplay-health quality_gate_summary_ok has a concrete artifact target."
   ]
 }

@@ -27,5 +27,24 @@
     "source": "n127111_quality_gate_summary_artifact_path_finalization",
     "quality_summary_path": "quality-gate-summary.json",
     "result_dir": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped"
+  },
+  "bundle_a_artifacts_ok": true,
+  "bundle_a_artifact_manifest_path": "artifact-manifest.json",
+  "survival_exit_criteria_ok": true,
+  "transcript_payload_budget_ok": true,
+  "transcript_payload_budget_advisory_ok": true,
+  "bundle_a_artifacts": {
+    "source": "bundle_a1_final_artifact_inclusion_manifest",
+    "files": [
+      "quality-gate-summary.json",
+      "survival-exit-criteria-summary.json",
+      "transcript-payload-budget-summary.json"
+    ],
+    "physical_presence": {
+      "quality-gate-summary.json": true,
+      "survival-exit-criteria-summary.json": true,
+      "transcript-payload-budget-summary.json": true
+    },
+    "manifest_file": "artifact-manifest.json"
   }
 }

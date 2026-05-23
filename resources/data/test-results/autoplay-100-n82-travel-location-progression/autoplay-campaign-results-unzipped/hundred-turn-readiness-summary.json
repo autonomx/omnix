@@ -221,9 +221,9 @@
         "severity": "advisory",
         "value": {
           "real_round_event_count": 2,
-          "real_attack_event_count": 291,
-          "real_damage_event_count": 4869,
-          "real_resolution_event_count": 46,
+          "real_attack_event_count": 395,
+          "real_damage_event_count": 5075,
+          "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
           "abstract_round_event_count": 2,
           "direct_graph_rounds_ok": true,
@@ -266,11 +266,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 3044542,
-          "operational_bytes_per_turn": 30445.42,
-          "operational_projected_1000_turn_bytes": 30445420,
-          "full_debug_bytes_sampled": 310680789,
-          "full_debug_projected_1000_turn_bytes": 3106807890,
+          "operational_bytes_sampled": 3048646,
+          "operational_bytes_per_turn": 30486.46,
+          "operational_projected_1000_turn_bytes": 30486460,
+          "full_debug_bytes_sampled": 324651937,
+          "full_debug_projected_1000_turn_bytes": 3246519370,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -1071,7 +1071,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_62ff0e3f8c47"
+              "session_key": "autoplay_0814ef714bd1"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1102,7 +1102,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_62ff0e3f8c47"
+              "session_key": "autoplay_0814ef714bd1"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1163,7 +1163,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_62ff0e3f8c47"
+              "session_key": "autoplay_0814ef714bd1"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -15608,5 +15608,17 @@
       "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>100</td></tr><tr><td>climate_tick_source_rows</td><td>100</td></tr><tr><td>survival_action_rows</td><td>7</td></tr><tr><td>survival_suggestion_rows</td><td>8</td></tr><tr><td>relief_applied_rows</td><td>7</td></tr><tr><td>warning_rows</td><td>34</td></tr><tr><td>nonzero_need_rows</td><td>95</td></tr><tr><td>nonzero_delta_rows</td><td>94</td></tr><tr><td>runtime_probe_rows</td><td>100</td></tr><tr><td>critical_thirst_override_called_rows</td><td>100</td></tr><tr><td>critical_thirst_override_applied_rows</td><td>3</td></tr></tbody></table>\n</section>",
       "source": "survival-metric-source-summary.json"
     }
-  ]
+  ],
+  "bundle_a_artifacts": {
+    "source": "bundle_a1_final_artifact_inclusion_manifest",
+    "survival_exit_criteria_ok": true,
+    "transcript_payload_budget_ok": true,
+    "transcript_payload_budget_advisory_ok": true,
+    "files": [
+      "quality-gate-summary.json",
+      "survival-exit-criteria-summary.json",
+      "transcript-payload-budget-summary.json"
+    ],
+    "manifest_file": "artifact-manifest.json"
+  }
 }
