@@ -4,6 +4,9 @@
 _N1272_GLOBAL_APPLY_TURN_PREV = globals().get("apply_turn")
 
 from app.rpg.session.service import load_session as _n1272_load_session  # noqa: E402
+from app.rpg.session.survival_autoplay_cadence import (  # noqa: E402
+    apply_critical_thirst_hard_override as _n12710_apply_critical_thirst_hard_override,
+)
 from app.rpg.session.survival_autoplay_persistence import (  # noqa: E402
     merge_survival_accumulator_into_session as _n1272_merge_survival_accumulator_into_session,
     persist_result_survival_state as _n1272_persist_result_survival_state,
@@ -155,6 +158,11 @@ def _n1272_apply_turn_wrapper(previous_apply_turn):
             save=True,
             prior_session=prior_session,
             accumulator_key=session_key,
+        )
+        result = _n12710_apply_critical_thirst_hard_override(
+            result,
+            save=True,
+            session_key=session_key,
         )
         return result
 
