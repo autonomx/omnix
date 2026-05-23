@@ -51,8 +51,12 @@ def _n12711_finalize_latest_bundle_a_artifacts():
     repairs = []
     for path in _n12711_candidate_result_dirs():
         quality = _n12711_repair_quality_gate_artifacts_if_present(path)
-        bundle = _bundle_a_write_bundle_a_artifacts(path) if quality.get("applied") else {"applied": False, "reason": "quality_repair_not_applied"}
-        manifest = _bundle_a_repair_manifest(path) if (quality.get("applied") or bundle.get("applied")) else {"applied": False, "reason": "bundle_not_applied"}
+        # Bundle A.1 must not depend on quality.get("applied"). In green reruns,
+        # quality-gate-summary.json can already be present/valid, but the manifest
+        # may still be empty. Always regenerate Bundle A summaries and then run
+        # the final manifest repair for each candidate result directory.
+        bundle = _bundle_a_write_bundle_a_artifacts(path)
+        manifest = _bundle_a_repair_manifest(path)
         repairs.append({"path": str(path), "quality": quality, "bundle_a": bundle, "manifest": manifest})
         if quality.get("applied") or bundle.get("applied") or manifest.get("applied"):
             break
