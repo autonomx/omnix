@@ -42,6 +42,18 @@ def _result():
     }
 
 
+def _result_with_items():
+    result = _result()
+    result["session"]["simulation_state"]["player_state"]["inventory_state"] = {
+        "items": [
+            {"item_id": "trail_ration", "name": "Trail Ration", "quantity": 1, "tags": ["food"]},
+            {"item_id": "waterskin", "name": "Waterskin", "quantity": 1, "tags": ["drink", "water"]},
+        ],
+        "currency": {"gold": 0, "silver": 0, "copper": 0},
+    }
+    return result
+
+
 def _prior_session(*, hunger=68, thirst=69, fatigue=68, action_count=68):
     climate = {
         "format_version": "n1231_climate_survival_state_v1",
@@ -178,3 +190,37 @@ def test_n1273_1_accumulator_state_can_seed_selector_session() -> None:
     assert result["session"]["simulation_state"]["needs"]["thirst"] == 71
     assert seeded["simulation_state"]["needs"]["thirst"] == 71
     assert seeded["runtime_state"]["survival_autoplay_accumulator"]["source"] == "n1273_1_in_process_survival_accumulator"
+
+
+def test_n1274_projects_backed_survival_suggestions_into_turn_contract() -> None:
+    result = persist_result_survival_state(_result_with_items(), save=False)
+
+    suggestions = result["turn_contract"]["survival_suggested_actions"]
+    action_kinds = {item["action_kind"] for item in suggestions}
+    assert {"drink_water", "eat_food", "rest"}.issubset(action_kinds)
+    assert result["turn_contract"]["climate_survival"]["survival_suggestions"]
+    assert result["survival_autoplay_persistence"]["suggestion_projection"]["suggestion_count"] >= 3
+
+
+def test_n1274_promoted_survival_command_triggers_relief_and_inventory_consumption() -> None:
+    result = _result_with_items()
+    result["survival_autoplay_promotion"] = {
+        "promoted": True,
+        "command": "I drink Waterskin",
+        "promoted_player_input": "I drink Waterskin",
+        "effective_player_input": "I drink Waterskin",
+        "need": "thirst",
+        "action_kind": "drink_water",
+        "source": "n1272_survival_autoplay_player_agent",
+    }
+
+    patched = persist_result_survival_state(result, save=False)
+
+    action = patched["turn_contract"]["survival_action"]
+    assert action["applied"] is True
+    assert action["action_kind"] == "drink_water"
+    assert patched["turn_contract"]["resource_changes"]["thirst_delta"] < 0
+    assert patched["survival_autoplay_relief_trigger"]["applied"] is True
+    assert patched["session"]["simulation_state"]["needs"]["thirst"] < 74
+    remaining_items = patched["session"]["simulation_state"]["player_state"]["inventory_state"]["items"]
+    assert all(item.get("item_id") != "waterskin" for item in remaining_items)
