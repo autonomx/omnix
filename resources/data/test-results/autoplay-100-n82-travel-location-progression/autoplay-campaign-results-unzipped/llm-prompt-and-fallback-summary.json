@@ -28,17 +28,17 @@
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 61,
-    "category_reclassified_count": 48,
-    "dialogue_relevance_repaired_count": 21,
+    "metadata_repaired_count": 71,
+    "category_reclassified_count": 52,
+    "dialogue_relevance_repaired_count": 34,
     "service_resolver_veto_count": 0,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 61,
-      "provider_category_reclassification": 48,
-      "dialogue_action_relevance_repair": 21,
+      "provider_metadata_or_shape_repair": 71,
+      "provider_category_reclassification": 52,
+      "dialogue_action_relevance_repair": 34,
       "service_resolver_veto": 0,
       "unsupported_combat_claim_suppressed": 0,
-      "unsupported_combat_claim_preselection_suppressed": 1
+      "unsupported_combat_claim_preselection_suppressed": 5
     },
     "note": "Counts are diagnostic repair pressure, not additional authoritative simulation outcomes.",
     "dialogue_relevance_repair_count_source": "dialogue_action_relevance_summary",
@@ -49,8 +49,8 @@
       "category_count": 0
     },
     "unsupported_combat_claim_suppressed_count": 0,
-    "unsupported_combat_claim_preselection_suppressed_count": 1,
-    "raw_unsupported_combat_claim_count": 1,
+    "unsupported_combat_claim_preselection_suppressed_count": 5,
+    "raw_unsupported_combat_claim_count": 5,
     "unsupported_combat_claim_preselection_suppression_match_ok": true,
     "metadata_repair_count_source": "background_presentation_attachment_summary",
     "category_reclassified_count_source": "background_presentation_attachment_summary"
@@ -213,8 +213,8 @@
   },
   "unsupported_combat_claim_cleanup": {
     "format_version": "unsupported_combat_claim_cleanup_v2_n11621",
-    "preselection_suppressed_count": 1,
-    "raw_unsupported_combat_claim_count": 1,
+    "preselection_suppressed_count": 5,
+    "raw_unsupported_combat_claim_count": 5,
     "suppression_match_ok": true,
     "ok": true,
     "policy": "unsupported combat claims are sanitized into llm_safe_fallback before deterministic fallback selection"
