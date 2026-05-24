@@ -1,0 +1,66 @@
+# Bundle D report projection wrapper.
+# Runs after the Bundle A/B/C final artifact wrapper and adds the consolidated
+# readiness-report-projection-summary.json artifact.
+
+_BUNDLE_D_PREV_MAIN = globals().get("main")
+
+from pathlib import Path as _BUNDLE_D_Path  # noqa: E402
+
+from app.rpg.session.bundle_a_manifest_repair import (  # noqa: E402
+    repair_bundle_a_manifest as _bundle_d_repair_manifest,
+)
+from app.rpg.session.bundle_d_report_projection import (  # noqa: E402
+    write_bundle_d_artifacts as _bundle_d_write_artifacts,
+)
+
+
+def _bundle_d_repo_root():
+    here = _BUNDLE_D_Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        if (parent / "resources").exists() or (parent / "src").exists():
+            if (parent / "src" / "tests" / "rpg").exists() or (parent / "resources" / "data").exists():
+                return parent
+    return _BUNDLE_D_Path.cwd()
+
+
+def _bundle_d_candidate_result_dirs():
+    roots = [_bundle_d_repo_root() / "resources" / "data" / "test-results", _BUNDLE_D_Path.cwd() / "resources" / "data" / "test-results"]
+    seen = set()
+    candidates = []
+    for base in roots:
+        if not base.exists():
+            continue
+        for path in base.rglob("hundred-turn-evaluation.json"):
+            parent = path.parent.resolve()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            candidates.append(parent)
+    candidates.sort(key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
+    return candidates[:5]
+
+
+def _bundle_d_finalize_latest_report_projection():
+    repairs = []
+    for path in _bundle_d_candidate_result_dirs():
+        bundle_d = _bundle_d_write_artifacts(path)
+        manifest = _bundle_d_repair_manifest(path)
+        repairs.append({"path": str(path), "bundle_d": bundle_d, "manifest": manifest})
+        if bundle_d.get("applied") or manifest.get("applied"):
+            break
+    return {
+        "source": "bundle_d_report_projection_wrapper",
+        "repairs": repairs,
+        "applied": any(item.get("bundle_d", {}).get("applied") or item.get("manifest", {}).get("applied") for item in repairs),
+    }
+
+
+def main(argv=None):
+    if not callable(_BUNDLE_D_PREV_MAIN):
+        raise RuntimeError("bundle_d_previous_main_missing")
+    exit_code = _BUNDLE_D_PREV_MAIN(argv)
+    try:
+        globals()["BUNDLE_D_FINAL_ARTIFACT_RESULT"] = _bundle_d_finalize_latest_report_projection()
+    except Exception as exc:
+        globals()["BUNDLE_D_FINAL_ARTIFACT_RESULT"] = {"source": "bundle_d_report_projection_wrapper", "applied": False, "error": repr(exc)}
+    return exit_code
