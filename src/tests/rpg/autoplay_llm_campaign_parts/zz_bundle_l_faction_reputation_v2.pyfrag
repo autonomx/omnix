@@ -1,0 +1,198 @@
+# Bundle L — Faction / Reputation Consequences v2
+#
+# Advisory layer for deterministic social consequences.  This fragment exports
+# a compact faction model, reputation axes, consequence rules, and gate metrics.
+# It writes faction-reputation-v2-summary.json and never mutates authoritative
+# simulation state.
+
+import json as _bundle_l_json
+from pathlib import Path as _BundleLPath
+from typing import Any as _BundleLAny, Dict as _BundleLDict
+
+_BUNDLE_L_SUMMARY_FILE = "faction-reputation-v2-summary.json"
+_BUNDLE_L_BASE_FILE = "faction-reputation-summary.json"
+_BUNDLE_L_INPUT_FILES = {
+    "summary.json",
+    _BUNDLE_L_BASE_FILE,
+    "npc-agency-v2-summary.json",
+    "economy-resource-pressure-v2-summary.json",
+    "travel-location-graph-v2-summary.json",
+    "content-depth-expansion-pack-summary.json",
+    "artifact-manifest-digest.json",
+}
+
+_BUNDLE_L_MODEL: _BundleLDict[str, _BundleLAny] = {
+    "format_version": "bundle_l_faction_reputation_v2_model_v1",
+    "source": "bundle_l_faction_reputation_v2",
+    "standing_axes": ["trust", "reliability", "fair_trade", "public_order", "local_knowledge"],
+    "factions": {
+        "inn_staff": {
+            "display_name": "Inn Staff",
+            "starting_standing": {"trust": 0, "reliability": 0, "fair_trade": 0},
+            "standing_bounds": {"min": -5, "max": 5},
+            "access_unlocks": ["private_room_discount", "ledger_room_hint", "staff_schedule_hint"],
+            "access_blocks": ["service_delay", "lodging_surcharge"],
+        },
+        "town_council": {
+            "display_name": "Town Council",
+            "starting_standing": {"public_order": 0, "reliability": 0, "local_knowledge": 0},
+            "standing_bounds": {"min": -5, "max": 5},
+            "access_unlocks": ["case_review", "archive_pass", "council_reference"],
+            "access_blocks": ["case_review_delay", "reference_denied"],
+        },
+        "merchant_circle": {
+            "display_name": "Merchant Circle",
+            "starting_standing": {"fair_trade": 0, "reliability": 0, "local_knowledge": 0},
+            "standing_bounds": {"min": -5, "max": 5},
+            "access_unlocks": ["bulk_supply_discount", "stock_tip", "repair_priority"],
+            "access_blocks": ["scarcity_surcharge", "stock_tip_denied"],
+        },
+        "road_guides": {
+            "display_name": "Road Guides",
+            "starting_standing": {"trust": 0, "reliability": 0, "local_knowledge": 0},
+            "standing_bounds": {"min": -5, "max": 5},
+            "access_unlocks": ["safe_route_option", "guide_discount", "weather_warning"],
+            "access_blocks": ["guide_unavailable", "route_warning_withheld"],
+        },
+    },
+    "consequence_rules": [
+        {"id": "pay_fairly", "trigger": "authoritative_payment", "faction": "merchant_circle", "axis": "fair_trade", "delta": 1, "cooldown_turns": 4},
+        {"id": "settle_lodging", "trigger": "lodging_paid", "faction": "inn_staff", "axis": "trust", "delta": 1, "cooldown_turns": 4},
+        {"id": "ignore_invoice", "trigger": "unpaid_service_record", "faction": "inn_staff", "axis": "trust", "delta": -1, "cooldown_turns": 6},
+        {"id": "bring_clear_evidence", "trigger": "verified_clue_delivered", "faction": "town_council", "axis": "reliability", "delta": 1, "cooldown_turns": 6},
+        {"id": "separate_rumor_from_fact", "trigger": "unverified_claim_rejected", "faction": "town_council", "axis": "public_order", "delta": 1, "cooldown_turns": 8},
+        {"id": "respect_route_limits", "trigger": "prepared_before_travel", "faction": "road_guides", "axis": "reliability", "delta": 1, "cooldown_turns": 6},
+        {"id": "travel_unprepared", "trigger": "resource_pressure_on_route", "faction": "road_guides", "axis": "reliability", "delta": -1, "cooldown_turns": 8},
+        {"id": "share_local_discovery", "trigger": "new_location_reported", "faction": "road_guides", "axis": "local_knowledge", "delta": 1, "cooldown_turns": 8},
+    ],
+    "determinism_contract": {
+        "requires_authoritative_trigger": True,
+        "clamps_standing_to_bounds": True,
+        "cooldown_prevents_reputation_spam": True,
+        "llm_may_describe_but_not_change_standing": True,
+    },
+}
+
+
+def _bundle_l_to_int(value: _BundleLAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_l_load_json_file(path: _BundleLPath) -> _BundleLDict[str, _BundleLAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_l_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_l_artifacts_from_result_dir(result_dir: _BundleLPath) -> _BundleLDict[str, _BundleLDict[str, _BundleLAny]]:
+    artifacts = {}
+    for file_name in sorted(_BUNDLE_L_INPUT_FILES):
+        payload = _bundle_l_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[file_name] = payload
+    return artifacts
+
+
+def _bundle_l_rule_ids_unique(model: _BundleLDict[str, _BundleLAny]) -> bool:
+    ids = [rule.get("id") for rule in model.get("consequence_rules", []) if isinstance(rule, dict)]
+    return len(ids) == len(set(ids)) and all(ids)
+
+
+def _bundle_l_rules_reference_known_factions(model: _BundleLDict[str, _BundleLAny]) -> bool:
+    factions = set(model.get("factions", {}).keys())
+    axes = set(model.get("standing_axes", []))
+    for rule in model.get("consequence_rules", []):
+        if not isinstance(rule, dict):
+            return False
+        if rule.get("faction") not in factions or rule.get("axis") not in axes:
+            return False
+    return True
+
+
+def _bundle_l_count_existing_consequences(payload: _BundleLAny) -> int:
+    if isinstance(payload, dict):
+        for key in ("consequence_count", "reputation_event_count", "standing_change_count"):
+            if key in payload:
+                return _bundle_l_to_int(payload.get(key), 0)
+        total = 0
+        for value in payload.values():
+            total = max(total, _bundle_l_count_existing_consequences(value))
+        return total
+    if isinstance(payload, list):
+        return len(payload)
+    return 0
+
+
+def _bundle_l_evaluate_faction_reputation_v2(artifacts: _BundleLDict[str, _BundleLDict[str, _BundleLAny]]):
+    model = _BUNDLE_L_MODEL
+    faction_count = len(model["factions"])
+    axis_count = len(model["standing_axes"])
+    rule_count = len(model["consequence_rules"])
+    unlock_count = sum(len(faction.get("access_unlocks", [])) for faction in model["factions"].values())
+    block_count = sum(len(faction.get("access_blocks", [])) for faction in model["factions"].values())
+    existing_consequence_count = max([_bundle_l_count_existing_consequences(payload) for payload in artifacts.values()] or [0])
+    contract = model["determinism_contract"]
+    checks = {
+        "faction_catalog_present": faction_count >= 4,
+        "standing_axes_present": axis_count >= 4,
+        "consequence_rules_present": rule_count >= 8,
+        "rule_ids_unique": _bundle_l_rule_ids_unique(model),
+        "rules_reference_known_factions_and_axes": _bundle_l_rules_reference_known_factions(model),
+        "access_unlocks_and_blocks_present": unlock_count >= 8 and block_count >= 4,
+        "determinism_contract_present": bool(contract.get("requires_authoritative_trigger")) and bool(contract.get("llm_may_describe_but_not_change_standing")),
+        "cooldown_contract_present": bool(contract.get("cooldown_prevents_reputation_spam")),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_l_faction_reputation_v2_summary_v1",
+        "source": "bundle_l_faction_reputation_v2",
+        "ok": not failures,
+        "advisory_only": True,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "faction_count": faction_count,
+            "standing_axis_count": axis_count,
+            "consequence_rule_count": rule_count,
+            "access_unlock_count": unlock_count,
+            "access_block_count": block_count,
+            "existing_consequence_count": existing_consequence_count,
+        },
+        "faction_reputation_model": model,
+        "recommended_next_step": "wire_faction_reputation_v2_into_runtime" if not failures else "fix_faction_reputation_v2_advisory_failures",
+    }
+
+
+def _bundle_l_write_summary_if_possible(result_dir: _BundleLPath):
+    try:
+        summary = _bundle_l_evaluate_faction_reputation_v2(_bundle_l_artifacts_from_result_dir(result_dir))
+        _BUNDLE_L_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_L_SUMMARY_FILE, _bundle_l_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_L_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_L_ORIGINAL_PATH_WRITE_TEXT = _BundleLPath.write_text
+
+    def _bundle_l_write_text_with_faction_reputation_v2(self, data, *args, **kwargs):
+        result = _BUNDLE_L_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleLPath(self)
+        try:
+            if path.name in _BUNDLE_L_INPUT_FILES:
+                _bundle_l_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleLPath.write_text = _bundle_l_write_text_with_faction_reputation_v2
+    globals()["_BUNDLE_L_PATH_WRITE_TEXT_PATCHED"] = True
