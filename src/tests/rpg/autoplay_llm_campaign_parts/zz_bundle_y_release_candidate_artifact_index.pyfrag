@@ -1,0 +1,134 @@
+# Bundle Y — Release Candidate Artifact Index + Integrity Digest
+#
+# Archive-oriented integrity index for the 1000-turn release-candidate pipeline.
+# This fragment reads the Bundle X runbook summary, Bundle V handoff manifest,
+# Bundle W handoff dashboard, and selected product artifacts, then writes
+# one-thousand-turn-release-candidate-artifact-index.json.  It is advisory-only.
+
+import hashlib as _bundle_y_hashlib
+import json as _bundle_y_json
+from pathlib import Path as _BundleYPath
+from typing import Any as _BundleYAny, Dict as _BundleYDict, List as _BundleYList
+
+_BUNDLE_Y_INDEX_FILE = "one-thousand-turn-release-candidate-artifact-index.json"
+_BUNDLE_Y_RUNBOOK_SUMMARY_FILE = "one-thousand-turn-release-candidate-runbook-summary.json"
+_BUNDLE_Y_TRACKED_FILES = [
+    "one-thousand-turn-readiness-aggregator-summary.json",
+    "one-thousand-turn-readiness-dashboard-summary.json",
+    "one-thousand-turn-preflight-profile-summary.json",
+    "one-thousand-turn-preflight-result-summary.json",
+    "one-thousand-turn-live-run-profile-summary.json",
+    "one-thousand-turn-live-result-summary.json",
+    "one-thousand-turn-release-candidate-dashboard-summary.json",
+    "one-thousand-turn-release-candidate-handoff-manifest.json",
+    "one-thousand-turn-release-candidate-handoff-dashboard-summary.json",
+    "one-thousand-turn-release-candidate-runbook.md",
+    "one-thousand-turn-release-candidate-runbook-summary.json",
+    "autoplay-campaign-report.html",
+    "autoplay-campaign-results.zip",
+]
+_BUNDLE_Y_REQUIRED_FOR_ARCHIVE = [
+    "one-thousand-turn-release-candidate-handoff-manifest.json",
+    "one-thousand-turn-release-candidate-handoff-dashboard-summary.json",
+    "one-thousand-turn-release-candidate-runbook.md",
+    "one-thousand-turn-release-candidate-runbook-summary.json",
+]
+
+
+def _bundle_y_load_json_file(path: _BundleYPath) -> _BundleYDict[str, _BundleYAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_y_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_y_file_digest(path: _BundleYPath) -> str:
+    try:
+        if not path.exists() or not path.is_file():
+            return ""
+        digest = _bundle_y_hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(65536), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except Exception:
+        return ""
+
+
+def _bundle_y_file_entry(result_dir: _BundleYPath, file_name: str) -> _BundleYDict[str, _BundleYAny]:
+    path = result_dir / file_name
+    present = path.exists() and path.is_file()
+    return {
+        "file": file_name,
+        "present": present,
+        "size_bytes": path.stat().st_size if present else 0,
+        "sha256": _bundle_y_file_digest(path) if present else "",
+        "required_for_archive": file_name in _BUNDLE_Y_REQUIRED_FOR_ARCHIVE,
+    }
+
+
+def _bundle_y_build_artifact_index(result_dir: _BundleYPath) -> _BundleYDict[str, _BundleYAny]:
+    entries = [_bundle_y_file_entry(result_dir, file_name) for file_name in _BUNDLE_Y_TRACKED_FILES]
+    missing_required = [entry["file"] for entry in entries if entry["required_for_archive"] and not entry["present"]]
+    present_entries = [entry for entry in entries if entry["present"]]
+    archive_digest_source = "\n".join(f"{entry['file']}:{entry['sha256']}:{entry['size_bytes']}" for entry in present_entries)
+    archive_digest = _bundle_y_hashlib.sha256(archive_digest_source.encode("utf-8")).hexdigest() if archive_digest_source else ""
+    runbook_summary = _bundle_y_load_json_file(result_dir / _BUNDLE_Y_RUNBOOK_SUMMARY_FILE)
+    runbook_ready = runbook_summary.get("runbook_ready") is True or runbook_summary.get("ok") is True
+    checks = {
+        "runbook_summary_ready": runbook_ready,
+        "required_archive_artifacts_present": not missing_required,
+        "at_least_one_product_artifact_present": any(entry["file"] in {"autoplay-campaign-report.html", "autoplay-campaign-results.zip"} and entry["present"] for entry in entries),
+        "archive_digest_available": bool(archive_digest),
+        "tracked_file_entries_present": len(entries) == len(_BUNDLE_Y_TRACKED_FILES),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_y_release_candidate_artifact_index_v1",
+        "source": "bundle_y_release_candidate_artifact_index",
+        "ok": not failures,
+        "advisory_only": True,
+        "archive_index_ready": not failures,
+        "checks": checks,
+        "advisory_failures": failures,
+        "missing_required_archive_artifacts": missing_required,
+        "archive_digest_sha256": archive_digest,
+        "tracked_files": entries,
+        "metrics": {
+            "tracked_file_count": len(entries),
+            "present_tracked_file_count": len(present_entries),
+            "required_archive_file_count": len(_BUNDLE_Y_REQUIRED_FOR_ARCHIVE),
+            "missing_required_archive_file_count": len(missing_required),
+            "total_present_bytes": sum(int(entry.get("size_bytes") or 0) for entry in present_entries),
+        },
+        "recommended_next_step": "archive_release_candidate_artifact_index" if not failures else "complete_release_candidate_archive_artifacts",
+    }
+
+
+def _bundle_y_write_index_if_possible(result_dir: _BundleYPath):
+    try:
+        index = _bundle_y_build_artifact_index(result_dir)
+        _BUNDLE_Y_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_Y_INDEX_FILE, _bundle_y_json.dumps(index, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return index
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_Y_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_Y_ORIGINAL_PATH_WRITE_TEXT = _BundleYPath.write_text
+
+    def _bundle_y_write_text_with_artifact_index(self, data, *args, **kwargs):
+        result = _BUNDLE_Y_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleYPath(self)
+        try:
+            if path.name in set(_BUNDLE_Y_TRACKED_FILES):
+                _bundle_y_write_index_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleYPath.write_text = _bundle_y_write_text_with_artifact_index
+    globals()["_BUNDLE_Y_PATH_WRITE_TEXT_PATCHED"] = True
