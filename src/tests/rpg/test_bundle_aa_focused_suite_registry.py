@@ -33,14 +33,14 @@ def _handoff_payload(namespace):
     }
 
 
-def test_bundle_aa_registry_lists_full_e_through_z_suite_in_order():
+def test_bundle_aa_registry_lists_full_e_through_ab_suite_in_order():
     namespace = _load_bundle_aa_namespace()
     test_files = namespace["_BUNDLE_AA_TEST_FILES"]
     command = namespace["_bundle_aa_build_focused_command"]()
 
-    assert len(test_files) == 22
+    assert len(test_files) == 23
     assert test_files[0] == "src/tests/rpg/test_bundle_e_product_report_rendering.py"
-    assert test_files[-1] == "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py"
+    assert test_files[-1] == "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
     assert command[:3] == ["python", "-m", "pytest"]
     assert command[3:] == test_files
     assert namespace["_bundle_aa_duplicate_test_files"]() == []
@@ -66,8 +66,8 @@ def test_bundle_aa_registry_passes_when_handoff_command_matches(tmp_path):
     assert result["checks"]["registry_files_exist"] is True
     assert result["checks"]["command_starts_with_pytest"] is True
     assert result["checks"]["handoff_command_matches_registry"] is True
-    assert result["canonical_command"]["argv"][-1] == "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py"
-    assert result["recommended_next_step"] == "use_canonical_e_z_focused_suite_command"
+    assert result["canonical_command"]["argv"][-1] == "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
+    assert result["recommended_next_step"] == "use_canonical_e_ab_focused_suite_command"
 
 
 def test_bundle_aa_registry_reports_handoff_command_drift(tmp_path):
@@ -104,7 +104,7 @@ def test_bundle_aa_writes_summary_when_handoff_manifest_is_exported(tmp_path):
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         assert summary["ok"] is True
         assert summary["focused_suite_registry_ready"] is True
-        assert summary["metrics"]["test_file_count"] == 22
-        assert summary["canonical_command"]["argv"][-1] == "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py"
+        assert summary["metrics"]["test_file_count"] == 23
+        assert summary["canonical_command"]["argv"][-1] == "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
     finally:
         Path.write_text = original_write_text
