@@ -49,6 +49,10 @@ _BUNDLE_V_COMMANDS: _BundleVDict[str, _BundleVList[str]] = {
         "src/tests/rpg/test_bundle_t_live_1000_result_gate.py",
         "src/tests/rpg/test_bundle_u_release_candidate_dashboard.py",
         "src/tests/rpg/test_bundle_v_release_candidate_handoff_manifest.py",
+        "src/tests/rpg/test_bundle_w_release_candidate_handoff_dashboard.py",
+        "src/tests/rpg/test_bundle_x_release_candidate_runbook.py",
+        "src/tests/rpg/test_bundle_y_release_candidate_artifact_index.py",
+        "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py",
     ],
     "preflight_1000": [
         "python", "src/tests/rpg/autoplay_llm_campaign.py",
