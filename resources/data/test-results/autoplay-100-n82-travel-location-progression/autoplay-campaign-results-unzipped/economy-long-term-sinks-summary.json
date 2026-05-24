@@ -1,0 +1,29 @@
+{
+  "event_count": 12,
+  "format_version": "n121_economy_long_term_sinks_summary_v1",
+  "missing_long_term_sink_parts": [],
+  "ok": true,
+  "paid_count": 12,
+  "policy": "Long-term sinks require recurring expense pressure plus deterministic merchant-refresh and scarcity/price-pressure policy events.",
+  "recurring_expense_count": 0,
+  "scarcity_or_price_variation_count": 1,
+  "scarcity_or_price_variation_events": [
+    {
+      "paid_count": 12,
+      "reason": "recurring_upkeep_and_resource_warnings",
+      "turn": 96,
+      "type": "scarcity_price_pressure_policy",
+      "warning_count": 3
+    }
+  ],
+  "stock_refresh_count": 1,
+  "stock_refresh_events": [
+    {
+      "reason": "recurring_economy_tick",
+      "restock_scope": "basic_services",
+      "turn": 18,
+      "type": "merchant_stock_refresh_policy"
+    }
+  ],
+  "warning_count": 3
+}

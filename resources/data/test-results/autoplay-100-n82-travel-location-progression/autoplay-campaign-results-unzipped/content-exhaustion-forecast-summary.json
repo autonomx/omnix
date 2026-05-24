@@ -1,0 +1,73 @@
+{
+  "format_version": "n131_content_exhaustion_forecast_summary_v1",
+  "source": "n131_story_content_graph_exhaustion_forecast",
+  "ok": true,
+  "advisory_ok": true,
+  "failed_checks": [],
+  "checks": {
+    "readiness_content_classification_ok": true,
+    "graph_progression_density_ok": true,
+    "unique_node_density_ok": true,
+    "waiting_for_next_graph_pack_ok": true,
+    "campaign_graphs_not_fully_exhausted_ok": true,
+    "available_next_graph_count_ok": true,
+    "story_arc_resolution_present": true,
+    "followup_arc_progression_present": true,
+    "escalation_arc_progression_present": true,
+    "pressure_pacing_active": true
+  },
+  "requested_turns": 100,
+  "turns_executed": 100,
+  "classification": "content_sufficient_for_requested_turns",
+  "graph_count": 9,
+  "completed_graph_count": 8,
+  "active_graph_count": 1,
+  "available_next_graph_count": 1,
+  "campaign_graphs_complete": false,
+  "waiting_for_next_graph_pack": false,
+  "progression_changed_count": 100,
+  "unique_progression_node_count": 100,
+  "graph_progression_density": 1.0,
+  "unique_node_density": 1.0,
+  "completed_graph_ratio": 0.8888888888888888,
+  "turns_until_content_exhaustion_estimate": 200,
+  "story_arc_resolution": {
+    "completed_count": 2,
+    "failed_count": 0,
+    "active_count": 0,
+    "status_counts": {
+      "failed": 2
+    }
+  },
+  "followup_arc_progression": {
+    "progression_event_count": 554,
+    "direct_graph_progression_count": 554,
+    "progressed_count": 0,
+    "progressed_arc_ids": [],
+    "world_signal_count": 0
+  },
+  "escalation_arc_progression": {
+    "progression_event_count": 194,
+    "direct_graph_escalation_count": 194,
+    "progressed_count": 0,
+    "progressed_arc_ids": [],
+    "pressure_event_count": 0,
+    "world_signal_count": 0
+  },
+  "pressure_pacing": {
+    "accepted_pressure_count": 190,
+    "accepted_pressure_event_count": 190,
+    "direct_graph_pressure_count": 190,
+    "direct_graph_pacing_bridge_active": true,
+    "rejected_pressure_event_count": 0,
+    "rejected_by_reason": {}
+  },
+  "recommended_next_actions": [
+    "Run a 250/300-turn dry profile before a full 1000-turn run.",
+    "If available_next_graph_count drops to zero, add graph packs or explicit waiting-for-next-graph handling.",
+    "Track unique node density to catch repeated graph-content reuse before it becomes a loop."
+  ],
+  "artifact_files": {
+    "summary": "content-exhaustion-forecast-summary.json"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "format_version": "n11721_readiness_gap_source_consistency_v1",
+  "ok": true,
+  "advisory_only": true,
+  "dialogue_repair_count_source": "dialogue-action-relevance-summary.json",
+  "previous_gap_dialogue_repaired_count": 34,
+  "refreshed_gap_dialogue_repaired_count": 34,
+  "artifact_dialogue_repaired_count": 34,
+  "previous_gap_repair_or_mismatch_rate": 0.0,
+  "refreshed_gap_repair_or_mismatch_rate": 0.0,
+  "artifact_repair_or_mismatch_rate": 0.0,
+  "changed_by_refresh": false,
+  "message": "1000-turn readiness gap report was refreshed from final artifact summaries before persistence."
+}

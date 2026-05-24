@@ -1,0 +1,461 @@
+{
+  "format_version": "n128_survival_exit_criteria_summary_v1",
+  "source": "n128_survival_system_exit_criteria_regression_lock",
+  "ok": true,
+  "failed_checks": [],
+  "checks": {
+    "survival_autoplay_evidence_ok": true,
+    "survival_response_ok": true,
+    "survival_metric_source_ok": true,
+    "blocked_relief_count_ok": true,
+    "drink_water_count_ok": true,
+    "eat_food_count_ok": true,
+    "thirst_capped_turns_ok": true,
+    "longest_thirst_capped_streak_ok": true,
+    "thirst_balance_attention_ok": true,
+    "runtime_probe_attached_ok": true,
+    "runtime_override_applied_or_not_needed_ok": true
+  },
+  "requested_turns": 100,
+  "turns_executed": 100,
+  "drink_water_count": 4,
+  "eat_food_count": 2,
+  "rest_count": 1,
+  "relief_counts_by_kind": {
+    "drink_water": 4,
+    "rest": 1,
+    "eat_food": 2
+  },
+  "blocked_relief_count": 0,
+  "blocked_counts_by_reason": {},
+  "capped_thirst_turns": 0,
+  "longest_capped_streaks": {
+    "hunger": 0,
+    "thirst": 0,
+    "fatigue": 0
+  },
+  "thirst_balance_attention": false,
+  "emergency_water_count": 3,
+  "inventory_consumed_summary": [
+    {
+      "item_id": "autoplay_field_ration_1",
+      "name": "Autoplay Field Ration",
+      "quantity": 1
+    },
+    {
+      "item_id": "autoplay_field_ration_2",
+      "name": "Autoplay Field Ration",
+      "quantity": 1
+    },
+    {
+      "item_id": "autoplay_waterskin_4",
+      "name": "Autoplay Waterskin",
+      "quantity": 1
+    },
+    {
+      "item_id": "emergency_water_cache_1",
+      "name": "Emergency Water Cache",
+      "quantity": 3
+    }
+  ],
+  "runtime_probe_summary": {
+    "format_version": "n127101_survival_runtime_probe_summary_v1",
+    "source": "n127101_critical_thirst_override_runtime_attachment_probe",
+    "turn_count": 100,
+    "probe_rows": 100,
+    "wrapper_called_rows": 100,
+    "previous_apply_turn_called_rows": 100,
+    "previous_apply_turn_returned_rows": 100,
+    "promotion_called_rows": 100,
+    "promotion_promoted_rows": 5,
+    "persistence_called_rows": 100,
+    "persistence_applied_rows": 95,
+    "override_called_rows": 100,
+    "override_applied_rows": 3,
+    "turn_contract_attached_rows": 100,
+    "runtime_state_attached_rows": 100,
+    "wrapper_attached_ok": true,
+    "override_invoked_ok": true,
+    "override_applied_ok": true,
+    "override_skip_reasons": {
+      "thirst_below_critical_threshold": 96,
+      "drink_already_applied": 1,
+      "critical_thirst_hard_override": 3
+    },
+    "promotion_reasons": {
+      "survival_pressure_below_threshold": 40,
+      "highest_pressure_backed_survival_suggestion": 5,
+      "no_backed_survival_suggestions": 55
+    },
+    "samples": [
+      {
+        "turn_index": 1,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 2,
+          "thirst": 3,
+          "fatigue": 2
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 2,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 3,
+          "thirst": 5,
+          "fatigue": 3
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 3,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 4,
+          "thirst": 7,
+          "fatigue": 4
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 4,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 5,
+          "thirst": 9,
+          "fatigue": 5
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 5,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 6,
+          "thirst": 11,
+          "fatigue": 6
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 6,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 7,
+          "thirst": 13,
+          "fatigue": 7
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 7,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 8,
+          "thirst": 15,
+          "fatigue": 8
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 8,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 9,
+          "thirst": 17,
+          "fatigue": 9
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 9,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 10,
+          "thirst": 19,
+          "fatigue": 10
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 10,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 11,
+          "thirst": 21,
+          "fatigue": 11
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 11,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 12,
+          "thirst": 23,
+          "fatigue": 12
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 12,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 13,
+          "thirst": 25,
+          "fatigue": 13
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 13,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 14,
+          "thirst": 27,
+          "fatigue": 14
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 14,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 15,
+          "thirst": 29,
+          "fatigue": 15
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 15,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 0,
+          "thirst": 0,
+          "fatigue": 0
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 16,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 16,
+          "thirst": 31,
+          "fatigue": 16
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 17,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 17,
+          "thirst": 33,
+          "fatigue": 17
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 18,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 18,
+          "thirst": 35,
+          "fatigue": 18
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 19,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 19,
+          "thirst": 37,
+          "fatigue": 19
+        },
+        "override_needs_after": {}
+      },
+      {
+        "turn_index": 20,
+        "override_called": true,
+        "override_applied": false,
+        "override_reason": "thirst_below_critical_threshold",
+        "override_action_kind": "",
+        "promotion_promoted": false,
+        "promotion_reason": "survival_pressure_below_threshold",
+        "override_needs_before": {
+          "hunger": 20,
+          "thirst": 39,
+          "fatigue": 20
+        },
+        "override_needs_after": {}
+      }
+    ],
+    "applied_samples": [
+      {
+        "turn_index": 64,
+        "override_called": true,
+        "override_applied": true,
+        "override_reason": "critical_thirst_hard_override",
+        "override_action_kind": "drink_water",
+        "promotion_promoted": false,
+        "promotion_reason": "no_backed_survival_suggestions",
+        "override_needs_before": {
+          "hunger": 31,
+          "thirst": 91,
+          "fatigue": 36
+        },
+        "override_needs_after": {
+          "hunger": 31,
+          "thirst": 61,
+          "fatigue": 36
+        }
+      },
+      {
+        "turn_index": 79,
+        "override_called": true,
+        "override_applied": true,
+        "override_reason": "critical_thirst_hard_override",
+        "override_action_kind": "drink_water",
+        "promotion_promoted": true,
+        "promotion_reason": "highest_pressure_backed_survival_suggestion",
+        "override_needs_before": {
+          "hunger": 46,
+          "thirst": 91,
+          "fatigue": 26
+        },
+        "override_needs_after": {
+          "hunger": 46,
+          "thirst": 61,
+          "fatigue": 26
+        }
+      },
+      {
+        "turn_index": 95,
+        "override_called": true,
+        "override_applied": true,
+        "override_reason": "critical_thirst_hard_override",
+        "override_action_kind": "drink_water",
+        "promotion_promoted": false,
+        "promotion_reason": "no_backed_survival_suggestions",
+        "override_needs_before": {
+          "hunger": 31,
+          "thirst": 91,
+          "fatigue": 41
+        },
+        "override_needs_after": {
+          "hunger": 31,
+          "thirst": 61,
+          "fatigue": 41
+        }
+      }
+    ]
+  },
+  "readiness_survival_gates": {
+    "survival_autoplay_evidence_ok": true,
+    "survival_response_ok": true,
+    "survival_metric_source_ok": true
+  },
+  "artifact_files": {
+    "summary": "survival-exit-criteria-summary.json",
+    "survival_pressure": "survival-pressure-relief-summary.json"
+  }
+}
