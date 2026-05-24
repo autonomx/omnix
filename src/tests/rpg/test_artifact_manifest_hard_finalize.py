@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 from app.rpg.session.autoplay_manifest_hard_finalize import hard_finalize_artifact_manifest
+from app.rpg.session.autoplay_manifest_zip_finalize import finalize_manifest_in_result_zips
 
 
 BUNDLE_A = {
@@ -105,6 +107,28 @@ def test_hard_finalize_patches_sidecars_and_keeps_manifest_as_final_write(tmp_pa
     final_manifest = _read_json(result_dir / "artifact-manifest.json")
     assert final_manifest["final_write_after_all_wrappers"] is True
     assert final_manifest["embedded_artifacts"]["readiness-report-projection-summary.json"]["ok"] is True
+
+
+def test_zip_manifest_finalizer_updates_sibling_results_zip(tmp_path) -> None:
+    result_dir = tmp_path / "autoplay-campaign-results-unzipped"
+    _seed_result_dir(result_dir, empty_manifest=True)
+    hard_finalize_artifact_manifest(result_dir)
+    zip_path = tmp_path / "autoplay-campaign-results.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("artifact-manifest.json", "")
+        zf.writestr("summary.json", json.dumps({"ok": True}))
+
+    result = finalize_manifest_in_result_zips(result_dir)
+
+    assert result["applied"] is True
+    assert result["ok"] is True
+    assert str(zip_path) in result["updated_paths"]
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        manifest = json.loads(zf.read("artifact-manifest.json").decode("utf-8"))
+        assert manifest["hard_finalized"] is True
+        assert manifest["zip_manifest_finalized"] is True
+        assert manifest["embedded_artifacts"]["readiness-report-projection-summary.json"]["ok"] is True
+        assert json.loads(zf.read("summary.json").decode("utf-8"))["ok"] is True
 
 
 def test_hard_finalize_skips_when_evaluation_is_missing(tmp_path) -> None:
