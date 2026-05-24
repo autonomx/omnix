@@ -29,12 +29,43 @@ def _autoplay_campaign_fragment_paths() -> List[Path]:
     return fragments
 
 
+def _combine_autoplay_campaign_fragments(fragments: List[Path]) -> str:
+    """Combine fragments while keeping all future imports at file start.
+
+    The fragment loader executes every ``*.pyfrag`` as one synthetic module.
+    Late fixes may need lexicographically-early fragments to register guards
+    before the rest of the runtime loads, but many existing fragments still
+    contain ``from __future__`` imports.  Python requires those imports before any
+    other executable statement in the *combined* module, so normalize them here.
+    """
+
+    future_imports: List[str] = []
+    seen_futures = set()
+    body_parts: List[str] = []
+    for fragment in fragments:
+        body_lines: List[str] = []
+        for line in fragment.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("from __future__ import "):
+                if stripped not in seen_futures:
+                    seen_futures.add(stripped)
+                    future_imports.append(stripped)
+                continue
+            body_lines.append(line)
+        body_parts.append("\n".join(body_lines))
+    prefix = "\n".join(future_imports)
+    body = "\n".join(body_parts)
+    if prefix:
+        return prefix + "\n\n" + body
+    return body
+
+
 def _load_autoplay_campaign_runtime() -> None:
     global _RUNTIME_LOADED
     if _RUNTIME_LOADED:
         return
     fragments = _autoplay_campaign_fragment_paths()
-    combined_source = "\n".join(fragment.read_text(encoding="utf-8") for fragment in fragments)
+    combined_source = _combine_autoplay_campaign_fragments(fragments)
     combined_filename = str(
         Path(__file__).with_name("autoplay_llm_campaign_parts")
         / "__combined_autoplay_llm_campaign__.py"
