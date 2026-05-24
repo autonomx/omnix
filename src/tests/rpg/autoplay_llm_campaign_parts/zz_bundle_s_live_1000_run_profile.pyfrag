@@ -1,0 +1,228 @@
+# Bundle S — Live 1000-Turn Run Profile + Promotion Guard
+#
+# Advisory profile layer for the first live 1000-turn campaign run.  This
+# fragment requires Bundle R's preflight promotion artifact before recommending
+# a live run, exports a deterministic command profile, and writes
+# one-thousand-turn-live-run-profile-summary.json.  It does not mutate
+# authoritative simulation state.
+
+import json as _bundle_s_json
+import os as _bundle_s_os
+from pathlib import Path as _BundleSPath
+from typing import Any as _BundleSAny, Dict as _BundleSDict, List as _BundleSList, Tuple as _BundleSTuple
+
+_BUNDLE_S_PROFILE_NAME = "live_1000"
+_BUNDLE_S_SUMMARY_FILE = "one-thousand-turn-live-run-profile-summary.json"
+_BUNDLE_S_PREFLIGHT_RESULT_FILE = "one-thousand-turn-preflight-result-summary.json"
+_BUNDLE_S_TARGET_TURNS = 1000
+
+_BUNDLE_S_PROFILE: _BundleSDict[str, _BundleSAny] = {
+    "format_version": "bundle_s_live_1000_turn_profile_v1",
+    "source": "bundle_s_live_1000_run_profile",
+    "name": _BUNDLE_S_PROFILE_NAME,
+    "target_turns": _BUNDLE_S_TARGET_TURNS,
+    "intent": "First live 1000-turn LLM campaign run after the preflight result gate promotes it.",
+    "requires_preflight_promotion": True,
+    "defaults": {
+        "turns": _BUNDLE_S_TARGET_TURNS,
+        "narration_mode": "deferred",
+        "background_llm_mode": "combined",
+        "checkpoint_interval": 25,
+        "artifact_detail": "full",
+        "compact_transcript_mode": True,
+        "final_background_drain_required": True,
+        "promotion_gate_required": True,
+        "zip_artifacts_required": True,
+    },
+    "guardrails": {
+        "require_preflight_result_file": True,
+        "require_promote_to_live_1000_turn_run": True,
+        "do_not_run_if_preflight_failed": True,
+        "preserve_full_report_artifacts": True,
+        "preserve_console_log_artifacts": True,
+    },
+    "canonical_cli_args": [
+        "--turns", "1000",
+        "--narration-mode", "deferred",
+        "--background-llm-mode", "combined",
+        "--checkpoint-interval", "25",
+        "--artifact-detail", "full",
+        "--compact-transcript-mode",
+        "--zip-results",
+    ],
+}
+
+
+def _bundle_s_load_json_file(path: _BundleSPath) -> _BundleSDict[str, _BundleSAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_s_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_s_bool(value: _BundleSAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed", "ready", "promote"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed", "not_ready", "blocked"}:
+        return False
+    return default
+
+
+def _bundle_s_build_live_command(script: str = "src/tests/rpg/autoplay_llm_campaign.py") -> _BundleSList[str]:
+    return ["python", script, *list(_BUNDLE_S_PROFILE["canonical_cli_args"])]
+
+
+def _bundle_s_missing_command_flags(argv: _BundleSList[str]) -> _BundleSList[str]:
+    supplied = {arg.split("=", 1)[0] for arg in argv if str(arg).startswith("--")}
+    required = [
+        "--turns",
+        "--narration-mode",
+        "--background-llm-mode",
+        "--checkpoint-interval",
+        "--artifact-detail",
+        "--compact-transcript-mode",
+        "--zip-results",
+    ]
+    return [flag for flag in required if flag not in supplied]
+
+
+def _bundle_s_strip_profile_args(argv: _BundleSList[str]) -> _BundleSTuple[_BundleSList[str], bool]:
+    stripped: _BundleSList[str] = []
+    applied = False
+    profile_flags = {"--profile", "--autoplay-profile", "--live-profile", "--run-profile"}
+    index = 0
+    while index < len(argv):
+        item = argv[index]
+        if item in profile_flags and index + 1 < len(argv):
+            if argv[index + 1] == _BUNDLE_S_PROFILE_NAME:
+                applied = True
+                index += 2
+                continue
+        if any(item.startswith(flag + "=") for flag in profile_flags):
+            if item.split("=", 1)[1] == _BUNDLE_S_PROFILE_NAME:
+                applied = True
+                index += 1
+                continue
+        stripped.append(item)
+        index += 1
+    return stripped, applied
+
+
+def _bundle_s_append_missing_profile_args(argv: _BundleSList[str]) -> _BundleSList[str]:
+    expanded = list(argv)
+    supplied = {arg.split("=", 1)[0] for arg in expanded if str(arg).startswith("--")}
+    for flag, value in [
+        ("--turns", "1000"),
+        ("--narration-mode", "deferred"),
+        ("--background-llm-mode", "combined"),
+        ("--checkpoint-interval", "25"),
+        ("--artifact-detail", "full"),
+    ]:
+        if flag not in supplied:
+            expanded.extend([flag, value])
+    for flag in ("--compact-transcript-mode", "--zip-results"):
+        if flag not in supplied:
+            expanded.append(flag)
+    return expanded
+
+
+def _bundle_s_apply_live_env() -> None:
+    defaults = _BUNDLE_S_PROFILE["defaults"]
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_PROFILE", _BUNDLE_S_PROFILE_NAME)
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_TURNS", str(defaults["turns"]))
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_NARRATION_MODE", str(defaults["narration_mode"]))
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_BACKGROUND_LLM_MODE", str(defaults["background_llm_mode"]))
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_CHECKPOINT_INTERVAL", str(defaults["checkpoint_interval"]))
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_ARTIFACT_DETAIL", str(defaults["artifact_detail"]))
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_COMPACT_TRANSCRIPT_MODE", "1")
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_ZIP_RESULTS", "1")
+
+
+def _bundle_s_evaluate_live_run_profile(result_dir: _BundleSPath) -> _BundleSDict[str, _BundleSAny]:
+    preflight = _bundle_s_load_json_file(result_dir / _BUNDLE_S_PREFLIGHT_RESULT_FILE)
+    command = _bundle_s_build_live_command()
+    missing_flags = _bundle_s_missing_command_flags(command)
+    preflight_present = bool(preflight)
+    promoted = _bundle_s_bool(preflight.get("promote_to_live_1000_turn_run"), False)
+    preflight_ok = _bundle_s_bool(preflight.get("ok"), False)
+    checks = {
+        "live_profile_descriptor_present": _BUNDLE_S_PROFILE["name"] == _BUNDLE_S_PROFILE_NAME,
+        "target_turns_1000": _BUNDLE_S_PROFILE["target_turns"] == _BUNDLE_S_TARGET_TURNS,
+        "canonical_command_complete": not missing_flags,
+        "promotion_guard_required": bool(_BUNDLE_S_PROFILE.get("requires_preflight_promotion")),
+        "preflight_result_present": preflight_present,
+        "preflight_result_ok": preflight_ok,
+        "preflight_promoted_live_run": promoted,
+        "compact_transcript_mode_enabled": bool(_BUNDLE_S_PROFILE["defaults"].get("compact_transcript_mode")),
+        "zip_artifacts_required": bool(_BUNDLE_S_PROFILE["defaults"].get("zip_artifacts_required")),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_s_live_1000_turn_profile_summary_v1",
+        "source": "bundle_s_live_1000_run_profile",
+        "ok": not failures,
+        "advisory_only": True,
+        "ready_to_start_live_1000_turn_run": not failures,
+        "profile": _BUNDLE_S_PROFILE,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "target_turns": _BUNDLE_S_TARGET_TURNS,
+            "canonical_command_arg_count": len(command),
+            "missing_command_flag_count": len(missing_flags),
+            "preflight_result_present": preflight_present,
+            "preflight_promoted_live_run": promoted,
+        },
+        "canonical_command": command,
+        "missing_command_flags": missing_flags,
+        "recommended_next_step": "run_live_1000_command" if not failures else "run_or_fix_preflight_1000_before_live_1000",
+    }
+
+
+def _bundle_s_write_summary_if_possible(result_dir: _BundleSPath):
+    try:
+        summary = _bundle_s_evaluate_live_run_profile(result_dir)
+        _BUNDLE_S_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_S_SUMMARY_FILE, _bundle_s_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_S_MAIN_PATCHED") and callable(globals().get("main")):
+    _BUNDLE_S_ORIGINAL_MAIN = globals()["main"]
+
+    def _bundle_s_main(argv=None):
+        args = list(argv or [])
+        args, applied = _bundle_s_strip_profile_args(args)
+        if applied:
+            _bundle_s_apply_live_env()
+            args = _bundle_s_append_missing_profile_args(args)
+        return _BUNDLE_S_ORIGINAL_MAIN(args)
+
+    globals()["main"] = _bundle_s_main
+    globals()["_BUNDLE_S_MAIN_PATCHED"] = True
+
+
+if not globals().get("_BUNDLE_S_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_S_ORIGINAL_PATH_WRITE_TEXT = _BundleSPath.write_text
+
+    def _bundle_s_write_text_with_live_run_profile(self, data, *args, **kwargs):
+        result = _BUNDLE_S_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleSPath(self)
+        try:
+            if path.name == _BUNDLE_S_PREFLIGHT_RESULT_FILE:
+                _bundle_s_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleSPath.write_text = _bundle_s_write_text_with_live_run_profile
+    globals()["_BUNDLE_S_PATH_WRITE_TEXT_PATCHED"] = True
