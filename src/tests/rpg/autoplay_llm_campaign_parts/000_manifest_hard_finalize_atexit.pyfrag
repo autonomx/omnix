@@ -6,6 +6,12 @@
 import atexit as _MANIFEST_HARD_ATEXIT_atexit  # noqa: E402
 from pathlib import Path as _MANIFEST_HARD_ATEXIT_Path  # noqa: E402
 
+from app.rpg.session.artifact_export_invariant import (  # noqa: E402
+    validate_artifact_export_invariant as _manifest_hard_atexit_validate_invariant,
+)
+from app.rpg.session.artifact_manifest_digest import (  # noqa: E402
+    write_artifact_manifest_digest as _manifest_hard_atexit_write_digest,
+)
 from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
     hard_finalize_artifact_manifest as _manifest_hard_atexit_finalize,
 )
@@ -59,15 +65,25 @@ def _manifest_hard_atexit_run():
         try:
             mirror = _manifest_hard_atexit_mirror_repair(path)
             item = _manifest_hard_atexit_finalize(path)
+            invariant = _manifest_hard_atexit_validate_invariant(path)
+            digest = _manifest_hard_atexit_write_digest(path) if invariant.get("ok") else {"applied": False, "reason": "invariant_failed"}
         except Exception as exc:
             mirror = {"applied": False, "source": "manifest_hard_finalize_atexit", "path": str(path), "error": repr(exc)}
             item = {"applied": False, "source": "manifest_hard_finalize_atexit", "path": str(path), "error": repr(exc)}
-        repairs.append({"path": str(path), "mirror": mirror, "manifest": item})
-        if mirror.get("applied") or item.get("applied"):
+            invariant = {"ok": False, "error": repr(exc)}
+            digest = {"applied": False, "source": "manifest_hard_finalize_atexit", "path": str(path), "error": repr(exc)}
+        repairs.append({"path": str(path), "mirror": mirror, "manifest": item, "invariant": invariant, "digest": digest})
+        if mirror.get("applied") or item.get("applied") or digest.get("applied"):
             break
     globals()["MANIFEST_HARD_ATEXIT_RESULT"] = {
         "source": "manifest_hard_finalize_atexit",
-        "applied": any(item.get("mirror", {}).get("applied") or item.get("manifest", {}).get("applied") for item in repairs),
+        "applied": any(
+            item.get("mirror", {}).get("applied")
+            or item.get("manifest", {}).get("applied")
+            or item.get("digest", {}).get("applied")
+            for item in repairs
+        ),
+        "digest_ok": any(item.get("digest", {}).get("ok") for item in repairs),
         "repairs": repairs,
     }
 
