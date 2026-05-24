@@ -1,0 +1,404 @@
+# Bundle H — Memory Aging + World-State Compression Gate
+#
+# Advisory/bounded layer for 1000-turn scale readiness.  This fragment does not
+# mutate authoritative game state.  It exports a deterministic memory/state
+# compression policy, computes boundedness gates from available artifacts, and
+# injects a compact report section into generated campaign HTML.
+
+import html as _bundle_h_html
+import json as _bundle_h_json
+from pathlib import Path as _BundleHPath
+from typing import Any as _BundleHAny, Dict as _BundleHDict, Iterable as _BundleHIterable, List as _BundleHList, Optional as _BundleHOptional, Tuple as _BundleHTuple
+
+
+_BUNDLE_H_SUMMARY_FILE = "memory-state-compression-summary.json"
+_BUNDLE_H_TARGET_TURNS = 1000
+_BUNDLE_H_MAX_STATE_BYTES = 16 * 1024 * 1024
+_BUNDLE_H_MAX_PROJECTED_STATE_BYTES = 48 * 1024 * 1024
+_BUNDLE_H_MAX_NPC_MEMORY_ROWS_PER_NPC = 64
+_BUNDLE_H_MAX_JOURNAL_RAW_ROWS = 120
+_BUNDLE_H_MAX_WORLD_EVENT_RETAINED_ROWS = 250
+_BUNDLE_H_REPORT_MARKER = 'id="bundle-h-memory-state-compression"'
+
+_BUNDLE_H_POLICY: _BundleHDict[str, _BundleHAny] = {
+    "format_version": "bundle_h_memory_state_compression_policy_v1",
+    "source": "bundle_h_memory_state_compression",
+    "recent_detail_turn_window": 25,
+    "summarize_after_turns": 75,
+    "low_importance_decay_after_turns": 150,
+    "high_importance_persist_threshold": 0.75,
+    "memory_aging_policy": {
+        "recent_memories": "keep detailed while inside recent_detail_turn_window",
+        "older_memories": "summarize after summarize_after_turns",
+        "low_importance_memories": "decay after low_importance_decay_after_turns unless referenced by active quest/social consequence",
+        "high_importance_memories": "persist as compact causal summary when importance >= high_importance_persist_threshold",
+    },
+    "world_state_compression": {
+        "locations": "compact location summaries with recent events and unresolved hooks",
+        "npc_relationships": "compact relationship summaries with trust/fear/debt/obligation deltas",
+        "quest_history": "compact resolved/unresolved objective timeline",
+        "journal": "bounded recap plus recent raw rows only",
+    },
+    "hard_gates": {
+        "max_state_bytes": _BUNDLE_H_MAX_STATE_BYTES,
+        "max_projected_state_bytes": _BUNDLE_H_MAX_PROJECTED_STATE_BYTES,
+        "max_npc_memory_rows_per_npc": _BUNDLE_H_MAX_NPC_MEMORY_ROWS_PER_NPC,
+        "max_journal_raw_rows": _BUNDLE_H_MAX_JOURNAL_RAW_ROWS,
+        "max_world_event_retained_rows": _BUNDLE_H_MAX_WORLD_EVENT_RETAINED_ROWS,
+    },
+}
+
+_BUNDLE_H_RELEVANT_INPUT_FILES = {
+    "summary.json",
+    "long-run-dry-run-projection-summary.json",
+    "readiness-report-projection-summary.json",
+    "npc-agency-schedule-summary.json",
+    "content-depth-expansion-pack-summary.json",
+    "artifact-manifest-digest.json",
+}
+
+
+def _bundle_h_safe_html(value: _BundleHAny) -> str:
+    return _bundle_h_html.escape("" if value is None else str(value), quote=True)
+
+
+def _bundle_h_to_int(value: _BundleHAny, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_h_load_json_file(path: _BundleHPath) -> _BundleHDict[str, _BundleHAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_h_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_h_first_scalar(payloads: _BundleHIterable[_BundleHDict[str, _BundleHAny]], *keys: str) -> _BundleHAny:
+    for payload in payloads:
+        for key in keys:
+            if key in payload and not isinstance(payload.get(key), (dict, list)):
+                return payload.get(key)
+    return None
+
+
+def _bundle_h_json_size(value: _BundleHAny) -> int:
+    try:
+        return len(_bundle_h_json.dumps(value, sort_keys=True, default=str).encode("utf-8"))
+    except Exception:
+        return 0
+
+
+def _bundle_h_walk(value: _BundleHAny):
+    stack = [value]
+    while stack:
+        current = stack.pop()
+        yield current
+        if isinstance(current, dict):
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+
+
+def _bundle_h_count_lists_by_key(payload: _BundleHAny, keys: _BundleHIterable[str]) -> int:
+    key_set = {key.lower() for key in keys}
+    total = 0
+    for node in _bundle_h_walk(payload):
+        if not isinstance(node, dict):
+            continue
+        for key, value in node.items():
+            if key.lower() in key_set and isinstance(value, list):
+                total += len(value)
+            elif key.lower() in key_set and isinstance(value, dict):
+                total += len(value)
+    return total
+
+
+def _bundle_h_max_npc_memory_rows(payload: _BundleHAny) -> int:
+    memory_keys = {"memories", "memory_rows", "npc_memories", "social_memories", "relationship_memories"}
+    max_rows = 0
+    for node in _bundle_h_walk(payload):
+        if not isinstance(node, dict):
+            continue
+        # Common shape: {"npc_id": {"memories": [...]}}
+        for key, value in node.items():
+            lower_key = key.lower()
+            if lower_key in memory_keys and isinstance(value, list):
+                max_rows = max(max_rows, len(value))
+            elif lower_key in {"npc_memory", "npc_memories", "social_memory_by_npc"} and isinstance(value, dict):
+                for rows in value.values():
+                    if isinstance(rows, list):
+                        max_rows = max(max_rows, len(rows))
+                    elif isinstance(rows, dict):
+                        for nested_key in memory_keys:
+                            nested_rows = rows.get(nested_key)
+                            if isinstance(nested_rows, list):
+                                max_rows = max(max_rows, len(nested_rows))
+    return max_rows
+
+
+def _bundle_h_explicit_or_count(
+    payloads: _BundleHIterable[_BundleHDict[str, _BundleHAny]],
+    count_keys: _BundleHIterable[str],
+    explicit_keys: _BundleHIterable[str],
+) -> int:
+    explicit = _bundle_h_first_scalar(payloads, *list(explicit_keys))
+    if explicit is not None:
+        return _bundle_h_to_int(explicit, 0)
+    return max(_bundle_h_count_lists_by_key(payload, count_keys) for payload in payloads)
+
+
+def _bundle_h_projected_value(observed_value: _BundleHAny, observed_turns: _BundleHAny, target_turns: int) -> int:
+    observed = _bundle_h_to_int(observed_value, 0)
+    turns = max(1, _bundle_h_to_int(observed_turns, 0))
+    if observed <= 0:
+        return 0
+    return int((observed / turns) * target_turns)
+
+
+def _bundle_h_artifacts_from_result_dir(result_dir: _BundleHPath) -> _BundleHDict[str, _BundleHDict[str, _BundleHAny]]:
+    artifacts: _BundleHDict[str, _BundleHDict[str, _BundleHAny]] = {}
+    for file_name in sorted(_BUNDLE_H_RELEVANT_INPUT_FILES):
+        payload = _bundle_h_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[file_name] = payload
+    return artifacts
+
+
+def _bundle_h_evaluate_memory_state_compression(
+    artifacts: _BundleHDict[str, _BundleHDict[str, _BundleHAny]],
+    *,
+    target_turns: int = _BUNDLE_H_TARGET_TURNS,
+) -> _BundleHDict[str, _BundleHAny]:
+    summary = artifacts.get("summary.json", {})
+    projection = artifacts.get("long-run-dry-run-projection-summary.json", {})
+    readiness = artifacts.get("readiness-report-projection-summary.json", {})
+    npc_agency = artifacts.get("npc-agency-schedule-summary.json", {})
+    payloads = [summary, projection, readiness, npc_agency]
+
+    turn_count = _bundle_h_to_int(
+        _bundle_h_first_scalar(payloads, "turn_count", "completed_turns", "requested_turns"),
+        100,
+    )
+    state_bytes = _bundle_h_to_int(
+        _bundle_h_first_scalar(payloads, "state_bytes", "final_state_bytes", "state_size_bytes"),
+        0,
+    )
+    if state_bytes <= 0 and summary:
+        state_bytes = _bundle_h_json_size(summary)
+
+    projected_state_bytes = _bundle_h_to_int(
+        _bundle_h_first_scalar(
+            [projection, readiness, summary],
+            "projected_1000_turn_state_bytes",
+            "projected_state_bytes_1000",
+            "projected_state_bytes",
+            "state_bytes_projected",
+        ),
+        0,
+    )
+    if projected_state_bytes <= 0:
+        projected_state_bytes = _bundle_h_projected_value(state_bytes, turn_count, target_turns)
+
+    max_npc_memory_rows = _bundle_h_to_int(
+        _bundle_h_first_scalar(payloads, "max_npc_memory_rows_per_npc", "npc_memory_rows_max"),
+        0,
+    )
+    if max_npc_memory_rows <= 0:
+        max_npc_memory_rows = max(_bundle_h_max_npc_memory_rows(payload) for payload in payloads)
+
+    journal_raw_rows = _bundle_h_explicit_or_count(
+        payloads,
+        ["journal", "journal_entries", "journal_raw_rows", "raw_journal", "player_journal"],
+        ["journal_raw_row_count", "journal_raw_rows", "journal_entry_count"],
+    )
+    world_event_rows = _bundle_h_explicit_or_count(
+        payloads,
+        ["world_events", "world_event_rows", "retained_world_events", "timeline_events"],
+        ["world_event_retained_row_count", "world_event_rows", "retained_world_event_count"],
+    )
+
+    checks = {
+        "state_bytes_bounded": state_bytes <= _BUNDLE_H_MAX_STATE_BYTES,
+        "projected_1000_state_bytes_bounded": projected_state_bytes <= _BUNDLE_H_MAX_PROJECTED_STATE_BYTES,
+        "npc_memory_rows_per_npc_bounded": max_npc_memory_rows <= _BUNDLE_H_MAX_NPC_MEMORY_ROWS_PER_NPC,
+        "journal_raw_rows_bounded": journal_raw_rows <= _BUNDLE_H_MAX_JOURNAL_RAW_ROWS,
+        "world_event_rows_bounded": world_event_rows <= _BUNDLE_H_MAX_WORLD_EVENT_RETAINED_ROWS,
+        "memory_aging_policy_present": True,
+        "world_state_compression_policy_present": True,
+    }
+    advisory_failures = [name for name, ok in checks.items() if not ok]
+
+    return {
+        "format_version": "bundle_h_memory_state_compression_summary_v1",
+        "source": "bundle_h_memory_state_compression",
+        "ok": not advisory_failures,
+        "advisory_only": True,
+        "target_turns": target_turns,
+        "checks": checks,
+        "advisory_failures": advisory_failures,
+        "metrics": {
+            "turn_count": turn_count,
+            "state_bytes": state_bytes,
+            "projected_1000_turn_state_bytes": projected_state_bytes,
+            "max_state_bytes": _BUNDLE_H_MAX_STATE_BYTES,
+            "max_projected_state_bytes": _BUNDLE_H_MAX_PROJECTED_STATE_BYTES,
+            "max_npc_memory_rows_per_npc": max_npc_memory_rows,
+            "max_npc_memory_rows_per_npc_allowed": _BUNDLE_H_MAX_NPC_MEMORY_ROWS_PER_NPC,
+            "journal_raw_rows": journal_raw_rows,
+            "max_journal_raw_rows": _BUNDLE_H_MAX_JOURNAL_RAW_ROWS,
+            "world_event_retained_rows": world_event_rows,
+            "max_world_event_retained_rows": _BUNDLE_H_MAX_WORLD_EVENT_RETAINED_ROWS,
+        },
+        "policy": dict(_BUNDLE_H_POLICY),
+        "recommended_next_step": "ready_for_1000_turn_preflight" if not advisory_failures else "apply_memory_state_compression_before_1000_turn_preflight",
+    }
+
+
+def _bundle_h_write_summary_if_possible(result_dir: _BundleHPath) -> _BundleHOptional[_BundleHDict[str, _BundleHAny]]:
+    try:
+        artifacts = _bundle_h_artifacts_from_result_dir(result_dir)
+        if not artifacts:
+            return None
+        summary = _bundle_h_evaluate_memory_state_compression(artifacts)
+        _BUNDLE_H_ORIGINAL_PATH_WRITE_TEXT(
+            result_dir / _BUNDLE_H_SUMMARY_FILE,
+            _bundle_h_json.dumps(summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return summary
+    except Exception:
+        return None
+
+
+def _bundle_h_render_report_section(result_dir: _BundleHPath) -> str:
+    payload = _bundle_h_load_json_file(result_dir / _BUNDLE_H_SUMMARY_FILE)
+    if not payload:
+        payload = _bundle_h_write_summary_if_possible(result_dir) or {
+            "ok": False,
+            "advisory_only": True,
+            "metrics": {},
+            "checks": {},
+            "advisory_failures": ["memory_state_compression_summary_missing"],
+        }
+    metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}
+    checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
+    failures = payload.get("advisory_failures") if isinstance(payload.get("advisory_failures"), list) else []
+    status = "Pass" if payload.get("ok") is True else "Advisory"
+    badge_class = "pass" if payload.get("ok") is True else "warn"
+
+    metric_rows = "".join(
+        "<tr>"
+        f"<th scope=\"row\">{_bundle_h_safe_html(key)}</th>"
+        f"<td>{_bundle_h_safe_html(value)}</td>"
+        "</tr>"
+        for key, value in metrics.items()
+        if not isinstance(value, (dict, list))
+    ) or "<tr><th scope=\"row\">status</th><td>missing</td></tr>"
+    check_rows = "".join(
+        "<tr>"
+        f"<th scope=\"row\">{_bundle_h_safe_html(key)}</th>"
+        f"<td>{_bundle_h_safe_html('pass' if value else 'advisory')}</td>"
+        "</tr>"
+        for key, value in checks.items()
+    )
+    raw_json = _bundle_h_json.dumps(payload, indent=2, sort_keys=True, default=str)
+
+    return (
+        '<section id="bundle-h-memory-state-compression" class="bundle-h-memory-state-compression">'
+        "<style>"
+        ".bundle-h-memory-state-compression{margin:24px 0;padding:18px;border:1px solid rgba(148,163,184,.35);border-radius:16px;background:rgba(15,23,42,.04)}"
+        ".bundle-h-memory-state-compression header{display:flex;align-items:center;justify-content:space-between;gap:10px}"
+        ".bundle-h-memory-state-compression h2{margin:0 0 8px 0}"
+        ".bundle-h-badge{font-size:.78rem;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid rgba(15,23,42,.18)}"
+        ".bundle-h-badge-pass{background:rgba(34,197,94,.16)}"
+        ".bundle-h-badge-warn{background:rgba(245,158,11,.16)}"
+        ".bundle-h-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:12px}"
+        ".bundle-h-card{padding:14px;border:1px solid rgba(148,163,184,.28);border-radius:14px;background:rgba(255,255,255,.72)}"
+        ".bundle-h-table{width:100%;border-collapse:collapse;font-size:.9rem}"
+        ".bundle-h-table th,.bundle-h-table td{padding:6px 8px;border-top:1px solid rgba(148,163,184,.25);text-align:left;vertical-align:top}"
+        ".bundle-h-raw-json{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:.82rem}"
+        "</style>"
+        "<header>"
+        "<h2>Memory / State Compression</h2>"
+        f'<span class="bundle-h-badge bundle-h-badge-{_bundle_h_safe_html(badge_class)}">{_bundle_h_safe_html(status)}</span>'
+        "</header>"
+        "<p>1000-turn readiness evidence for bounded NPC memories, journal rows, retained world events, and projected state bytes.</p>"
+        f"<p>Advisory failures: {_bundle_h_safe_html(len(failures))}</p>"
+        '<div class="bundle-h-grid">'
+        '<div class="bundle-h-card"><h3>Metrics</h3><table class="bundle-h-table"><tbody>'
+        f"{metric_rows}"
+        "</tbody></table></div>"
+        '<div class="bundle-h-card"><h3>Gate Checks</h3><table class="bundle-h-table"><tbody>'
+        f"{check_rows}"
+        "</tbody></table></div>"
+        "</div>"
+        '<details class="bundle-h-raw-details"><summary>Raw JSON details</summary>'
+        f'<pre class="bundle-h-raw-json">{_bundle_h_safe_html(raw_json)}</pre>'
+        "</details>"
+        "</section>"
+    )
+
+
+def _bundle_h_looks_like_campaign_report(path: _BundleHPath, html_text: str) -> bool:
+    if path.suffix.lower() not in {".html", ".htm"}:
+        return False
+    lower_path = str(path).lower()
+    lower_html = html_text.lower()
+    if "bundle-h-memory-state-compression" in lower_html:
+        return False
+    if "autoplay" in lower_path and "report" in lower_path:
+        return True
+    return "autoplay campaign report" in lower_html or "campaign chronicle" in lower_html
+
+
+def _bundle_h_html_insertion_index(html_text: str) -> int:
+    lower_html = html_text.lower()
+    marker = "</main>"
+    idx = lower_html.find(marker)
+    if idx >= 0:
+        return idx
+    marker = "</body>"
+    idx = lower_html.find(marker)
+    if idx >= 0:
+        return idx
+    return len(html_text)
+
+
+def _bundle_h_inject_report_section(path: _BundleHPath, html_text: str) -> str:
+    if not _bundle_h_looks_like_campaign_report(path, html_text):
+        return html_text
+    section = _bundle_h_render_report_section(path.parent)
+    index = _bundle_h_html_insertion_index(html_text)
+    return html_text[:index] + "\n" + section + "\n" + html_text[index:]
+
+
+if not globals().get("_BUNDLE_H_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_H_ORIGINAL_PATH_WRITE_TEXT = _BundleHPath.write_text
+
+    def _bundle_h_write_text_with_summary_and_report(self, data, *args, **kwargs):
+        path = _BundleHPath(self)
+        if isinstance(data, str) and _bundle_h_looks_like_campaign_report(path, data):
+            try:
+                data = _bundle_h_inject_report_section(path, data)
+            except Exception as exc:
+                data = data + "\n<!-- Bundle H report injection skipped: " + _bundle_h_safe_html(f"{type(exc).__name__}: {exc}") + " -->\n"
+        result = _BUNDLE_H_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        try:
+            if path.name in _BUNDLE_H_RELEVANT_INPUT_FILES:
+                _bundle_h_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleHPath.write_text = _bundle_h_write_text_with_summary_and_report
+    globals()["_BUNDLE_H_PATH_WRITE_TEXT_PATCHED"] = True
