@@ -108,8 +108,21 @@ def test_bundle_r_writes_summary_when_preflight_artifacts_are_exported(tmp_path)
     namespace = _load_bundle_r_namespace()
     original_write_text = namespace["_BUNDLE_R_ORIGINAL_PATH_WRITE_TEXT"]
     try:
-        for file_name, payload in _passing_artifacts().items():
-            (tmp_path / file_name).write_text(json.dumps(payload), encoding="utf-8")
+        artifacts = _passing_artifacts()
+        # Write broad run artifacts first because earlier Bundle O/P/Q decorators
+        # may regenerate readiness sidecars when summary or manifest artifacts land.
+        # Then write the final readiness/profile/dashboard artifacts last so Bundle R
+        # evaluates the same final artifact ordering used by real autoplay exports.
+        for file_name in (
+            "summary.json",
+            "performance-summary.json",
+            "progress-quality-summary.json",
+            "artifact-manifest-digest.json",
+            "one-thousand-turn-preflight-profile-summary.json",
+            "one-thousand-turn-readiness-aggregator-summary.json",
+            "one-thousand-turn-readiness-dashboard-summary.json",
+        ):
+            (tmp_path / file_name).write_text(json.dumps(artifacts[file_name]), encoding="utf-8")
 
         summary_path = tmp_path / "one-thousand-turn-preflight-result-summary.json"
         assert summary_path.exists()
