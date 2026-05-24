@@ -1,0 +1,208 @@
+# Bundle N — Story Arc Resolution + Campaign End-State v2
+#
+# Advisory layer for long-run story readiness.  This fragment exports a compact
+# story arc lifecycle model, campaign end-state rules, pacing checks, and gate
+# metrics.  It writes story-arc-end-state-v2-summary.json and does not mutate
+# authoritative simulation state.
+
+import json as _bundle_n_json
+from pathlib import Path as _BundleNPath
+from typing import Any as _BundleNAny, Dict as _BundleNDict
+
+_BUNDLE_N_SUMMARY_FILE = "story-arc-end-state-v2-summary.json"
+_BUNDLE_N_BASE_FILE = "story-arc-summary.json"
+_BUNDLE_N_INPUT_FILES = {
+    "summary.json",
+    _BUNDLE_N_BASE_FILE,
+    "content-depth-expansion-pack-summary.json",
+    "npc-agency-v2-summary.json",
+    "economy-resource-pressure-v2-summary.json",
+    "travel-location-graph-v2-summary.json",
+    "faction-reputation-v2-summary.json",
+    "encounter-lifecycle-v2-summary.json",
+    "memory-state-compression-summary.json",
+    "artifact-manifest-digest.json",
+}
+
+_BUNDLE_N_MODEL: _BundleNDict[str, _BundleNAny] = {
+    "format_version": "bundle_n_story_arc_end_state_v2_model_v1",
+    "source": "bundle_n_story_arc_end_state_v2",
+    "arc_states": ["locked", "available", "active", "advanced", "resolved", "archived"],
+    "campaign_states": ["opening", "investigating", "committing", "resolving", "epilogue", "complete"],
+    "story_arcs": [
+        {
+            "id": "inn_trust_arc",
+            "title": "Inn Trust Arc",
+            "required_signals": ["fair_payment", "staff_help", "ledger_hint"],
+            "resolution_conditions": ["trust_threshold_met", "ledger_thread_closed"],
+            "end_state_flags": ["inn_staff_status_known", "lodging_access_settled"],
+        },
+        {
+            "id": "road_readiness_arc",
+            "title": "Road Readiness Arc",
+            "required_signals": ["travel_supply_ready", "guide_contact", "route_checked"],
+            "resolution_conditions": ["safe_route_selected", "route_cost_paid_or_waived"],
+            "end_state_flags": ["route_plan_committed", "travel_pressure_accounted"],
+        },
+        {
+            "id": "town_record_arc",
+            "title": "Town Record Arc",
+            "required_signals": ["clear_evidence", "council_review", "public_order_choice"],
+            "resolution_conditions": ["record_delivered", "claim_status_resolved"],
+            "end_state_flags": ["council_standing_updated", "case_summary_available"],
+        },
+        {
+            "id": "local_knowledge_arc",
+            "title": "Local Knowledge Arc",
+            "required_signals": ["new_location_reported", "route_note_added", "guide_feedback"],
+            "resolution_conditions": ["map_summary_updated", "local_knowledge_rewarded"],
+            "end_state_flags": ["location_graph_summary_ready", "guide_reputation_updated"],
+        },
+    ],
+    "pacing_rules": [
+        {"id": "no_same_arc_three_times", "window": 6, "max_repeats": 2},
+        {"id": "advance_or_branch_by_window", "window": 12, "required_progress": 1},
+        {"id": "recap_before_epilogue", "window": 20, "required_summary": True},
+        {"id": "resolved_arcs_leave_followup", "window": 10, "required_followup": True},
+    ],
+    "end_state_rules": [
+        {"id": "at_least_one_primary_arc_resolved", "requires": "resolved_arc_count>=1"},
+        {"id": "active_arc_count_bounded", "requires": "active_arc_count<=4"},
+        {"id": "unresolved_blocker_count_bounded", "requires": "unresolved_blocker_count<=3"},
+        {"id": "epilogue_summary_available", "requires": "campaign_summary_present"},
+        {"id": "no_open_system_tasks", "requires": "open_system_task_count==0"},
+    ],
+    "determinism_contract": {
+        "arc_progress_requires_authoritative_signal": True,
+        "end_state_uses_structured_flags_only": True,
+        "llm_may_summarize_but_not_resolve_arcs": True,
+        "resolved_arc_becomes_archivable": True,
+        "pacing_rules_are_advisory": True,
+    },
+}
+
+
+def _bundle_n_to_int(value: _BundleNAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_n_load_json_file(path: _BundleNPath) -> _BundleNDict[str, _BundleNAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_n_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_n_artifacts_from_result_dir(result_dir: _BundleNPath) -> _BundleNDict[str, _BundleNDict[str, _BundleNAny]]:
+    artifacts = {}
+    for file_name in sorted(_BUNDLE_N_INPUT_FILES):
+        payload = _bundle_n_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[file_name] = payload
+    return artifacts
+
+
+def _bundle_n_ids_unique(items) -> bool:
+    ids = [item.get("id") for item in items if isinstance(item, dict)]
+    return len(ids) == len(set(ids)) and all(ids)
+
+
+def _bundle_n_count_existing_arcs(payload: _BundleNAny, keys) -> int:
+    if isinstance(payload, dict):
+        for key in keys:
+            if key in payload:
+                return _bundle_n_to_int(payload.get(key), 0)
+        total = 0
+        for value in payload.values():
+            total = max(total, _bundle_n_count_existing_arcs(value, keys))
+        return total
+    if isinstance(payload, list):
+        return len(payload)
+    return 0
+
+
+def _bundle_n_evaluate_story_arc_end_state_v2(artifacts: _BundleNDict[str, _BundleNDict[str, _BundleNAny]]):
+    model = _BUNDLE_N_MODEL
+    arc_count = len(model["story_arcs"])
+    arc_state_count = len(model["arc_states"])
+    campaign_state_count = len(model["campaign_states"])
+    pacing_rule_count = len(model["pacing_rules"])
+    end_state_rule_count = len(model["end_state_rules"])
+    signal_count = sum(len(arc.get("required_signals", [])) for arc in model["story_arcs"])
+    resolution_condition_count = sum(len(arc.get("resolution_conditions", [])) for arc in model["story_arcs"])
+    end_flag_count = sum(len(arc.get("end_state_flags", [])) for arc in model["story_arcs"])
+    resolved_arc_count = max([_bundle_n_count_existing_arcs(payload, ("resolved_arc_count", "resolved_story_arc_count")) for payload in artifacts.values()] or [0])
+    active_arc_count = max([_bundle_n_count_existing_arcs(payload, ("active_arc_count", "active_story_arc_count")) for payload in artifacts.values()] or [0])
+    unresolved_blocker_count = max([_bundle_n_count_existing_arcs(payload, ("unresolved_blocker_count", "open_blocker_count")) for payload in artifacts.values()] or [0])
+    contract = model["determinism_contract"]
+    checks = {
+        "story_arc_catalog_present": arc_count >= 4,
+        "arc_state_machine_present": arc_state_count >= 6 and campaign_state_count >= 6,
+        "arc_ids_unique": _bundle_n_ids_unique(model["story_arcs"]),
+        "pacing_rules_present": pacing_rule_count >= 4 and _bundle_n_ids_unique(model["pacing_rules"]),
+        "end_state_rules_present": end_state_rule_count >= 5 and _bundle_n_ids_unique(model["end_state_rules"]),
+        "required_signals_present": signal_count >= 10,
+        "resolution_conditions_present": resolution_condition_count >= 8,
+        "end_state_flags_present": end_flag_count >= 8,
+        "active_arc_count_bounded": active_arc_count <= 4,
+        "unresolved_blocker_count_bounded": unresolved_blocker_count <= 3,
+        "determinism_contract_present": bool(contract.get("arc_progress_requires_authoritative_signal")) and bool(contract.get("llm_may_summarize_but_not_resolve_arcs")),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_n_story_arc_end_state_v2_summary_v1",
+        "source": "bundle_n_story_arc_end_state_v2",
+        "ok": not failures,
+        "advisory_only": True,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "story_arc_count": arc_count,
+            "arc_state_count": arc_state_count,
+            "campaign_state_count": campaign_state_count,
+            "pacing_rule_count": pacing_rule_count,
+            "end_state_rule_count": end_state_rule_count,
+            "required_signal_count": signal_count,
+            "resolution_condition_count": resolution_condition_count,
+            "end_state_flag_count": end_flag_count,
+            "resolved_arc_count": resolved_arc_count,
+            "active_arc_count": active_arc_count,
+            "unresolved_blocker_count": unresolved_blocker_count,
+        },
+        "story_arc_end_state_model": model,
+        "recommended_next_step": "wire_story_arc_end_state_v2_into_runtime" if not failures else "fix_story_arc_end_state_v2_advisory_failures",
+    }
+
+
+def _bundle_n_write_summary_if_possible(result_dir: _BundleNPath):
+    try:
+        summary = _bundle_n_evaluate_story_arc_end_state_v2(_bundle_n_artifacts_from_result_dir(result_dir))
+        _BUNDLE_N_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_N_SUMMARY_FILE, _bundle_n_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_N_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_N_ORIGINAL_PATH_WRITE_TEXT = _BundleNPath.write_text
+
+    def _bundle_n_write_text_with_story_arc_end_state_v2(self, data, *args, **kwargs):
+        result = _BUNDLE_N_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleNPath(self)
+        try:
+            if path.name in _BUNDLE_N_INPUT_FILES:
+                _bundle_n_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleNPath.write_text = _bundle_n_write_text_with_story_arc_end_state_v2
+    globals()["_BUNDLE_N_PATH_WRITE_TEXT_PATCHED"] = True
