@@ -122,10 +122,13 @@ def _bundle_n_count_existing_arcs(payload: _BundleNAny, keys) -> int:
                 return _bundle_n_to_int(payload.get(key), 0)
         total = 0
         for value in payload.values():
-            total = max(total, _bundle_n_count_existing_arcs(value, keys))
+            if isinstance(value, dict):
+                total = max(total, _bundle_n_count_existing_arcs(value, keys))
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        total = max(total, _bundle_n_count_existing_arcs(item, keys))
         return total
-    if isinstance(payload, list):
-        return len(payload)
     return 0
 
 
