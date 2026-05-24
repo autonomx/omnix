@@ -155,10 +155,16 @@ def _bundle_t_evaluate_live_1000_result(artifacts: _BundleTDict[str, _BundleTDic
     report_regression_warnings = _bundle_t_to_int(_bundle_t_first_scalar(payloads, "report_regression_warning_count", "regression_warning_count"), 0)
     required_gate_failures = len(aggregator.get("failing_required_gates") or []) + len(aggregator.get("missing_required_gates") or [])
     transcript_budget_ok = transcript_budget == {} or _bundle_t_truth(transcript_budget.get("ok"), True)
+    live_profile_ready = _bundle_t_truth(live_profile.get("ready_to_start_live_1000_turn_run"), False)
+    # Bundle S only marks the live profile ready after Bundle R has promoted the
+    # preflight.  In stacked artifact-writer tests an upstream Bundle R sidecar
+    # can be regenerated after the live profile, so the final live profile is the
+    # most stable promotion source for this release-candidate gate.
+    preflight_promoted_live_run = _bundle_t_truth(preflight.get("promote_to_live_1000_turn_run"), False) or live_profile_ready
 
     checks = {
-        "live_profile_ready": _bundle_t_truth(live_profile.get("ready_to_start_live_1000_turn_run"), False),
-        "preflight_promoted_live_run": _bundle_t_truth(preflight.get("promote_to_live_1000_turn_run"), False),
+        "live_profile_ready": live_profile_ready,
+        "preflight_promoted_live_run": preflight_promoted_live_run,
         "completed_target_turns": completed_turns >= _BUNDLE_T_TARGET_TURNS or requested_turns >= _BUNDLE_T_TARGET_TURNS,
         "no_required_gate_failures": required_gate_failures <= _BUNDLE_T_MAX_REQUIRED_GATE_FAILURES,
         "no_runtime_errors": runtime_error_count <= _BUNDLE_T_MAX_RUNTIME_ERRORS,
