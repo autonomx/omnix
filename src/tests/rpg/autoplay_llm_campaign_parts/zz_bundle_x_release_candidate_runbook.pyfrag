@@ -1,0 +1,140 @@
+# Bundle X — Release Candidate Runbook Markdown Export
+#
+# Standalone runbook export for the 1000-turn release-candidate pipeline.  This
+# fragment reads the Bundle V handoff manifest and Bundle W handoff dashboard,
+# writes one-thousand-turn-release-candidate-runbook.md plus a compact summary
+# JSON, and stays advisory-only.
+
+import json as _bundle_x_json
+from pathlib import Path as _BundleXPath
+from typing import Any as _BundleXAny, Dict as _BundleXDict, List as _BundleXList
+
+_BUNDLE_X_HANDOFF_FILE = "one-thousand-turn-release-candidate-handoff-manifest.json"
+_BUNDLE_X_DASHBOARD_FILE = "one-thousand-turn-release-candidate-handoff-dashboard-summary.json"
+_BUNDLE_X_RUNBOOK_FILE = "one-thousand-turn-release-candidate-runbook.md"
+_BUNDLE_X_SUMMARY_FILE = "one-thousand-turn-release-candidate-runbook-summary.json"
+
+
+def _bundle_x_load_json_file(path: _BundleXPath) -> _BundleXDict[str, _BundleXAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_x_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_x_safe_text(value: _BundleXAny) -> str:
+    return "" if value is None else str(value).replace("\r", " ").strip()
+
+
+def _bundle_x_command_lines(handoff: _BundleXDict[str, _BundleXAny]) -> _BundleXList[str]:
+    commands = handoff.get("commands") if isinstance(handoff.get("commands"), dict) else {}
+    lines: _BundleXList[str] = []
+    for name in ("focused_test_suite", "preflight_1000", "live_1000"):
+        payload = commands.get(name)
+        if isinstance(payload, dict) and payload.get("text"):
+            lines.append(f"### {name}\n\n```powershell\n{_bundle_x_safe_text(payload.get('text'))}\n```")
+    return lines
+
+
+def _bundle_x_artifact_lines(handoff: _BundleXDict[str, _BundleXAny]) -> _BundleXList[str]:
+    checklist = handoff.get("artifact_checklist") if isinstance(handoff.get("artifact_checklist"), dict) else {}
+    lines = ["| Artifact | Group | Status | Bytes |", "|---|---:|---:|---:|"]
+    for group_name in ("required", "optional_product"):
+        entries = checklist.get(group_name) if isinstance(checklist.get(group_name), list) else []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            status = "present" if entry.get("present") else "missing"
+            lines.append(
+                f"| `{_bundle_x_safe_text(entry.get('file'))}` | {group_name} | {status} | {_bundle_x_safe_text(entry.get('size_bytes', 0))} |"
+            )
+    if len(lines) == 2:
+        lines.append("| _none_ | required | missing | 0 |")
+    return lines
+
+
+def _bundle_x_build_runbook_markdown(handoff: _BundleXDict[str, _BundleXAny], dashboard: _BundleXDict[str, _BundleXAny]) -> str:
+    status = _bundle_x_safe_text(dashboard.get("status_label") or ("Handoff Ready" if handoff.get("release_candidate_handoff_ready") else "Handoff Blocked"))
+    next_step = _bundle_x_safe_text(handoff.get("recommended_next_step") or dashboard.get("recommended_next_step") or "complete_release_candidate_handoff_artifacts")
+    artifact_lines = "\n".join(_bundle_x_artifact_lines(handoff))
+    command_sections = "\n\n".join(_bundle_x_command_lines(handoff)) or "_No commands available._"
+    return (
+        "# 1000-Turn Release Candidate Runbook\n\n"
+        f"**Status:** {status}\n\n"
+        f"**Recommended next step:** `{next_step}`\n\n"
+        "## Artifact Checklist\n\n"
+        f"{artifact_lines}\n\n"
+        "## Commands\n\n"
+        f"{command_sections}\n\n"
+        "## Operator Notes\n\n"
+        "- Keep this runbook with the report HTML, result ZIP, and JSON sidecars.\n"
+        "- Run the focused test suite before starting a preflight or live 1000-turn run.\n"
+        "- Do not run the live profile unless the preflight result gate promotes it.\n"
+    )
+
+
+def _bundle_x_build_summary(result_dir: _BundleXPath, handoff: _BundleXDict[str, _BundleXAny], dashboard: _BundleXDict[str, _BundleXAny]) -> _BundleXDict[str, _BundleXAny]:
+    commands = handoff.get("commands") if isinstance(handoff.get("commands"), dict) else {}
+    checklist = handoff.get("artifact_checklist") if isinstance(handoff.get("artifact_checklist"), dict) else {}
+    missing_required = checklist.get("missing_required") if isinstance(checklist.get("missing_required"), list) else []
+    runbook_path = result_dir / _BUNDLE_X_RUNBOOK_FILE
+    checks = {
+        "handoff_manifest_present": bool(handoff),
+        "handoff_dashboard_present": bool(dashboard),
+        "handoff_ready": handoff.get("release_candidate_handoff_ready") is True,
+        "required_artifacts_present": not missing_required,
+        "focused_test_command_present": "focused_test_suite" in commands,
+        "preflight_command_present": "preflight_1000" in commands,
+        "live_command_present": "live_1000" in commands,
+        "runbook_markdown_written": runbook_path.exists(),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_x_release_candidate_runbook_summary_v1",
+        "source": "bundle_x_release_candidate_runbook",
+        "ok": not failures,
+        "advisory_only": True,
+        "runbook_ready": not failures,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "command_count": len(commands),
+            "missing_required_file_count": len(missing_required),
+            "runbook_size_bytes": runbook_path.stat().st_size if runbook_path.exists() else 0,
+        },
+        "runbook_file": _BUNDLE_X_RUNBOOK_FILE,
+        "recommended_next_step": "archive_release_candidate_runbook" if not failures else "complete_release_candidate_runbook_inputs",
+    }
+
+
+def _bundle_x_write_runbook_if_possible(result_dir: _BundleXPath):
+    try:
+        handoff = _bundle_x_load_json_file(result_dir / _BUNDLE_X_HANDOFF_FILE)
+        dashboard = _bundle_x_load_json_file(result_dir / _BUNDLE_X_DASHBOARD_FILE)
+        markdown = _bundle_x_build_runbook_markdown(handoff, dashboard)
+        _BUNDLE_X_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_X_RUNBOOK_FILE, markdown, encoding="utf-8")
+        summary = _bundle_x_build_summary(result_dir, handoff, dashboard)
+        _BUNDLE_X_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_X_SUMMARY_FILE, _bundle_x_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_X_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_X_ORIGINAL_PATH_WRITE_TEXT = _BundleXPath.write_text
+
+    def _bundle_x_write_text_with_runbook(self, data, *args, **kwargs):
+        result = _BUNDLE_X_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleXPath(self)
+        try:
+            if path.name in {_BUNDLE_X_HANDOFF_FILE, _BUNDLE_X_DASHBOARD_FILE}:
+                _bundle_x_write_runbook_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleXPath.write_text = _bundle_x_write_text_with_runbook
+    globals()["_BUNDLE_X_PATH_WRITE_TEXT_PATCHED"] = True
