@@ -1,0 +1,487 @@
+# Bundle E — Product-Facing Report Rendering for Bundle A/B/C/D
+#
+# This late fragment intentionally avoids touching the core report writer.  The
+# autoplay harness loads every fragment before invoking main(), so a guarded
+# Path.write_text decorator can enrich generated HTML reports with product-facing
+# sections built from the Bundle A/B/C/D advisory artifact JSON sidecars.
+
+import html as _bundle_e_html
+import json as _bundle_e_json
+from pathlib import Path as _BundleEPath
+from typing import Any as _BundleEAny, Dict as _BundleEDict, Iterable as _BundleEIterable, List as _BundleEList, Optional as _BundleEOptional, Tuple as _BundleETuple
+
+
+_BUNDLE_E_SECTION_SPECS: _BundleEList[_BundleETuple[str, str, str, _BundleEList[str]]] = [
+    (
+        "bundle-e-survival-exit-criteria",
+        "Survival Exit Criteria",
+        "survival-exit-criteria-summary.json",
+        [
+            "ok",
+            "source",
+            "turn_count",
+            "requested_turns",
+            "completed_turns",
+            "exit_reason",
+            "survival_ok",
+            "hard_failure_count",
+            "advisory_failure_count",
+        ],
+    ),
+    (
+        "bundle-e-transcript-payload-budget",
+        "Transcript Payload Budget",
+        "transcript-payload-budget-summary.json",
+        [
+            "ok",
+            "source",
+            "turn_count",
+            "total_bytes",
+            "projected_1000_turn_bytes",
+            "max_turn_payload_bytes",
+            "budget_ok",
+            "truncated_field_count",
+            "growth_offender_count",
+        ],
+    ),
+    (
+        "bundle-e-long-run-dry-run-projection",
+        "Long-Run Dry-Run Projection",
+        "long-run-dry-run-projection-summary.json",
+        [
+            "ok",
+            "source",
+            "requested_turns",
+            "projected_turns",
+            "projected_wall_time_seconds",
+            "projected_state_bytes",
+            "projected_transcript_bytes",
+            "ready_for_300_turns",
+            "ready_for_1000_turns",
+        ],
+    ),
+    (
+        "bundle-e-content-exhaustion-forecast",
+        "Content Exhaustion Forecast",
+        "content-exhaustion-forecast-summary.json",
+        [
+            "ok",
+            "source",
+            "requested_turns",
+            "estimated_supported_turns",
+            "content_exhaustion_estimate",
+            "unique_objective_count",
+            "unique_rumor_count",
+            "unique_hook_count",
+            "warning_count",
+        ],
+    ),
+    (
+        "bundle-e-npc-agency-schedule-evidence",
+        "NPC Agency / Schedule Evidence",
+        "npc-agency-schedule-summary.json",
+        [
+            "ok",
+            "source",
+            "npc_count",
+            "scheduled_npc_count",
+            "agency_event_count",
+            "meaningful_agency_event_count",
+            "location_change_count",
+            "memory_change_count",
+            "warning_count",
+        ],
+    ),
+    (
+        "bundle-e-economy-resource-pressure",
+        "Economy / Resource Pressure",
+        "economy-resource-pressure-summary.json",
+        [
+            "ok",
+            "source",
+            "total_earned",
+            "total_spent",
+            "currency_delta",
+            "unpaid_count",
+            "blocked_relief_count",
+            "survival_intervention_count",
+            "resource_pressure_ok",
+        ],
+    ),
+]
+
+_BUNDLE_E_DIGEST_FILE = "artifact-manifest-digest.json"
+_BUNDLE_E_MARKER = 'id="bundle-e-product-reporting"'
+
+
+def _bundle_e_safe_html(value: _BundleEAny) -> str:
+    return _bundle_e_html.escape("" if value is None else str(value), quote=True)
+
+
+def _bundle_e_load_json_file(path: _BundleEPath) -> _BundleEOptional[_BundleEDict[str, _BundleEAny]]:
+    try:
+        if not path.exists() or not path.is_file():
+            return None
+        data = _bundle_e_json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source": path.name,
+            "load_error": f"{type(exc).__name__}: {exc}",
+        }
+    if isinstance(data, dict):
+        data.setdefault("source", path.name)
+        return data
+    return {
+        "ok": False,
+        "source": path.name,
+        "load_error": f"expected JSON object, got {type(data).__name__}",
+    }
+
+
+def _bundle_e_find_existing_artifact_payload(
+    artifact_map: _BundleEDict[str, _BundleEDict[str, _BundleEAny]],
+    file_name: str,
+) -> _BundleEOptional[_BundleEDict[str, _BundleEAny]]:
+    payload = artifact_map.get(file_name)
+    if isinstance(payload, dict):
+        return payload
+    lower_name = file_name.lower()
+    for key, value in artifact_map.items():
+        if str(key).lower().endswith(lower_name) and isinstance(value, dict):
+            return value
+    return None
+
+
+def _bundle_e_load_artifact_map(result_dir: _BundleEPath) -> _BundleEDict[str, _BundleEDict[str, _BundleEAny]]:
+    artifacts: _BundleEDict[str, _BundleEDict[str, _BundleEAny]] = {}
+    for _, _, file_name, _ in _BUNDLE_E_SECTION_SPECS:
+        payload = _bundle_e_load_json_file(result_dir / file_name)
+        if payload is not None:
+            artifacts[file_name] = payload
+    digest = _bundle_e_load_json_file(result_dir / _BUNDLE_E_DIGEST_FILE)
+    if digest is not None:
+        artifacts[_BUNDLE_E_DIGEST_FILE] = digest
+    return artifacts
+
+
+def _bundle_e_truthy_status(payload: _BundleEOptional[_BundleEDict[str, _BundleEAny]]) -> _BundleETuple[str, str]:
+    if not payload:
+        return ("missing", "Missing")
+
+    # Prefer explicit failure/error fields before optimistic status fields.
+    hard_failure_count = payload.get("hard_failure_count")
+    try:
+        if hard_failure_count is not None and int(hard_failure_count) > 0:
+            return ("fail", "Fail")
+    except Exception:
+        pass
+
+    failed_checks = payload.get("failed_checks") or payload.get("invariant_failed_checks")
+    if isinstance(failed_checks, list) and failed_checks:
+        return ("fail", "Fail")
+
+    for key in (
+        "ok",
+        "gate_ok",
+        "budget_ok",
+        "ready",
+        "ready_for_300_turns",
+        "survival_ok",
+        "resource_pressure_ok",
+        "invariant_ok",
+        "manifest_ok",
+    ):
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if value is True:
+            return ("pass", "Pass")
+        if value is False:
+            return ("warn", "Advisory")
+
+    warnings = payload.get("warnings")
+    if isinstance(warnings, list) and warnings:
+        return ("warn", "Advisory")
+    warning_count = payload.get("warning_count")
+    try:
+        if warning_count is not None and int(warning_count) > 0:
+            return ("warn", "Advisory")
+    except Exception:
+        pass
+
+    return ("info", "Info")
+
+
+def _bundle_e_summarize_payload(payload: _BundleEOptional[_BundleEDict[str, _BundleEAny]], title: str) -> str:
+    if not payload:
+        return f"{title} artifact is not present in this result directory."
+
+    status_class, status_label = _bundle_e_truthy_status(payload)
+    source = payload.get("source") or "artifact JSON"
+    blockers = payload.get("blockers")
+    warnings = payload.get("warnings")
+
+    if status_class == "pass":
+        prefix = "Passing advisory evidence found"
+    elif status_class == "fail":
+        prefix = "Blocking evidence found"
+    elif status_class == "warn":
+        prefix = "Advisory warning evidence found"
+    else:
+        prefix = "Artifact evidence found"
+
+    details: _BundleEList[str] = [f"{prefix} in {source}."]
+    if isinstance(blockers, list) and blockers:
+        details.append(f"Blockers: {len(blockers)}.")
+    if isinstance(warnings, list) and warnings:
+        details.append(f"Warnings: {len(warnings)}.")
+    failed_checks = payload.get("failed_checks") or payload.get("invariant_failed_checks")
+    if isinstance(failed_checks, list) and failed_checks:
+        details.append(f"Failed checks: {len(failed_checks)}.")
+    if status_label == "Advisory":
+        details.append("This is advisory report evidence, not a normal 100-turn hard failure.")
+    return " ".join(details)
+
+
+def _bundle_e_metric_rows(
+    payload: _BundleEOptional[_BundleEDict[str, _BundleEAny]],
+    preferred_keys: _BundleEIterable[str],
+) -> str:
+    if not payload:
+        return (
+            "<tr>"
+            "<th scope=\"row\">status</th>"
+            "<td>missing</td>"
+            "</tr>"
+        )
+
+    rows: _BundleEList[str] = []
+    emitted = set()
+    for key in preferred_keys:
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if isinstance(value, (dict, list)):
+            continue
+        emitted.add(key)
+        rows.append(
+            "<tr>"
+            f"<th scope=\"row\">{_bundle_e_safe_html(key)}</th>"
+            f"<td>{_bundle_e_safe_html(value)}</td>"
+            "</tr>"
+        )
+
+    if len(rows) < 5:
+        for key in sorted(payload.keys()):
+            if key in emitted or key.startswith("_"):
+                continue
+            value = payload.get(key)
+            if isinstance(value, (dict, list)):
+                continue
+            emitted.add(key)
+            rows.append(
+                "<tr>"
+                f"<th scope=\"row\">{_bundle_e_safe_html(key)}</th>"
+                f"<td>{_bundle_e_safe_html(value)}</td>"
+                "</tr>"
+            )
+            if len(rows) >= 8:
+                break
+
+    if not rows:
+        rows.append(
+            "<tr>"
+            "<th scope=\"row\">source</th>"
+            f"<td>{_bundle_e_safe_html(payload.get('source', 'artifact JSON'))}</td>"
+            "</tr>"
+        )
+    return "\n".join(rows)
+
+
+def _bundle_e_raw_json_details(payload: _BundleEOptional[_BundleEDict[str, _BundleEAny]], title: str) -> str:
+    if payload is None:
+        raw_json = _bundle_e_json.dumps(
+            {"ok": False, "missing": True, "title": title},
+            indent=2,
+            sort_keys=True,
+        )
+    else:
+        raw_json = _bundle_e_json.dumps(payload, indent=2, sort_keys=True, default=str)
+    return (
+        '<details class="bundle-e-raw-details">'
+        "<summary>Raw JSON details</summary>"
+        f'<pre class="bundle-e-raw-json">{_bundle_e_safe_html(raw_json)}</pre>'
+        "</details>"
+    )
+
+
+def _bundle_e_render_digest_summary(
+    artifact_map: _BundleEDict[str, _BundleEDict[str, _BundleEAny]]
+) -> str:
+    digest = artifact_map.get(_BUNDLE_E_DIGEST_FILE)
+    status_class, status_label = _bundle_e_truthy_status(digest)
+    preferred = [
+        "ok",
+        "manifest_byte_size",
+        "manifest_sha256",
+        "embedded_artifact_count",
+        "zip_manifest_valid_count",
+        "invariant_ok",
+        "manifest_hard_finalized",
+        "manifest_final_write_after_all_wrappers",
+    ]
+    return (
+        '<section id="bundle-e-artifact-manifest-digest" class="bundle-e-card bundle-e-digest-card">'
+        "<header>"
+        "<h3>Artifact Manifest Digest</h3>"
+        f'<span class="bundle-e-badge bundle-e-badge-{_bundle_e_safe_html(status_class)}">{_bundle_e_safe_html(status_label)}</span>'
+        "</header>"
+        "<p>Small review surface for the large artifact manifest and zip-level manifest invariant.</p>"
+        '<table class="bundle-e-metrics"><tbody>'
+        f"{_bundle_e_metric_rows(digest, preferred)}"
+        "</tbody></table>"
+        f"{_bundle_e_raw_json_details(digest, 'Artifact Manifest Digest')}"
+        "</section>"
+    )
+
+
+def _bundle_e_render_section(
+    section_id: str,
+    title: str,
+    file_name: str,
+    preferred_keys: _BundleEIterable[str],
+    artifact_map: _BundleEDict[str, _BundleEDict[str, _BundleEAny]],
+) -> str:
+    payload = _bundle_e_find_existing_artifact_payload(artifact_map, file_name)
+    status_class, status_label = _bundle_e_truthy_status(payload)
+    return (
+        f'<section id="{_bundle_e_safe_html(section_id)}" class="bundle-e-card">'
+        "<header>"
+        f"<h3>{_bundle_e_safe_html(title)}</h3>"
+        f'<span class="bundle-e-badge bundle-e-badge-{_bundle_e_safe_html(status_class)}">{_bundle_e_safe_html(status_label)}</span>'
+        "</header>"
+        f"<p>{_bundle_e_safe_html(_bundle_e_summarize_payload(payload, title))}</p>"
+        '<table class="bundle-e-metrics"><tbody>'
+        f"{_bundle_e_metric_rows(payload, preferred_keys)}"
+        "</tbody></table>"
+        f"{_bundle_e_raw_json_details(payload, title)}"
+        "</section>"
+    )
+
+
+def _bundle_e_render_product_report_sections(result_dir: _BundleEPath) -> str:
+    artifact_map = _bundle_e_load_artifact_map(result_dir)
+    nav_links = [
+        (
+            "bundle-e-artifact-manifest-digest",
+            "Artifact Manifest Digest",
+        )
+    ] + [(section_id, title) for section_id, title, _, _ in _BUNDLE_E_SECTION_SPECS]
+
+    nav_html = "".join(
+        f'<a href="#{_bundle_e_safe_html(section_id)}">{_bundle_e_safe_html(title)}</a>'
+        for section_id, title in nav_links
+    )
+    cards = [_bundle_e_render_digest_summary(artifact_map)]
+    cards.extend(
+        _bundle_e_render_section(section_id, title, file_name, preferred_keys, artifact_map)
+        for section_id, title, file_name, preferred_keys in _BUNDLE_E_SECTION_SPECS
+    )
+
+    return (
+        '<section id="bundle-e-product-reporting" class="bundle-e-product-reporting">'
+        "<style>"
+        ".bundle-e-product-reporting{margin:24px 0;padding:18px;border:1px solid rgba(148,163,184,.35);border-radius:16px;background:rgba(15,23,42,.04)}"
+        ".bundle-e-product-reporting h2{margin:0 0 8px 0}"
+        ".bundle-e-product-reporting .bundle-e-subtitle{margin:0 0 14px 0;opacity:.78}"
+        ".bundle-e-nav{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px 0}"
+        ".bundle-e-nav a{padding:6px 10px;border:1px solid rgba(148,163,184,.35);border-radius:999px;text-decoration:none}"
+        ".bundle-e-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}"
+        ".bundle-e-card{padding:14px;border:1px solid rgba(148,163,184,.28);border-radius:14px;background:rgba(255,255,255,.72)}"
+        ".bundle-e-card header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}"
+        ".bundle-e-card h3{margin:0;font-size:1rem}"
+        ".bundle-e-badge{font-size:.78rem;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid rgba(15,23,42,.18)}"
+        ".bundle-e-badge-pass{background:rgba(34,197,94,.16)}"
+        ".bundle-e-badge-warn{background:rgba(245,158,11,.16)}"
+        ".bundle-e-badge-fail{background:rgba(239,68,68,.16)}"
+        ".bundle-e-badge-missing{background:rgba(100,116,139,.16)}"
+        ".bundle-e-badge-info{background:rgba(59,130,246,.14)}"
+        ".bundle-e-metrics{width:100%;border-collapse:collapse;margin-top:10px;font-size:.9rem}"
+        ".bundle-e-metrics th,.bundle-e-metrics td{padding:6px 8px;border-top:1px solid rgba(148,163,184,.25);text-align:left;vertical-align:top}"
+        ".bundle-e-metrics th{width:44%;font-weight:650}"
+        ".bundle-e-raw-details{margin-top:10px}"
+        ".bundle-e-raw-json{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:.82rem}"
+        "</style>"
+        "<h2>Bundle A/B/C/D Advisory Evidence</h2>"
+        '<p class="bundle-e-subtitle">Product-facing summaries rendered from final advisory artifacts. Raw JSON stays collapsed by default.</p>'
+        f'<nav class="bundle-e-nav" aria-label="Bundle A/B/C/D report sections">{nav_html}</nav>'
+        '<div class="bundle-e-grid">'
+        f"{''.join(cards)}"
+        "</div>"
+        "</section>"
+    )
+
+
+def _bundle_e_html_insertion_index(html_text: str) -> int:
+    lower_html = html_text.lower()
+    for marker in ("<main", "<body"):
+        idx = lower_html.find(marker)
+        if idx < 0:
+            continue
+        close_idx = lower_html.find(">", idx)
+        if close_idx >= 0:
+            return close_idx + 1
+    for marker in ("</main>", "</body>", "</html>"):
+        idx = lower_html.find(marker)
+        if idx >= 0:
+            return idx
+    return len(html_text)
+
+
+def _bundle_e_looks_like_campaign_report(path: _BundleEPath, html_text: str) -> bool:
+    if path.suffix.lower() not in {".html", ".htm"}:
+        return False
+    lower_path = str(path).lower()
+    lower_html = html_text.lower()
+    if "bundle-e-product-reporting" in lower_html:
+        return False
+    if "autoplay" in lower_path and "report" in lower_path:
+        return True
+    return (
+        "autoplay campaign report" in lower_html
+        or "campaign chronicle" in lower_html
+        or "campaign report" in lower_html and "artifact-manifest" in lower_html
+    )
+
+
+def _bundle_e_inject_product_sections_into_html(path: _BundleEPath, html_text: str) -> str:
+    if not _bundle_e_looks_like_campaign_report(path, html_text):
+        return html_text
+    insertion = _bundle_e_html_insertion_index(html_text)
+    bundle_e_html = _bundle_e_render_product_report_sections(path.parent)
+    return html_text[:insertion] + "\n" + bundle_e_html + "\n" + html_text[insertion:]
+
+
+if not globals().get("_BUNDLE_E_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_E_ORIGINAL_PATH_WRITE_TEXT = _BundleEPath.write_text
+
+    def _bundle_e_write_text_with_product_sections(self, data, *args, **kwargs):
+        if isinstance(data, str):
+            try:
+                data = _bundle_e_inject_product_sections_into_html(_BundleEPath(self), data)
+            except Exception as exc:
+                # Report rendering must never break autoplay result export.  Leave a
+                # small HTML comment so failures are inspectable without making the
+                # 100-turn smoke run fail.
+                if str(self).lower().endswith((".html", ".htm")):
+                    data = (
+                        data
+                        + "\n<!-- Bundle E product report injection skipped: "
+                        + _bundle_e_safe_html(f"{type(exc).__name__}: {exc}")
+                        + " -->\n"
+                    )
+        return _BUNDLE_E_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+
+    _BundleEPath.write_text = _bundle_e_write_text_with_product_sections
+    globals()["_BUNDLE_E_PATH_WRITE_TEXT_PATCHED"] = True
