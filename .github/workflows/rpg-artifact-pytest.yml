@@ -28,7 +28,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pytest-base-url pytest-playwright anyio
+          python -m pip install pytest pytest-base-url pytest-playwright anyio fastapi
 
       - name: Show Python and import context
         env:
