@@ -3,7 +3,7 @@
 # Product-facing dashboard for Bundle AA's focused suite registry.  This
 # fragment reads one-thousand-turn-focused-suite-registry-summary.json, writes a
 # compact dashboard summary, and injects a campaign report section that shows
-# command drift status and the canonical E-Z focused pytest command.
+# command drift status and the canonical E-AB focused pytest command.
 
 import html as _bundle_ab_html
 import json as _bundle_ab_json
@@ -121,7 +121,7 @@ def _bundle_ab_render_dashboard_section(result_dir: _BundleABPath) -> str:
         "</style>"
         "<header><h2>Focused Suite Registry</h2>"
         f'<span class="bundle-ab-badge bundle-ab-badge-{_bundle_ab_safe_html(status_class)}">{_bundle_ab_safe_html(status_label)}</span></header>'
-        "<p>Canonical E-Z focused test command and drift guard for archived release-candidate handoffs.</p>"
+        "<p>Canonical E-AB focused test command and drift guard for archived release-candidate handoffs.</p>"
         f"<p>Tests: {_bundle_ab_safe_html(dashboard.get('test_file_count', 0))}; missing: {_bundle_ab_safe_html(dashboard.get('missing_test_file_count', 0))}; duplicates: {_bundle_ab_safe_html(dashboard.get('duplicate_test_file_count', 0))}.</p>"
         f"<p>Recommended next step: {_bundle_ab_safe_html(dashboard.get('recommended_next_step'))}</p>"
         '<div class="bundle-ab-card"><h3>Canonical Command</h3>'
