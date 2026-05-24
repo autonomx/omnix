@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
-SOURCE = "bundle_abc_final_artifact_manifest_repair"
+SOURCE = "bundle_abcd_final_artifact_manifest_repair"
 ARTIFACT_MANIFEST_FILE = "artifact-manifest.json"
 BUNDLE_A_FILES = [
     "quality-gate-summary.json",
@@ -18,6 +18,9 @@ BUNDLE_B_FILES = [
 BUNDLE_C_FILES = [
     "npc-agency-schedule-summary.json",
     "economy-resource-pressure-summary.json",
+]
+BUNDLE_D_FILES = [
+    "readiness-report-projection-summary.json",
 ]
 HEALTH_FILE = "autoplay-health.json"
 EVALUATION_FILE = "hundred-turn-evaluation.json"
@@ -54,6 +57,10 @@ def _present_names(presence: Dict[str, bool]) -> List[str]:
     return [name for name, present in presence.items() if present]
 
 
+def _bundle_complete(presence: Dict[str, bool]) -> bool:
+    return all(presence.values()) if any(presence.values()) else False
+
+
 def _manifest_needs_repair(path: Path, required_embedded_names: List[str]) -> bool:
     if not path.exists() or path.stat().st_size <= 2:
         return True
@@ -64,12 +71,23 @@ def _manifest_needs_repair(path: Path, required_embedded_names: List[str]) -> bo
     return not all(name in embedded for name in required_embedded_names)
 
 
+def _final_write_existing_manifest(manifest_path: Path, manifest: Dict[str, Any]) -> bool:
+    if not manifest:
+        return False
+    manifest["final_write_after_sidecars"] = True
+    manifest["already_complete_final_write"] = True
+    _write_json(manifest_path, manifest)
+    return manifest_path.exists() and manifest_path.stat().st_size > 2
+
+
 def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
-    """Repair the final artifact manifest for Bundle A/B/C files.
+    """Repair the final artifact manifest for Bundle A/B/C/D files.
 
     Kept under the original function name because the late autoplay wrapper already
     calls it after bundle writers.  The repair is idempotent and treats later
-    bundle files as required when their physical summaries are present.
+    bundle files as required when their physical summaries are present.  Even when
+    a manifest is already complete, it is physically rewritten so this function
+    remains the final durable manifest write after sidecar patching.
     """
 
     root = Path(result_dir)
@@ -77,6 +95,7 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
     bundle_a_presence = _presence(root, BUNDLE_A_FILES)
     bundle_b_presence = _presence(root, BUNDLE_B_FILES)
     bundle_c_presence = _presence(root, BUNDLE_C_FILES)
+    bundle_d_presence = _presence(root, BUNDLE_D_FILES)
     if not all(bundle_a_presence.values()):
         return {
             "applied": False,
@@ -86,18 +105,25 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
             "physical_presence": bundle_a_presence,
             "bundle_b_physical_presence": bundle_b_presence,
             "bundle_c_physical_presence": bundle_c_presence,
+            "bundle_d_physical_presence": bundle_d_presence,
         }
 
-    required_names = [*BUNDLE_A_FILES, *_present_names(bundle_b_presence), *_present_names(bundle_c_presence)]
+    required_names = [*BUNDLE_A_FILES, *_present_names(bundle_b_presence), *_present_names(bundle_c_presence), *_present_names(bundle_d_presence)]
     if not _manifest_needs_repair(manifest_path, required_names):
+        manifest = _read_json(manifest_path)
+        manifest_exists_after_final_write = _final_write_existing_manifest(manifest_path, manifest)
         return {
             "applied": False,
-            "reason": "manifest_already_complete",
+            "reason": "manifest_already_complete_final_write_refreshed",
             "source": SOURCE,
             "result_dir": str(root),
+            "manifest_path": str(manifest_path),
+            "manifest_exists_after_final_write": manifest_exists_after_final_write,
+            "final_write_after_sidecars": True,
             "physical_presence": bundle_a_presence,
             "bundle_b_physical_presence": bundle_b_presence,
             "bundle_c_physical_presence": bundle_c_presence,
+            "bundle_d_physical_presence": bundle_d_presence,
         }
 
     existing = _read_json(manifest_path)
@@ -106,26 +132,33 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
     embedded = dict(_safe_dict(existing.get("embedded_artifacts")))
     for name in required_names:
         embedded[name] = _read_json(root / name)
-    bundle_b_complete = all(bundle_b_presence.values()) if any(bundle_b_presence.values()) else False
-    bundle_c_complete = all(bundle_c_presence.values()) if any(bundle_c_presence.values()) else False
+    bundle_b_complete = _bundle_complete(bundle_b_presence)
+    bundle_c_complete = _bundle_complete(bundle_c_presence)
+    bundle_d_complete = _bundle_complete(bundle_d_presence)
     manifest = {
         **existing,
-        "format_version": "bundle_abc_artifact_manifest_v2",
+        "format_version": "bundle_abcd_artifact_manifest_v1",
         "source": SOURCE,
-        "ok": all(bundle_a_presence.values()) and (not any(bundle_b_presence.values()) or bundle_b_complete) and (not any(bundle_c_presence.values()) or bundle_c_complete),
+        "ok": all(bundle_a_presence.values())
+        and (not any(bundle_b_presence.values()) or bundle_b_complete)
+        and (not any(bundle_c_presence.values()) or bundle_c_complete)
+        and (not any(bundle_d_presence.values()) or bundle_d_complete),
         "bundle_a_files": list(BUNDLE_A_FILES),
         "bundle_b_files": list(BUNDLE_B_FILES),
         "bundle_c_files": list(BUNDLE_C_FILES),
+        "bundle_d_files": list(BUNDLE_D_FILES),
         "files": files,
         "physical_presence": bundle_a_presence,
         "bundle_b_physical_presence": bundle_b_presence,
         "bundle_c_physical_presence": bundle_c_presence,
+        "bundle_d_physical_presence": bundle_d_presence,
         "embedded_artifacts": embedded,
         "repair_applied": True,
         "final_write_after_sidecars": True,
         "notes": [
-            "Rebuilt from physical Bundle A/B/C files at finalization time.",
-            "Written once before sidecar patches and again after sidecar patches so artifact-manifest.json remains durable."
+            "Rebuilt from physical Bundle A/B/C/D files at finalization time.",
+            "Written once before sidecar patches and again after sidecar patches so artifact-manifest.json remains durable.",
+            "When already complete, the manifest is still rewritten so Bundle D cannot skip the final durability write."
         ],
     }
     _write_json(manifest_path, manifest)
@@ -144,6 +177,10 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
             health["bundle_c_artifact_manifest_path"] = ARTIFACT_MANIFEST_FILE
             health["bundle_c_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE, "final_write_after_sidecars": True}
             health["bundle_c_artifacts_ok"] = True
+        if bundle_d_complete:
+            health["bundle_d_artifact_manifest_path"] = ARTIFACT_MANIFEST_FILE
+            health["bundle_d_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE, "final_write_after_sidecars": True}
+            health["bundle_d_artifacts_ok"] = True
         _write_json(health_path, health)
 
     evaluation_path = root / EVALUATION_FILE
@@ -156,9 +193,11 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
             "bundle_a_files": list(BUNDLE_A_FILES),
             "bundle_b_files": list(BUNDLE_B_FILES),
             "bundle_c_files": list(BUNDLE_C_FILES),
+            "bundle_d_files": list(BUNDLE_D_FILES),
             "physical_presence": bundle_a_presence,
             "bundle_b_physical_presence": bundle_b_presence,
             "bundle_c_physical_presence": bundle_c_presence,
+            "bundle_d_physical_presence": bundle_d_presence,
             "final_write_after_sidecars": True,
         }
         evaluation["artifact_level_summaries"] = summaries
@@ -181,13 +220,13 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
             bundle_c["manifest_repair_source"] = SOURCE
             bundle_c["manifest_file"] = ARTIFACT_MANIFEST_FILE
             readiness["bundle_c_artifacts"] = bundle_c
+        if bundle_d_complete or readiness.get("bundle_d_artifacts"):
+            bundle_d = _safe_dict(readiness.get("bundle_d_artifacts"))
+            bundle_d["manifest_repair_source"] = SOURCE
+            bundle_d["manifest_file"] = ARTIFACT_MANIFEST_FILE
+            readiness["bundle_d_artifacts"] = bundle_d
         _write_json(readiness_path, readiness)
 
-    # Critical: keep the manifest as the final physical artifact write.  The
-    # prior implementation wrote manifest first and then patched health/eval/
-    # readiness sidecars.  In the observed 100-turn artifacts, health showed the
-    # repair executed while artifact-manifest.json was still empty.  Rewriting it
-    # last makes the manifest durable even if sidecar patching or hooks touched it.
     _write_json(manifest_path, manifest)
     manifest_exists_after_final_write = manifest_path.exists() and manifest_path.stat().st_size > 2
 
@@ -201,4 +240,5 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
         "physical_presence": bundle_a_presence,
         "bundle_b_physical_presence": bundle_b_presence,
         "bundle_c_physical_presence": bundle_c_presence,
+        "bundle_d_physical_presence": bundle_d_presence,
     }
