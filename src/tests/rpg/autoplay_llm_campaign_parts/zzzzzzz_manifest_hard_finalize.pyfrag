@@ -9,6 +9,9 @@ from pathlib import Path as _MANIFEST_HARD_FINALIZE_Path  # noqa: E402
 from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
     hard_finalize_artifact_manifest as _hard_finalize_artifact_manifest,
 )
+from app.rpg.session.autoplay_manifest_zip_finalize import (  # noqa: E402
+    finalize_manifest_in_result_zips as _finalize_manifest_in_result_zips,
+)
 
 
 def _manifest_hard_finalize_repo_root():
@@ -44,12 +47,13 @@ def _manifest_hard_finalize_latest():
     repairs = []
     for path in _manifest_hard_finalize_candidates():
         item = _hard_finalize_artifact_manifest(path)
-        repairs.append(item)
-        if item.get("applied"):
+        zip_item = _finalize_manifest_in_result_zips(path)
+        repairs.append({"path": str(path), "manifest": item, "zip_manifest": zip_item})
+        if item.get("applied") or zip_item.get("applied"):
             break
     return {
         "source": "manifest_hard_finalize_wrapper",
-        "applied": any(item.get("applied") for item in repairs),
+        "applied": any(item.get("manifest", {}).get("applied") or item.get("zip_manifest", {}).get("applied") for item in repairs),
         "repairs": repairs,
     }
 
