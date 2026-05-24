@@ -53,6 +53,7 @@ _BUNDLE_V_COMMANDS: _BundleVDict[str, _BundleVList[str]] = {
         "src/tests/rpg/test_bundle_x_release_candidate_runbook.py",
         "src/tests/rpg/test_bundle_y_release_candidate_artifact_index.py",
         "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py",
+        "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py",
     ],
     "preflight_1000": [
         "python", "src/tests/rpg/autoplay_llm_campaign.py",
