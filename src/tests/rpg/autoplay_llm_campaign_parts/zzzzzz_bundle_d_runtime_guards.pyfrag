@@ -1,0 +1,12 @@
+# Bundle D runtime guards.
+# Installs narrowly-scoped guards for the 100-turn autoplay artifact finalization:
+# - test-result artifact writes create missing parents under resources/data/test-results
+# - prompt-only HTML transcript meta marker is treated as a false positive
+
+from app.rpg.session.autoplay_runtime_guards import (  # noqa: E402
+    install_html_transcript_prompt_marker_guard as _bundle_d_install_html_prompt_guard,
+    install_test_result_artifact_write_parent_guard as _bundle_d_install_write_parent_guard,
+)
+
+_BUNDLE_D_WRITE_PARENT_GUARD_INSTALLED = _bundle_d_install_write_parent_guard()
+_BUNDLE_D_HTML_PROMPT_GUARD_INSTALLED = _bundle_d_install_html_prompt_guard(globals())
