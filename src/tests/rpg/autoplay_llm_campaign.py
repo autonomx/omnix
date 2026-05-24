@@ -103,10 +103,8 @@ def _load_autoplay_campaign_runtime() -> None:
         chunk_globals["__name__"] = original_name
 
 
-_load_autoplay_campaign_runtime()
-
-
 if __name__ == "__main__":
+    _load_autoplay_campaign_runtime()
     main_fn = globals().get("main")
     if not callable(main_fn):
         raise RuntimeError("autoplay_campaign_main_missing_after_fragment_load")
