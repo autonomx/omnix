@@ -15,6 +15,28 @@ from pathlib import Path
 from typing import Dict, List
 
 _RUNTIME_LOADED = False
+_RUNTIME_MODULE_ALIASES = (
+    "tests.rpg.autoplay_llm_campaign",
+    "rpg.autoplay_llm_campaign",
+)
+
+
+def _register_autoplay_runtime_aliases() -> None:
+    """Expose this running script under import names used by helper modules.
+
+    Some helper modules import ``tests.rpg.autoplay_llm_campaign`` at runtime to
+    access functions defined by the combined fragment source.  When this file is
+    executed as a script, those functions live on ``__main__`` after
+    ``_load_autoplay_campaign_runtime()``.  Register aliases so those imports
+    resolve to the already-loaded runtime module instead of importing a second,
+    lightweight loader-only copy.
+    """
+
+    module = sys.modules.get(__name__)
+    if module is None:
+        return
+    for name in _RUNTIME_MODULE_ALIASES:
+        sys.modules[name] = module
 
 
 def _autoplay_campaign_fragment_paths() -> List[Path]:
@@ -64,6 +86,7 @@ def _load_autoplay_campaign_runtime() -> None:
     global _RUNTIME_LOADED
     if _RUNTIME_LOADED:
         return
+    _register_autoplay_runtime_aliases()
     fragments = _autoplay_campaign_fragment_paths()
     combined_source = _combine_autoplay_campaign_fragments(fragments)
     combined_filename = str(
@@ -81,6 +104,7 @@ def _load_autoplay_campaign_runtime() -> None:
         combined_filename,
     )
     chunk_globals: Dict[str, object] = globals()
+    chunk_globals.setdefault("__file__", str(Path(__file__).resolve()))
     original_name = chunk_globals.get("__name__", __name__)
     # N118.3: fragment 66 historically contains an ``if __name__ == "__main__"``
     # block.  After late fragments were added, that block exited before fragments
@@ -101,9 +125,11 @@ def _load_autoplay_campaign_runtime() -> None:
         )
     finally:
         chunk_globals["__name__"] = original_name
+        _register_autoplay_runtime_aliases()
 
 
 if __name__ == "__main__":
+    _register_autoplay_runtime_aliases()
     _load_autoplay_campaign_runtime()
     main_fn = globals().get("main")
     if not callable(main_fn):
