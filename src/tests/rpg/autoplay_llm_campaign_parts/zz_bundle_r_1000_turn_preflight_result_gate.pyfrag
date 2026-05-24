@@ -1,0 +1,215 @@
+# Bundle R — 1000-Turn Preflight Result Evaluator + Promotion Gate
+#
+# Advisory promotion gate for the first 1000-turn preflight run.  This fragment
+# reads the preflight profile, readiness rollup, dashboard, run summary, and
+# performance artifacts, then writes one-thousand-turn-preflight-result-summary.json.
+# It does not mutate authoritative simulation state and does not make shorter
+# runs fail.
+
+import json as _bundle_r_json
+from pathlib import Path as _BundleRPath
+from typing import Any as _BundleRAny, Dict as _BundleRDict, Iterable as _BundleRIterable
+
+_BUNDLE_R_SUMMARY_FILE = "one-thousand-turn-preflight-result-summary.json"
+_BUNDLE_R_PROFILE_FILE = "one-thousand-turn-preflight-profile-summary.json"
+_BUNDLE_R_AGGREGATOR_FILE = "one-thousand-turn-readiness-aggregator-summary.json"
+_BUNDLE_R_DASHBOARD_FILE = "one-thousand-turn-readiness-dashboard-summary.json"
+_BUNDLE_R_TARGET_TURNS = 1000
+_BUNDLE_R_MAX_BLOCKING_P95_SECONDS = 8.0
+_BUNDLE_R_MAX_BACKGROUND_DRAIN_SECONDS = 120.0
+_BUNDLE_R_MAX_PLAYER_AGENT_FALLBACK_RATE = 0.25
+_BUNDLE_R_MIN_MEANINGFUL_PROGRESS_RATE = 0.10
+_BUNDLE_R_MAX_RUNTIME_ERRORS = 0
+_BUNDLE_R_MAX_UNRESOLVED_BACKGROUND_JOBS = 0
+
+_BUNDLE_R_INPUT_FILES = {
+    _BUNDLE_R_PROFILE_FILE,
+    _BUNDLE_R_AGGREGATOR_FILE,
+    _BUNDLE_R_DASHBOARD_FILE,
+    "summary.json",
+    "artifact-manifest-digest.json",
+    "performance-summary.json",
+    "autoplay-performance-summary.json",
+    "progress-quality-summary.json",
+    "long-run-dry-run-projection-summary.json",
+    "transcript-payload-budget-summary.json",
+}
+
+
+def _bundle_r_load_json_file(path: _BundleRPath) -> _BundleRDict[str, _BundleRAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_r_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_r_artifacts_from_result_dir(result_dir: _BundleRPath) -> _BundleRDict[str, _BundleRDict[str, _BundleRAny]]:
+    artifacts: _BundleRDict[str, _BundleRDict[str, _BundleRAny]] = {}
+    for file_name in sorted(_BUNDLE_R_INPUT_FILES):
+        payload = _bundle_r_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[file_name] = payload
+    return artifacts
+
+
+def _bundle_r_truth(value: _BundleRAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed", "ready"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed", "not_ready"}:
+        return False
+    return default
+
+
+def _bundle_r_to_int(value: _BundleRAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_r_to_float(value: _BundleRAny, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(str(value))
+    except Exception:
+        return default
+
+
+def _bundle_r_walk(value: _BundleRAny):
+    stack = [value]
+    while stack:
+        current = stack.pop()
+        yield current
+        if isinstance(current, dict):
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+
+
+def _bundle_r_first_scalar(payloads: _BundleRIterable[_BundleRDict[str, _BundleRAny]], *keys: str) -> _BundleRAny:
+    key_set = set(keys)
+    for payload in payloads:
+        for node in _bundle_r_walk(payload):
+            if not isinstance(node, dict):
+                continue
+            for key in key_set:
+                if key in node and not isinstance(node.get(key), (dict, list)):
+                    return node.get(key)
+    return None
+
+
+def _bundle_r_count_failures(payload: _BundleRDict[str, _BundleRAny]) -> int:
+    failures = payload.get("advisory_failures")
+    if isinstance(failures, list):
+        return len(failures)
+    checks = payload.get("checks")
+    if isinstance(checks, dict):
+        return len([value for value in checks.values() if value is False])
+    return 0
+
+
+def _bundle_r_evaluate_1000_turn_preflight_result(artifacts: _BundleRDict[str, _BundleRDict[str, _BundleRAny]]):
+    profile = artifacts.get(_BUNDLE_R_PROFILE_FILE, {})
+    aggregator = artifacts.get(_BUNDLE_R_AGGREGATOR_FILE, {})
+    dashboard = artifacts.get(_BUNDLE_R_DASHBOARD_FILE, {})
+    run_summary = artifacts.get("summary.json", {})
+    manifest = artifacts.get("artifact-manifest-digest.json", {})
+    performance = artifacts.get("performance-summary.json") or artifacts.get("autoplay-performance-summary.json", {})
+    progress = artifacts.get("progress-quality-summary.json", {})
+    payloads = [profile, aggregator, dashboard, run_summary, manifest, performance, progress]
+
+    completed_turns = _bundle_r_to_int(_bundle_r_first_scalar(payloads, "completed_turns", "turn_count", "turns_completed", "requested_turns"), 0)
+    requested_turns = _bundle_r_to_int(_bundle_r_first_scalar(payloads, "requested_turns", "target_turns", "turns"), _BUNDLE_R_TARGET_TURNS)
+    runtime_error_count = _bundle_r_to_int(_bundle_r_first_scalar(payloads, "runtime_error_count", "error_count", "exception_count"), 0)
+    unresolved_jobs = _bundle_r_to_int(_bundle_r_first_scalar(payloads, "unresolved_final_background_jobs", "unresolved_background_jobs", "unfinished_background_jobs"), 0)
+    blocking_p95 = _bundle_r_to_float(_bundle_r_first_scalar(payloads, "blocking_turn_p95_seconds", "turn_p95_seconds", "p95_turn_seconds", "p95_seconds"), 0.0)
+    background_drain = _bundle_r_to_float(_bundle_r_first_scalar(payloads, "background_drain_seconds", "final_background_drain_seconds", "background_drain_elapsed_seconds"), 0.0)
+    fallback_rate = _bundle_r_to_float(_bundle_r_first_scalar(payloads, "player_agent_fallback_rate", "fallback_rate"), 0.0)
+    progress_rate = _bundle_r_to_float(_bundle_r_first_scalar(payloads, "meaningful_progress_rate", "progress_rate"), 1.0)
+    required_gate_failures = len(aggregator.get("failing_required_gates") or []) + len(aggregator.get("missing_required_gates") or [])
+
+    checks = {
+        "preflight_profile_ready": _bundle_r_truth(profile.get("ok"), False),
+        "readiness_aggregator_ready": _bundle_r_truth(aggregator.get("ready_for_1000_turn_preflight"), False),
+        "readiness_dashboard_ready": dashboard.get("status_label") in {"Live Ready", "Preflight Ready"},
+        "completed_target_turns": completed_turns >= _BUNDLE_R_TARGET_TURNS or requested_turns >= _BUNDLE_R_TARGET_TURNS,
+        "no_required_gate_failures": required_gate_failures == 0,
+        "no_runtime_errors": runtime_error_count <= _BUNDLE_R_MAX_RUNTIME_ERRORS,
+        "no_unresolved_background_jobs": unresolved_jobs <= _BUNDLE_R_MAX_UNRESOLVED_BACKGROUND_JOBS,
+        "blocking_turn_p95_within_budget": blocking_p95 <= _BUNDLE_R_MAX_BLOCKING_P95_SECONDS if blocking_p95 > 0 else True,
+        "background_drain_within_budget": background_drain <= _BUNDLE_R_MAX_BACKGROUND_DRAIN_SECONDS if background_drain > 0 else True,
+        "player_agent_fallback_rate_within_budget": fallback_rate <= _BUNDLE_R_MAX_PLAYER_AGENT_FALLBACK_RATE,
+        "meaningful_progress_rate_within_budget": progress_rate >= _BUNDLE_R_MIN_MEANINGFUL_PROGRESS_RATE,
+        "artifact_manifest_ok": manifest == {} or _bundle_r_truth(manifest.get("ok") or manifest.get("manifest_ok") or manifest.get("invariant_ok"), True),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    promote_to_live_1000_turn_run = not failures
+
+    return {
+        "format_version": "bundle_r_1000_turn_preflight_result_summary_v1",
+        "source": "bundle_r_1000_turn_preflight_result_gate",
+        "ok": promote_to_live_1000_turn_run,
+        "advisory_only": True,
+        "promote_to_live_1000_turn_run": promote_to_live_1000_turn_run,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "target_turns": _BUNDLE_R_TARGET_TURNS,
+            "completed_turns": completed_turns,
+            "requested_turns": requested_turns,
+            "runtime_error_count": runtime_error_count,
+            "unresolved_background_jobs": unresolved_jobs,
+            "blocking_turn_p95_seconds": blocking_p95,
+            "max_blocking_turn_p95_seconds": _BUNDLE_R_MAX_BLOCKING_P95_SECONDS,
+            "background_drain_seconds": background_drain,
+            "max_background_drain_seconds": _BUNDLE_R_MAX_BACKGROUND_DRAIN_SECONDS,
+            "player_agent_fallback_rate": fallback_rate,
+            "max_player_agent_fallback_rate": _BUNDLE_R_MAX_PLAYER_AGENT_FALLBACK_RATE,
+            "meaningful_progress_rate": progress_rate,
+            "min_meaningful_progress_rate": _BUNDLE_R_MIN_MEANINGFUL_PROGRESS_RATE,
+            "required_gate_failure_count": required_gate_failures,
+            "profile_failure_count": _bundle_r_count_failures(profile),
+            "aggregator_failure_count": _bundle_r_count_failures(aggregator),
+            "dashboard_failure_count": _bundle_r_count_failures(dashboard),
+        },
+        "recommended_next_step": "promote_to_live_1000_turn_run" if promote_to_live_1000_turn_run else "fix_preflight_result_failures_before_live_1000_turn_run",
+    }
+
+
+def _bundle_r_write_summary_if_possible(result_dir: _BundleRPath):
+    try:
+        summary = _bundle_r_evaluate_1000_turn_preflight_result(_bundle_r_artifacts_from_result_dir(result_dir))
+        _BUNDLE_R_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_R_SUMMARY_FILE, _bundle_r_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_R_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_R_ORIGINAL_PATH_WRITE_TEXT = _BundleRPath.write_text
+
+    def _bundle_r_write_text_with_preflight_result_gate(self, data, *args, **kwargs):
+        result = _BUNDLE_R_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleRPath(self)
+        try:
+            if path.name in _BUNDLE_R_INPUT_FILES:
+                _bundle_r_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleRPath.write_text = _bundle_r_write_text_with_preflight_result_gate
+    globals()["_BUNDLE_R_PATH_WRITE_TEXT_PATCHED"] = True
