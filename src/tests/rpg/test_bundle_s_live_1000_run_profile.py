@@ -47,12 +47,17 @@ def test_bundle_s_profile_descriptor_and_live_command_are_explicit():
     assert profile["defaults"]["narration_mode"] == "deferred"
     assert profile["defaults"]["background_llm_mode"] == "combined"
     assert profile["defaults"]["compact_transcript_mode"] is True
+    assert profile["defaults"]["transcript_detail"] == "auto"
     assert profile["defaults"]["zip_artifacts_required"] is True
     assert command[:2] == ["python", "src/tests/rpg/autoplay_llm_campaign.py"]
     assert namespace["_bundle_s_missing_command_flags"](command) == []
     assert "--turns" in command
     assert "1000" in command
-    assert "--zip-results" in command
+    assert "--transcript-detail" in command
+    assert "auto" in command
+    assert "--capture-console-log" in command
+    assert "--compact-transcript-mode" not in command
+    assert "--zip-results" not in command
 
 
 def test_bundle_s_profile_arg_expansion_preserves_caller_flags():
@@ -66,14 +71,17 @@ def test_bundle_s_profile_arg_expansion_preserves_caller_flags():
     assert "--live-profile" not in expanded
     turns_index = expanded.index("--turns")
     artifact_index = expanded.index("--artifact-detail")
+    transcript_index = expanded.index("--transcript-detail")
     assert expanded[turns_index + 1] == "777"
     assert expanded[artifact_index + 1] == "compact"
+    assert expanded[transcript_index + 1] == "auto"
     assert "--narration-mode" in expanded
     assert "deferred" in expanded
     assert "--background-llm-mode" in expanded
     assert "combined" in expanded
-    assert "--compact-transcript-mode" in expanded
-    assert "--zip-results" in expanded
+    assert "--capture-console-log" in expanded
+    assert "--compact-transcript-mode" not in expanded
+    assert "--zip-results" not in expanded
 
 
 def test_bundle_s_live_profile_passes_only_with_promoted_preflight(tmp_path):
@@ -93,6 +101,8 @@ def test_bundle_s_live_profile_passes_only_with_promoted_preflight(tmp_path):
     assert result["checks"]["preflight_result_ok"] is True
     assert result["checks"]["preflight_promoted_live_run"] is True
     assert result["checks"]["promotion_guard_required"] is True
+    assert "--compact-transcript-mode" not in result["canonical_command"]
+    assert "--zip-results" not in result["canonical_command"]
     assert result["recommended_next_step"] == "run_live_1000_command"
 
 
@@ -132,6 +142,8 @@ def test_bundle_s_writes_summary_when_preflight_result_is_exported(tmp_path):
         assert summary["ok"] is True
         assert summary["ready_to_start_live_1000_turn_run"] is True
         assert summary["checks"]["preflight_promoted_live_run"] is True
+        assert "--compact-transcript-mode" not in summary["canonical_command"]
+        assert "--zip-results" not in summary["canonical_command"]
         assert summary["recommended_next_step"] == "run_live_1000_command"
     finally:
         Path.write_text = original_write_text
