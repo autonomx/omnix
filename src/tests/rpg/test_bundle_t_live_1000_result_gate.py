@@ -57,6 +57,25 @@ def _passing_artifacts():
     }
 
 
+def _write_live_artifacts_in_final_export_order(tmp_path: Path, artifacts: dict):
+    # Write broad run artifacts first because earlier Bundle O/P/Q/R/S decorators
+    # may regenerate readiness sidecars when summary/manifest/performance files land.
+    # Then write final readiness/profile artifacts last so Bundle T evaluates the
+    # same final artifact ordering used by real autoplay exports.
+    for file_name in (
+        "summary.json",
+        "performance-summary.json",
+        "progress-quality-summary.json",
+        "artifact-manifest-digest.json",
+        "transcript-payload-budget-summary.json",
+        "one-thousand-turn-preflight-result-summary.json",
+        "one-thousand-turn-live-run-profile-summary.json",
+        "one-thousand-turn-readiness-aggregator-summary.json",
+        "one-thousand-turn-readiness-dashboard-summary.json",
+    ):
+        (tmp_path / file_name).write_text(json.dumps(artifacts[file_name]), encoding="utf-8")
+
+
 def test_bundle_t_live_result_marks_release_candidate_when_all_checks_pass():
     namespace = _load_bundle_t_namespace()
     result = namespace["_bundle_t_evaluate_live_1000_result"](_passing_artifacts())
@@ -124,8 +143,7 @@ def test_bundle_t_blocks_release_candidate_for_performance_progress_and_transcri
 
 def test_bundle_t_artifact_scanner_detects_report_and_zip_files(tmp_path):
     namespace = _load_bundle_t_namespace()
-    for file_name, payload in _passing_artifacts().items():
-        (tmp_path / file_name).write_text(json.dumps(payload), encoding="utf-8")
+    _write_live_artifacts_in_final_export_order(tmp_path, _passing_artifacts())
     (tmp_path / "autoplay-campaign-report.html").write_text("<html>report</html>", encoding="utf-8")
     (tmp_path / "autoplay-campaign-results.zip").write_bytes(b"PK\x03\x04fake")
 
@@ -143,8 +161,7 @@ def test_bundle_t_writes_summary_when_live_artifacts_are_exported(tmp_path):
     namespace = _load_bundle_t_namespace()
     original_write_text = namespace["_BUNDLE_T_ORIGINAL_PATH_WRITE_TEXT"]
     try:
-        for file_name, payload in _passing_artifacts().items():
-            (tmp_path / file_name).write_text(json.dumps(payload), encoding="utf-8")
+        _write_live_artifacts_in_final_export_order(tmp_path, _passing_artifacts())
 
         summary_path = tmp_path / "one-thousand-turn-live-result-summary.json"
         assert summary_path.exists()
