@@ -1,0 +1,146 @@
+# Bundle AA — Focused Suite Registry + Command Sync Guard
+#
+# Final advisory registry for the E-Z focused 1000-turn readiness suite.  This
+# fragment provides one canonical ordered list of focused test files, builds the
+# pytest command from that registry, and can compare the registry to Bundle V's
+# archived handoff command so release-candidate runbooks do not drift.
+
+import json as _bundle_aa_json
+from pathlib import Path as _BundleAAPath
+from typing import Any as _BundleAAAny, Dict as _BundleAADict, List as _BundleAAList
+
+_BUNDLE_AA_SUMMARY_FILE = "one-thousand-turn-focused-suite-registry-summary.json"
+_BUNDLE_AA_HANDOFF_FILE = "one-thousand-turn-release-candidate-handoff-manifest.json"
+_BUNDLE_AA_TEST_FILES: _BundleAAList[str] = [
+    "src/tests/rpg/test_bundle_e_product_report_rendering.py",
+    "src/tests/rpg/test_bundle_f_dry_run_300_profile.py",
+    "src/tests/rpg/test_bundle_g_content_depth_expansion.py",
+    "src/tests/rpg/test_bundle_h_memory_state_compression.py",
+    "src/tests/rpg/test_bundle_i_npc_agency_v2.py",
+    "src/tests/rpg/test_bundle_j_economy_resource_pressure_v2.py",
+    "src/tests/rpg/test_bundle_k_travel_location_graph_v2.py",
+    "src/tests/rpg/test_bundle_l_faction_reputation_v2.py",
+    "src/tests/rpg/test_bundle_m_encounter_lifecycle_v2.py",
+    "src/tests/rpg/test_bundle_n_story_arc_end_state_v2.py",
+    "src/tests/rpg/test_bundle_o_1000_turn_readiness_aggregator.py",
+    "src/tests/rpg/test_bundle_p_1000_turn_readiness_dashboard.py",
+    "src/tests/rpg/test_bundle_q_1000_turn_preflight_profile.py",
+    "src/tests/rpg/test_bundle_r_1000_turn_preflight_result_gate.py",
+    "src/tests/rpg/test_bundle_s_live_1000_run_profile.py",
+    "src/tests/rpg/test_bundle_t_live_1000_result_gate.py",
+    "src/tests/rpg/test_bundle_u_release_candidate_dashboard.py",
+    "src/tests/rpg/test_bundle_v_release_candidate_handoff_manifest.py",
+    "src/tests/rpg/test_bundle_w_release_candidate_handoff_dashboard.py",
+    "src/tests/rpg/test_bundle_x_release_candidate_runbook.py",
+    "src/tests/rpg/test_bundle_y_release_candidate_artifact_index.py",
+    "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py",
+]
+
+
+def _bundle_aa_load_json_file(path: _BundleAAPath) -> _BundleAADict[str, _BundleAAAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_aa_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_aa_build_focused_command() -> _BundleAAList[str]:
+    return ["python", "-m", "pytest", *_BUNDLE_AA_TEST_FILES]
+
+
+def _bundle_aa_command_text(argv: _BundleAAList[str]) -> str:
+    return " ".join(str(part) for part in argv)
+
+
+def _bundle_aa_missing_test_files(repo_root: _BundleAAPath) -> _BundleAAList[str]:
+    return [path for path in _BUNDLE_AA_TEST_FILES if not (repo_root / path).exists()]
+
+
+def _bundle_aa_duplicate_test_files() -> _BundleAAList[str]:
+    seen = set()
+    duplicates: _BundleAAList[str] = []
+    for path in _BUNDLE_AA_TEST_FILES:
+        if path in seen:
+            duplicates.append(path)
+        seen.add(path)
+    return duplicates
+
+
+def _bundle_aa_handoff_focused_argv(handoff: _BundleAADict[str, _BundleAAAny]) -> _BundleAAList[str]:
+    commands = handoff.get("commands") if isinstance(handoff.get("commands"), dict) else {}
+    focused = commands.get("focused_test_suite") if isinstance(commands.get("focused_test_suite"), dict) else {}
+    argv = focused.get("argv") if isinstance(focused.get("argv"), list) else []
+    return [str(part) for part in argv]
+
+
+def _bundle_aa_evaluate_focused_suite_registry(repo_root: _BundleAAPath, result_dir: _BundleAAPath | None = None) -> _BundleAADict[str, _BundleAAAny]:
+    result_dir = result_dir or repo_root
+    command = _bundle_aa_build_focused_command()
+    handoff = _bundle_aa_load_json_file(result_dir / _BUNDLE_AA_HANDOFF_FILE)
+    handoff_argv = _bundle_aa_handoff_focused_argv(handoff)
+    missing = _bundle_aa_missing_test_files(repo_root)
+    duplicates = _bundle_aa_duplicate_test_files()
+    checks = {
+        "registry_has_expected_range": _BUNDLE_AA_TEST_FILES[0].endswith("test_bundle_e_product_report_rendering.py") and _BUNDLE_AA_TEST_FILES[-1].endswith("test_bundle_z_release_candidate_artifact_index_dashboard.py"),
+        "registry_test_count_expected": len(_BUNDLE_AA_TEST_FILES) == 22,
+        "registry_has_no_duplicates": not duplicates,
+        "registry_files_exist": not missing,
+        "command_starts_with_pytest": command[:3] == ["python", "-m", "pytest"],
+        "handoff_command_matches_registry": not handoff_argv or handoff_argv == command,
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_aa_focused_suite_registry_summary_v1",
+        "source": "bundle_aa_focused_suite_registry",
+        "ok": not failures,
+        "advisory_only": True,
+        "focused_suite_registry_ready": not failures,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "test_file_count": len(_BUNDLE_AA_TEST_FILES),
+            "missing_test_file_count": len(missing),
+            "duplicate_test_file_count": len(duplicates),
+            "command_arg_count": len(command),
+            "handoff_command_arg_count": len(handoff_argv),
+        },
+        "test_files": list(_BUNDLE_AA_TEST_FILES),
+        "canonical_command": {"argv": command, "text": _bundle_aa_command_text(command)},
+        "missing_test_files": missing,
+        "duplicate_test_files": duplicates,
+        "recommended_next_step": "use_canonical_e_z_focused_suite_command" if not failures else "fix_focused_suite_registry_drift",
+    }
+
+
+def _bundle_aa_write_summary_if_possible(result_dir: _BundleAAPath):
+    try:
+        repo_root = result_dir
+        for _ in range(5):
+            if (repo_root / "src" / "tests" / "rpg").exists():
+                break
+            repo_root = repo_root.parent
+        summary = _bundle_aa_evaluate_focused_suite_registry(repo_root, result_dir)
+        _BUNDLE_AA_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_AA_SUMMARY_FILE, _bundle_aa_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_AA_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_AA_ORIGINAL_PATH_WRITE_TEXT = _BundleAAPath.write_text
+
+    def _bundle_aa_write_text_with_focused_suite_registry(self, data, *args, **kwargs):
+        result = _BUNDLE_AA_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleAAPath(self)
+        try:
+            if path.name == _BUNDLE_AA_HANDOFF_FILE:
+                _bundle_aa_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleAAPath.write_text = _bundle_aa_write_text_with_focused_suite_registry
+    globals()["_BUNDLE_AA_PATH_WRITE_TEXT_PATCHED"] = True
