@@ -58,16 +58,19 @@ def test_results_mirror_repair_extracts_full_unzipped_folder_from_zip(tmp_path) 
         zf.writestr("summary.json", json.dumps({"ok": True, "turns_executed": 20}))
         zf.writestr("hundred-turn-evaluation.json", json.dumps({"ok": True, "artifact_level_summaries": {}}))
         zf.writestr("hundred-turn-readiness-summary.json", json.dumps({"ok": True}))
-        zf.writestr("readiness-report-projection-summary.json", json.dumps({"ok": True, "section_count": 6}))
+        for filename, payload in REQUIRED_EMBEDDED.items():
+            zf.writestr(filename, json.dumps(payload))
 
     result = repair_results_mirror_from_zip(result_dir)
 
     assert result["ok"] is True
     assert result["after_has_core"] is True
-    assert result["extracted_file_count"] >= 6
+    assert result["extracted_file_count"] >= 13
     assert result["digest"]["ok"] is True
     assert _read_json(result_dir / "artifact-manifest.json")["hard_finalized"] is True
     assert _read_json(result_dir / "autoplay-health.json")["ok"] is True
+    for filename in REQUIRED_EMBEDDED:
+        assert (result_dir / filename).exists()
     digest = _read_json(result_dir / "artifact-manifest-digest.json")
     assert digest["ok"] is True
     assert digest["embedded_artifact_count"] == len(REQUIRED_EMBEDDED)
