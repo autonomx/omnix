@@ -12,6 +12,9 @@ from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
 from app.rpg.session.autoplay_manifest_zip_finalize import (  # noqa: E402
     finalize_manifest_in_result_zips as _finalize_manifest_in_result_zips,
 )
+from app.rpg.session.autoplay_results_mirror_repair import (  # noqa: E402
+    repair_results_mirror_from_zip as _repair_results_mirror_from_zip,
+)
 
 
 def _manifest_hard_finalize_repo_root():
@@ -39,6 +42,12 @@ def _manifest_hard_finalize_candidates():
                 continue
             seen.add(parent)
             candidates.append(parent)
+        for path in base.rglob("essential-mirror-consistency-summary.json"):
+            parent = path.parent.resolve()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            candidates.append(parent)
     candidates.sort(key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
     return candidates[:5]
 
@@ -46,14 +55,20 @@ def _manifest_hard_finalize_candidates():
 def _manifest_hard_finalize_latest():
     repairs = []
     for path in _manifest_hard_finalize_candidates():
+        mirror = _repair_results_mirror_from_zip(path)
         item = _hard_finalize_artifact_manifest(path)
         zip_item = _finalize_manifest_in_result_zips(path)
-        repairs.append({"path": str(path), "manifest": item, "zip_manifest": zip_item})
-        if item.get("applied") or zip_item.get("applied"):
+        repairs.append({"path": str(path), "mirror": mirror, "manifest": item, "zip_manifest": zip_item})
+        if mirror.get("applied") or item.get("applied") or zip_item.get("applied"):
             break
     return {
         "source": "manifest_hard_finalize_wrapper",
-        "applied": any(item.get("manifest", {}).get("applied") or item.get("zip_manifest", {}).get("applied") for item in repairs),
+        "applied": any(
+            item.get("mirror", {}).get("applied")
+            or item.get("manifest", {}).get("applied")
+            or item.get("zip_manifest", {}).get("applied")
+            for item in repairs
+        ),
         "repairs": repairs,
     }
 
