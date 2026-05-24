@@ -30,9 +30,40 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest pytest-base-url pytest-playwright anyio
 
+      - name: Show Python and import context
+        env:
+          PYTHONPATH: "src:src/tests"
+        run: |
+          python --version
+          python - <<'PY'
+          import os
+          import sys
+          print('PYTHONPATH=', os.environ.get('PYTHONPATH'))
+          print('sys.path[:6]=', sys.path[:6])
+          import app.rpg.session.artifact_manifest_digest
+          print('import app ok')
+          PY
+
+      - name: Collect focused RPG artifact tests
+        env:
+          PYTHONPATH: "src:src/tests"
+        run: |
+          python -m pytest \
+            src/tests/rpg/test_artifact_manifest_digest.py \
+            src/tests/rpg/test_artifact_export_invariant.py \
+            src/tests/rpg/test_results_mirror_repair.py \
+            src/tests/rpg/test_artifact_manifest_hard_finalize.py \
+            src/tests/rpg/test_autoplay_fragment_loader_future_imports.py \
+            src/tests/rpg/test_bundle_b1_manifest_final_write_smoke.py \
+            src/tests/rpg/test_bundle_a_artifacts.py \
+            src/tests/rpg/test_bundle_b_artifacts.py \
+            src/tests/rpg/test_bundle_c_artifacts.py \
+            src/tests/rpg/test_bundle_d_report_projection.py \
+            --collect-only -q
+
       - name: Run focused RPG artifact pytest suite
         env:
-          PYTHONPATH: src
+          PYTHONPATH: "src:src/tests"
         run: |
           python -m pytest \
             src/tests/rpg/test_artifact_manifest_digest.py \
