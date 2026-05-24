@@ -1,12 +1,18 @@
 {
-  "climate_survival_action_plan_summary_present": true,
-  "climate_survival_campaign_summary_present": true,
-  "expected_file_count": 47,
-  "format_version": "n1221_essential_mirror_consistency_v1",
-  "mirror_dir": "resources/data/test-results/autoplay-100-n82-travel-location-progression/autoplay-campaign-results-unzipped",
-  "missing_listed_file_count": 0,
-  "missing_listed_files": [],
-  "note": "If this reports missing files, commit the full autoplay-campaign-results-unzipped folder after rerunning; do not commit only unzipped-artifact-index.json.",
+  "format_version": "bundle_d_results_mirror_extraction_repair_v1",
+  "source": "bundle_d_results_mirror_extraction_repair",
   "ok": true,
-  "present_expected_file_count": 45
+  "repaired": false,
+  "mirror_dir": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped",
+  "zip_path": "",
+  "extracted_file_count": 0,
+  "present_file_count": 55,
+  "core_presence": {
+    "artifact-manifest.json": true,
+    "autoplay-health.json": true,
+    "summary.json": true,
+    "hundred-turn-evaluation.json": true
+  },
+  "missing_core_files": [],
+  "note": "Generated review mirror must include core artifacts, not only this summary file."
 }
