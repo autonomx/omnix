@@ -65,6 +65,16 @@ parakeet-tdt-0.6b-v2/
 # Data files
 resources/data/
 
+# Allow the small review-safe manifest digest to be committed from ignored
+# test-result trees.  Other large/generated test-result files remain ignored
+# unless they are already tracked or explicitly force-added.
+!/resources/data/
+/resources/data/*
+!/resources/data/test-results/
+/resources/data/test-results/**/*
+!/resources/data/test-results/**/
+!/resources/data/test-results/**/artifact-manifest-digest.json
+
 # Logs
 *.log
 logs/
