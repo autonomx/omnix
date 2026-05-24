@@ -9,6 +9,9 @@ from pathlib import Path as _MANIFEST_HARD_ATEXIT_Path  # noqa: E402
 from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
     hard_finalize_artifact_manifest as _manifest_hard_atexit_finalize,
 )
+from app.rpg.session.autoplay_results_mirror_repair import (  # noqa: E402
+    repair_results_mirror_from_zip as _manifest_hard_atexit_mirror_repair,
+)
 
 _MANIFEST_HARD_ATEXIT_CANDIDATES = []
 _MANIFEST_HARD_ATEXIT_REGISTERED = False
@@ -39,6 +42,12 @@ def _manifest_hard_atexit_candidates():
                 continue
             seen.add(parent)
             candidates.append(parent)
+        for path in base.rglob("essential-mirror-consistency-summary.json"):
+            parent = path.parent.resolve()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            candidates.append(parent)
     candidates.sort(key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
     return candidates[:5]
 
@@ -48,15 +57,17 @@ def _manifest_hard_atexit_run():
     candidates = list(_MANIFEST_HARD_ATEXIT_CANDIDATES) or _manifest_hard_atexit_candidates()
     for path in candidates[:5]:
         try:
+            mirror = _manifest_hard_atexit_mirror_repair(path)
             item = _manifest_hard_atexit_finalize(path)
         except Exception as exc:
+            mirror = {"applied": False, "source": "manifest_hard_finalize_atexit", "path": str(path), "error": repr(exc)}
             item = {"applied": False, "source": "manifest_hard_finalize_atexit", "path": str(path), "error": repr(exc)}
-        repairs.append(item)
-        if item.get("applied"):
+        repairs.append({"path": str(path), "mirror": mirror, "manifest": item})
+        if mirror.get("applied") or item.get("applied"):
             break
     globals()["MANIFEST_HARD_ATEXIT_RESULT"] = {
         "source": "manifest_hard_finalize_atexit",
-        "applied": any(item.get("applied") for item in repairs),
+        "applied": any(item.get("mirror", {}).get("applied") or item.get("manifest", {}).get("applied") for item in repairs),
         "repairs": repairs,
     }
 
