@@ -85,19 +85,19 @@
   },
   "bundle_a_manifest_repair": {
     "applied": true,
-    "source": "bundle_abc_final_artifact_manifest_repair",
+    "source": "bundle_abcd_final_artifact_manifest_repair",
     "manifest_file": "artifact-manifest.json",
     "final_write_after_sidecars": true
   },
   "bundle_b_manifest_repair": {
     "applied": true,
-    "source": "bundle_abc_final_artifact_manifest_repair",
+    "source": "bundle_abcd_final_artifact_manifest_repair",
     "manifest_file": "artifact-manifest.json",
     "final_write_after_sidecars": true
   },
   "bundle_c_manifest_repair": {
     "applied": true,
-    "source": "bundle_abc_final_artifact_manifest_repair",
+    "source": "bundle_abcd_final_artifact_manifest_repair",
     "manifest_file": "artifact-manifest.json",
     "final_write_after_sidecars": true
   },
@@ -114,5 +114,11 @@
       "readiness-report-projection-summary.json": true
     },
     "manifest_file": "artifact-manifest.json"
+  },
+  "bundle_d_manifest_repair": {
+    "applied": true,
+    "source": "bundle_abcd_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json",
+    "final_write_after_sidecars": true
   }
 }
