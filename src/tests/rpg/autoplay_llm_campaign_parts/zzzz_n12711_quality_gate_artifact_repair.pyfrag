@@ -1,7 +1,7 @@
-# Bundle A/B final artifact wrapper.
+# Bundle A/B/C final artifact wrapper.
 # Runs after the normal autoplay main() completes and finalizes quality-gate,
 # survival-exit, transcript-payload-budget, long-run projection, content forecast,
-# and manifest artifacts for the latest green run.
+# NPC agency, economy pressure, and manifest artifacts for the latest green run.
 
 _N12711_PREV_MAIN = globals().get("main")
 
@@ -19,6 +19,9 @@ from app.rpg.session.bundle_ab_late_manifest_hook import (  # noqa: E402
 )
 from app.rpg.session.bundle_b_artifacts import (  # noqa: E402
     write_bundle_b_artifacts as _bundle_b_write_bundle_b_artifacts,
+)
+from app.rpg.session.bundle_c_artifacts import (  # noqa: E402
+    write_bundle_c_artifacts as _bundle_c_write_bundle_c_artifacts,
 )
 from app.rpg.session.quality_gate_artifact_repair import (  # noqa: E402
     repair_quality_gate_artifacts_if_present as _n12711_repair_quality_gate_artifacts_if_present,
@@ -65,6 +68,8 @@ def _n12711_finalize_latest_bundle_artifacts():
         manifest_a = _bundle_a_repair_manifest(path)
         bundle_b = _bundle_b_write_bundle_b_artifacts(path)
         manifest_b = _bundle_a_repair_manifest(path)
+        bundle_c = _bundle_c_write_bundle_c_artifacts(path)
+        manifest_c = _bundle_a_repair_manifest(path)
         late = _bundle_ab_run_late_manifest_repair([path])
         repairs.append({
             "path": str(path),
@@ -73,12 +78,14 @@ def _n12711_finalize_latest_bundle_artifacts():
             "manifest_a": manifest_a,
             "bundle_b": bundle_b,
             "manifest_b": manifest_b,
+            "bundle_c": bundle_c,
+            "manifest_c": manifest_c,
             "late_manifest_repair": late,
         })
-        if any(item.get("applied") for item in (quality, bundle_a, manifest_a, bundle_b, manifest_b, late)):
+        if any(item.get("applied") for item in (quality, bundle_a, manifest_a, bundle_b, manifest_b, bundle_c, manifest_c, late)):
             break
     return {
-        "source": "bundle_ab_final_artifact_wrapper",
+        "source": "bundle_abc_final_artifact_wrapper",
         "repairs": repairs,
         "applied": any(
             item.get("quality", {}).get("applied")
@@ -86,6 +93,8 @@ def _n12711_finalize_latest_bundle_artifacts():
             or item.get("manifest_a", {}).get("applied")
             or item.get("bundle_b", {}).get("applied")
             or item.get("manifest_b", {}).get("applied")
+            or item.get("bundle_c", {}).get("applied")
+            or item.get("manifest_c", {}).get("applied")
             or item.get("late_manifest_repair", {}).get("applied")
             for item in repairs
         ),
@@ -95,14 +104,16 @@ def _n12711_finalize_latest_bundle_artifacts():
 
 def main(argv=None):
     if not callable(_N12711_PREV_MAIN):
-        raise RuntimeError("bundle_ab_previous_main_missing")
+        raise RuntimeError("bundle_abc_previous_main_missing")
     exit_code = _N12711_PREV_MAIN(argv)
     try:
         globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"] = _n12711_finalize_latest_bundle_artifacts()
         globals()["BUNDLE_B_FINAL_ARTIFACT_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
+        globals()["BUNDLE_C_FINAL_ARTIFACT_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
         globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
     except Exception as exc:
-        globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"] = {"source": "bundle_ab_final_artifact_wrapper", "applied": False, "error": repr(exc)}
+        globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"] = {"source": "bundle_abc_final_artifact_wrapper", "applied": False, "error": repr(exc)}
         globals()["BUNDLE_B_FINAL_ARTIFACT_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
+        globals()["BUNDLE_C_FINAL_ARTIFACT_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
         globals()["N12711_QUALITY_GATE_REPAIR_RESULT"] = globals()["BUNDLE_A_FINAL_ARTIFACT_RESULT"]
     return exit_code
