@@ -22,6 +22,7 @@ def _registry_payload(ready: bool = True):
         "src/tests/rpg/test_bundle_e_product_report_rendering.py",
         "src/tests/rpg/test_bundle_v_release_candidate_handoff_manifest.py",
         "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py",
+        "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py",
     ]
     command = ["python", "-m", "pytest", *tests]
     return {
@@ -47,7 +48,7 @@ def _registry_payload(ready: bool = True):
         },
         "test_files": tests,
         "canonical_command": {"argv": command, "text": " ".join(command)},
-        "recommended_next_step": "use_canonical_e_z_focused_suite_command" if ready else "fix_focused_suite_registry_drift",
+        "recommended_next_step": "use_canonical_e_ab_focused_suite_command" if ready else "fix_focused_suite_registry_drift",
     }
 
 
@@ -61,14 +62,14 @@ def test_bundle_ab_dashboard_summary_reports_synced_state():
     assert dashboard["status_label"] == "Focused Suite Synced"
     assert dashboard["status_class"] == "pass"
     assert dashboard["focused_suite_registry_ready"] is True
-    assert dashboard["test_file_count"] == 3
+    assert dashboard["test_file_count"] == 4
     assert dashboard["missing_test_file_count"] == 0
     assert dashboard["duplicate_test_file_count"] == 0
     assert dashboard["advisory_failure_count"] == 0
     assert dashboard["first_test_file"] == "src/tests/rpg/test_bundle_e_product_report_rendering.py"
-    assert dashboard["last_test_file"] == "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py"
+    assert dashboard["last_test_file"] == "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
     assert "python -m pytest" in dashboard["canonical_command_text"]
-    assert dashboard["recommended_next_step"] == "use_canonical_e_z_focused_suite_command"
+    assert dashboard["recommended_next_step"] == "use_canonical_e_ab_focused_suite_command"
 
 
 def test_bundle_ab_dashboard_summary_reports_drift_state():
@@ -98,7 +99,7 @@ def test_bundle_ab_writes_dashboard_when_registry_summary_is_exported(tmp_path):
         dashboard = json.loads(dashboard_path.read_text(encoding="utf-8"))
         assert dashboard["ok"] is True
         assert dashboard["status_label"] == "Focused Suite Synced"
-        assert dashboard["last_test_file"] == "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py"
+        assert dashboard["last_test_file"] == "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
     finally:
         Path.write_text = original_write_text
 
@@ -121,8 +122,11 @@ def test_bundle_ab_injects_focused_suite_report_section_with_command_and_collaps
         assert 'id="bundle-ab-focused-suite-registry-dashboard"' in rendered
         assert "Focused Suite Registry" in rendered
         assert "Focused Suite Synced" in rendered
+        assert "Canonical E-AB focused test command" in rendered
+        assert "Canonical E-Z focused test command" not in rendered
         assert "python -m pytest" in rendered
         assert "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py" in rendered
+        assert "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py" in rendered
         assert '<details class="bundle-ab-raw-details">' in rendered
         raw_start = rendered.index('<details class="bundle-ab-raw-details">')
         raw_open = rendered[raw_start : rendered.index(">", raw_start) + 1]
