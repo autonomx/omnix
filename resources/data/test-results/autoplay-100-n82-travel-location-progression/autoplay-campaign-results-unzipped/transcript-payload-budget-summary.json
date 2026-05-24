@@ -4,11 +4,11 @@
   "ok": true,
   "advisory_ok": true,
   "row_count": 100,
-  "total_transcript_bytes": 3051653,
-  "average_row_bytes": 30516,
-  "max_row_bytes": 49276,
+  "total_transcript_bytes": 3050078,
+  "average_row_bytes": 30500,
+  "max_row_bytes": 49370,
   "max_compact_row_bytes": 120000,
-  "projected_1000_turn_transcript_bytes": 30516000,
+  "projected_1000_turn_transcript_bytes": 30500000,
   "max_projected_1000_turn_transcript_bytes": 200000000,
   "max_projected_1000_turn_review_bytes": 1000000000,
   "oversized_row_count": 0,
@@ -16,15 +16,11 @@
   "heavy_field_totals": [
     {
       "field": "presentation_soft_classification",
-      "bytes": 118660
+      "bytes": 118521
     },
     {
       "field": "presentation_hard_grounding",
-      "bytes": 37680
-    },
-    {
-      "field": "narration_before_meta_repair",
-      "bytes": 1238
+      "bytes": 38610
     }
   ],
   "recommended_actions": [

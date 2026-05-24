@@ -7,13 +7,13 @@
       "type": null
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 38,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"fallback_source\": \"llm_safe_fallback\", \"narration\": \"The heavy parchment feels weighty in your hands as you present it to Bran and Garran. The markings detailing Captain Voss’s movements are undeniable proof that this isn't mere coincidence; organized malice is at work. Bran takes the manifest, his usual guarded expression softening slightly as he scans the seals and script. Then the proof needs daylight and witnesses before anyone can make it vanish.\", \"npc\": {\"line\": \"Then the proof needs daylight and witnesses before anyone can make it vanish.\", \"speaker\": \"Captain Voss\"}, \"source\": \"llm_safe_fallback\", \"unsupported_combat_claim_preselection_suppressed\": true, \"unsupported_combat_claim_sanitizer\": {\"dropped_sentence_count\": 0, \"dropped_sentence_preview\": [], \"format_version\": \"n11621_unsupported_combat_preselection_sanitizer_v",
+      "raw_preview": "{\"action\": \"I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.\", \"dialogue_source\": \"deterministic_social_graph_line\", \"fallback_source\": \"llm_safe_fallback\", \"narration\": \"Bran accepts the rolled-up manifest from you, his expression immediately shifting from cautious neutrality to deep concern as he scans the seals and markings. Garran leans closer, peering over Bran's shoulder, a low murmur of recognition escaping him at the document's contents. The weight of Voss's culpability seems to settle heavily into the quiet air between the three of you. If that proof is solid, we copy it, guard it, and press the name it gives us.\", \"npc\": {\"line\": \"If that proof is solid, we copy it, guard it, and press the name it gives us.\", \"speaker\": \"Captain Voss\"}, \"source\": \"llm_safe_fallback\", \"unsupported_combat_claim_preselection_suppressed\": true, \"unsupported_combat_claim_sanitizer\": {\"dropped_sentence_count\": 0, \"dropped_sentence_preview\": [], \"format_versi",
       "summary": "",
       "turn": 38,
       "type": null
@@ -37,26 +37,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 39,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 39,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 39,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 39,
       "type": "semantic_intent"
     },
@@ -67,26 +67,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 40,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 40,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 40,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 40,
       "type": "semantic_intent"
     },
@@ -97,26 +97,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 41,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 41,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 41,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 41,
       "type": "semantic_intent"
     },
@@ -127,26 +127,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 42,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 42,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 42,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 42,
       "type": "semantic_intent"
     },
@@ -157,26 +157,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 43,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 43,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 43,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 43,
       "type": "semantic_intent"
     },
@@ -187,26 +187,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 44,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 44,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 44,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 44,
       "type": "semantic_intent"
     },
@@ -217,26 +217,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 45,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 45,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 45,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 45,
       "type": "semantic_intent"
     },
@@ -247,26 +247,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 46,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 46,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 46,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 46,
       "type": "semantic_intent"
     },
@@ -277,26 +277,26 @@
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 47,
       "type": null
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T19:18:01.834169+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:abbd74f9dd2f6c75\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:183a89c60cfec5ca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 39, \"created_at\": \"2026-05-24T20:43:43.614935+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:38:semantic_intent:4ae541bdff91161f\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1fd113137c4ce833\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 39}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 47,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\", \"target\": \"Bran\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\", \"target\": \"Bran\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 47,
       "type": "semantic_intent"
     },
     {
-      "raw_preview": "{\"confidence\": 0.9, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.\"}",
-      "summary": "The physical document serves as irrefutable evidence placing Captain Voss directly behind the recent attacks.",
+      "raw_preview": "{\"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.\"}",
+      "summary": "The player successfully presented a manifest proving Captain Voss orchestrated the hostile attacks to Bran and Garran.",
       "turn": 47,
       "type": "semantic_intent"
     }
@@ -314,121 +314,91 @@
   ],
   "damage_events": [
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f0ee3abd859745eb\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:cfb6a1951e9f3e74\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 93}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f0ee3abd859745eb\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:cfb6a1951e9f3e74\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 93}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 2,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f0ee3abd859745eb\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:cfb6a1951e9f3e74\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 93}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 3}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-24T19:17:59.667152+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:a2f08281337d5271\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
@@ -440,55 +410,43 @@
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f0ee3abd859745eb\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:0fa1648b80330be4\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T19:17:59.686517+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:70c273e07af32c2e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:0fa1648b80330be4\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_pr",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 4,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-24T19:17:59.667152+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:a2f08281337d5271\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T20:43:41.852613+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:a76b4e3bf2d25882\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "future_hook"
@@ -500,61 +458,43 @@
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:0fa1648b80330be4\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T19:17:59.686517+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:70c273e07af32c2e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:0fa1648b80330be4\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_pr",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 5,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-24T19:17:59.667152+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:a2f08281337d5271\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T20:43:41.852613+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:a76b4e3bf2d25882\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 5,
       "type": "future_hook"
@@ -566,31 +506,37 @@
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:0fa1648b80330be4\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 6,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 6,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 6,
       "type": "Immediate Investigation Prompt"
@@ -602,16 +548,70 @@
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T19:17:59.686517+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:70c273e07af32c2e\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:0fa1648b80330be4\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_pr",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T20:43:41.852613+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:a76b4e3bf2d25882\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 6,
       "type": "future_hook"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 6,
       "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:ee6c04761d7a8da7\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 7}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 7, \"created_at\": \"2026-05-24T20:43:41.920493+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:6:future_hook:242efb5f00547396\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:ee6c04761d7a8da7\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 7}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T20:43:41.852613+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:a76b4e3bf2d25882\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 7,
+      "type": "future_hook"
     }
   ],
   "direct_graph_combat_count": 4,
@@ -628,7 +628,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -641,7 +641,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -654,7 +654,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -667,7 +667,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f0ee3abd859745eb\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -680,7 +680,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:cfb6a1951e9f3e74\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 93}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -693,7 +693,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -706,7 +706,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -719,7 +719,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -732,7 +732,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f0ee3abd859745eb\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -745,9 +745,74 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:cfb6a1951e9f3e74\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 93}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
+      "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -760,19 +825,6 @@
       },
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 2,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
@@ -784,9 +836,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3997be6d657ce1a5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 99}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -797,9 +849,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f2f79d5e34244fe5\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 97}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -810,9 +862,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f0ee3abd859745eb\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f18f52a34cc25c97\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -823,9 +875,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:cfb6a1951e9f3e74\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 93}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:aeb07d18082b181c\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -836,9 +888,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"hook_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fae1f20f0e12c570\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 94}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -849,9 +901,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -862,9 +914,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-24T19:17:59.667152+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:a2f08281337d5271\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-24T20:43:41.852613+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:a76b4e3bf2d25882\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b33ac4129a451634\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "future_hook"
     },
     {
@@ -877,7 +929,7 @@
       },
       "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"target\": \"Bran\"}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
+      "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -889,58 +941,6 @@
         "round": false
       },
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\"}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:883be95f90615bca\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 3}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8a4afccd0e7d2943\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 100}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b1a95753654400df\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 96}",
-      "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:14cdb4155b5ee9f1\", \"summary\": \"Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).\", \"turn_index\": 95}",
       "summary": "Bran suggests investigating the watchpost itself now that evidence of Veska's passage is secured in hand (Triggered by this confrontation).",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
@@ -985,15 +985,15 @@
     "missing_parts": [],
     "ok": true,
     "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
-    "real_attack_event_count": 289,
-    "real_damage_event_count": 5093,
+    "real_attack_event_count": 284,
+    "real_damage_event_count": 4754,
     "real_resolution_event_count": 45
   },
   "ok": true,
   "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
-  "real_attack_event_count": 289,
+  "real_attack_event_count": 284,
   "real_combat_lifecycle_ok": true,
-  "real_damage_event_count": 5093,
+  "real_damage_event_count": 4754,
   "real_resolution_event_count": 45,
   "real_round_event_count": 2,
   "resolution_events": [
@@ -1269,6 +1269,18 @@
     }
   ],
   "round_events": [
+    {
+      "raw_preview": "{\"action\": \"Initiative established: Player (6) vs. Bandit (3)\", \"combat_narration_accepted\": true, \"combat_narration_attempted\": true, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], \"facts\": {\"actor_id\": \"\", \"actor_name\": \"\", \"attack_roll\": null, \"attack_total\": null, \"combat_ended\": false, \"damage_applied\": null, \"defeated\": false, \"hit\": null, \"next_actor_id\": \"player\", \"party_defeated\": false, \"reason\": \"combat_started\", \"round\": 1, \"target_defense\": nul",
+      "summary": "",
+      "turn": 63,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"action\": \"Initiative established: Player (6) vs. Bandit (3)\", \"followup_hooks\": [\"Player's turn to act against the Bandit.\", \"The next action will be resolved using the player's initiative.\"], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The conflict has begun! The Bandit raises a crude weapon, ready to strike. You are positioned first in the initiative order, poised to respond to the ambush. With an initial roll of 5 and a bonus of +1, your action is primed for impact.\", \"npc\": {\"line\": \"\", \"speaker\": \"Bandit\"}, \"reward\": \"\"}",
+      "summary": "",
+      "turn": 63,
+      "type": null
+    },
     {
       "consequence_event_count": 1,
       "direct_graph_combat_count": 4,
