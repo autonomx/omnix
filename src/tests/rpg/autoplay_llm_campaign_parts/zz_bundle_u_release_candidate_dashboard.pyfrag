@@ -1,0 +1,213 @@
+# Bundle U — Release Candidate Dashboard + Final Readiness Summary
+#
+# Product-facing dashboard for Bundle T's live 1000-turn result gate.  This
+# fragment reads one-thousand-turn-live-result-summary.json, writes a compact
+# release-candidate dashboard summary, and injects a campaign report section.
+# It is advisory-only and never mutates authoritative simulation state.
+
+import html as _bundle_u_html
+import json as _bundle_u_json
+from pathlib import Path as _BundleUPath
+from typing import Any as _BundleUAny, Dict as _BundleUDict, List as _BundleUList
+
+_BUNDLE_U_LIVE_RESULT_FILE = "one-thousand-turn-live-result-summary.json"
+_BUNDLE_U_DASHBOARD_FILE = "one-thousand-turn-release-candidate-dashboard-summary.json"
+_BUNDLE_U_MARKER = 'id="bundle-u-release-candidate-dashboard"'
+
+
+def _bundle_u_safe_html(value: _BundleUAny) -> str:
+    return _bundle_u_html.escape("" if value is None else str(value), quote=True)
+
+
+def _bundle_u_load_json_file(path: _BundleUPath) -> _BundleUDict[str, _BundleUAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_u_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_u_to_int(value: _BundleUAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_u_status_label(live_result: _BundleUDict[str, _BundleUAny]) -> str:
+    if live_result.get("release_candidate_ready") is True:
+        return "Release Candidate Ready"
+    if live_result:
+        return "Release Candidate Blocked"
+    return "Live Result Missing"
+
+
+def _bundle_u_status_class(live_result: _BundleUDict[str, _BundleUAny]) -> str:
+    if live_result.get("release_candidate_ready") is True:
+        return "pass"
+    if live_result:
+        return "warn"
+    return "fail"
+
+
+def _bundle_u_build_dashboard_summary(live_result: _BundleUDict[str, _BundleUAny]) -> _BundleUDict[str, _BundleUAny]:
+    checks = live_result.get("checks") if isinstance(live_result.get("checks"), dict) else {}
+    failures = live_result.get("advisory_failures") if isinstance(live_result.get("advisory_failures"), list) else []
+    metrics = live_result.get("metrics") if isinstance(live_result.get("metrics"), dict) else {}
+    check_count = len(checks)
+    passing_check_count = len([value for value in checks.values() if value is True])
+    completion_percent = int((passing_check_count / check_count) * 100) if check_count else 0
+    return {
+        "format_version": "bundle_u_release_candidate_dashboard_summary_v1",
+        "source": "bundle_u_release_candidate_dashboard",
+        "ok": live_result.get("release_candidate_ready") is True,
+        "advisory_only": True,
+        "status_label": _bundle_u_status_label(live_result),
+        "status_class": _bundle_u_status_class(live_result),
+        "release_candidate_ready": live_result.get("release_candidate_ready") is True,
+        "check_count": check_count,
+        "passing_check_count": passing_check_count,
+        "failing_check_count": check_count - passing_check_count,
+        "completion_percent": completion_percent,
+        "advisory_failure_count": len(failures),
+        "advisory_failures": list(failures),
+        "metrics": metrics,
+        "recommended_next_step": live_result.get("recommended_next_step") or "run_live_1000_result_gate",
+    }
+
+
+def _bundle_u_write_dashboard_summary_if_possible(result_dir: _BundleUPath) -> _BundleUDict[str, _BundleUAny]:
+    live_result = _bundle_u_load_json_file(result_dir / _BUNDLE_U_LIVE_RESULT_FILE)
+    if not live_result:
+        dashboard = _bundle_u_build_dashboard_summary({})
+        dashboard["advisory_failures"] = [_BUNDLE_U_LIVE_RESULT_FILE]
+        dashboard["advisory_failure_count"] = 1
+        dashboard["recommended_next_step"] = "write_live_1000_result_summary_first"
+    else:
+        dashboard = _bundle_u_build_dashboard_summary(live_result)
+    _BUNDLE_U_ORIGINAL_PATH_WRITE_TEXT(
+        result_dir / _BUNDLE_U_DASHBOARD_FILE,
+        _bundle_u_json.dumps(dashboard, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return dashboard
+
+
+def _bundle_u_check_rows(live_result: _BundleUDict[str, _BundleUAny]) -> str:
+    checks = live_result.get("checks") if isinstance(live_result.get("checks"), dict) else {}
+    rows: _BundleUList[str] = []
+    for name, ok in checks.items():
+        rows.append(
+            "<tr>"
+            f"<th scope=\"row\">{_bundle_u_safe_html(name)}</th>"
+            f"<td>{_bundle_u_safe_html('pass' if ok else 'advisory')}</td>"
+            "</tr>"
+        )
+    return "".join(rows) or "<tr><th scope=\"row\">status</th><td>no checks available</td></tr>"
+
+
+def _bundle_u_metric_rows(dashboard: _BundleUDict[str, _BundleUAny]) -> str:
+    metrics = dashboard.get("metrics") if isinstance(dashboard.get("metrics"), dict) else {}
+    rows: _BundleUList[str] = []
+    for name, value in metrics.items():
+        if isinstance(value, (dict, list)):
+            continue
+        rows.append(
+            "<tr>"
+            f"<th scope=\"row\">{_bundle_u_safe_html(name)}</th>"
+            f"<td>{_bundle_u_safe_html(value)}</td>"
+            "</tr>"
+        )
+    return "".join(rows) or "<tr><th scope=\"row\">metrics</th><td>no metrics available</td></tr>"
+
+
+def _bundle_u_render_dashboard_section(result_dir: _BundleUPath) -> str:
+    live_result = _bundle_u_load_json_file(result_dir / _BUNDLE_U_LIVE_RESULT_FILE)
+    dashboard = _bundle_u_load_json_file(result_dir / _BUNDLE_U_DASHBOARD_FILE)
+    if not dashboard:
+        dashboard = _bundle_u_write_dashboard_summary_if_possible(result_dir)
+    raw_json = _bundle_u_json.dumps(dashboard, indent=2, sort_keys=True, default=str)
+    status_class = dashboard.get("status_class") or "fail"
+    status_label = dashboard.get("status_label") or "Live Result Missing"
+    return (
+        '<section id="bundle-u-release-candidate-dashboard" class="bundle-u-release-candidate-dashboard">'
+        "<style>"
+        ".bundle-u-release-candidate-dashboard{margin:24px 0;padding:18px;border:1px solid rgba(148,163,184,.35);border-radius:16px;background:rgba(15,23,42,.04)}"
+        ".bundle-u-release-candidate-dashboard header{display:flex;align-items:center;justify-content:space-between;gap:10px}"
+        ".bundle-u-badge{font-size:.78rem;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid rgba(15,23,42,.18)}"
+        ".bundle-u-badge-pass{background:rgba(34,197,94,.16)}"
+        ".bundle-u-badge-warn{background:rgba(245,158,11,.16)}"
+        ".bundle-u-badge-fail{background:rgba(239,68,68,.16)}"
+        ".bundle-u-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:12px}"
+        ".bundle-u-card{padding:14px;border:1px solid rgba(148,163,184,.28);border-radius:14px;background:rgba(255,255,255,.72)}"
+        ".bundle-u-table{width:100%;border-collapse:collapse;font-size:.9rem}"
+        ".bundle-u-table th,.bundle-u-table td{padding:6px 8px;border-top:1px solid rgba(148,163,184,.25);text-align:left;vertical-align:top}"
+        ".bundle-u-raw-json{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:.82rem}"
+        "</style>"
+        "<header>"
+        "<h2>1000-Turn Release Candidate Dashboard</h2>"
+        f'<span class="bundle-u-badge bundle-u-badge-{_bundle_u_safe_html(status_class)}">{_bundle_u_safe_html(status_label)}</span>'
+        "</header>"
+        "<p>Final advisory rollup for promoting the guarded live 1000-turn campaign run into a release candidate.</p>"
+        f"<p>Progress: {_bundle_u_safe_html(dashboard.get('passing_check_count', 0))}/{_bundle_u_safe_html(dashboard.get('check_count', 0))} checks passing ({_bundle_u_safe_html(dashboard.get('completion_percent', 0))}%).</p>"
+        f"<p>Recommended next step: {_bundle_u_safe_html(dashboard.get('recommended_next_step'))}</p>"
+        '<div class="bundle-u-grid">'
+        '<div class="bundle-u-card"><h3>Release Checks</h3><table class="bundle-u-table"><thead><tr><th>Check</th><th>Status</th></tr></thead><tbody>'
+        f"{_bundle_u_check_rows(live_result)}"
+        "</tbody></table></div>"
+        '<div class="bundle-u-card"><h3>Key Metrics</h3><table class="bundle-u-table"><tbody>'
+        f"{_bundle_u_metric_rows(dashboard)}"
+        "</tbody></table></div>"
+        "</div>"
+        '<details class="bundle-u-raw-details"><summary>Raw release candidate dashboard JSON</summary>'
+        f'<pre class="bundle-u-raw-json">{_bundle_u_safe_html(raw_json)}</pre>'
+        "</details>"
+        "</section>"
+    )
+
+
+def _bundle_u_looks_like_campaign_report(path: _BundleUPath, html_text: str) -> bool:
+    if path.suffix.lower() not in {".html", ".htm"}:
+        return False
+    lower = html_text.lower()
+    if "bundle-u-release-candidate-dashboard" in lower:
+        return False
+    return "autoplay campaign report" in lower or "campaign chronicle" in lower or ("autoplay" in str(path).lower() and "report" in str(path).lower())
+
+
+def _bundle_u_inject_dashboard_section(path: _BundleUPath, html_text: str) -> str:
+    if not _bundle_u_looks_like_campaign_report(path, html_text):
+        return html_text
+    lower = html_text.lower()
+    idx = lower.find("</main>")
+    if idx < 0:
+        idx = lower.find("</body>")
+    if idx < 0:
+        idx = len(html_text)
+    return html_text[:idx] + "\n" + _bundle_u_render_dashboard_section(path.parent) + "\n" + html_text[idx:]
+
+
+if not globals().get("_BUNDLE_U_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_U_ORIGINAL_PATH_WRITE_TEXT = _BundleUPath.write_text
+
+    def _bundle_u_write_text_with_release_dashboard(self, data, *args, **kwargs):
+        path = _BundleUPath(self)
+        if isinstance(data, str) and _bundle_u_looks_like_campaign_report(path, data):
+            try:
+                data = _bundle_u_inject_dashboard_section(path, data)
+            except Exception as exc:
+                data = data + "\n<!-- Bundle U dashboard injection skipped: " + _bundle_u_safe_html(f"{type(exc).__name__}: {exc}") + " -->\n"
+        result = _BUNDLE_U_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        try:
+            if path.name == _BUNDLE_U_LIVE_RESULT_FILE:
+                _bundle_u_write_dashboard_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleUPath.write_text = _bundle_u_write_text_with_release_dashboard
+    globals()["_BUNDLE_U_PATH_WRITE_TEXT_PATCHED"] = True
