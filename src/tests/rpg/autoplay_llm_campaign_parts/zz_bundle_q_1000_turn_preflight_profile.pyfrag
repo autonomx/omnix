@@ -1,0 +1,216 @@
+# Bundle Q — 1000-Turn Preflight Profile + Command Builder
+#
+# Advisory profile layer for the first full-scale preflight.  This fragment
+# exposes a deterministic 1000-turn preflight profile, command-builder helpers,
+# and a summary artifact that links Bundle O/P readiness to a concrete next run.
+# It does not mutate authoritative simulation state.
+
+import json as _bundle_q_json
+import os as _bundle_q_os
+from pathlib import Path as _BundleQPath
+from typing import Any as _BundleQAny, Dict as _BundleQDict, List as _BundleQList, Tuple as _BundleQTuple
+
+_BUNDLE_Q_PROFILE_NAME = "preflight_1000"
+_BUNDLE_Q_SUMMARY_FILE = "one-thousand-turn-preflight-profile-summary.json"
+_BUNDLE_Q_AGGREGATOR_FILE = "one-thousand-turn-readiness-aggregator-summary.json"
+_BUNDLE_Q_DASHBOARD_FILE = "one-thousand-turn-readiness-dashboard-summary.json"
+_BUNDLE_Q_TARGET_TURNS = 1000
+
+_BUNDLE_Q_PROFILE: _BundleQDict[str, _BundleQAny] = {
+    "format_version": "bundle_q_1000_turn_preflight_profile_v1",
+    "source": "bundle_q_1000_turn_preflight_profile",
+    "name": _BUNDLE_Q_PROFILE_NAME,
+    "target_turns": _BUNDLE_Q_TARGET_TURNS,
+    "intent": "First full-scale advisory preflight before a live 1000-turn LLM campaign run.",
+    "defaults": {
+        "turns": _BUNDLE_Q_TARGET_TURNS,
+        "narration_mode": "deferred",
+        "background_llm_mode": "combined",
+        "checkpoint_interval": 25,
+        "artifact_detail": "full",
+        "compact_transcript_mode": True,
+        "final_background_drain_required": True,
+        "readiness_aggregator_required": True,
+        "dashboard_required": True,
+    },
+    "safety_thresholds": {
+        "max_blocking_turn_p95_seconds": 8.0,
+        "max_background_drain_seconds": 120.0,
+        "max_player_agent_fallback_rate": 0.25,
+        "min_meaningful_progress_rate": 0.10,
+        "max_required_gate_failures": 0,
+    },
+    "canonical_cli_args": [
+        "--turns", "1000",
+        "--narration-mode", "deferred",
+        "--background-llm-mode", "combined",
+        "--checkpoint-interval", "25",
+        "--artifact-detail", "full",
+        "--compact-transcript-mode",
+    ],
+}
+
+
+def _bundle_q_load_json_file(path: _BundleQPath) -> _BundleQDict[str, _BundleQAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_q_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_q_bool(value: _BundleQAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed"}:
+        return False
+    return default
+
+
+def _bundle_q_build_preflight_command(script: str = "src/tests/rpg/autoplay_llm_campaign.py") -> _BundleQList[str]:
+    return ["python", script, *list(_BUNDLE_Q_PROFILE["canonical_cli_args"])]
+
+
+def _bundle_q_missing_command_flags(argv: _BundleQList[str]) -> _BundleQList[str]:
+    supplied = {arg.split("=", 1)[0] for arg in argv if str(arg).startswith("--")}
+    required = ["--turns", "--narration-mode", "--background-llm-mode", "--checkpoint-interval", "--artifact-detail", "--compact-transcript-mode"]
+    return [flag for flag in required if flag not in supplied]
+
+
+def _bundle_q_strip_profile_args(argv: _BundleQList[str]) -> _BundleQTuple[_BundleQList[str], bool]:
+    stripped: _BundleQList[str] = []
+    applied = False
+    profile_flags = {"--profile", "--autoplay-profile", "--dry-run-profile", "--preflight-profile"}
+    index = 0
+    while index < len(argv):
+        item = argv[index]
+        if item in profile_flags and index + 1 < len(argv):
+            value = argv[index + 1]
+            if value == _BUNDLE_Q_PROFILE_NAME:
+                applied = True
+                index += 2
+                continue
+        if item.startswith("--profile=") or item.startswith("--autoplay-profile=") or item.startswith("--dry-run-profile=") or item.startswith("--preflight-profile="):
+            value = item.split("=", 1)[1]
+            if value == _BUNDLE_Q_PROFILE_NAME:
+                applied = True
+                index += 1
+                continue
+        stripped.append(item)
+        index += 1
+    return stripped, applied
+
+
+def _bundle_q_append_missing_profile_args(argv: _BundleQList[str]) -> _BundleQList[str]:
+    expanded = list(argv)
+    supplied = {arg.split("=", 1)[0] for arg in expanded if str(arg).startswith("--")}
+    for flag, value in [
+        ("--turns", "1000"),
+        ("--narration-mode", "deferred"),
+        ("--background-llm-mode", "combined"),
+        ("--checkpoint-interval", "25"),
+        ("--artifact-detail", "full"),
+    ]:
+        if flag not in supplied:
+            expanded.extend([flag, value])
+    if "--compact-transcript-mode" not in supplied:
+        expanded.append("--compact-transcript-mode")
+    return expanded
+
+
+def _bundle_q_apply_preflight_env() -> None:
+    defaults = _BUNDLE_Q_PROFILE["defaults"]
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_PROFILE", _BUNDLE_Q_PROFILE_NAME)
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_TURNS", str(defaults["turns"]))
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_NARRATION_MODE", str(defaults["narration_mode"]))
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_BACKGROUND_LLM_MODE", str(defaults["background_llm_mode"]))
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_CHECKPOINT_INTERVAL", str(defaults["checkpoint_interval"]))
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_ARTIFACT_DETAIL", str(defaults["artifact_detail"]))
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_COMPACT_TRANSCRIPT_MODE", "1")
+
+
+def _bundle_q_evaluate_preflight_profile(result_dir: _BundleQPath) -> _BundleQDict[str, _BundleQAny]:
+    aggregator = _bundle_q_load_json_file(result_dir / _BUNDLE_Q_AGGREGATOR_FILE)
+    dashboard = _bundle_q_load_json_file(result_dir / _BUNDLE_Q_DASHBOARD_FILE)
+    command = _bundle_q_build_preflight_command()
+    missing_flags = _bundle_q_missing_command_flags(command)
+    aggregator_ready = _bundle_q_bool(aggregator.get("ready_for_1000_turn_preflight"), False)
+    dashboard_ready = bool(dashboard) and dashboard.get("status_label") in {"Live Ready", "Preflight Ready"}
+    checks = {
+        "profile_descriptor_present": _BUNDLE_Q_PROFILE["name"] == _BUNDLE_Q_PROFILE_NAME,
+        "target_turns_1000": _BUNDLE_Q_PROFILE["target_turns"] == _BUNDLE_Q_TARGET_TURNS,
+        "canonical_command_complete": not missing_flags,
+        "aggregator_preflight_ready": aggregator_ready,
+        "dashboard_present": bool(dashboard),
+        "dashboard_preflight_ready": dashboard_ready,
+        "compact_transcript_mode_enabled": bool(_BUNDLE_Q_PROFILE["defaults"].get("compact_transcript_mode")),
+        "final_background_drain_required": bool(_BUNDLE_Q_PROFILE["defaults"].get("final_background_drain_required")),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_q_1000_turn_preflight_profile_summary_v1",
+        "source": "bundle_q_1000_turn_preflight_profile",
+        "ok": not failures,
+        "advisory_only": True,
+        "profile": _BUNDLE_Q_PROFILE,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "target_turns": _BUNDLE_Q_TARGET_TURNS,
+            "canonical_command_arg_count": len(command),
+            "missing_command_flag_count": len(missing_flags),
+            "aggregator_present": bool(aggregator),
+            "dashboard_present": bool(dashboard),
+        },
+        "canonical_command": command,
+        "missing_command_flags": missing_flags,
+        "recommended_next_step": "run_preflight_1000_command" if not failures else "fix_readiness_dashboard_before_preflight_1000",
+    }
+
+
+def _bundle_q_write_summary_if_possible(result_dir: _BundleQPath):
+    try:
+        summary = _bundle_q_evaluate_preflight_profile(result_dir)
+        _BUNDLE_Q_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_Q_SUMMARY_FILE, _bundle_q_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_Q_MAIN_PATCHED") and callable(globals().get("main")):
+    _BUNDLE_Q_ORIGINAL_MAIN = globals()["main"]
+
+    def _bundle_q_main(argv=None):
+        args = list(argv or [])
+        args, applied = _bundle_q_strip_profile_args(args)
+        if applied:
+            _bundle_q_apply_preflight_env()
+            args = _bundle_q_append_missing_profile_args(args)
+        return _BUNDLE_Q_ORIGINAL_MAIN(args)
+
+    globals()["main"] = _bundle_q_main
+    globals()["_BUNDLE_Q_MAIN_PATCHED"] = True
+
+
+if not globals().get("_BUNDLE_Q_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_Q_ORIGINAL_PATH_WRITE_TEXT = _BundleQPath.write_text
+
+    def _bundle_q_write_text_with_preflight_profile(self, data, *args, **kwargs):
+        result = _BUNDLE_Q_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleQPath(self)
+        try:
+            if path.name in {_BUNDLE_Q_AGGREGATOR_FILE, _BUNDLE_Q_DASHBOARD_FILE}:
+                _bundle_q_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleQPath.write_text = _bundle_q_write_text_with_preflight_profile
+    globals()["_BUNDLE_Q_PATH_WRITE_TEXT_PATCHED"] = True
