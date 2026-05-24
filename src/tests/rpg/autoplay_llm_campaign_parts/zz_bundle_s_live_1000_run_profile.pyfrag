@@ -29,6 +29,7 @@ _BUNDLE_S_PROFILE: _BundleSDict[str, _BundleSAny] = {
         "background_llm_mode": "combined",
         "checkpoint_interval": 25,
         "artifact_detail": "full",
+        "transcript_detail": "auto",
         "compact_transcript_mode": True,
         "final_background_drain_required": True,
         "promotion_gate_required": True,
@@ -47,8 +48,8 @@ _BUNDLE_S_PROFILE: _BundleSDict[str, _BundleSAny] = {
         "--background-llm-mode", "combined",
         "--checkpoint-interval", "25",
         "--artifact-detail", "full",
-        "--compact-transcript-mode",
-        "--zip-results",
+        "--transcript-detail", "auto",
+        "--capture-console-log",
     ],
 }
 
@@ -88,8 +89,8 @@ def _bundle_s_missing_command_flags(argv: _BundleSList[str]) -> _BundleSList[str
         "--background-llm-mode",
         "--checkpoint-interval",
         "--artifact-detail",
-        "--compact-transcript-mode",
-        "--zip-results",
+        "--transcript-detail",
+        "--capture-console-log",
     ]
     return [flag for flag in required if flag not in supplied]
 
@@ -125,12 +126,12 @@ def _bundle_s_append_missing_profile_args(argv: _BundleSList[str]) -> _BundleSLi
         ("--background-llm-mode", "combined"),
         ("--checkpoint-interval", "25"),
         ("--artifact-detail", "full"),
+        ("--transcript-detail", "auto"),
     ]:
         if flag not in supplied:
             expanded.extend([flag, value])
-    for flag in ("--compact-transcript-mode", "--zip-results"):
-        if flag not in supplied:
-            expanded.append(flag)
+    if "--capture-console-log" not in supplied and "--no-capture-console-log" not in supplied:
+        expanded.append("--capture-console-log")
     return expanded
 
 
@@ -142,6 +143,7 @@ def _bundle_s_apply_live_env() -> None:
     _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_BACKGROUND_LLM_MODE", str(defaults["background_llm_mode"]))
     _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_CHECKPOINT_INTERVAL", str(defaults["checkpoint_interval"]))
     _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_ARTIFACT_DETAIL", str(defaults["artifact_detail"]))
+    _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_TRANSCRIPT_DETAIL", str(defaults["transcript_detail"]))
     _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_COMPACT_TRANSCRIPT_MODE", "1")
     _bundle_s_os.environ.setdefault("RPG_AUTOPLAY_ZIP_RESULTS", "1")
 
