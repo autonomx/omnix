@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.42872,
-        "p95_turn_seconds": 9.739942
+        "avg_turn_seconds": 7.2166570000000005,
+        "p95_turn_seconds": 11.855227000000001
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.43s, p95 9.74s."
+      "message": "Average turn latency 7.22s, p95 11.86s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -10133,7 +10133,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_b5c50233a9f8"
+                "session_key": "autoplay_6a05abd514ac"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10164,7 +10164,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_b5c50233a9f8"
+                "session_key": "autoplay_6a05abd514ac"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10225,7 +10225,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_b5c50233a9f8"
+                "session_key": "autoplay_6a05abd514ac"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -11379,9 +11379,9 @@
           "target_turns": 250,
           "base_turns": 100,
           "turn_ratio": 2.5,
-          "projected_wall_seconds_avg": 1607.18,
-          "projected_wall_hours_avg": 0.446,
-          "projected_p95_cumulative_seconds": 2434.985,
+          "projected_wall_seconds_avg": 1804.164,
+          "projected_wall_hours_avg": 0.501,
+          "projected_p95_cumulative_seconds": 2963.807,
           "projected_transcript_bytes": 111000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 14900,
@@ -11391,9 +11391,9 @@
           "target_turns": 300,
           "base_turns": 100,
           "turn_ratio": 3.0,
-          "projected_wall_seconds_avg": 1928.616,
-          "projected_wall_hours_avg": 0.536,
-          "projected_p95_cumulative_seconds": 2921.983,
+          "projected_wall_seconds_avg": 2164.997,
+          "projected_wall_hours_avg": 0.601,
+          "projected_p95_cumulative_seconds": 3556.568,
           "projected_transcript_bytes": 133200,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 17880,
@@ -11403,9 +11403,9 @@
           "target_turns": 1000,
           "base_turns": 100,
           "turn_ratio": 10.0,
-          "projected_wall_seconds_avg": 6428.72,
-          "projected_wall_hours_avg": 1.786,
-          "projected_p95_cumulative_seconds": 9739.942,
+          "projected_wall_seconds_avg": 7216.657,
+          "projected_wall_hours_avg": 2.005,
+          "projected_p95_cumulative_seconds": 11855.227,
           "projected_transcript_bytes": 444000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 59600,
@@ -11413,8 +11413,8 @@
         }
       ],
       "performance_source": {
-        "avg_turn_seconds": 6.42872,
-        "p95_turn_seconds": 9.739942
+        "avg_turn_seconds": 7.2166570000000005,
+        "p95_turn_seconds": 11.855227000000001
       },
       "payload_budget_source": {
         "average_row_bytes": 444,
@@ -11540,6 +11540,75 @@
       ],
       "artifact_files": {
         "summary": "content-exhaustion-forecast-summary.json"
+      }
+    },
+    "npc-agency-schedule-summary.json": {
+      "format_version": "n132_npc_agency_schedule_summary_v1",
+      "source": "n132_npc_agency_schedule_consequence_depth",
+      "ok": true,
+      "advisory_ok": true,
+      "failed_checks": [],
+      "checks": {
+        "npc_agency_gate_ok": true,
+        "npc_count_ok": true,
+        "schedule_events_ok": true,
+        "memory_or_agency_events_ok": true,
+        "bounded_compression_ok": true,
+        "readiness_ok": true
+      },
+      "event_count": 182,
+      "direct_graph_agency_count": 182,
+      "npc_count": 3,
+      "schedule_event_count": 32,
+      "agency_event_count": 0,
+      "memory_event_count": 182,
+      "presence_gating_note": "Current Bundle C locks evidence that NPC schedule/agency exists; next gameplay pass can make presence-gated dialogue stricter.",
+      "recommended_next_actions": [
+        "Project NPC Agency Timeline into the HTML report.",
+        "Track named NPC goal changes and location/presence changes in future long-run runs.",
+        "Use schedule_event_count and memory_event_count as regression evidence for long-run NPC agency."
+      ],
+      "artifact_files": {
+        "summary": "npc-agency-schedule-summary.json"
+      }
+    },
+    "economy-resource-pressure-summary.json": {
+      "format_version": "n133_economy_resource_pressure_summary_v1",
+      "source": "n133_economy_resource_pressure_integration_v2",
+      "ok": true,
+      "advisory_ok": true,
+      "failed_checks": [],
+      "checks": {
+        "economy_pressure_gate_ok": true,
+        "paid_events_ok": true,
+        "unpaid_events_bounded_ok": true,
+        "spend_recorded_ok": true,
+        "ending_currency_recorded_ok": true,
+        "economy_world_signal_ok": true,
+        "readiness_ok": true
+      },
+      "event_count": 12,
+      "paid_count": 12,
+      "unpaid_count": 0,
+      "warning_count": 3,
+      "ending_currency": {
+        "gold": 3,
+        "silver": 0,
+        "copper": 5
+      },
+      "total_spent": {
+        "copper": 25,
+        "gold": 7
+      },
+      "economy_world_signal_count": 5,
+      "service_priority_note": "Current Bundle C locks economy pressure evidence; future gameplay pass should prefer merchant food/drink/lodging before emergency fallback.",
+      "recommended_next_actions": [
+        "Project Economy / Resource Pressure into the HTML report.",
+        "Track merchant-backed food/drink/lodging usage versus emergency fallback.",
+        "Add scarcity/restock/price-pressure evidence before 250/300-turn dry run if economy pressure becomes too static."
+      ],
+      "artifact_files": {
+        "summary": "economy-resource-pressure-summary.json"
       }
     }
   },
@@ -12265,7 +12334,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_b5c50233a9f8"
+              "session_key": "autoplay_6a05abd514ac"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12296,7 +12365,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_b5c50233a9f8"
+              "session_key": "autoplay_6a05abd514ac"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12357,7 +12426,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_b5c50233a9f8"
+              "session_key": "autoplay_6a05abd514ac"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -17779,6 +17848,16 @@
     "files": [
       "long-run-dry-run-projection-summary.json",
       "content-exhaustion-forecast-summary.json"
+    ],
+    "manifest_file": "artifact-manifest.json"
+  },
+  "bundle_c_artifacts": {
+    "source": "bundle_c_npc_economy_artifact_manifest",
+    "npc_agency_schedule_ok": true,
+    "economy_resource_pressure_ok": true,
+    "files": [
+      "npc-agency-schedule-summary.json",
+      "economy-resource-pressure-summary.json"
     ],
     "manifest_file": "artifact-manifest.json"
   }
