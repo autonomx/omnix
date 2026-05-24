@@ -1,0 +1,178 @@
+# Bundle M — Encounter Lifecycle v2
+#
+# Advisory layer for deterministic encounter readiness.  This fragment exports a
+# compact encounter lifecycle model, participant roles, round phases, outcome
+# rules, recovery hooks, and gate metrics.  It writes
+# encounter-lifecycle-v2-summary.json and does not mutate authoritative state.
+
+import json as _bundle_m_json
+from pathlib import Path as _BundleMPath
+from typing import Any as _BundleMAny, Dict as _BundleMDict
+
+_BUNDLE_M_SUMMARY_FILE = "encounter-lifecycle-v2-summary.json"
+_BUNDLE_M_BASE_FILE = "encounter-lifecycle-summary.json"
+_BUNDLE_M_INPUT_FILES = {
+    "summary.json",
+    _BUNDLE_M_BASE_FILE,
+    "travel-location-graph-v2-summary.json",
+    "economy-resource-pressure-v2-summary.json",
+    "faction-reputation-v2-summary.json",
+    "memory-state-compression-summary.json",
+    "artifact-manifest-digest.json",
+}
+
+_BUNDLE_M_MODEL: _BundleMDict[str, _BundleMAny] = {
+    "format_version": "bundle_m_encounter_lifecycle_v2_model_v1",
+    "source": "bundle_m_encounter_lifecycle_v2",
+    "participant_roles": ["leader", "support", "opponent", "bystander", "neutral"],
+    "round_phases": ["enter", "assess", "choose", "resolve", "consequence", "recover", "exit"],
+    "action_catalog": [
+        {"id": "hold_position", "phase": "choose", "requires_target": False, "resource": "focus", "bounded": True},
+        {"id": "press_advantage", "phase": "choose", "requires_target": True, "resource": "stamina", "bounded": True},
+        {"id": "guard_ally", "phase": "choose", "requires_target": True, "resource": "stamina", "bounded": True},
+        {"id": "withdraw_safely", "phase": "choose", "requires_target": False, "resource": "focus", "bounded": True},
+        {"id": "use_item", "phase": "choose", "requires_target": False, "resource": "item", "bounded": True},
+        {"id": "call_for_help", "phase": "choose", "requires_target": False, "resource": "relationship", "bounded": True},
+        {"id": "deescalate", "phase": "choose", "requires_target": True, "resource": "social_state", "bounded": True},
+        {"id": "take_cover", "phase": "choose", "requires_target": False, "resource": "position", "bounded": True},
+    ],
+    "resolution_rules": [
+        {"id": "initiative_order_stable", "rule": "sort by deterministic score then participant id"},
+        {"id": "one_declared_action_per_round", "rule": "ignore duplicate action declarations for same actor and round"},
+        {"id": "resource_cost_applied_once", "rule": "cost is applied only after valid resolution"},
+        {"id": "outcome_from_state_only", "rule": "narration cannot create new outcome fields"},
+        {"id": "recovery_after_exit", "rule": "recovery hooks run only after lifecycle exit"},
+    ],
+    "outcome_states": ["ongoing", "resolved", "withdrawn", "deescalated", "blocked", "needs_followup"],
+    "recovery_hooks": [
+        {"id": "fatigue_update", "source": "resource_delta", "bounded": True},
+        {"id": "item_use_update", "source": "inventory_delta", "bounded": True},
+        {"id": "relationship_consequence", "source": "faction_reputation_v2", "bounded": True},
+        {"id": "journal_summary", "source": "encounter_result", "bounded": True},
+        {"id": "location_risk_update", "source": "travel_location_graph_v2", "bounded": True},
+    ],
+    "determinism_contract": {
+        "authoritative_state_required": True,
+        "stable_participant_order": True,
+        "single_resolution_per_round": True,
+        "llm_may_describe_but_not_change_outcome": True,
+        "bounded_recovery_hooks": True,
+    },
+}
+
+
+def _bundle_m_to_int(value: _BundleMAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_m_load_json_file(path: _BundleMPath) -> _BundleMDict[str, _BundleMAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_m_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_m_artifacts_from_result_dir(result_dir: _BundleMPath) -> _BundleMDict[str, _BundleMDict[str, _BundleMAny]]:
+    artifacts = {}
+    for file_name in sorted(_BUNDLE_M_INPUT_FILES):
+        payload = _bundle_m_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[file_name] = payload
+    return artifacts
+
+
+def _bundle_m_rule_ids_unique(items) -> bool:
+    ids = [item.get("id") for item in items if isinstance(item, dict)]
+    return len(ids) == len(set(ids)) and all(ids)
+
+
+def _bundle_m_count_existing_encounters(payload: _BundleMAny) -> int:
+    if isinstance(payload, dict):
+        for key in ("encounter_count", "resolved_encounter_count", "round_count"):
+            if key in payload:
+                return _bundle_m_to_int(payload.get(key), 0)
+        total = 0
+        for value in payload.values():
+            total = max(total, _bundle_m_count_existing_encounters(value))
+        return total
+    if isinstance(payload, list):
+        return len(payload)
+    return 0
+
+
+def _bundle_m_evaluate_encounter_lifecycle_v2(artifacts: _BundleMDict[str, _BundleMDict[str, _BundleMAny]]):
+    model = _BUNDLE_M_MODEL
+    action_count = len(model["action_catalog"])
+    phase_count = len(model["round_phases"])
+    role_count = len(model["participant_roles"])
+    resolution_rule_count = len(model["resolution_rules"])
+    outcome_state_count = len(model["outcome_states"])
+    recovery_hook_count = len(model["recovery_hooks"])
+    existing_encounter_count = max([_bundle_m_count_existing_encounters(payload) for payload in artifacts.values()] or [0])
+    contract = model["determinism_contract"]
+    checks = {
+        "participant_roles_present": role_count >= 5,
+        "round_phases_present": phase_count >= 7,
+        "action_catalog_present": action_count >= 8,
+        "action_ids_unique": _bundle_m_rule_ids_unique(model["action_catalog"]),
+        "resolution_rules_present": resolution_rule_count >= 5,
+        "resolution_rule_ids_unique": _bundle_m_rule_ids_unique(model["resolution_rules"]),
+        "outcome_states_present": outcome_state_count >= 5,
+        "recovery_hooks_present": recovery_hook_count >= 5,
+        "determinism_contract_present": bool(contract.get("authoritative_state_required")) and bool(contract.get("llm_may_describe_but_not_change_outcome")),
+        "single_resolution_contract_present": bool(contract.get("single_resolution_per_round")),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_m_encounter_lifecycle_v2_summary_v1",
+        "source": "bundle_m_encounter_lifecycle_v2",
+        "ok": not failures,
+        "advisory_only": True,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "participant_role_count": role_count,
+            "round_phase_count": phase_count,
+            "action_count": action_count,
+            "resolution_rule_count": resolution_rule_count,
+            "outcome_state_count": outcome_state_count,
+            "recovery_hook_count": recovery_hook_count,
+            "existing_encounter_count": existing_encounter_count,
+        },
+        "encounter_lifecycle_model": model,
+        "recommended_next_step": "wire_encounter_lifecycle_v2_into_runtime" if not failures else "fix_encounter_lifecycle_v2_advisory_failures",
+    }
+
+
+def _bundle_m_write_summary_if_possible(result_dir: _BundleMPath):
+    try:
+        summary = _bundle_m_evaluate_encounter_lifecycle_v2(_bundle_m_artifacts_from_result_dir(result_dir))
+        _BUNDLE_M_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_M_SUMMARY_FILE, _bundle_m_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_M_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_M_ORIGINAL_PATH_WRITE_TEXT = _BundleMPath.write_text
+
+    def _bundle_m_write_text_with_encounter_lifecycle_v2(self, data, *args, **kwargs):
+        result = _BUNDLE_M_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleMPath(self)
+        try:
+            if path.name in _BUNDLE_M_INPUT_FILES:
+                _bundle_m_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleMPath.write_text = _bundle_m_write_text_with_encounter_lifecycle_v2
+    globals()["_BUNDLE_M_PATH_WRITE_TEXT_PATCHED"] = True
