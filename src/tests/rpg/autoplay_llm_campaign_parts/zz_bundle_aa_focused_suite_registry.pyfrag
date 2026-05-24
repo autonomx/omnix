@@ -1,6 +1,6 @@
 # Bundle AA — Focused Suite Registry + Command Sync Guard
 #
-# Final advisory registry for the E-Z focused 1000-turn readiness suite.  This
+# Final advisory registry for the E-AB focused 1000-turn readiness suite.  This
 # fragment provides one canonical ordered list of focused test files, builds the
 # pytest command from that registry, and can compare the registry to Bundle V's
 # archived handoff command so release-candidate runbooks do not drift.
@@ -34,6 +34,7 @@ _BUNDLE_AA_TEST_FILES: _BundleAAList[str] = [
     "src/tests/rpg/test_bundle_x_release_candidate_runbook.py",
     "src/tests/rpg/test_bundle_y_release_candidate_artifact_index.py",
     "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py",
+    "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py",
 ]
 
 
@@ -84,8 +85,8 @@ def _bundle_aa_evaluate_focused_suite_registry(repo_root: _BundleAAPath, result_
     missing = _bundle_aa_missing_test_files(repo_root)
     duplicates = _bundle_aa_duplicate_test_files()
     checks = {
-        "registry_has_expected_range": _BUNDLE_AA_TEST_FILES[0].endswith("test_bundle_e_product_report_rendering.py") and _BUNDLE_AA_TEST_FILES[-1].endswith("test_bundle_z_release_candidate_artifact_index_dashboard.py"),
-        "registry_test_count_expected": len(_BUNDLE_AA_TEST_FILES) == 22,
+        "registry_has_expected_range": _BUNDLE_AA_TEST_FILES[0].endswith("test_bundle_e_product_report_rendering.py") and _BUNDLE_AA_TEST_FILES[-1].endswith("test_bundle_ab_focused_suite_registry_dashboard.py"),
+        "registry_test_count_expected": len(_BUNDLE_AA_TEST_FILES) == 23,
         "registry_has_no_duplicates": not duplicates,
         "registry_files_exist": not missing,
         "command_starts_with_pytest": command[:3] == ["python", "-m", "pytest"],
@@ -111,7 +112,7 @@ def _bundle_aa_evaluate_focused_suite_registry(repo_root: _BundleAAPath, result_
         "canonical_command": {"argv": command, "text": _bundle_aa_command_text(command)},
         "missing_test_files": missing,
         "duplicate_test_files": duplicates,
-        "recommended_next_step": "use_canonical_e_z_focused_suite_command" if not failures else "fix_focused_suite_registry_drift",
+        "recommended_next_step": "use_canonical_e_ab_focused_suite_command" if not failures else "fix_focused_suite_registry_drift",
     }
 
 
