@@ -1,0 +1,197 @@
+# Bundle O — 1000-Turn Readiness Aggregator
+#
+# Advisory rollup layer for long-run campaign readiness.  This fragment reads
+# the Bundle F-N summary artifacts, computes one normalized readiness snapshot,
+# and writes one-thousand-turn-readiness-aggregator-summary.json.  It does not
+# mutate authoritative simulation state and does not make 100-turn runs fail.
+
+import json as _bundle_o_json
+from pathlib import Path as _BundleOPath
+from typing import Any as _BundleOAny, Dict as _BundleODict, List as _BundleOList
+
+_BUNDLE_O_SUMMARY_FILE = "one-thousand-turn-readiness-aggregator-summary.json"
+_BUNDLE_O_INPUT_FILES = {
+    "dry-run-300-endurance-gate-summary.json": "dry_run_300_endurance",
+    "content-depth-expansion-pack-summary.json": "content_depth",
+    "memory-state-compression-summary.json": "memory_state_compression",
+    "npc-agency-v2-summary.json": "npc_agency_v2",
+    "economy-resource-pressure-v2-summary.json": "economy_resource_pressure_v2",
+    "travel-location-graph-v2-summary.json": "travel_location_graph_v2",
+    "faction-reputation-v2-summary.json": "faction_reputation_v2",
+    "encounter-lifecycle-v2-summary.json": "encounter_lifecycle_v2",
+    "story-arc-end-state-v2-summary.json": "story_arc_end_state_v2",
+    "artifact-manifest-digest.json": "artifact_manifest_digest",
+    "summary.json": "autoplay_summary",
+}
+
+_BUNDLE_O_REQUIRED_GATES = {
+    "dry_run_300_endurance",
+    "content_depth",
+    "memory_state_compression",
+    "npc_agency_v2",
+    "economy_resource_pressure_v2",
+    "travel_location_graph_v2",
+    "faction_reputation_v2",
+    "encounter_lifecycle_v2",
+    "story_arc_end_state_v2",
+}
+
+_BUNDLE_O_GATE_CATEGORIES = {
+    "dry_run_300_endurance": "endurance",
+    "content_depth": "content",
+    "memory_state_compression": "bounded_state",
+    "npc_agency_v2": "living_world",
+    "economy_resource_pressure_v2": "systems",
+    "travel_location_graph_v2": "systems",
+    "faction_reputation_v2": "consequences",
+    "encounter_lifecycle_v2": "systems",
+    "story_arc_end_state_v2": "campaign",
+    "artifact_manifest_digest": "artifacts",
+    "autoplay_summary": "run_summary",
+}
+
+
+def _bundle_o_load_json_file(path: _BundleOPath) -> _BundleODict[str, _BundleOAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_o_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_o_truth(value: _BundleOAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "pass", "passed", "ok"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed"}:
+        return False
+    return default
+
+
+def _bundle_o_to_int(value: _BundleOAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_o_gate_status(name: str, payload: _BundleODict[str, _BundleOAny]) -> _BundleODict[str, _BundleOAny]:
+    present = bool(payload)
+    checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
+    failures = payload.get("advisory_failures") if isinstance(payload.get("advisory_failures"), list) else []
+    metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}
+    if not present:
+        ok = False
+        failures = ["missing_summary_artifact"]
+    else:
+        ok = _bundle_o_truth(payload.get("ok"), default=not failures)
+        if checks and any(value is False for value in checks.values()):
+            ok = False
+        if failures:
+            ok = False
+    return {
+        "name": name,
+        "category": _BUNDLE_O_GATE_CATEGORIES.get(name, "other"),
+        "present": present,
+        "ok": ok,
+        "check_count": len(checks),
+        "failed_check_count": len([value for value in checks.values() if value is False]),
+        "advisory_failure_count": len(failures),
+        "advisory_failures": failures,
+        "metrics": metrics,
+    }
+
+
+def _bundle_o_artifacts_from_result_dir(result_dir: _BundleOPath) -> _BundleODict[str, _BundleODict[str, _BundleOAny]]:
+    artifacts: _BundleODict[str, _BundleODict[str, _BundleOAny]] = {}
+    for file_name, gate_name in _BUNDLE_O_INPUT_FILES.items():
+        payload = _bundle_o_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[gate_name] = payload
+    return artifacts
+
+
+def _bundle_o_evaluate_1000_turn_readiness(artifacts: _BundleODict[str, _BundleODict[str, _BundleOAny]]):
+    gate_statuses: _BundleOList[_BundleODict[str, _BundleOAny]] = []
+    for gate_name in sorted(_BUNDLE_O_REQUIRED_GATES):
+        gate_statuses.append(_bundle_o_gate_status(gate_name, artifacts.get(gate_name, {})))
+    optional_statuses = [
+        _bundle_o_gate_status(name, artifacts.get(name, {}))
+        for name in ("artifact_manifest_digest", "autoplay_summary")
+        if artifacts.get(name)
+    ]
+    all_statuses = gate_statuses + optional_statuses
+
+    missing_required = [status["name"] for status in gate_statuses if not status["present"]]
+    failing_required = [status["name"] for status in gate_statuses if status["present"] and not status["ok"]]
+    total_failed_checks = sum(status["failed_check_count"] for status in all_statuses)
+    total_advisory_failures = sum(status["advisory_failure_count"] for status in all_statuses)
+
+    category_rollup: _BundleODict[str, _BundleODict[str, _BundleOAny]] = {}
+    for status in all_statuses:
+        category = status["category"]
+        bucket = category_rollup.setdefault(category, {"gate_count": 0, "pass_count": 0, "fail_count": 0})
+        bucket["gate_count"] += 1
+        if status["ok"]:
+            bucket["pass_count"] += 1
+        else:
+            bucket["fail_count"] += 1
+
+    ready_for_1000_turn_preflight = not missing_required and not failing_required
+    ready_for_live_1000_turn_run = ready_for_1000_turn_preflight and total_failed_checks == 0 and total_advisory_failures == 0
+
+    return {
+        "format_version": "bundle_o_1000_turn_readiness_aggregator_summary_v1",
+        "source": "bundle_o_1000_turn_readiness_aggregator",
+        "ok": ready_for_1000_turn_preflight,
+        "advisory_only": True,
+        "ready_for_1000_turn_preflight": ready_for_1000_turn_preflight,
+        "ready_for_live_1000_turn_run": ready_for_live_1000_turn_run,
+        "required_gate_count": len(_BUNDLE_O_REQUIRED_GATES),
+        "present_required_gate_count": len([status for status in gate_statuses if status["present"]]),
+        "passing_required_gate_count": len([status for status in gate_statuses if status["ok"]]),
+        "missing_required_gates": missing_required,
+        "failing_required_gates": failing_required,
+        "total_failed_check_count": total_failed_checks,
+        "total_advisory_failure_count": total_advisory_failures,
+        "gate_statuses": gate_statuses,
+        "optional_gate_statuses": optional_statuses,
+        "category_rollup": category_rollup,
+        "recommended_next_step": "run_1000_turn_preflight" if ready_for_1000_turn_preflight else "fix_required_readiness_gates_before_1000_turn_preflight",
+    }
+
+
+def _bundle_o_write_summary_if_possible(result_dir: _BundleOPath):
+    try:
+        summary = _bundle_o_evaluate_1000_turn_readiness(_bundle_o_artifacts_from_result_dir(result_dir))
+        _BUNDLE_O_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_O_SUMMARY_FILE, _bundle_o_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_O_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_O_ORIGINAL_PATH_WRITE_TEXT = _BundleOPath.write_text
+
+    def _bundle_o_write_text_with_1000_turn_readiness(self, data, *args, **kwargs):
+        result = _BUNDLE_O_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleOPath(self)
+        try:
+            if path.name in _BUNDLE_O_INPUT_FILES:
+                _bundle_o_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleOPath.write_text = _bundle_o_write_text_with_1000_turn_readiness
+    globals()["_BUNDLE_O_PATH_WRITE_TEXT_PATCHED"] = True
