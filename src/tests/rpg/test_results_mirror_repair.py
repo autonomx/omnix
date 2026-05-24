@@ -7,6 +7,18 @@ from pathlib import Path
 from app.rpg.session.autoplay_results_mirror_repair import repair_results_mirror_from_zip
 
 
+REQUIRED_EMBEDDED = {
+    "quality-gate-summary.json": {"ok": True},
+    "survival-exit-criteria-summary.json": {"ok": True},
+    "transcript-payload-budget-summary.json": {"ok": True},
+    "long-run-dry-run-projection-summary.json": {"ok": True},
+    "content-exhaustion-forecast-summary.json": {"ok": True},
+    "npc-agency-schedule-summary.json": {"ok": True},
+    "economy-resource-pressure-summary.json": {"ok": True},
+    "readiness-report-projection-summary.json": {"ok": True},
+}
+
+
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
@@ -23,9 +35,7 @@ def _manifest() -> dict:
         "ok": True,
         "hard_finalized": True,
         "final_write_after_all_wrappers": True,
-        "embedded_artifacts": {
-            "readiness-report-projection-summary.json": {"ok": True},
-        },
+        "embedded_artifacts": dict(REQUIRED_EMBEDDED),
     }
 
 
@@ -55,11 +65,18 @@ def test_results_mirror_repair_extracts_full_unzipped_folder_from_zip(tmp_path) 
     assert result["ok"] is True
     assert result["after_has_core"] is True
     assert result["extracted_file_count"] >= 6
+    assert result["digest"]["ok"] is True
     assert _read_json(result_dir / "artifact-manifest.json")["hard_finalized"] is True
     assert _read_json(result_dir / "autoplay-health.json")["ok"] is True
+    digest = _read_json(result_dir / "artifact-manifest-digest.json")
+    assert digest["ok"] is True
+    assert digest["embedded_artifact_count"] == len(REQUIRED_EMBEDDED)
     mirror = _read_json(result_dir / "essential-mirror-consistency-summary.json")
+    assert mirror["format_version"] == "bundle_d_results_mirror_extraction_repair_v3"
     assert mirror["ok"] is True
     assert mirror["repaired"] is True
+    assert mirror["artifact_manifest_digest_ok"] is True
+    assert mirror["artifact_manifest_digest"]["embedded_artifact_count"] == len(REQUIRED_EMBEDDED)
     assert mirror["core_presence"] == {
         "artifact-manifest.json": True,
         "autoplay-health.json": True,
