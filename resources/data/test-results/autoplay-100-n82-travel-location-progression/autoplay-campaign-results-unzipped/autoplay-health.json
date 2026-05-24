@@ -21,6 +21,13 @@
   "unsupported_combat_claim_preselection_suppressed_count": 5,
   "raw_unsupported_combat_claim_count": 5,
   "unsupported_combat_claim_preselection_suppression_match_ok": true,
+  "artifact_manifest_hard_finalized": {
+    "applied": true,
+    "source": "bundle_d_hard_artifact_manifest_finalizer",
+    "manifest_file": "artifact-manifest.json",
+    "ok": true,
+    "final_write_after_all_wrappers": true
+  },
   "quality_gate_summary_path": "quality-gate-summary.json",
   "quality_gate_artifact_repair": {
     "applied": true,
@@ -47,12 +54,40 @@
     },
     "manifest_file": "artifact-manifest.json"
   },
+  "bundle_a_manifest_repair": {
+    "applied": true,
+    "source": "bundle_abcd_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json",
+    "final_write_after_sidecars": true
+  },
+  "bundle_b_artifact_manifest_path": "artifact-manifest.json",
+  "bundle_b_manifest_repair": {
+    "applied": true,
+    "source": "bundle_abcd_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json",
+    "final_write_after_sidecars": true
+  },
   "bundle_b_artifacts_ok": true,
+  "bundle_c_artifact_manifest_path": "artifact-manifest.json",
+  "bundle_c_manifest_repair": {
+    "applied": true,
+    "source": "bundle_abcd_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json",
+    "final_write_after_sidecars": true
+  },
+  "bundle_c_artifacts_ok": true,
+  "bundle_d_artifact_manifest_path": "artifact-manifest.json",
+  "bundle_d_manifest_repair": {
+    "applied": true,
+    "source": "bundle_abcd_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json",
+    "final_write_after_sidecars": true
+  },
+  "bundle_d_artifacts_ok": true,
   "long_run_projection_ok": true,
   "long_run_projection_advisory_ok": true,
   "content_exhaustion_forecast_ok": true,
   "content_exhaustion_forecast_advisory_ok": true,
-  "bundle_b_artifact_manifest_path": "artifact-manifest.json",
   "bundle_b_artifacts": {
     "source": "bundle_b_long_run_projection_manifest",
     "files": [
@@ -64,68 +99,5 @@
       "content-exhaustion-forecast-summary.json": true
     },
     "manifest_file": "artifact-manifest.json"
-  },
-  "bundle_c_artifacts_ok": true,
-  "npc_agency_schedule_ok": true,
-  "npc_agency_schedule_advisory_ok": true,
-  "economy_resource_pressure_ok": true,
-  "economy_resource_pressure_advisory_ok": true,
-  "bundle_c_artifact_manifest_path": "artifact-manifest.json",
-  "bundle_c_artifacts": {
-    "source": "bundle_c_npc_economy_artifact_manifest",
-    "files": [
-      "npc-agency-schedule-summary.json",
-      "economy-resource-pressure-summary.json"
-    ],
-    "physical_presence": {
-      "npc-agency-schedule-summary.json": true,
-      "economy-resource-pressure-summary.json": true
-    },
-    "manifest_file": "artifact-manifest.json"
-  },
-  "bundle_a_manifest_repair": {
-    "applied": true,
-    "source": "bundle_abcd_final_artifact_manifest_repair",
-    "manifest_file": "artifact-manifest.json",
-    "final_write_after_sidecars": true
-  },
-  "bundle_b_manifest_repair": {
-    "applied": true,
-    "source": "bundle_abcd_final_artifact_manifest_repair",
-    "manifest_file": "artifact-manifest.json",
-    "final_write_after_sidecars": true
-  },
-  "bundle_c_manifest_repair": {
-    "applied": true,
-    "source": "bundle_abcd_final_artifact_manifest_repair",
-    "manifest_file": "artifact-manifest.json",
-    "final_write_after_sidecars": true
-  },
-  "bundle_d_artifacts_ok": true,
-  "readiness_report_projection_ok": true,
-  "readiness_report_projection_advisory_ok": true,
-  "bundle_d_artifact_manifest_path": "artifact-manifest.json",
-  "bundle_d_artifacts": {
-    "source": "bundle_d_readiness_report_projection",
-    "files": [
-      "readiness-report-projection-summary.json"
-    ],
-    "physical_presence": {
-      "readiness-report-projection-summary.json": true
-    },
-    "manifest_file": "artifact-manifest.json"
-  },
-  "artifact_manifest_hard_finalized": {
-    "applied": true,
-    "source": "bundle_d_hard_artifact_manifest_finalizer",
-    "manifest_file": "artifact-manifest.json",
-    "ok": true,
-    "final_write_after_all_wrappers": true
-  },
-  "bundle_d_manifest_repair": {
-    "applied": true,
-    "source": "bundle_abcd_final_artifact_manifest_repair",
-    "manifest_file": "artifact-manifest.json",
-    "final_write_after_sidecars": true
   }
 }

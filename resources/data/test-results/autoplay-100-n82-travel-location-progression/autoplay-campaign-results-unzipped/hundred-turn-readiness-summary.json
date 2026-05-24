@@ -220,9 +220,9 @@
         "ok": true,
         "severity": "advisory",
         "value": {
-          "real_round_event_count": 4,
-          "real_attack_event_count": 719,
-          "real_damage_event_count": 5510,
+          "real_round_event_count": 274,
+          "real_attack_event_count": 494,
+          "real_damage_event_count": 5394,
           "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
           "abstract_round_event_count": 2,
@@ -266,11 +266,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 3056250,
-          "operational_bytes_per_turn": 30562.5,
-          "operational_projected_1000_turn_bytes": 30562500,
-          "full_debug_bytes_sampled": 317208028,
-          "full_debug_projected_1000_turn_bytes": 3172080280,
+          "operational_bytes_sampled": 3045788,
+          "operational_bytes_per_turn": 30457.88,
+          "operational_projected_1000_turn_bytes": 30457880,
+          "full_debug_bytes_sampled": 322037882,
+          "full_debug_projected_1000_turn_bytes": 3220378820,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -1071,7 +1071,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_75c8f1fb8a65"
+              "session_key": "autoplay_a47e7519607a"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1102,7 +1102,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_75c8f1fb8a65"
+              "session_key": "autoplay_a47e7519607a"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1163,7 +1163,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_75c8f1fb8a65"
+              "session_key": "autoplay_a47e7519607a"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -15609,6 +15609,13 @@
       "source": "survival-metric-source-summary.json"
     }
   ],
+  "artifact_manifest_hard_finalized": {
+    "applied": true,
+    "source": "bundle_d_hard_artifact_manifest_finalizer",
+    "manifest_file": "artifact-manifest.json",
+    "ok": true,
+    "final_write_after_all_wrappers": true
+  },
   "bundle_a_artifacts": {
     "source": "bundle_a1_final_artifact_inclusion_manifest",
     "survival_exit_criteria_ok": true,
@@ -15641,34 +15648,11 @@
     "manifest_file": "artifact-manifest.json"
   },
   "bundle_c_artifacts": {
-    "source": "bundle_c_npc_economy_artifact_manifest",
-    "npc_agency_schedule_ok": true,
-    "npc_agency_schedule_advisory_ok": true,
-    "economy_resource_pressure_ok": true,
-    "economy_resource_pressure_advisory_ok": true,
-    "files": [
-      "npc-agency-schedule-summary.json",
-      "economy-resource-pressure-summary.json"
-    ],
-    "manifest_file": "artifact-manifest.json",
-    "manifest_repair_source": "bundle_abcd_final_artifact_manifest_repair"
+    "manifest_repair_source": "bundle_abcd_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json"
   },
   "bundle_d_artifacts": {
-    "source": "bundle_d_readiness_report_projection",
-    "readiness_report_projection_ok": true,
-    "readiness_report_projection_advisory_ok": true,
-    "section_count": 6,
-    "files": [
-      "readiness-report-projection-summary.json"
-    ],
-    "manifest_file": "artifact-manifest.json",
-    "manifest_repair_source": "bundle_abcd_final_artifact_manifest_repair"
-  },
-  "artifact_manifest_hard_finalized": {
-    "applied": true,
-    "source": "bundle_d_hard_artifact_manifest_finalizer",
-    "manifest_file": "artifact-manifest.json",
-    "ok": true,
-    "final_write_after_all_wrappers": true
+    "manifest_repair_source": "bundle_abcd_final_artifact_manifest_repair",
+    "manifest_file": "artifact-manifest.json"
   }
 }

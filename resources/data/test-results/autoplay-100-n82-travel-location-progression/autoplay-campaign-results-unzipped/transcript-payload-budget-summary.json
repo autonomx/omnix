@@ -4,16 +4,25 @@
   "ok": true,
   "advisory_ok": true,
   "row_count": 100,
-  "total_transcript_bytes": 44453,
-  "average_row_bytes": 444,
-  "max_row_bytes": 464,
+  "total_transcript_bytes": 3045588,
+  "average_row_bytes": 30455,
+  "max_row_bytes": 49216,
   "max_compact_row_bytes": 120000,
-  "projected_1000_turn_transcript_bytes": 444000,
+  "projected_1000_turn_transcript_bytes": 30455000,
   "max_projected_1000_turn_transcript_bytes": 200000000,
   "max_projected_1000_turn_review_bytes": 1000000000,
   "oversized_row_count": 0,
   "oversized_rows_sample": [],
-  "heavy_field_totals": [],
+  "heavy_field_totals": [
+    {
+      "field": "presentation_soft_classification",
+      "bytes": 118604
+    },
+    {
+      "field": "presentation_hard_grounding",
+      "bytes": 37680
+    }
+  ],
   "recommended_actions": [
     "Keep compact transcript rows for report/evaluation fields only.",
     "Move bulky debug/provider/prompt/history fields to review-artifacts rather than final transcript rows.",

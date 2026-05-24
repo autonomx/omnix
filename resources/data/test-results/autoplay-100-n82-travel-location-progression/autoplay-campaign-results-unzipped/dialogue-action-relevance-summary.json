@@ -15,8 +15,7 @@
     "travel": 11,
     "economy": 1,
     "mixed": 36,
-    "combat": 1,
-    "evidence": 9
+    "evidence": 10
   },
   "by_dialogue_kind": {
     "social_investigation": 41,
@@ -57,7 +56,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported_but_specific_fallback_preferred",
-          "provider_reason": "The player is simultaneously inquiring about a service (room) and questioning the atmosphere (tension), making it inherently mixed.",
+          "provider_reason": "The player is simultaneously inquiring about service (lodging) and providing a social inquiry (tension).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -88,7 +87,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Ask the point directly; I will not chase rumors around it."
+        "line": "Ask straight, and I will not dress the answer up."
       },
       "after_repair": {
         "ok": true,
@@ -117,7 +116,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported_but_specific_fallback_preferred",
-          "provider_reason": "The player is simultaneously inquiring about a service (room) and questioning the atmosphere (tension), making it inherently mixed.",
+          "provider_reason": "The player is simultaneously inquiring about service (lodging) and providing a social inquiry (tension).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -167,7 +166,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asks Bran for information regarding a past event (the traveler's direction).",
+          "provider_reason": "The player is directly asking an NPC (Bran) for information regarding a recent event (the cloaked traveler's path).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -198,7 +197,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Put the question plainly, and I will keep to what I know."
+        "line": "Ask it plainly, and I will answer what I know."
       },
       "after_repair": {
         "ok": true,
@@ -226,7 +225,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asks Bran for information regarding a past event (the traveler's direction).",
+          "provider_reason": "The player is directly asking an NPC (Bran) for information regarding a recent event (the cloaked traveler's path).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -276,7 +275,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking Bran a direct question about geography (a road leading to a bridge).",
+          "provider_reason": "The player is directly asking an NPC (Bran) for information regarding a geographical feature (bridge on the old east road).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -307,7 +306,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Ask straight, and I will not dress the answer up."
+        "line": "Name what you need answered, and I will stay with the facts."
       },
       "after_repair": {
         "ok": true,
@@ -335,7 +334,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking Bran a direct question about geography (a road leading to a bridge).",
+          "provider_reason": "The player is directly asking an NPC (Bran) for information regarding a geographical feature (bridge on the old east road).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -383,9 +382,9 @@
           "secondary_categories": [
             "investigation"
           ],
-          "confidence": 1.0,
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is initiating social interaction specifically to gather information about a location (the mill bridge).",
+          "provider_reason": "The core action is asking an NPC a question, which fits dialogue, while the inquiry targets specific information about a location (mill bridge), fitting investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -416,7 +415,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Local Patron",
-        "line": "If you mean the old bridge, folk avoid it before dawn. Too many quiet wagons, too few honest reasons."
+        "line": "The old bridge draws the wrong kind of traffic before sunrise; I would not call those wagons honest."
       },
       "after_repair": {
         "ok": true,
@@ -442,9 +441,9 @@
           "secondary_categories": [
             "investigation"
           ],
-          "confidence": 1.0,
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is initiating social interaction specifically to gather information about a location (the mill bridge).",
+          "provider_reason": "The core action is asking an NPC a question, which fits dialogue, while the inquiry targets specific information about a location (mill bridge), fitting investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -494,7 +493,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is actively reporting evidence (trail, blood, bridge story) to an NPC (Bran), which is a core social/reporting action that implies investigation findings.",
+          "provider_reason": "The core action is reporting evidence (a social report), which falls under dialogue, but the content inherently suggests investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -525,7 +524,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Good. Proof narrows the road; show me which direction it leaves open."
+        "line": "That is something we can act on. Tell me exactly where it points next."
       },
       "after_repair": {
         "ok": true,
@@ -553,7 +552,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is actively reporting evidence (trail, blood, bridge story) to an NPC (Bran), which is a core social/reporting action that implies investigation findings.",
+          "provider_reason": "The core action is reporting evidence (a social report), which falls under dialogue, but the content inherently suggests investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -598,10 +597,12 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is an inquiry directed at Bran regarding travel patterns, which falls under social dialogue and investigative context.",
+          "provider_reason": "The player explicitly asks Bran a question seeking information about movement patterns on the road before dawn.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -632,7 +633,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Ask the point directly; I will not chase rumors around it."
+        "line": "Ask straight, and I will not dress the answer up."
       },
       "after_repair": {
         "ok": true,
@@ -655,10 +656,12 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is an inquiry directed at Bran regarding travel patterns, which falls under social dialogue and investigative context.",
+          "provider_reason": "The player explicitly asks Bran a question seeking information about movement patterns on the road before dawn.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -703,10 +706,12 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [],
+          "secondary_categories": [
+            "investigation"
+          ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player's primary action is clearly movement towards a specific location (Garran's wagon yard).",
+          "provider_reason": "The primary action is movement towards a specific location (Garran's yard), which implies travel, but the destination suggests an immediate investigative goal.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -757,10 +762,12 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [],
+          "secondary_categories": [
+            "investigation"
+          ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player's primary action is clearly movement towards a specific location (Garran's wagon yard).",
+          "provider_reason": "The primary action is movement towards a specific location (Garran's yard), which implies travel, but the destination suggests an immediate investigative goal.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -805,13 +812,10 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "evidence",
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is directly informing Garran of a threat and presenting physical proof (evidence) to support the claim.",
+          "provider_reason": "The player is actively relaying evidence to an NPC and presenting a hypothesis (ambush), which primarily constitutes dialogue supported by evidence/investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -865,13 +869,10 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "evidence",
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is directly informing Garran of a threat and presenting physical proof (evidence) to support the claim.",
+          "provider_reason": "The player is actively relaying evidence to an NPC and presenting a hypothesis (ambush), which primarily constitutes dialogue supported by evidence/investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -916,12 +917,10 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 0.95,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking an NPC a direct question, which falls under dialogue, but seeking route information inherently involves investigation.",
+          "provider_reason": "The core action is asking a direct question to an NPC regarding potential routes, which implies investigation/travel context.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -952,7 +951,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Garran",
-        "line": "Ask the point directly; I will not chase rumors around it."
+        "line": "Name what you need answered, and I will stay with the facts."
       },
       "after_repair": {
         "ok": true,
@@ -975,12 +974,10 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 0.95,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking an NPC a direct question, which falls under dialogue, but seeking route information inherently involves investigation.",
+          "provider_reason": "The core action is asking a direct question to an NPC regarding potential routes, which implies investigation/travel context.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1026,9 +1023,9 @@
           "proposed_category": "general",
           "fallback_category": "general",
           "secondary_categories": [],
-          "confidence": 0.95,
+          "confidence": 0.45,
           "reason": "provider_intent_supported_but_specific_fallback_preferred",
-          "provider_reason": "The action is primarily observational/preparation, setting the stage for travel without a distinct investigative or social focus yet.",
+          "provider_reason": "The player is actively assisting an NPC in preparation, which involves observation of the wagon/route and general readiness for departure.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1059,7 +1056,7 @@
       "final_narration": "The evidence gives the investigation a firmer shape, connecting the current lead to the next step.",
       "final_npc": {
         "speaker": "Garran",
-        "line": "That gives us a direction. Now we need the next solid piece of proof."
+        "line": "It is a direction, not an answer yet. We need the next hard piece."
       },
       "after_repair": {
         "ok": true,
@@ -1083,9 +1080,9 @@
           "proposed_category": "general",
           "fallback_category": "general",
           "secondary_categories": [],
-          "confidence": 0.95,
+          "confidence": 0.45,
           "reason": "provider_intent_supported_but_specific_fallback_preferred",
-          "provider_reason": "The action is primarily observational/preparation, setting the stage for travel without a distinct investigative or social focus yet.",
+          "provider_reason": "The player is actively assisting an NPC in preparation, which involves observation of the wagon/route and general readiness for departure.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1135,7 +1132,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement (leaving the yard and taking a specific road), which falls under 'travel', but the act of moving implies an investigation into that route.",
+          "provider_reason": "The player explicitly states they are moving and taking a specific road (Quarry Road), which is primarily travel, but the act of choosing a route implies investigation/exploration.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1191,7 +1188,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement (leaving the yard and taking a specific road), which falls under 'travel', but the act of moving implies an investigation into that route.",
+          "provider_reason": "The player explicitly states they are moving and taking a specific road (Quarry Road), which is primarily travel, but the act of choosing a route implies investigation/exploration.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1236,10 +1233,12 @@
           "primary_category": "investigation",
           "proposed_category": "investigation",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "stealth"
+          ],
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is actively observing/scouting a specific location (quarry road) for signs of past activity, which is primary investigation.",
+          "provider_reason": "The core action is observation/scouting, which falls under investigation, but the method used (hiding) suggests stealth.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1290,10 +1289,12 @@
           "primary_category": "investigation",
           "proposed_category": "investigation",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "stealth"
+          ],
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is actively observing/scouting a specific location (quarry road) for signs of past activity, which is primary investigation.",
+          "provider_reason": "The core action is observation/scouting, which falls under investigation, but the method used (hiding) suggests stealth.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1343,7 +1344,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is issuing a tactical command/suggestion to an NPC, which requires conversational acknowledgment.",
+          "provider_reason": "The core interaction is telling Garran a tactical plan, which falls under dialogue, but it directly influences the immediate investigative path.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1374,7 +1375,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Garran",
-        "line": "Then say it clearly and we decide what changes because of it."
+        "line": "Then we should move before someone else decides the next step for us."
       },
       "after_repair": {
         "ok": true,
@@ -1402,7 +1403,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is issuing a tactical command/suggestion to an NPC, which requires conversational acknowledgment.",
+          "provider_reason": "The core interaction is telling Garran a tactical plan, which falls under dialogue, but it directly influences the immediate investigative path.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1428,7 +1429,7 @@
       "dialogue_source": "direct_graph_execution",
       "relevance": {
         "ok": true,
-        "action_kind": "combat",
+        "action_kind": "social",
         "dialogue_kind": "social_investigation",
         "display_source": "",
         "npc_speaker": "",
@@ -1436,8 +1437,8 @@
         "player_action": "I check in with Garran and focus on the active wagon-road objective.",
         "narration_preview": "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead.",
         "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "combat",
-        "validated_presentation_category": "combat",
+        "action_kind_before_presentation_intent_sync": "social",
+        "validated_presentation_category": "dialogue",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -1445,12 +1446,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "investigation",
+          "proposed_category": "dialogue",
           "fallback_category": "general",
           "secondary_categories": [],
           "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is actively observing/checking in with an NPC (Garran) regarding a specific objective (wagon-road), which blends dialogue and investigation.",
+          "provider_reason": "The player is checking in with an NPC (Garran) while focusing on a specific objective (wagon-road), which primarily requires dialogue response and investigation/observation context.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -1482,7 +1483,7 @@
       "final_npc": {},
       "after_repair": {
         "ok": true,
-        "action_kind": "combat",
+        "action_kind": "social",
         "dialogue_kind": "travel",
         "display_source": "deterministic_action_relevance_fallback",
         "npc_speaker": "",
@@ -1491,7 +1492,7 @@
         "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
         "npc_line_preview": "",
         "action_kind_before_presentation_intent_sync": "combat",
-        "validated_presentation_category": "combat",
+        "validated_presentation_category": "dialogue",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -1499,12 +1500,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "investigation",
+          "proposed_category": "dialogue",
           "fallback_category": "general",
           "secondary_categories": [],
           "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is actively observing/checking in with an NPC (Garran) regarding a specific objective (wagon-road), which blends dialogue and investigation.",
+          "provider_reason": "The player is checking in with an NPC (Garran) while focusing on a specific objective (wagon-road), which primarily requires dialogue response and investigation/observation context.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -1554,7 +1555,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asked an NPC (Bran) a question seeking information about a specific location and its occupants.",
+          "provider_reason": "The player is directly asking an NPC (Bran) for information regarding a specific location (the old mill) and its current usage.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1585,7 +1586,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Name what you need answered, and I will stay with the facts."
+        "line": "Put the question plainly, and I will keep to what I know."
       },
       "after_repair": {
         "ok": true,
@@ -1613,7 +1614,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asked an NPC (Bran) a question seeking information about a specific location and its occupants.",
+          "provider_reason": "The player is directly asking an NPC (Bran) for information regarding a specific location (the old mill) and its current usage.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1658,10 +1659,12 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement ('travel'), and its purpose (following a coin lead) implies investigation.",
+          "provider_reason": "The primary action is movement ('I travel'), and the reason for traveling is to 'follow the marked coin lead,' which implies investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1712,10 +1715,12 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement ('travel'), and its purpose (following a coin lead) implies investigation.",
+          "provider_reason": "The primary action is movement ('I travel'), and the reason for traveling is to 'follow the marked coin lead,' which implies investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1765,7 +1770,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The primary action is movement ('follow the north road shrine lead'), but this is driven by an investigative observation (the shrine lead), making investigation a strong secondary category.",
+          "provider_reason": "The core action is movement along a specific route (north road shrine lead), which constitutes travel, while the motivation is investigative (following the lead).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1821,7 +1826,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The primary action is movement ('follow the north road shrine lead'), but this is driven by an investigative observation (the shrine lead), making investigation a strong secondary category.",
+          "provider_reason": "The core action is movement along a specific route (north road shrine lead), which constitutes travel, while the motivation is investigative (following the lead).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1866,10 +1871,12 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement ('I travel'), and its purpose is clearly investigative (following the Black Briar lead).",
+          "provider_reason": "The primary action is movement to a specific location (the shrine), and the reason for travel is tied directly to following a lead, which is an investigative act.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1920,10 +1927,12 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement ('I travel'), and its purpose is clearly investigative (following the Black Briar lead).",
+          "provider_reason": "The primary action is movement to a specific location (the shrine), and the reason for travel is tied directly to following a lead, which is an investigative act.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1973,7 +1982,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is actively hiding (sneak) while waiting for a specific signal (observation).",
+          "provider_reason": "The player is actively hiding (stealth) while observing for a specific signal, which falls under observation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -2029,7 +2038,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is actively hiding (sneak) while waiting for a specific signal (observation).",
+          "provider_reason": "The player is actively hiding (stealth) while observing for a specific signal, which falls under observation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -2055,7 +2064,7 @@
       "dialogue_source": null,
       "relevance": {
         "ok": true,
-        "action_kind": "social",
+        "action_kind": "evidence",
         "dialogue_kind": "combat",
         "display_source": "",
         "npc_speaker": "",
@@ -2067,24 +2076,24 @@
         "fallback_applied": true,
         "fallback_source": "llm_safe_fallback",
         "reason": "unsupported_combat_claim_preselection_suppressed",
-        "action_kind_before_presentation_intent_sync": "social",
-        "validated_presentation_category": "dialogue",
+        "action_kind_before_presentation_intent_sync": "evidence",
+        "validated_presentation_category": "evidence",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
-          "provider_intent_ok": false,
+          "provider_intent_ok": true,
           "validated_intent_ok": true,
-          "provider_intent_repaired": true,
-          "primary_category": "travel",
-          "proposed_category": "dialogue",
+          "provider_intent_repaired": false,
+          "primary_category": "evidence",
+          "proposed_category": "evidence",
           "fallback_category": "general",
           "secondary_categories": [
-            "evidence",
+            "dialogue",
             "investigation"
           ],
-          "confidence": 1.0,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is reporting evidence (manifest) to NPCs, which necessitates dialogue and implies investigation into the findings.",
+          "confidence": 0.95,
+          "reason": "provider_intent_supported",
+          "provider_reason": "The primary action is presenting evidence (the manifest), which inherently involves dialogue and investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -2110,7 +2119,7 @@
         "blocked_reasons": []
       },
       "repaired": true,
-      "final_narration": "As you present the official manifest detailing Captain Voss’s complicity in the recent attacks, Bran visibly stills, his usual restless energy momentarily replaced by grave focus. Garran leans closer, peering over your shoulder at the seals and markings as if seeking confirmation from the paper itself. The evidence you bring confirms suspicions that have been nagging at their strategic minds for days. Then the proof needs daylight and witnesses before anyone can make it vanish.",
+      "final_narration": "As you present the sealed manifest detailing Captain Voss's involvement in the recent hostile actions, Bran leans forward, his expression hardening with grim confirmation. Garran nods slowly, taking immediate note of the documented proof against their superior officer. The weight of this evidence shifts the tone from cautious vigilance to focused determination within the hideout. Then the proof needs daylight and witnesses before anyone can make it vanish.",
       "final_npc": {
         "speaker": "Captain Voss",
         "line": "Then the proof needs daylight and witnesses before anyone can make it vanish."

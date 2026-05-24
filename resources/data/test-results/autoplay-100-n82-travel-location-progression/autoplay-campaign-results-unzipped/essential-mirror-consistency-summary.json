@@ -1,18 +1,28 @@
 {
-  "format_version": "bundle_d_results_mirror_extraction_repair_v1",
+  "format_version": "bundle_d_results_mirror_extraction_repair_v2",
   "source": "bundle_d_results_mirror_extraction_repair",
   "ok": true,
   "repaired": false,
   "mirror_dir": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped",
   "zip_path": "",
   "extracted_file_count": 0,
-  "present_file_count": 55,
+  "present_file_count": 18085,
   "core_presence": {
     "artifact-manifest.json": true,
     "autoplay-health.json": true,
     "summary.json": true,
     "hundred-turn-evaluation.json": true
   },
+  "raw_file_presence": {
+    "artifact-manifest.json": true,
+    "autoplay-health.json": true,
+    "summary.json": true,
+    "hundred-turn-evaluation.json": true
+  },
+  "artifact_manifest_valid": true,
+  "artifact_manifest_format_version": "bundle_abcd_artifact_manifest_hard_finalized_v1",
+  "artifact_manifest_hard_finalized": true,
+  "artifact_manifest_embedded_artifact_count": 8,
   "missing_core_files": [],
-  "note": "Generated review mirror must include core artifacts, not only this summary file."
+  "note": "Generated review mirror must include valid core artifacts, not only present files."
 }
