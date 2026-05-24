@@ -47,7 +47,7 @@ _BUNDLE_J_MERCHANT_REFRESH: _BundleJDict[str, _BundleJAny] = {
     "refresh_interval_turns": 24,
     "stock_by_location": {
         "tavern_common_room": ["meal_simple_stew", "drink_clean_water", "drink_tavern_ale", "lodging_common_bed", "lodging_private_room"],
-        "market_stables": ["supply_road_rations", "supply_waterskin_fill", "guide_safe_route", "repair_light_gear"],
+        "market_stables": ["supply_road_rations", "supply_waterskin_fill", "guide_safe_route", "repair_light_gear", "meal_travel_ration"],
         "watch_yard": ["repair_light_gear", "repair_armor_patch", "rumor_verified_lead"],
         "north_road_fork": ["guide_safe_route", "supply_road_rations", "supply_waterskin_fill"],
     },
