@@ -110,7 +110,7 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
     bundle_c_complete = all(bundle_c_presence.values()) if any(bundle_c_presence.values()) else False
     manifest = {
         **existing,
-        "format_version": "bundle_abc_artifact_manifest_v1",
+        "format_version": "bundle_abc_artifact_manifest_v2",
         "source": SOURCE,
         "ok": all(bundle_a_presence.values()) and (not any(bundle_b_presence.values()) or bundle_b_complete) and (not any(bundle_c_presence.values()) or bundle_c_complete),
         "bundle_a_files": list(BUNDLE_A_FILES),
@@ -122,9 +122,10 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
         "bundle_c_physical_presence": bundle_c_presence,
         "embedded_artifacts": embedded,
         "repair_applied": True,
+        "final_write_after_sidecars": True,
         "notes": [
             "Rebuilt from physical Bundle A/B/C files at finalization time.",
-            "This remains robust if an earlier writer leaves artifact-manifest.json empty or only embeds earlier bundles."
+            "Written once before sidecar patches and again after sidecar patches so artifact-manifest.json remains durable."
         ],
     }
     _write_json(manifest_path, manifest)
@@ -133,15 +134,15 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
     health = _read_json(health_path)
     if health:
         health["bundle_a_artifact_manifest_path"] = ARTIFACT_MANIFEST_FILE
-        health["bundle_a_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE}
+        health["bundle_a_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE, "final_write_after_sidecars": True}
         health["bundle_a_artifacts_ok"] = True
         if bundle_b_complete:
             health["bundle_b_artifact_manifest_path"] = ARTIFACT_MANIFEST_FILE
-            health["bundle_b_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE}
+            health["bundle_b_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE, "final_write_after_sidecars": True}
             health["bundle_b_artifacts_ok"] = True
         if bundle_c_complete:
             health["bundle_c_artifact_manifest_path"] = ARTIFACT_MANIFEST_FILE
-            health["bundle_c_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE}
+            health["bundle_c_manifest_repair"] = {"applied": True, "source": SOURCE, "manifest_file": ARTIFACT_MANIFEST_FILE, "final_write_after_sidecars": True}
             health["bundle_c_artifacts_ok"] = True
         _write_json(health_path, health)
 
@@ -158,6 +159,7 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
             "physical_presence": bundle_a_presence,
             "bundle_b_physical_presence": bundle_b_presence,
             "bundle_c_physical_presence": bundle_c_presence,
+            "final_write_after_sidecars": True,
         }
         evaluation["artifact_level_summaries"] = summaries
         _write_json(evaluation_path, evaluation)
@@ -181,11 +183,21 @@ def repair_bundle_a_manifest(result_dir: str | Path) -> Dict[str, Any]:
             readiness["bundle_c_artifacts"] = bundle_c
         _write_json(readiness_path, readiness)
 
+    # Critical: keep the manifest as the final physical artifact write.  The
+    # prior implementation wrote manifest first and then patched health/eval/
+    # readiness sidecars.  In the observed 100-turn artifacts, health showed the
+    # repair executed while artifact-manifest.json was still empty.  Rewriting it
+    # last makes the manifest durable even if sidecar patching or hooks touched it.
+    _write_json(manifest_path, manifest)
+    manifest_exists_after_final_write = manifest_path.exists() and manifest_path.stat().st_size > 2
+
     return {
         "applied": True,
         "source": SOURCE,
         "result_dir": str(root),
         "manifest_path": str(manifest_path),
+        "manifest_exists_after_final_write": manifest_exists_after_final_write,
+        "final_write_after_sidecars": True,
         "physical_presence": bundle_a_presence,
         "bundle_b_physical_presence": bundle_b_presence,
         "bundle_c_physical_presence": bundle_c_presence,
