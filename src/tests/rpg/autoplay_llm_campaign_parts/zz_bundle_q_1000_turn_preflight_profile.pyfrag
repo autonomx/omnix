@@ -28,6 +28,7 @@ _BUNDLE_Q_PROFILE: _BundleQDict[str, _BundleQAny] = {
         "background_llm_mode": "combined",
         "checkpoint_interval": 25,
         "artifact_detail": "full",
+        "transcript_detail": "auto",
         "compact_transcript_mode": True,
         "final_background_drain_required": True,
         "readiness_aggregator_required": True,
@@ -46,7 +47,7 @@ _BUNDLE_Q_PROFILE: _BundleQDict[str, _BundleQAny] = {
         "--background-llm-mode", "combined",
         "--checkpoint-interval", "25",
         "--artifact-detail", "full",
-        "--compact-transcript-mode",
+        "--transcript-detail", "auto",
     ],
 }
 
@@ -80,7 +81,7 @@ def _bundle_q_build_preflight_command(script: str = "src/tests/rpg/autoplay_llm_
 
 def _bundle_q_missing_command_flags(argv: _BundleQList[str]) -> _BundleQList[str]:
     supplied = {arg.split("=", 1)[0] for arg in argv if str(arg).startswith("--")}
-    required = ["--turns", "--narration-mode", "--background-llm-mode", "--checkpoint-interval", "--artifact-detail", "--compact-transcript-mode"]
+    required = ["--turns", "--narration-mode", "--background-llm-mode", "--checkpoint-interval", "--artifact-detail", "--transcript-detail"]
     return [flag for flag in required if flag not in supplied]
 
 
@@ -117,11 +118,10 @@ def _bundle_q_append_missing_profile_args(argv: _BundleQList[str]) -> _BundleQLi
         ("--background-llm-mode", "combined"),
         ("--checkpoint-interval", "25"),
         ("--artifact-detail", "full"),
+        ("--transcript-detail", "auto"),
     ]:
         if flag not in supplied:
             expanded.extend([flag, value])
-    if "--compact-transcript-mode" not in supplied:
-        expanded.append("--compact-transcript-mode")
     return expanded
 
 
@@ -133,6 +133,7 @@ def _bundle_q_apply_preflight_env() -> None:
     _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_BACKGROUND_LLM_MODE", str(defaults["background_llm_mode"]))
     _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_CHECKPOINT_INTERVAL", str(defaults["checkpoint_interval"]))
     _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_ARTIFACT_DETAIL", str(defaults["artifact_detail"]))
+    _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_TRANSCRIPT_DETAIL", str(defaults["transcript_detail"]))
     _bundle_q_os.environ.setdefault("RPG_AUTOPLAY_COMPACT_TRANSCRIPT_MODE", "1")
 
 
