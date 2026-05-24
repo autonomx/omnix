@@ -57,7 +57,8 @@ def test_bundle_v_command_catalog_is_explicit():
     assert "src/tests/rpg/test_bundle_x_release_candidate_runbook.py" in focused
     assert "src/tests/rpg/test_bundle_y_release_candidate_artifact_index.py" in focused
     assert "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py" in focused
-    assert focused[-1] == "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py"
+    assert "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py" in focused
+    assert focused[-1] == "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
     assert namespace["_bundle_v_command_text"](["python", "-m", "pytest"]) == "python -m pytest"
 
 
@@ -134,6 +135,6 @@ def test_bundle_v_writes_manifest_when_required_artifacts_are_exported(tmp_path)
         assert manifest["release_candidate_handoff_ready"] is True
         assert manifest["checks"]["required_handoff_artifacts_present"] is True
         assert manifest["commands"]["preflight_1000"]["text"] == "python src/tests/rpg/autoplay_llm_campaign.py --preflight-profile preflight_1000"
-        assert manifest["commands"]["focused_test_suite"]["argv"][-1] == "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py"
+        assert manifest["commands"]["focused_test_suite"]["argv"][-1] == "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
     finally:
         Path.write_text = original_write_text
