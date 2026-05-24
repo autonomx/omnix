@@ -1,0 +1,399 @@
+# Bundle F — 300-Turn Dry-Run Profile + Endurance Gate
+#
+# Late fragment integration points:
+# - Expose an explicit dry_run_300 profile descriptor.
+# - Provide deterministic gate math for 300-turn endurance readiness.
+# - Opportunistically write dry-run-300-endurance-gate-summary.json whenever
+#   Bundle A/B/C/D advisory sidecars are present in a result directory.
+# - Keep normal 100-turn runs advisory-only; this fragment does not raise or
+#   fail the autoplay process.
+
+import json as _bundle_f_json
+import os as _bundle_f_os
+from pathlib import Path as _BundleFPath
+from typing import Any as _BundleFAny, Dict as _BundleFDict, Iterable as _BundleFIterable, List as _BundleFList, Optional as _BundleFOptional, Tuple as _BundleFTuple
+
+
+_BUNDLE_F_PROFILE_NAME = "dry_run_300"
+_BUNDLE_F_GATE_FILE = "dry-run-300-endurance-gate-summary.json"
+_BUNDLE_F_TARGET_TURNS = 300
+_BUNDLE_F_DEFAULT_MAX_PROJECTED_TRANSCRIPT_BYTES = 64 * 1024 * 1024
+_BUNDLE_F_DEFAULT_MAX_PROJECTED_STATE_BYTES = 16 * 1024 * 1024
+_BUNDLE_F_RELEVANT_INPUT_FILES = {
+    "artifact-manifest-digest.json",
+    "content-exhaustion-forecast-summary.json",
+    "long-run-dry-run-projection-summary.json",
+    "readiness-report-projection-summary.json",
+    "survival-exit-criteria-summary.json",
+    "transcript-payload-budget-summary.json",
+    "quality-gate-summary.json",
+    "summary.json",
+}
+
+_BUNDLE_F_DRY_RUN_300_PROFILE: _BundleFDict[str, _BundleFAny] = {
+    "name": _BUNDLE_F_PROFILE_NAME,
+    "format_version": "bundle_f_dry_run_300_profile_v1",
+    "target_turns": _BUNDLE_F_TARGET_TURNS,
+    "intent": "Intermediate endurance profile before full 1000-turn LLM runs.",
+    "defaults": {
+        "turns": _BUNDLE_F_TARGET_TURNS,
+        "narration_mode": "deferred",
+        "background_llm_mode": "combined",
+        "checkpoint_interval": 25,
+        "artifact_detail": "full",
+        "compact_transcript_mode": True,
+        "final_background_drain_required": True,
+    },
+    "advisory_gate": {
+        "min_content_exhaustion_estimate": _BUNDLE_F_TARGET_TURNS,
+        "max_projected_transcript_bytes": _BUNDLE_F_DEFAULT_MAX_PROJECTED_TRANSCRIPT_BYTES,
+        "max_projected_state_bytes": _BUNDLE_F_DEFAULT_MAX_PROJECTED_STATE_BYTES,
+        "require_manifest_digest_ok": True,
+        "require_no_runtime_errors": True,
+        "require_no_unresolved_final_background_jobs": True,
+    },
+    "canonical_cli_args": [
+        "--turns",
+        "300",
+        "--narration-mode",
+        "deferred",
+        "--background-llm-mode",
+        "combined",
+        "--checkpoint-interval",
+        "25",
+        "--artifact-detail",
+        "full",
+        "--compact-transcript-mode",
+    ],
+}
+
+
+def _bundle_f_load_json_file(path: _BundleFPath) -> _BundleFDict[str, _BundleFAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_f_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {"_load_error": f"expected object, got {type(data).__name__}"}
+    except Exception as exc:
+        return {"_load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_f_first_scalar(payloads: _BundleFIterable[_BundleFDict[str, _BundleFAny]], *keys: str) -> _BundleFAny:
+    for payload in payloads:
+        for key in keys:
+            if key in payload and not isinstance(payload.get(key), (dict, list)):
+                return payload.get(key)
+    return None
+
+
+def _bundle_f_to_int(value: _BundleFAny, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_f_to_bool(value: _BundleFAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "ok", "pass", "passed"}:
+        return True
+    if text in {"0", "false", "no", "n", "fail", "failed"}:
+        return False
+    return default
+
+
+def _bundle_f_failure_count(payload: _BundleFDict[str, _BundleFAny], *keys: str) -> int:
+    total = 0
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            total += len(value)
+        else:
+            total += _bundle_f_to_int(value, 0)
+    return total
+
+
+def _bundle_f_projected_value(
+    observed_value: _BundleFAny,
+    observed_turns: _BundleFAny,
+    target_turns: int,
+) -> int:
+    observed = _bundle_f_to_int(observed_value, 0)
+    turns = max(1, _bundle_f_to_int(observed_turns, 0))
+    if observed <= 0:
+        return 0
+    return int((observed / turns) * target_turns)
+
+
+def _bundle_f_artifacts_from_result_dir(result_dir: _BundleFPath) -> _BundleFDict[str, _BundleFDict[str, _BundleFAny]]:
+    artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]] = {}
+    for file_name in sorted(_BUNDLE_F_RELEVANT_INPUT_FILES):
+        payload = _bundle_f_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[file_name] = payload
+    return artifacts
+
+
+def _bundle_f_content_exhaustion_estimate(artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]]) -> int:
+    content = artifacts.get("content-exhaustion-forecast-summary.json", {})
+    readiness = artifacts.get("readiness-report-projection-summary.json", {})
+    projection = artifacts.get("long-run-dry-run-projection-summary.json", {})
+    return _bundle_f_to_int(
+        _bundle_f_first_scalar(
+            [content, readiness, projection],
+            "content_exhaustion_estimate",
+            "estimated_supported_turns",
+            "estimated_turns_supported",
+            "turns_supported_estimate",
+        ),
+        0,
+    )
+
+
+def _bundle_f_projected_transcript_bytes(artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]]) -> int:
+    transcript = artifacts.get("transcript-payload-budget-summary.json", {})
+    projection = artifacts.get("long-run-dry-run-projection-summary.json", {})
+    explicit = _bundle_f_first_scalar(
+        [projection, transcript],
+        "projected_300_turn_transcript_bytes",
+        "projected_transcript_bytes_300",
+        "projected_transcript_bytes",
+        "projected_1000_turn_bytes",
+    )
+    if explicit is not None:
+        # A 1000-turn projection is still useful as a conservative upper-bound.
+        return _bundle_f_to_int(explicit, 0)
+    turn_count = _bundle_f_first_scalar([transcript, projection], "turn_count", "completed_turns", "requested_turns")
+    observed_bytes = _bundle_f_first_scalar([transcript], "total_bytes", "transcript_bytes", "payload_bytes")
+    return _bundle_f_projected_value(observed_bytes, turn_count, _BUNDLE_F_TARGET_TURNS)
+
+
+def _bundle_f_projected_state_bytes(artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]]) -> int:
+    projection = artifacts.get("long-run-dry-run-projection-summary.json", {})
+    summary = artifacts.get("summary.json", {})
+    explicit = _bundle_f_first_scalar(
+        [projection, summary],
+        "projected_300_turn_state_bytes",
+        "projected_state_bytes_300",
+        "projected_state_bytes",
+        "state_bytes_projected",
+    )
+    if explicit is not None:
+        return _bundle_f_to_int(explicit, 0)
+    turn_count = _bundle_f_first_scalar([summary, projection], "turn_count", "completed_turns", "requested_turns")
+    observed_bytes = _bundle_f_first_scalar([summary, projection], "state_bytes", "final_state_bytes", "state_size_bytes")
+    return _bundle_f_projected_value(observed_bytes, turn_count, _BUNDLE_F_TARGET_TURNS)
+
+
+def _bundle_f_manifest_digest_ok(artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]]) -> bool:
+    digest = artifacts.get("artifact-manifest-digest.json", {})
+    if not digest:
+        return False
+    if digest.get("manifest_exists") is False:
+        return False
+    checks = [
+        digest.get("ok"),
+        digest.get("manifest_ok"),
+        digest.get("invariant_ok"),
+    ]
+    explicit_checks = [value for value in checks if value is not None]
+    if explicit_checks and not all(_bundle_f_to_bool(value, False) for value in explicit_checks):
+        return False
+    if _bundle_f_failure_count(digest, "invariant_failed_checks", "failed_checks") > 0:
+        return False
+    zip_valid = digest.get("zip_manifest_valid_count")
+    if zip_valid is not None and _bundle_f_to_int(zip_valid, 0) <= 0:
+        return False
+    return True
+
+
+def _bundle_f_runtime_error_count(artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]]) -> int:
+    summary = artifacts.get("summary.json", {})
+    quality = artifacts.get("quality-gate-summary.json", {})
+    survival = artifacts.get("survival-exit-criteria-summary.json", {})
+    return (
+        _bundle_f_failure_count(summary, "runtime_error_count", "error_count", "errors")
+        + _bundle_f_failure_count(quality, "runtime_error_count", "error_count", "errors")
+        + _bundle_f_failure_count(survival, "runtime_error_count", "error_count", "hard_failures")
+    )
+
+
+def _bundle_f_unresolved_background_jobs(artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]]) -> int:
+    summary = artifacts.get("summary.json", {})
+    projection = artifacts.get("long-run-dry-run-projection-summary.json", {})
+    quality = artifacts.get("quality-gate-summary.json", {})
+    return _bundle_f_to_int(
+        _bundle_f_first_scalar(
+            [summary, projection, quality],
+            "unresolved_final_background_jobs",
+            "unfinished_background_jobs",
+            "final_background_jobs_unresolved",
+            "cancelled_background_jobs",
+        ),
+        0,
+    )
+
+
+def _bundle_f_evaluate_300_turn_endurance(
+    artifacts: _BundleFDict[str, _BundleFDict[str, _BundleFAny]],
+    *,
+    target_turns: int = _BUNDLE_F_TARGET_TURNS,
+    max_projected_transcript_bytes: int = _BUNDLE_F_DEFAULT_MAX_PROJECTED_TRANSCRIPT_BYTES,
+    max_projected_state_bytes: int = _BUNDLE_F_DEFAULT_MAX_PROJECTED_STATE_BYTES,
+) -> _BundleFDict[str, _BundleFAny]:
+    content_estimate = _bundle_f_content_exhaustion_estimate(artifacts)
+    transcript_bytes = _bundle_f_projected_transcript_bytes(artifacts)
+    state_bytes = _bundle_f_projected_state_bytes(artifacts)
+    manifest_ok = _bundle_f_manifest_digest_ok(artifacts)
+    runtime_errors = _bundle_f_runtime_error_count(artifacts)
+    unresolved_jobs = _bundle_f_unresolved_background_jobs(artifacts)
+
+    checks = {
+        "transcript_payload_bounded": transcript_bytes <= max_projected_transcript_bytes,
+        "state_size_bounded": state_bytes <= max_projected_state_bytes,
+        "content_exhaustion_supports_300": content_estimate >= target_turns,
+        "artifact_manifest_digest_ok": manifest_ok,
+        "no_runtime_errors": runtime_errors == 0,
+        "no_unresolved_final_background_jobs": unresolved_jobs == 0,
+    }
+    advisory_failures = [name for name, ok in checks.items() if not ok]
+
+    return {
+        "format_version": "bundle_f_dry_run_300_endurance_gate_v1",
+        "source": "bundle_f_dry_run_300_profile",
+        "profile": _BUNDLE_F_PROFILE_NAME,
+        "target_turns": target_turns,
+        "ok": not advisory_failures,
+        "advisory_only": True,
+        "checks": checks,
+        "advisory_failures": advisory_failures,
+        "metrics": {
+            "content_exhaustion_estimate": content_estimate,
+            "projected_transcript_bytes": transcript_bytes,
+            "projected_state_bytes": state_bytes,
+            "max_projected_transcript_bytes": max_projected_transcript_bytes,
+            "max_projected_state_bytes": max_projected_state_bytes,
+            "runtime_error_count": runtime_errors,
+            "unresolved_final_background_jobs": unresolved_jobs,
+            "manifest_digest_present": bool(artifacts.get("artifact-manifest-digest.json")),
+            "manifest_digest_ok": manifest_ok,
+        },
+        "profile_defaults": dict(_BUNDLE_F_DRY_RUN_300_PROFILE["defaults"]),
+        "recommended_next_run": "dry_run_300" if not advisory_failures else "fix_advisory_failures_before_dry_run_300",
+    }
+
+
+def _bundle_f_write_gate_summary_if_possible(result_dir: _BundleFPath) -> _BundleFOptional[_BundleFDict[str, _BundleFAny]]:
+    try:
+        artifacts = _bundle_f_artifacts_from_result_dir(result_dir)
+        if not artifacts:
+            return None
+        summary = _bundle_f_evaluate_300_turn_endurance(artifacts)
+        path = result_dir / _BUNDLE_F_GATE_FILE
+        _BUNDLE_F_ORIGINAL_PATH_WRITE_TEXT(
+            path,
+            _bundle_f_json.dumps(summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return summary
+    except Exception:
+        return None
+
+
+def _bundle_f_apply_dry_run_300_env(profile_name: str) -> bool:
+    if profile_name != _BUNDLE_F_PROFILE_NAME:
+        return False
+    defaults = _BUNDLE_F_DRY_RUN_300_PROFILE["defaults"]
+    _bundle_f_os.environ.setdefault("RPG_AUTOPLAY_PROFILE", _BUNDLE_F_PROFILE_NAME)
+    _bundle_f_os.environ.setdefault("RPG_AUTOPLAY_TURNS", str(defaults["turns"]))
+    _bundle_f_os.environ.setdefault("RPG_AUTOPLAY_NARRATION_MODE", str(defaults["narration_mode"]))
+    _bundle_f_os.environ.setdefault("RPG_AUTOPLAY_BACKGROUND_LLM_MODE", str(defaults["background_llm_mode"]))
+    _bundle_f_os.environ.setdefault("RPG_AUTOPLAY_CHECKPOINT_INTERVAL", str(defaults["checkpoint_interval"]))
+    _bundle_f_os.environ.setdefault("RPG_AUTOPLAY_ARTIFACT_DETAIL", str(defaults["artifact_detail"]))
+    _bundle_f_os.environ.setdefault("RPG_AUTOPLAY_COMPACT_TRANSCRIPT_MODE", "1")
+    return True
+
+
+def _bundle_f_strip_profile_args(argv: _BundleFList[str]) -> _BundleFTuple[_BundleFList[str], bool]:
+    result: _BundleFList[str] = []
+    applied = False
+    index = 0
+    profile_flags = {"--profile", "--autoplay-profile", "--dry-run-profile"}
+    while index < len(argv):
+        item = argv[index]
+        if item in profile_flags and index + 1 < len(argv):
+            value = argv[index + 1]
+            if _bundle_f_apply_dry_run_300_env(value):
+                applied = True
+                index += 2
+                continue
+        if item.startswith("--profile=") or item.startswith("--autoplay-profile=") or item.startswith("--dry-run-profile="):
+            value = item.split("=", 1)[1]
+            if _bundle_f_apply_dry_run_300_env(value):
+                applied = True
+                index += 1
+                continue
+        result.append(item)
+        index += 1
+    return result, applied
+
+
+def _bundle_f_append_missing_profile_args(argv: _BundleFList[str]) -> _BundleFList[str]:
+    # Use conservative, documented defaults, but only add a flag when the caller
+    # has not already supplied it.  Existing CLI choices always win.
+    flag_values = [
+        ("--turns", "300"),
+        ("--narration-mode", "deferred"),
+        ("--background-llm-mode", "combined"),
+        ("--checkpoint-interval", "25"),
+        ("--artifact-detail", "full"),
+    ]
+    flag_set = {item.split("=", 1)[0] for item in argv if item.startswith("--")}
+    expanded = list(argv)
+    for flag, value in flag_values:
+        if flag not in flag_set:
+            expanded.extend([flag, value])
+    if "--compact-transcript-mode" not in flag_set:
+        expanded.append("--compact-transcript-mode")
+    return expanded
+
+
+if not globals().get("_BUNDLE_F_MAIN_PATCHED") and callable(globals().get("main")):
+    _BUNDLE_F_ORIGINAL_MAIN = globals()["main"]
+
+    def _bundle_f_main(argv=None):
+        args = list(argv or [])
+        args, applied = _bundle_f_strip_profile_args(args)
+        if applied:
+            args = _bundle_f_append_missing_profile_args(args)
+        return _BUNDLE_F_ORIGINAL_MAIN(args)
+
+    globals()["main"] = _bundle_f_main
+    globals()["_BUNDLE_F_MAIN_PATCHED"] = True
+
+
+if not globals().get("_BUNDLE_F_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_F_ORIGINAL_PATH_WRITE_TEXT = _BundleFPath.write_text
+
+    def _bundle_f_write_text_with_gate_summary(self, data, *args, **kwargs):
+        result = _BUNDLE_F_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        try:
+            path = _BundleFPath(self)
+            if path.name in _BUNDLE_F_RELEVANT_INPUT_FILES and path.parent.exists():
+                _bundle_f_write_gate_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleFPath.write_text = _bundle_f_write_text_with_gate_summary
+    globals()["_BUNDLE_F_PATH_WRITE_TEXT_PATCHED"] = True
