@@ -10,8 +10,9 @@ from app.rpg.session.autoplay_manifest_zip_finalize import finalize_manifest_in_
 
 SOURCE = "bundle_d_results_mirror_extraction_repair"
 MIRROR_SUMMARY_FILE = "essential-mirror-consistency-summary.json"
+ARTIFACT_MANIFEST_FILE = "artifact-manifest.json"
 CORE_FILES = [
-    "artifact-manifest.json",
+    ARTIFACT_MANIFEST_FILE,
     "autoplay-health.json",
     "summary.json",
     "hundred-turn-evaluation.json",
@@ -29,6 +30,24 @@ def _read_json(path: Path) -> Dict[str, Any]:
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+
+
+def _file_nonempty(path: Path) -> bool:
+    return path.exists() and path.stat().st_size > 2
+
+
+def _artifact_manifest_valid(result_dir: Path) -> bool:
+    path = result_dir / ARTIFACT_MANIFEST_FILE
+    if not _file_nonempty(path):
+        return False
+    manifest = _read_json(path)
+    return bool(manifest.get("ok")) and bool(manifest.get("hard_finalized")) and bool(manifest.get("embedded_artifacts"))
+
+
+def _core_file_valid(result_dir: Path, name: str) -> bool:
+    if name == ARTIFACT_MANIFEST_FILE:
+        return _artifact_manifest_valid(result_dir)
+    return _file_nonempty(result_dir / name)
 
 
 def _candidate_zips(result_dir: Path) -> List[Path]:
@@ -49,7 +68,7 @@ def _candidate_zips(result_dir: Path) -> List[Path]:
 
 
 def _has_core_files(result_dir: Path) -> bool:
-    return all((result_dir / name).exists() and (result_dir / name).stat().st_size > 2 for name in CORE_FILES)
+    return all(_core_file_valid(result_dir, name) for name in CORE_FILES)
 
 
 def _extract_zip(zip_path: Path, result_dir: Path) -> int:
@@ -68,9 +87,11 @@ def _extract_zip(zip_path: Path, result_dir: Path) -> int:
 
 def _write_mirror_summary(result_dir: Path, *, zip_path: Path | None, extracted_count: int, repaired: bool) -> Dict[str, Any]:
     files = [path for path in result_dir.rglob("*") if path.is_file()]
-    core_presence = {name: (result_dir / name).exists() and (result_dir / name).stat().st_size > 2 for name in CORE_FILES}
+    core_presence = {name: _core_file_valid(result_dir, name) for name in CORE_FILES}
+    raw_file_presence = {name: _file_nonempty(result_dir / name) for name in CORE_FILES}
+    manifest = _read_json(result_dir / ARTIFACT_MANIFEST_FILE)
     summary = {
-        "format_version": "bundle_d_results_mirror_extraction_repair_v1",
+        "format_version": "bundle_d_results_mirror_extraction_repair_v2",
         "source": SOURCE,
         "ok": all(core_presence.values()),
         "repaired": repaired,
@@ -79,8 +100,13 @@ def _write_mirror_summary(result_dir: Path, *, zip_path: Path | None, extracted_
         "extracted_file_count": extracted_count,
         "present_file_count": len(files),
         "core_presence": core_presence,
+        "raw_file_presence": raw_file_presence,
+        "artifact_manifest_valid": _artifact_manifest_valid(result_dir),
+        "artifact_manifest_format_version": manifest.get("format_version"),
+        "artifact_manifest_hard_finalized": bool(manifest.get("hard_finalized")),
+        "artifact_manifest_embedded_artifact_count": len(manifest.get("embedded_artifacts") or {}) if isinstance(manifest.get("embedded_artifacts"), dict) else 0,
         "missing_core_files": [name for name, present in core_presence.items() if not present],
-        "note": "Generated review mirror must include core artifacts, not only this summary file.",
+        "note": "Generated review mirror must include valid core artifacts, not only present files.",
     }
     _write_json(result_dir / MIRROR_SUMMARY_FILE, summary)
     return summary
@@ -100,7 +126,7 @@ def repair_results_mirror_from_zip(result_dir: str | Path) -> Dict[str, Any]:
             if _has_core_files(root):
                 break
     hard_finalize = hard_finalize_artifact_manifest(root) if (root / "hundred-turn-evaluation.json").exists() else {"applied": False, "reason": "evaluation_missing"}
-    zip_finalize = finalize_manifest_in_result_zips(root) if (root / "artifact-manifest.json").exists() else {"applied": False, "reason": "manifest_missing"}
+    zip_finalize = finalize_manifest_in_result_zips(root) if (root / ARTIFACT_MANIFEST_FILE).exists() else {"applied": False, "reason": "manifest_missing"}
     summary = _write_mirror_summary(root, zip_path=selected_zip, extracted_count=extracted_count, repaired=repaired)
     return {
         "applied": repaired or bool(hard_finalize.get("applied")) or bool(zip_finalize.get("applied")),
