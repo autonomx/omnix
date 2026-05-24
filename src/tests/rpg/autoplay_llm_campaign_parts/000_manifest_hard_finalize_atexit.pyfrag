@@ -1,0 +1,87 @@
+# Register hard artifact-manifest finalization as early as possible.
+# Python runs atexit callbacks in LIFO order.  By registering this in a 000_ fragment,
+# the callback runs after later packaging/mirror atexit callbacks and can restore
+# artifact-manifest.json as the final physical file on disk.
+
+import atexit as _MANIFEST_HARD_ATEXIT_atexit  # noqa: E402
+from pathlib import Path as _MANIFEST_HARD_ATEXIT_Path  # noqa: E402
+
+from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
+    hard_finalize_artifact_manifest as _manifest_hard_atexit_finalize,
+)
+
+_MANIFEST_HARD_ATEXIT_CANDIDATES = []
+_MANIFEST_HARD_ATEXIT_REGISTERED = False
+
+
+def _manifest_hard_atexit_repo_root():
+    here = _MANIFEST_HARD_ATEXIT_Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        if (parent / "resources").exists() or (parent / "src").exists():
+            if (parent / "src" / "tests" / "rpg").exists() or (parent / "resources" / "data").exists():
+                return parent
+    return _MANIFEST_HARD_ATEXIT_Path.cwd()
+
+
+def _manifest_hard_atexit_candidates():
+    roots = [
+        _manifest_hard_atexit_repo_root() / "resources" / "data" / "test-results",
+        _MANIFEST_HARD_ATEXIT_Path.cwd() / "resources" / "data" / "test-results",
+    ]
+    seen = set()
+    candidates = []
+    for base in roots:
+        if not base.exists():
+            continue
+        for path in base.rglob("hundred-turn-evaluation.json"):
+            parent = path.parent.resolve()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            candidates.append(parent)
+    candidates.sort(key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
+    return candidates[:5]
+
+
+def _manifest_hard_atexit_run():
+    repairs = []
+    candidates = list(_MANIFEST_HARD_ATEXIT_CANDIDATES) or _manifest_hard_atexit_candidates()
+    for path in candidates[:5]:
+        try:
+            item = _manifest_hard_atexit_finalize(path)
+        except Exception as exc:
+            item = {"applied": False, "source": "manifest_hard_finalize_atexit", "path": str(path), "error": repr(exc)}
+        repairs.append(item)
+        if item.get("applied"):
+            break
+    globals()["MANIFEST_HARD_ATEXIT_RESULT"] = {
+        "source": "manifest_hard_finalize_atexit",
+        "applied": any(item.get("applied") for item in repairs),
+        "repairs": repairs,
+    }
+
+
+def _manifest_hard_atexit_set_candidates(paths):
+    global _MANIFEST_HARD_ATEXIT_CANDIDATES
+    seen = set()
+    out = []
+    for raw in paths or []:
+        path = _MANIFEST_HARD_ATEXIT_Path(raw)
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+    _MANIFEST_HARD_ATEXIT_CANDIDATES = out[:5]
+
+
+def _manifest_hard_atexit_register_once():
+    global _MANIFEST_HARD_ATEXIT_REGISTERED
+    if _MANIFEST_HARD_ATEXIT_REGISTERED:
+        return False
+    _MANIFEST_HARD_ATEXIT_atexit.register(_manifest_hard_atexit_run)
+    _MANIFEST_HARD_ATEXIT_REGISTERED = True
+    return True
+
+
+_MANIFEST_HARD_ATEXIT_REGISTERED_NOW = _manifest_hard_atexit_register_once()
