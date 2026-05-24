@@ -6,6 +6,9 @@ _MANIFEST_HARD_FINALIZE_PREV_MAIN = globals().get("main")
 
 from pathlib import Path as _MANIFEST_HARD_FINALIZE_Path  # noqa: E402
 
+from app.rpg.session.artifact_export_invariant import (  # noqa: E402
+    validate_artifact_export_invariant as _validate_artifact_export_invariant,
+)
 from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
     hard_finalize_artifact_manifest as _hard_finalize_artifact_manifest,
 )
@@ -58,9 +61,24 @@ def _manifest_hard_finalize_latest():
         mirror = _repair_results_mirror_from_zip(path)
         item = _hard_finalize_artifact_manifest(path)
         zip_item = _finalize_manifest_in_result_zips(path)
-        repairs.append({"path": str(path), "mirror": mirror, "manifest": item, "zip_manifest": zip_item})
+        invariant = _validate_artifact_export_invariant(path)
+        repairs.append({"path": str(path), "mirror": mirror, "manifest": item, "zip_manifest": zip_item, "invariant": invariant})
+        if invariant.get("ok"):
+            break
         if mirror.get("applied") or item.get("applied") or zip_item.get("applied"):
             break
+    failed = [item for item in repairs if not item.get("invariant", {}).get("ok")]
+    if repairs and failed and not any(item.get("invariant", {}).get("ok") for item in repairs):
+        first = failed[0]
+        invariant = first.get("invariant", {})
+        raise RuntimeError(
+            "artifact_export_invariant_failed:"
+            f"path={first.get('path')}:"
+            f"failed_checks={invariant.get('failed_checks')}:"
+            f"missing_unzipped_files={invariant.get('missing_unzipped_files')}:"
+            f"unzipped_manifest={invariant.get('unzipped_manifest')}:"
+            f"zip_count={invariant.get('zip_count')}"
+        )
     return {
         "source": "manifest_hard_finalize_wrapper",
         "applied": any(
@@ -69,6 +87,7 @@ def _manifest_hard_finalize_latest():
             or item.get("zip_manifest", {}).get("applied")
             for item in repairs
         ),
+        "ok": any(item.get("invariant", {}).get("ok") for item in repairs),
         "repairs": repairs,
     }
 
@@ -77,8 +96,5 @@ def main(argv=None):
     if not callable(_MANIFEST_HARD_FINALIZE_PREV_MAIN):
         raise RuntimeError("manifest_hard_finalize_previous_main_missing")
     exit_code = _MANIFEST_HARD_FINALIZE_PREV_MAIN(argv)
-    try:
-        globals()["MANIFEST_HARD_FINALIZE_RESULT"] = _manifest_hard_finalize_latest()
-    except Exception as exc:
-        globals()["MANIFEST_HARD_FINALIZE_RESULT"] = {"source": "manifest_hard_finalize_wrapper", "applied": False, "error": repr(exc)}
+    globals()["MANIFEST_HARD_FINALIZE_RESULT"] = _manifest_hard_finalize_latest()
     return exit_code
