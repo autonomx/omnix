@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from app.rpg.session.artifact_manifest_digest import write_artifact_manifest_digest
 from app.rpg.session.autoplay_manifest_hard_finalize import hard_finalize_artifact_manifest
 from app.rpg.session.autoplay_manifest_zip_finalize import finalize_manifest_in_result_zips
 
@@ -85,15 +86,15 @@ def _extract_zip(zip_path: Path, result_dir: Path) -> int:
     return count
 
 
-def _write_mirror_summary(result_dir: Path, *, zip_path: Path | None, extracted_count: int, repaired: bool) -> Dict[str, Any]:
+def _write_mirror_summary(result_dir: Path, *, zip_path: Path | None, extracted_count: int, repaired: bool, digest: Dict[str, Any]) -> Dict[str, Any]:
     files = [path for path in result_dir.rglob("*") if path.is_file()]
     core_presence = {name: _core_file_valid(result_dir, name) for name in CORE_FILES}
     raw_file_presence = {name: _file_nonempty(result_dir / name) for name in CORE_FILES}
     manifest = _read_json(result_dir / ARTIFACT_MANIFEST_FILE)
     summary = {
-        "format_version": "bundle_d_results_mirror_extraction_repair_v2",
+        "format_version": "bundle_d_results_mirror_extraction_repair_v3",
         "source": SOURCE,
-        "ok": all(core_presence.values()),
+        "ok": all(core_presence.values()) and bool(digest.get("ok")),
         "repaired": repaired,
         "mirror_dir": str(result_dir),
         "zip_path": str(zip_path) if zip_path else "",
@@ -105,6 +106,13 @@ def _write_mirror_summary(result_dir: Path, *, zip_path: Path | None, extracted_
         "artifact_manifest_format_version": manifest.get("format_version"),
         "artifact_manifest_hard_finalized": bool(manifest.get("hard_finalized")),
         "artifact_manifest_embedded_artifact_count": len(manifest.get("embedded_artifacts") or {}) if isinstance(manifest.get("embedded_artifacts"), dict) else 0,
+        "artifact_manifest_digest_ok": bool(digest.get("ok")),
+        "artifact_manifest_digest_file": digest.get("digest_file", "artifact-manifest-digest.json"),
+        "artifact_manifest_digest": {
+            "manifest_byte_size": digest.get("manifest_byte_size"),
+            "embedded_artifact_count": digest.get("embedded_artifact_count"),
+            "zip_manifest_valid_count": digest.get("zip_manifest_valid_count"),
+        },
         "missing_core_files": [name for name, present in core_presence.items() if not present],
         "note": "Generated review mirror must include valid core artifacts, not only present files.",
     }
@@ -127,9 +135,10 @@ def repair_results_mirror_from_zip(result_dir: str | Path) -> Dict[str, Any]:
                 break
     hard_finalize = hard_finalize_artifact_manifest(root) if (root / "hundred-turn-evaluation.json").exists() else {"applied": False, "reason": "evaluation_missing"}
     zip_finalize = finalize_manifest_in_result_zips(root) if (root / ARTIFACT_MANIFEST_FILE).exists() else {"applied": False, "reason": "manifest_missing"}
-    summary = _write_mirror_summary(root, zip_path=selected_zip, extracted_count=extracted_count, repaired=repaired)
+    digest = write_artifact_manifest_digest(root) if _artifact_manifest_valid(root) else {"applied": False, "ok": False, "reason": "artifact_manifest_invalid"}
+    summary = _write_mirror_summary(root, zip_path=selected_zip, extracted_count=extracted_count, repaired=repaired, digest=digest)
     return {
-        "applied": repaired or bool(hard_finalize.get("applied")) or bool(zip_finalize.get("applied")),
+        "applied": repaired or bool(hard_finalize.get("applied")) or bool(zip_finalize.get("applied")) or bool(digest.get("applied")),
         "source": SOURCE,
         "result_dir": str(root),
         "ok": bool(summary.get("ok")),
@@ -139,6 +148,7 @@ def repair_results_mirror_from_zip(result_dir: str | Path) -> Dict[str, Any]:
         "extracted_file_count": extracted_count,
         "hard_finalize": hard_finalize,
         "zip_finalize": zip_finalize,
+        "digest": digest,
         "summary": summary,
     }
 
