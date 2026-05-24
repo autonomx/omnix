@@ -1,0 +1,43 @@
+{
+  "format_version": "bundle_d3_artifact_manifest_digest_v1",
+  "source": "bundle_d3_artifact_manifest_digest",
+  "ok": true,
+  "result_dir": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped",
+  "manifest_file": "artifact-manifest.json",
+  "manifest_exists": true,
+  "manifest_byte_size": 1993633,
+  "manifest_sha256": "fb9cc50cd73f29aed4b2a67833610dab4354126b7f6186f54ed2650351e3bc63",
+  "manifest_format_version": "bundle_abcd_artifact_manifest_hard_finalized_v1",
+  "manifest_source": "bundle_d_hard_artifact_manifest_finalizer",
+  "manifest_ok": true,
+  "manifest_hard_finalized": true,
+  "manifest_final_write_after_all_wrappers": true,
+  "embedded_artifact_count": 8,
+  "embedded_artifact_names": [
+    "content-exhaustion-forecast-summary.json",
+    "economy-resource-pressure-summary.json",
+    "long-run-dry-run-projection-summary.json",
+    "npc-agency-schedule-summary.json",
+    "quality-gate-summary.json",
+    "readiness-report-projection-summary.json",
+    "survival-exit-criteria-summary.json",
+    "transcript-payload-budget-summary.json"
+  ],
+  "invariant_ok": true,
+  "invariant_failed_checks": [],
+  "zip_manifest_digests": [
+    {
+      "zip_path": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results.zip",
+      "ok": true,
+      "entry_name": "artifact-manifest.json",
+      "byte_size": 1974193,
+      "sha256": "5470eea5c5d62aa3db01980bca5526f049cf92a565cea015c04be62c0562a9d6",
+      "format_version": "bundle_abcd_artifact_manifest_hard_finalized_v1",
+      "source": "bundle_d_hard_artifact_manifest_finalizer",
+      "hard_finalized": true,
+      "embedded_artifact_count": 8
+    }
+  ],
+  "zip_manifest_valid_count": 1,
+  "review_note": "Use this small digest for manifest review; artifact-manifest.json may be too large for inline content readers."
+}
