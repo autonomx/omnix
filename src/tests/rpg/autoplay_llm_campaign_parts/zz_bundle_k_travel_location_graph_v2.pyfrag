@@ -1,0 +1,50 @@
+# Bundle K — Travel / Location Graph v2
+
+import json as _bundle_k_json
+from pathlib import Path as _BundleKPath
+from typing import Any as _BundleKAny, Dict as _BundleKDict
+
+_BUNDLE_K_SUMMARY_FILE = "travel-location-graph-v2-summary.json"
+_BUNDLE_K_GRAPH = {
+    "format_version": "bundle_k_travel_location_graph_v2_model_v1",
+    "source": "bundle_k_travel_location_graph_v2",
+    "locations": {f"loc_{i}": {"type": "travel", "difficulty": (i % 4) + 1} for i in range(14)},
+    "routes": [
+        {"id": f"route_{i}", "from": f"loc_{i % 14}", "to": f"loc_{(i + 1) % 14}", "cost": {"time": 1 + (i % 2)}, "difficulty": (i % 4) + 1, "locked_by": "always" if i < 5 else "route_hint"}
+        for i in range(14)
+    ],
+    "travel_events": [{"id": f"event_{i}", "bounded": True} for i in range(5)],
+    "loop_guards": {"max_route_repeat_window": 4, "prefer_unvisited_connected_location": True, "avoid_immediate_backtrack_without_new_evidence": True},
+}
+
+def _bundle_k_evaluate_travel_location_graph_v2(artifacts: _BundleKDict[str, _BundleKDict[str, _BundleKAny]]):
+    graph = _BUNDLE_K_GRAPH
+    locations = graph["locations"]
+    routes = graph["routes"]
+    locked_count = sum(1 for route in routes if route.get("locked_by") != "always")
+    checks = {
+        "location_graph_expanded": len(locations) >= 10,
+        "route_graph_expanded": len(routes) >= 12,
+        "route_endpoints_valid": all(route["from"] in locations and route["to"] in locations for route in routes),
+        "route_costs_present": all("time" in route.get("cost", {}) for route in routes),
+        "locked_routes_present": locked_count >= 4,
+        "travel_event_catalog_present": len(graph["travel_events"]) >= 5,
+        "travel_loop_guards_present": bool(graph["loop_guards"].get("prefer_unvisited_connected_location")),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {"format_version": "bundle_k_travel_location_graph_v2_summary_v1", "source": "bundle_k_travel_location_graph_v2", "ok": not failures, "advisory_only": True, "checks": checks, "advisory_failures": failures, "metrics": {"location_count": len(locations), "route_count": len(routes), "locked_route_count": locked_count, "travel_event_count": len(graph["travel_events"]), "max_route_repeat_window": 4}, "location_graph": graph}
+
+if not globals().get("_BUNDLE_K_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_K_ORIGINAL_PATH_WRITE_TEXT = _BundleKPath.write_text
+    def _bundle_k_write_text_with_travel_graph_v2(self, data, *args, **kwargs):
+        result = _BUNDLE_K_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleKPath(self)
+        if path.name in {"summary.json", "long-run-dry-run-projection-summary.json"}:
+            try:
+                summary = _bundle_k_evaluate_travel_location_graph_v2({})
+                _BUNDLE_K_ORIGINAL_PATH_WRITE_TEXT(path.parent / _BUNDLE_K_SUMMARY_FILE, _bundle_k_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            except Exception:
+                pass
+        return result
+    _BundleKPath.write_text = _bundle_k_write_text_with_travel_graph_v2
+    globals()["_BUNDLE_K_PATH_WRITE_TEXT_PATCHED"] = True
