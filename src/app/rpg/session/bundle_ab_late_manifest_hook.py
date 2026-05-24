@@ -18,15 +18,20 @@ _WRITE_GUARD_INSTALLED = False
 _ORIGINAL_WRITE_TEXT = None
 _ORIGINAL_OPEN = None
 _CANDIDATES: List[Path] = []
-_BUNDLE_FILES = [
+_BUNDLE_A_FILES = [
     "quality-gate-summary.json",
     "survival-exit-criteria-summary.json",
     "transcript-payload-budget-summary.json",
+]
+_BUNDLE_B_FILES = [
     "long-run-dry-run-projection-summary.json",
     "content-exhaustion-forecast-summary.json",
+]
+_BUNDLE_C_FILES = [
     "npc-agency-schedule-summary.json",
     "economy-resource-pressure-summary.json",
 ]
+_BUNDLE_FILES = [*_BUNDLE_A_FILES, *_BUNDLE_B_FILES, *_BUNDLE_C_FILES]
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -42,20 +47,35 @@ def _read_json(path: Path) -> Dict[str, Any]:
         return {}
 
 
+def _presence(root: Path, names: List[str]) -> Dict[str, bool]:
+    return {name: (root / name).exists() and (root / name).stat().st_size > 2 for name in names}
+
+
+def _bundle_ok(presence: Dict[str, bool], *, required: bool) -> bool:
+    if required:
+        return all(presence.values())
+    if not any(presence.values()):
+        return True
+    return all(presence.values())
+
+
 def _bundle_manifest_from_physical_files(root: Path) -> Dict[str, Any]:
-    physical = {name: (root / name).exists() and (root / name).stat().st_size > 2 for name in _BUNDLE_FILES}
+    bundle_a_presence = _presence(root, _BUNDLE_A_FILES)
+    bundle_b_presence = _presence(root, _BUNDLE_B_FILES)
+    bundle_c_presence = _presence(root, _BUNDLE_C_FILES)
+    physical = {**bundle_a_presence, **bundle_b_presence, **bundle_c_presence}
     embedded = {name: _read_json(root / name) for name, present in physical.items() if present}
     return {
-        "format_version": "bundle_abc_artifact_manifest_guard_v2",
+        "format_version": "bundle_abc_artifact_manifest_guard_v3",
         "source": "bundle_ab_late_manifest_empty_write_guard",
-        "ok": all(physical.values()),
-        "bundle_a_files": _BUNDLE_FILES[:3],
-        "bundle_b_files": _BUNDLE_FILES[3:5],
-        "bundle_c_files": _BUNDLE_FILES[5:],
+        "ok": _bundle_ok(bundle_a_presence, required=True) and _bundle_ok(bundle_b_presence, required=False) and _bundle_ok(bundle_c_presence, required=False),
+        "bundle_a_files": list(_BUNDLE_A_FILES),
+        "bundle_b_files": list(_BUNDLE_B_FILES),
+        "bundle_c_files": list(_BUNDLE_C_FILES),
         "files": [name for name, present in physical.items() if present],
-        "physical_presence": {name: physical[name] for name in _BUNDLE_FILES[:3]},
-        "bundle_b_physical_presence": {name: physical[name] for name in _BUNDLE_FILES[3:5]},
-        "bundle_c_physical_presence": {name: physical[name] for name in _BUNDLE_FILES[5:]},
+        "physical_presence": bundle_a_presence,
+        "bundle_b_physical_presence": bundle_b_presence,
+        "bundle_c_physical_presence": bundle_c_presence,
         "embedded_artifacts": embedded,
         "empty_write_guard_applied": True,
     }
