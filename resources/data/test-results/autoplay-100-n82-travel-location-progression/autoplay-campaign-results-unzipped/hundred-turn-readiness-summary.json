@@ -221,8 +221,8 @@
         "severity": "advisory",
         "value": {
           "real_round_event_count": 2,
-          "real_attack_event_count": 191,
-          "real_damage_event_count": 4774,
+          "real_attack_event_count": 567,
+          "real_damage_event_count": 5566,
           "real_resolution_event_count": 45,
           "direct_graph_combat_count": 4,
           "abstract_round_event_count": 2,
@@ -266,11 +266,11 @@
           "ok": true,
           "budget_1000_turn_bytes": 786432000,
           "turns_sampled": 100,
-          "operational_bytes_sampled": 3045051,
-          "operational_bytes_per_turn": 30450.51,
-          "operational_projected_1000_turn_bytes": 30450510,
-          "full_debug_bytes_sampled": 310914628,
-          "full_debug_projected_1000_turn_bytes": 3109146280,
+          "operational_bytes_sampled": 3057719,
+          "operational_bytes_per_turn": 30577.19,
+          "operational_projected_1000_turn_bytes": 30577190,
+          "full_debug_bytes_sampled": 331117424,
+          "full_debug_projected_1000_turn_bytes": 3311174240,
           "monolithic_full_transcript_written": false,
           "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
         },
@@ -1071,7 +1071,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_093f584691d6"
+              "session_key": "autoplay_a849b9ad823e"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1102,7 +1102,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_093f584691d6"
+              "session_key": "autoplay_a849b9ad823e"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -1163,7 +1163,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_093f584691d6"
+              "session_key": "autoplay_a849b9ad823e"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
