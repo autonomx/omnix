@@ -50,11 +50,14 @@ def test_bundle_q_profile_descriptor_and_command_are_explicit():
     assert profile["defaults"]["narration_mode"] == "deferred"
     assert profile["defaults"]["background_llm_mode"] == "combined"
     assert profile["defaults"]["compact_transcript_mode"] is True
+    assert profile["defaults"]["transcript_detail"] == "auto"
     assert command[:2] == ["python", "src/tests/rpg/autoplay_llm_campaign.py"]
     assert namespace["_bundle_q_missing_command_flags"](command) == []
     assert "--turns" in command
     assert "1000" in command
-    assert "--compact-transcript-mode" in command
+    assert "--transcript-detail" in command
+    assert "auto" in command
+    assert "--compact-transcript-mode" not in command
 
 
 def test_bundle_q_profile_arg_expansion_preserves_caller_flags():
@@ -68,13 +71,15 @@ def test_bundle_q_profile_arg_expansion_preserves_caller_flags():
     assert "--preflight-profile" not in expanded
     turns_index = expanded.index("--turns")
     artifact_index = expanded.index("--artifact-detail")
+    transcript_index = expanded.index("--transcript-detail")
     assert expanded[turns_index + 1] == "777"
     assert expanded[artifact_index + 1] == "compact"
+    assert expanded[transcript_index + 1] == "auto"
     assert "--narration-mode" in expanded
     assert "deferred" in expanded
     assert "--background-llm-mode" in expanded
     assert "combined" in expanded
-    assert "--compact-transcript-mode" in expanded
+    assert "--compact-transcript-mode" not in expanded
 
 
 def test_bundle_q_preflight_profile_passes_with_ready_aggregator_and_dashboard(tmp_path):
@@ -101,6 +106,7 @@ def test_bundle_q_preflight_profile_passes_with_ready_aggregator_and_dashboard(t
     assert result["checks"]["aggregator_preflight_ready"] is True
     assert result["checks"]["dashboard_present"] is True
     assert result["checks"]["dashboard_preflight_ready"] is True
+    assert "--compact-transcript-mode" not in result["canonical_command"]
     assert result["recommended_next_step"] == "run_preflight_1000_command"
 
 
@@ -134,6 +140,7 @@ def test_bundle_q_writes_summary_when_dashboard_or_aggregator_is_exported(tmp_pa
         assert summary["ok"] is True
         assert summary["checks"]["target_turns_1000"] is True
         assert summary["checks"]["canonical_command_complete"] is True
+        assert "--compact-transcript-mode" not in summary["canonical_command"]
         assert summary["recommended_next_step"] == "run_preflight_1000_command"
     finally:
         Path.write_text = original_write_text
