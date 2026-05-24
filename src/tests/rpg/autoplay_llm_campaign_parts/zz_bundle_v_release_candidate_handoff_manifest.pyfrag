@@ -1,0 +1,172 @@
+# Bundle V — Release Candidate Handoff Manifest
+#
+# Final advisory handoff layer for the 1000-turn readiness pipeline.  This
+# fragment reads the Bundle U release-candidate dashboard and Bundle T live
+# result, builds a compact artifact checklist and command handoff, and writes
+# one-thousand-turn-release-candidate-handoff-manifest.json.  It does not mutate
+# authoritative simulation state.
+
+import json as _bundle_v_json
+from pathlib import Path as _BundleVPath
+from typing import Any as _BundleVAny, Dict as _BundleVDict, List as _BundleVList
+
+_BUNDLE_V_SUMMARY_FILE = "one-thousand-turn-release-candidate-handoff-manifest.json"
+_BUNDLE_V_DASHBOARD_FILE = "one-thousand-turn-release-candidate-dashboard-summary.json"
+_BUNDLE_V_LIVE_RESULT_FILE = "one-thousand-turn-live-result-summary.json"
+_BUNDLE_V_REQUIRED_FILES = [
+    "one-thousand-turn-readiness-aggregator-summary.json",
+    "one-thousand-turn-readiness-dashboard-summary.json",
+    "one-thousand-turn-preflight-profile-summary.json",
+    "one-thousand-turn-preflight-result-summary.json",
+    "one-thousand-turn-live-run-profile-summary.json",
+    "one-thousand-turn-live-result-summary.json",
+    "one-thousand-turn-release-candidate-dashboard-summary.json",
+]
+_BUNDLE_V_OPTIONAL_PRODUCT_FILES = [
+    "autoplay-campaign-report.html",
+    "autoplay-campaign-results.zip",
+    "artifact-manifest-digest.json",
+]
+
+_BUNDLE_V_COMMANDS: _BundleVDict[str, _BundleVList[str]] = {
+    "focused_test_suite": [
+        "python", "-m", "pytest",
+        "src/tests/rpg/test_bundle_e_product_report_rendering.py",
+        "src/tests/rpg/test_bundle_f_dry_run_300_profile.py",
+        "src/tests/rpg/test_bundle_g_content_depth_expansion.py",
+        "src/tests/rpg/test_bundle_h_memory_state_compression.py",
+        "src/tests/rpg/test_bundle_i_npc_agency_v2.py",
+        "src/tests/rpg/test_bundle_j_economy_resource_pressure_v2.py",
+        "src/tests/rpg/test_bundle_k_travel_location_graph_v2.py",
+        "src/tests/rpg/test_bundle_l_faction_reputation_v2.py",
+        "src/tests/rpg/test_bundle_m_encounter_lifecycle_v2.py",
+        "src/tests/rpg/test_bundle_n_story_arc_end_state_v2.py",
+        "src/tests/rpg/test_bundle_o_1000_turn_readiness_aggregator.py",
+        "src/tests/rpg/test_bundle_p_1000_turn_readiness_dashboard.py",
+        "src/tests/rpg/test_bundle_q_1000_turn_preflight_profile.py",
+        "src/tests/rpg/test_bundle_r_1000_turn_preflight_result_gate.py",
+        "src/tests/rpg/test_bundle_s_live_1000_run_profile.py",
+        "src/tests/rpg/test_bundle_t_live_1000_result_gate.py",
+        "src/tests/rpg/test_bundle_u_release_candidate_dashboard.py",
+        "src/tests/rpg/test_bundle_v_release_candidate_handoff_manifest.py",
+    ],
+    "preflight_1000": [
+        "python", "src/tests/rpg/autoplay_llm_campaign.py",
+        "--preflight-profile", "preflight_1000",
+    ],
+    "live_1000": [
+        "python", "src/tests/rpg/autoplay_llm_campaign.py",
+        "--live-profile", "live_1000",
+    ],
+}
+
+
+def _bundle_v_load_json_file(path: _BundleVPath) -> _BundleVDict[str, _BundleVAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_v_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_v_bool(value: _BundleVAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed", "ready"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed", "blocked"}:
+        return False
+    return default
+
+
+def _bundle_v_command_text(argv: _BundleVList[str]) -> str:
+    return " ".join(str(part) for part in argv)
+
+
+def _bundle_v_file_status(result_dir: _BundleVPath, file_name: str) -> _BundleVDict[str, _BundleVAny]:
+    path = result_dir / file_name
+    return {
+        "file": file_name,
+        "present": path.exists(),
+        "size_bytes": path.stat().st_size if path.exists() and path.is_file() else 0,
+    }
+
+
+def _bundle_v_build_artifact_checklist(result_dir: _BundleVPath) -> _BundleVDict[str, _BundleVAny]:
+    required = [_bundle_v_file_status(result_dir, file_name) for file_name in _BUNDLE_V_REQUIRED_FILES]
+    optional = [_bundle_v_file_status(result_dir, file_name) for file_name in _BUNDLE_V_OPTIONAL_PRODUCT_FILES]
+    missing_required = [entry["file"] for entry in required if not entry["present"]]
+    return {
+        "required": required,
+        "optional_product": optional,
+        "missing_required": missing_required,
+        "required_file_count": len(required),
+        "present_required_file_count": len(required) - len(missing_required),
+    }
+
+
+def _bundle_v_evaluate_release_candidate_handoff(result_dir: _BundleVPath) -> _BundleVDict[str, _BundleVAny]:
+    dashboard = _bundle_v_load_json_file(result_dir / _BUNDLE_V_DASHBOARD_FILE)
+    live_result = _bundle_v_load_json_file(result_dir / _BUNDLE_V_LIVE_RESULT_FILE)
+    checklist = _bundle_v_build_artifact_checklist(result_dir)
+    dashboard_ready = dashboard.get("status_label") == "Release Candidate Ready" and _bundle_v_bool(dashboard.get("ok"), False)
+    live_result_ready = _bundle_v_bool(live_result.get("release_candidate_ready"), False)
+    missing_required = checklist["missing_required"]
+    checks = {
+        "release_candidate_dashboard_ready": dashboard_ready,
+        "live_result_release_candidate_ready": live_result_ready,
+        "required_handoff_artifacts_present": not missing_required,
+        "focused_test_command_present": bool(_BUNDLE_V_COMMANDS.get("focused_test_suite")),
+        "preflight_command_present": bool(_BUNDLE_V_COMMANDS.get("preflight_1000")),
+        "live_command_present": bool(_BUNDLE_V_COMMANDS.get("live_1000")),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_v_release_candidate_handoff_manifest_v1",
+        "source": "bundle_v_release_candidate_handoff_manifest",
+        "ok": not failures,
+        "advisory_only": True,
+        "release_candidate_handoff_ready": not failures,
+        "checks": checks,
+        "advisory_failures": failures,
+        "artifact_checklist": checklist,
+        "commands": {name: {"argv": argv, "text": _bundle_v_command_text(argv)} for name, argv in _BUNDLE_V_COMMANDS.items()},
+        "metrics": {
+            "required_file_count": checklist["required_file_count"],
+            "present_required_file_count": checklist["present_required_file_count"],
+            "missing_required_file_count": len(missing_required),
+            "command_count": len(_BUNDLE_V_COMMANDS),
+        },
+        "recommended_next_step": "archive_release_candidate_artifacts" if not failures else "complete_release_candidate_handoff_artifacts",
+    }
+
+
+def _bundle_v_write_summary_if_possible(result_dir: _BundleVPath):
+    try:
+        summary = _bundle_v_evaluate_release_candidate_handoff(result_dir)
+        _BUNDLE_V_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_V_SUMMARY_FILE, _bundle_v_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+if not globals().get("_BUNDLE_V_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_V_ORIGINAL_PATH_WRITE_TEXT = _BundleVPath.write_text
+
+    def _bundle_v_write_text_with_release_handoff(self, data, *args, **kwargs):
+        result = _BUNDLE_V_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        path = _BundleVPath(self)
+        try:
+            if path.name in set(_BUNDLE_V_REQUIRED_FILES):
+                _bundle_v_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleVPath.write_text = _bundle_v_write_text_with_release_handoff
+    globals()["_BUNDLE_V_PATH_WRITE_TEXT_PATCHED"] = True
