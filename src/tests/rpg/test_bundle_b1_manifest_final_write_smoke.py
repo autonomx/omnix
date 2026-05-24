@@ -22,6 +22,10 @@ BUNDLE_C_FILES = {
     "economy-resource-pressure-summary.json": {"ok": True, "advisory_ok": True, "source": "test_economy", "paid_count": 12, "unpaid_count": 0},
 }
 
+BUNDLE_D_FILES = {
+    "readiness-report-projection-summary.json": {"ok": True, "advisory_ok": True, "source": "test_report_projection", "section_count": 6},
+}
+
 
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
@@ -40,7 +44,7 @@ def _seed_result_dir(result_dir: Path) -> None:
     )
     _write_json(result_dir / "hundred-turn-readiness-summary.json", {"ok": True, "failed_gates": []})
     _write_json(result_dir / "autoplay-health.json", {"ok": True})
-    for filename, payload in {**BUNDLE_A_FILES, **BUNDLE_B_FILES, **BUNDLE_C_FILES}.items():
+    for filename, payload in {**BUNDLE_A_FILES, **BUNDLE_B_FILES, **BUNDLE_C_FILES, **BUNDLE_D_FILES}.items():
         _write_json(result_dir / filename, payload)
     # Simulate the exact observed failure mode from the 100-turn run.
     (result_dir / "artifact-manifest.json").write_text("", encoding="utf-8")
@@ -60,13 +64,14 @@ def test_bundle_b1_manifest_repair_final_write_survives_sidecar_patches(tmp_path
     assert manifest_path.exists()
     assert manifest_path.stat().st_size > 2
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["format_version"] == "bundle_abc_artifact_manifest_v2"
+    assert manifest["format_version"] == "bundle_abcd_artifact_manifest_v1"
     assert manifest["ok"] is True
     assert manifest["final_write_after_sidecars"] is True
     assert manifest["physical_presence"] == {name: True for name in BUNDLE_A_FILES}
     assert manifest["bundle_b_physical_presence"] == {name: True for name in BUNDLE_B_FILES}
     assert manifest["bundle_c_physical_presence"] == {name: True for name in BUNDLE_C_FILES}
-    for filename in [*BUNDLE_A_FILES, *BUNDLE_B_FILES, *BUNDLE_C_FILES]:
+    assert manifest["bundle_d_physical_presence"] == {name: True for name in BUNDLE_D_FILES}
+    for filename in [*BUNDLE_A_FILES, *BUNDLE_B_FILES, *BUNDLE_C_FILES, *BUNDLE_D_FILES]:
         assert filename in manifest["embedded_artifacts"]
         assert manifest["embedded_artifacts"][filename]["ok"] is True
 
@@ -74,6 +79,7 @@ def test_bundle_b1_manifest_repair_final_write_survives_sidecar_patches(tmp_path
     assert health["bundle_a_manifest_repair"]["final_write_after_sidecars"] is True
     assert health["bundle_b_manifest_repair"]["final_write_after_sidecars"] is True
     assert health["bundle_c_manifest_repair"]["final_write_after_sidecars"] is True
+    assert health["bundle_d_manifest_repair"]["final_write_after_sidecars"] is True
 
     evaluation = json.loads((result_dir / "hundred-turn-evaluation.json").read_text(encoding="utf-8"))
     assert evaluation["artifact_level_summaries"]["artifact-manifest.json"]["final_write_after_sidecars"] is True
