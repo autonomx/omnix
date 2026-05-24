@@ -1,0 +1,437 @@
+# Bundle J — Economy / Resource Pressure v2
+#
+# Advisory/bounded economy layer.  This fragment exports deterministic service
+# catalogs, merchant inventory refresh rules, resource pressure rules, and
+# balance/readiness gates.  It enriches economy-resource-pressure-summary.json
+# and writes economy-resource-pressure-v2-summary.json without mutating the
+# authoritative simulation state.
+
+import html as _bundle_j_html
+import json as _bundle_j_json
+from pathlib import Path as _BundleJPath
+from typing import Any as _BundleJAny, Dict as _BundleJDict, Iterable as _BundleJIterable, List as _BundleJList, Optional as _BundleJOptional, Set as _BundleJSet
+
+
+_BUNDLE_J_SUMMARY_FILE = "economy-resource-pressure-v2-summary.json"
+_BUNDLE_J_BASE_ECONOMY_FILE = "economy-resource-pressure-summary.json"
+_BUNDLE_J_REPORT_MARKER = 'id="bundle-j-economy-resource-pressure-v2"'
+_BUNDLE_J_MIN_SERVICE_COUNT = 10
+_BUNDLE_J_MIN_MERCHANT_STOCK_COUNT = 12
+_BUNDLE_J_MAX_SURVIVAL_INTERVENTION_COUNT = 8
+_BUNDLE_J_MAX_UNPAID_COUNT = 8
+_BUNDLE_J_MAX_REPETITIVE_PRESSURE_EVENTS = 5
+
+_BUNDLE_J_SERVICE_CATALOG: _BundleJDict[str, _BundleJAny] = {
+    "format_version": "bundle_j_service_catalog_v1",
+    "source": "bundle_j_economy_resource_pressure_v2",
+    "services": [
+        {"id": "lodging_common_bed", "category": "lodging", "tier": "common", "base_price": 3, "effects": {"rest": 1, "safety": 0}},
+        {"id": "lodging_private_room", "category": "lodging", "tier": "private", "base_price": 8, "effects": {"rest": 2, "safety": 1}},
+        {"id": "lodging_secure_room", "category": "lodging", "tier": "secure", "base_price": 14, "effects": {"rest": 3, "safety": 2}},
+        {"id": "meal_simple_stew", "category": "meal", "tier": "basic", "base_price": 1, "effects": {"food": 1}},
+        {"id": "meal_travel_ration", "category": "meal", "tier": "travel", "base_price": 2, "effects": {"food": 2}},
+        {"id": "drink_clean_water", "category": "drink", "tier": "basic", "base_price": 1, "effects": {"water": 2}},
+        {"id": "drink_tavern_ale", "category": "drink", "tier": "comfort", "base_price": 1, "effects": {"morale": 1}},
+        {"id": "supply_road_rations", "category": "travel_supply", "tier": "standard", "base_price": 5, "effects": {"food": 4, "travel_ready": 1}},
+        {"id": "supply_waterskin_fill", "category": "travel_supply", "tier": "standard", "base_price": 2, "effects": {"water": 4, "travel_ready": 1}},
+        {"id": "repair_light_gear", "category": "repair", "tier": "light", "base_price": 4, "effects": {"durability": 1}},
+        {"id": "repair_armor_patch", "category": "repair", "tier": "armor", "base_price": 9, "effects": {"durability": 2}},
+        {"id": "guide_safe_route", "category": "guide", "tier": "route", "base_price": 7, "effects": {"route_safety": 2}},
+        {"id": "rumor_verified_lead", "category": "rumor_service", "tier": "verified", "base_price": 3, "effects": {"lead_quality": 1}},
+    ],
+}
+
+_BUNDLE_J_MERCHANT_REFRESH: _BundleJDict[str, _BundleJAny] = {
+    "format_version": "bundle_j_merchant_refresh_v1",
+    "source": "bundle_j_economy_resource_pressure_v2",
+    "refresh_interval_turns": 24,
+    "stock_by_location": {
+        "tavern_common_room": ["meal_simple_stew", "drink_clean_water", "drink_tavern_ale", "lodging_common_bed", "lodging_private_room"],
+        "market_stables": ["supply_road_rations", "supply_waterskin_fill", "guide_safe_route", "repair_light_gear"],
+        "watch_yard": ["repair_light_gear", "repair_armor_patch", "rumor_verified_lead"],
+        "north_road_fork": ["guide_safe_route", "supply_road_rations", "supply_waterskin_fill"],
+    },
+    "price_modifiers": {
+        "high_trust_discount": -0.15,
+        "low_trust_surcharge": 0.20,
+        "scarcity_surcharge": 0.35,
+        "faction_pressure_surcharge": 0.25,
+        "safe_route_discount": -0.10,
+    },
+    "determinism": "stock refresh is keyed by location, refresh interval, campaign seed, and faction pressure state",
+}
+
+_BUNDLE_J_RESOURCE_PRESSURE_RULES: _BundleJDict[str, _BundleJAny] = {
+    "format_version": "bundle_j_resource_pressure_rules_v1",
+    "source": "bundle_j_economy_resource_pressure_v2",
+    "resources": ["food", "water", "rest", "fatigue", "travel_cost", "debt"],
+    "pressure_rules": [
+        {"id": "food_low_warning", "resource": "food", "threshold": 1, "cooldown_turns": 8, "severity": "warning"},
+        {"id": "water_low_warning", "resource": "water", "threshold": 1, "cooldown_turns": 8, "severity": "warning"},
+        {"id": "fatigue_rest_needed", "resource": "fatigue", "threshold": 3, "cooldown_turns": 10, "severity": "warning"},
+        {"id": "travel_cost_due", "resource": "travel_cost", "threshold": 1, "cooldown_turns": 12, "severity": "advisory"},
+        {"id": "unpaid_service_debt", "resource": "debt", "threshold": 1, "cooldown_turns": 12, "severity": "consequence"},
+    ],
+    "anti_spam_policy": {
+        "cooldown_required": True,
+        "merge_similar_pressure_events": True,
+        "max_repetitive_pressure_events": _BUNDLE_J_MAX_REPETITIVE_PRESSURE_EVENTS,
+    },
+    "grounding_contract": {
+        "no_reward_payment_hallucination": True,
+        "payments_require_authoritative_transaction": True,
+        "debt_consequences_require_unpaid_service_record": True,
+        "survival_relief_does_not_grant_free_rewards": True,
+    },
+}
+
+_BUNDLE_J_RELEVANT_INPUT_FILES = {
+    _BUNDLE_J_BASE_ECONOMY_FILE,
+    "summary.json",
+    "survival-exit-criteria-summary.json",
+    "transcript-payload-budget-summary.json",
+    "artifact-manifest-digest.json",
+}
+
+
+def _bundle_j_safe_html(value: _BundleJAny) -> str:
+    return _bundle_j_html.escape("" if value is None else str(value), quote=True)
+
+
+def _bundle_j_to_int(value: _BundleJAny, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_j_to_float(value: _BundleJAny, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return float(int(value))
+    try:
+        return float(str(value))
+    except Exception:
+        return default
+
+
+def _bundle_j_load_json_file(path: _BundleJPath) -> _BundleJDict[str, _BundleJAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_j_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_j_first_scalar(payloads: _BundleJIterable[_BundleJDict[str, _BundleJAny]], *keys: str) -> _BundleJAny:
+    for payload in payloads:
+        for key in keys:
+            if key in payload and not isinstance(payload.get(key), (dict, list)):
+                return payload.get(key)
+    return None
+
+
+def _bundle_j_walk(value: _BundleJAny):
+    stack = [value]
+    while stack:
+        current = stack.pop()
+        yield current
+        if isinstance(current, dict):
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+
+
+def _bundle_j_service_categories() -> _BundleJSet[str]:
+    return {str(service.get("category")) for service in _BUNDLE_J_SERVICE_CATALOG["services"] if service.get("category")}
+
+
+def _bundle_j_stock_item_count() -> int:
+    items: _BundleJSet[str] = set()
+    for stock in _BUNDLE_J_MERCHANT_REFRESH["stock_by_location"].values():
+        if isinstance(stock, list):
+            items.update(str(item) for item in stock)
+    return len(items)
+
+
+def _bundle_j_count_transactions(payload: _BundleJAny) -> int:
+    total = 0
+    for node in _bundle_j_walk(payload):
+        if not isinstance(node, dict):
+            continue
+        for key, value in node.items():
+            if key.lower() in {"transactions", "economy_transactions", "service_transactions"} and isinstance(value, list):
+                total += len(value)
+    return total
+
+
+def _bundle_j_count_repetitive_pressure_events(payload: _BundleJAny) -> int:
+    explicit = _bundle_j_first_scalar([payload], "repetitive_pressure_event_count", "repetitive_hunger_thirst_count")
+    if explicit is not None:
+        return _bundle_j_to_int(explicit, 0)
+    repeated = 0
+    seen = {}
+    for node in _bundle_j_walk(payload):
+        if not isinstance(node, dict):
+            continue
+        kind = node.get("resource") or node.get("pressure_type") or node.get("type")
+        if not kind:
+            continue
+        text = str(kind).lower()
+        if text in {"food", "water", "hunger", "thirst", "fatigue"}:
+            seen[text] = seen.get(text, 0) + 1
+    for count in seen.values():
+        if count > 1:
+            repeated += count - 1
+    return repeated
+
+
+def _bundle_j_artifacts_from_result_dir(result_dir: _BundleJPath) -> _BundleJDict[str, _BundleJDict[str, _BundleJAny]]:
+    artifacts: _BundleJDict[str, _BundleJDict[str, _BundleJAny]] = {}
+    for file_name in sorted(_BUNDLE_J_RELEVANT_INPUT_FILES):
+        payload = _bundle_j_load_json_file(result_dir / file_name)
+        if payload:
+            artifacts[file_name] = payload
+    return artifacts
+
+
+def _bundle_j_evaluate_economy_resource_pressure_v2(
+    artifacts: _BundleJDict[str, _BundleJDict[str, _BundleJAny]],
+) -> _BundleJDict[str, _BundleJAny]:
+    economy = artifacts.get(_BUNDLE_J_BASE_ECONOMY_FILE, {})
+    survival = artifacts.get("survival-exit-criteria-summary.json", {})
+    summary = artifacts.get("summary.json", {})
+    payloads = [economy, survival, summary]
+
+    service_count = len(_BUNDLE_J_SERVICE_CATALOG["services"])
+    service_categories = sorted(_bundle_j_service_categories())
+    merchant_location_count = len(_BUNDLE_J_MERCHANT_REFRESH["stock_by_location"])
+    merchant_stock_item_count = _bundle_j_stock_item_count()
+    pressure_rule_count = len(_BUNDLE_J_RESOURCE_PRESSURE_RULES["pressure_rules"])
+
+    total_earned = _bundle_j_to_float(_bundle_j_first_scalar(payloads, "total_earned", "earned", "currency_earned"), 0.0)
+    total_spent = _bundle_j_to_float(_bundle_j_first_scalar(payloads, "total_spent", "spent", "currency_spent"), 0.0)
+    unpaid_count = _bundle_j_to_int(_bundle_j_first_scalar(payloads, "unpaid_count", "unpaid_service_count", "debt_count"), 0)
+    blocked_relief_count = _bundle_j_to_int(_bundle_j_first_scalar(payloads, "blocked_relief_count", "relief_blocked_count"), 0)
+    survival_intervention_count = _bundle_j_to_int(
+        _bundle_j_first_scalar(payloads, "survival_intervention_count", "survival_relief_count", "relief_count"),
+        0,
+    )
+    transaction_count = _bundle_j_to_int(_bundle_j_first_scalar(payloads, "transaction_count", "economy_transaction_count"), 0)
+    if transaction_count <= 0:
+        transaction_count = max(_bundle_j_count_transactions(payload) for payload in payloads)
+    repetitive_pressure_events = max(_bundle_j_count_repetitive_pressure_events(payload) for payload in payloads)
+
+    grounding = _BUNDLE_J_RESOURCE_PRESSURE_RULES["grounding_contract"]
+    anti_spam = _BUNDLE_J_RESOURCE_PRESSURE_RULES["anti_spam_policy"]
+    checks = {
+        "service_catalog_expanded": service_count >= _BUNDLE_J_MIN_SERVICE_COUNT,
+        "lodging_meal_travel_repair_guide_services_present": {"lodging", "meal", "travel_supply", "repair", "guide", "rumor_service"}.issubset(set(service_categories)),
+        "merchant_refresh_rules_present": merchant_location_count >= 3 and merchant_stock_item_count >= _BUNDLE_J_MIN_MERCHANT_STOCK_COUNT,
+        "price_variance_rules_present": bool(_BUNDLE_J_MERCHANT_REFRESH["price_modifiers"]),
+        "resource_pressure_rules_present": pressure_rule_count >= 5,
+        "unpaid_debt_bounded": unpaid_count <= _BUNDLE_J_MAX_UNPAID_COUNT,
+        "survival_intervention_bounded": survival_intervention_count <= _BUNDLE_J_MAX_SURVIVAL_INTERVENTION_COUNT,
+        "repetitive_pressure_spam_bounded": repetitive_pressure_events <= _BUNDLE_J_MAX_REPETITIVE_PRESSURE_EVENTS,
+        "reward_payment_grounding_contract_present": bool(grounding.get("no_reward_payment_hallucination")) and bool(grounding.get("payments_require_authoritative_transaction")),
+        "anti_spam_policy_present": bool(anti_spam.get("cooldown_required")) and bool(anti_spam.get("merge_similar_pressure_events")),
+    }
+    advisory_failures = [name for name, ok in checks.items() if not ok]
+
+    return {
+        "format_version": "bundle_j_economy_resource_pressure_v2_summary_v1",
+        "source": "bundle_j_economy_resource_pressure_v2",
+        "ok": not advisory_failures,
+        "advisory_only": True,
+        "checks": checks,
+        "advisory_failures": advisory_failures,
+        "metrics": {
+            "service_count": service_count,
+            "service_category_count": len(service_categories),
+            "merchant_location_count": merchant_location_count,
+            "merchant_stock_item_count": merchant_stock_item_count,
+            "price_modifier_count": len(_BUNDLE_J_MERCHANT_REFRESH["price_modifiers"]),
+            "pressure_rule_count": pressure_rule_count,
+            "total_earned": total_earned,
+            "total_spent": total_spent,
+            "currency_delta": total_earned - total_spent,
+            "unpaid_count": unpaid_count,
+            "blocked_relief_count": blocked_relief_count,
+            "survival_intervention_count": survival_intervention_count,
+            "transaction_count": transaction_count,
+            "repetitive_pressure_event_count": repetitive_pressure_events,
+        },
+        "service_categories": service_categories,
+        "service_catalog": _BUNDLE_J_SERVICE_CATALOG,
+        "merchant_refresh": _BUNDLE_J_MERCHANT_REFRESH,
+        "resource_pressure_rules": _BUNDLE_J_RESOURCE_PRESSURE_RULES,
+        "recommended_next_step": "wire_economy_resource_pressure_v2_into_runtime" if not advisory_failures else "fix_economy_resource_pressure_v2_advisory_failures",
+    }
+
+
+def _bundle_j_write_summary_if_possible(result_dir: _BundleJPath) -> _BundleJOptional[_BundleJDict[str, _BundleJAny]]:
+    try:
+        artifacts = _bundle_j_artifacts_from_result_dir(result_dir)
+        summary = _bundle_j_evaluate_economy_resource_pressure_v2(artifacts)
+        _BUNDLE_J_ORIGINAL_PATH_WRITE_TEXT(
+            result_dir / _BUNDLE_J_SUMMARY_FILE,
+            _bundle_j_json.dumps(summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return summary
+    except Exception:
+        return None
+
+
+def _bundle_j_enrich_base_economy(path: _BundleJPath, payload: _BundleJDict[str, _BundleJAny]) -> _BundleJDict[str, _BundleJAny]:
+    summary = _bundle_j_evaluate_economy_resource_pressure_v2({_BUNDLE_J_BASE_ECONOMY_FILE: payload})
+    enriched = dict(payload)
+    enriched["bundle_j_economy_resource_pressure_v2_applied"] = True
+    enriched["economy_resource_pressure_v2_artifact"] = _BUNDLE_J_SUMMARY_FILE
+    enriched["economy_resource_pressure_v2_ok"] = summary["ok"]
+    enriched["service_count"] = max(_bundle_j_to_int(enriched.get("service_count"), 0), summary["metrics"]["service_count"])
+    enriched["merchant_stock_item_count"] = max(_bundle_j_to_int(enriched.get("merchant_stock_item_count"), 0), summary["metrics"]["merchant_stock_item_count"])
+    enriched["pressure_rule_count"] = max(_bundle_j_to_int(enriched.get("pressure_rule_count"), 0), summary["metrics"]["pressure_rule_count"])
+    enriched["resource_pressure_ok"] = summary["ok"] and enriched.get("resource_pressure_ok", True) is not False
+    enriched["reward_payment_grounding_contract_present"] = summary["checks"]["reward_payment_grounding_contract_present"]
+    enriched["anti_spam_policy_present"] = summary["checks"]["anti_spam_policy_present"]
+    return enriched
+
+
+def _bundle_j_render_report_section(result_dir: _BundleJPath) -> str:
+    payload = _bundle_j_load_json_file(result_dir / _BUNDLE_J_SUMMARY_FILE)
+    if not payload:
+        payload = _bundle_j_write_summary_if_possible(result_dir) or {
+            "ok": False,
+            "metrics": {},
+            "checks": {},
+            "advisory_failures": ["economy_resource_pressure_v2_summary_missing"],
+        }
+    metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}
+    checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
+    failures = payload.get("advisory_failures") if isinstance(payload.get("advisory_failures"), list) else []
+    status = "Pass" if payload.get("ok") is True else "Advisory"
+    badge_class = "pass" if payload.get("ok") is True else "warn"
+    raw_json = _bundle_j_json.dumps(payload, indent=2, sort_keys=True, default=str)
+
+    metric_rows = "".join(
+        "<tr>"
+        f"<th scope=\"row\">{_bundle_j_safe_html(key)}</th>"
+        f"<td>{_bundle_j_safe_html(value)}</td>"
+        "</tr>"
+        for key, value in metrics.items()
+        if not isinstance(value, (dict, list))
+    )
+    check_rows = "".join(
+        "<tr>"
+        f"<th scope=\"row\">{_bundle_j_safe_html(key)}</th>"
+        f"<td>{_bundle_j_safe_html('pass' if value else 'advisory')}</td>"
+        "</tr>"
+        for key, value in checks.items()
+    )
+
+    return (
+        '<section id="bundle-j-economy-resource-pressure-v2" class="bundle-j-economy-resource-pressure-v2">'
+        "<style>"
+        ".bundle-j-economy-resource-pressure-v2{margin:24px 0;padding:18px;border:1px solid rgba(148,163,184,.35);border-radius:16px;background:rgba(15,23,42,.04)}"
+        ".bundle-j-economy-resource-pressure-v2 header{display:flex;align-items:center;justify-content:space-between;gap:10px}"
+        ".bundle-j-badge{font-size:.78rem;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid rgba(15,23,42,.18)}"
+        ".bundle-j-badge-pass{background:rgba(34,197,94,.16)}"
+        ".bundle-j-badge-warn{background:rgba(245,158,11,.16)}"
+        ".bundle-j-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:12px}"
+        ".bundle-j-card{padding:14px;border:1px solid rgba(148,163,184,.28);border-radius:14px;background:rgba(255,255,255,.72)}"
+        ".bundle-j-table{width:100%;border-collapse:collapse;font-size:.9rem}"
+        ".bundle-j-table th,.bundle-j-table td{padding:6px 8px;border-top:1px solid rgba(148,163,184,.25);text-align:left;vertical-align:top}"
+        ".bundle-j-raw-json{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:.82rem}"
+        "</style>"
+        "<header>"
+        "<h2>Economy / Resource Pressure v2</h2>"
+        f'<span class="bundle-j-badge bundle-j-badge-{_bundle_j_safe_html(badge_class)}">{_bundle_j_safe_html(status)}</span>'
+        "</header>"
+        "<p>Bounded economy readiness for services, merchant refresh, resource pressure, debt consequences, and payment-grounding safety.</p>"
+        f"<p>Advisory failures: {_bundle_j_safe_html(len(failures))}</p>"
+        '<div class="bundle-j-grid">'
+        '<div class="bundle-j-card"><h3>Balance Metrics</h3><table class="bundle-j-table"><tbody>'
+        f"{metric_rows}"
+        "</tbody></table></div>"
+        '<div class="bundle-j-card"><h3>Gate Checks</h3><table class="bundle-j-table"><tbody>'
+        f"{check_rows}"
+        "</tbody></table></div>"
+        "</div>"
+        '<details class="bundle-j-raw-details"><summary>Raw JSON details</summary>'
+        f'<pre class="bundle-j-raw-json">{_bundle_j_safe_html(raw_json)}</pre>'
+        "</details>"
+        "</section>"
+    )
+
+
+def _bundle_j_looks_like_campaign_report(path: _BundleJPath, html_text: str) -> bool:
+    if path.suffix.lower() not in {".html", ".htm"}:
+        return False
+    lower_path = str(path).lower()
+    lower_html = html_text.lower()
+    if "bundle-j-economy-resource-pressure-v2" in lower_html:
+        return False
+    if "autoplay" in lower_path and "report" in lower_path:
+        return True
+    return "autoplay campaign report" in lower_html or "campaign chronicle" in lower_html
+
+
+def _bundle_j_html_insertion_index(html_text: str) -> int:
+    lower_html = html_text.lower()
+    for marker in ("</main>", "</body>", "</html>"):
+        idx = lower_html.find(marker)
+        if idx >= 0:
+            return idx
+    return len(html_text)
+
+
+def _bundle_j_inject_report_section(path: _BundleJPath, html_text: str) -> str:
+    if not _bundle_j_looks_like_campaign_report(path, html_text):
+        return html_text
+    index = _bundle_j_html_insertion_index(html_text)
+    section = _bundle_j_render_report_section(path.parent)
+    return html_text[:index] + "\n" + section + "\n" + html_text[index:]
+
+
+if not globals().get("_BUNDLE_J_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_J_ORIGINAL_PATH_WRITE_TEXT = _BundleJPath.write_text
+
+    def _bundle_j_write_text_with_economy_v2(self, data, *args, **kwargs):
+        path = _BundleJPath(self)
+        if path.name == _BUNDLE_J_BASE_ECONOMY_FILE and isinstance(data, str):
+            try:
+                parsed = _bundle_j_json.loads(data)
+                if isinstance(parsed, dict) and not parsed.get("bundle_j_economy_resource_pressure_v2_applied"):
+                    enriched = _bundle_j_enrich_base_economy(path, parsed)
+                    _BUNDLE_J_ORIGINAL_PATH_WRITE_TEXT(
+                        path,
+                        _bundle_j_json.dumps(enriched, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    _bundle_j_write_summary_if_possible(path.parent)
+                    return len(data)
+            except Exception:
+                pass
+        if isinstance(data, str) and _bundle_j_looks_like_campaign_report(path, data):
+            try:
+                data = _bundle_j_inject_report_section(path, data)
+            except Exception as exc:
+                data = data + "\n<!-- Bundle J report injection skipped: " + _bundle_j_safe_html(f"{type(exc).__name__}: {exc}") + " -->\n"
+        result = _BUNDLE_J_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        try:
+            if path.name in _BUNDLE_J_RELEVANT_INPUT_FILES:
+                _bundle_j_write_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundleJPath.write_text = _bundle_j_write_text_with_economy_v2
+    globals()["_BUNDLE_J_PATH_WRITE_TEXT_PATCHED"] = True
