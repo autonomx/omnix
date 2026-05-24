@@ -27,6 +27,11 @@ from app.rpg.session.quality_gate_artifact_repair import (  # noqa: E402
     repair_quality_gate_artifacts_if_present as _n12711_repair_quality_gate_artifacts_if_present,
 )
 
+# Register at import time, before the underlying autoplay main() can register any
+# packaging/extraction atexit hooks.  Python runs atexit callbacks in LIFO order,
+# so this early registration lets the late manifest repair run after those hooks.
+_bundle_ab_register_late_manifest_repair()
+
 
 def _n12711_repo_root():
     here = _N12711_Path(__file__).resolve()
@@ -99,6 +104,7 @@ def _n12711_finalize_latest_bundle_artifacts():
             for item in repairs
         ),
         "late_manifest_repair_registered": True,
+        "late_manifest_repair_registered_before_main": True,
     }
 
 
