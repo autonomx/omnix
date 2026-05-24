@@ -1,0 +1,221 @@
+# Bundle P — 1000-Turn Readiness Dashboard Rendering
+#
+# Product-facing dashboard for the Bundle O readiness aggregator.  This fragment
+# reads one-thousand-turn-readiness-aggregator-summary.json, writes a compact
+# dashboard summary, and injects a campaign report section.  It is advisory-only
+# and never mutates authoritative simulation state.
+
+import html as _bundle_p_html
+import json as _bundle_p_json
+from pathlib import Path as _BundlePPath
+from typing import Any as _BundlePAny, Dict as _BundlePDict, List as _BundlePList
+
+_BUNDLE_P_AGGREGATOR_FILE = "one-thousand-turn-readiness-aggregator-summary.json"
+_BUNDLE_P_DASHBOARD_FILE = "one-thousand-turn-readiness-dashboard-summary.json"
+_BUNDLE_P_MARKER = 'id="bundle-p-1000-turn-readiness-dashboard"'
+
+
+def _bundle_p_safe_html(value: _BundlePAny) -> str:
+    return _bundle_p_html.escape("" if value is None else str(value), quote=True)
+
+
+def _bundle_p_load_json_file(path: _BundlePPath) -> _BundlePDict[str, _BundlePAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_p_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_p_status_label(payload: _BundlePDict[str, _BundlePAny]) -> str:
+    if payload.get("ready_for_live_1000_turn_run") is True:
+        return "Live Ready"
+    if payload.get("ready_for_1000_turn_preflight") is True:
+        return "Preflight Ready"
+    return "Not Ready"
+
+
+def _bundle_p_status_class(payload: _BundlePDict[str, _BundlePAny]) -> str:
+    if payload.get("ready_for_live_1000_turn_run") is True:
+        return "pass"
+    if payload.get("ready_for_1000_turn_preflight") is True:
+        return "warn"
+    return "fail"
+
+
+def _bundle_p_build_dashboard_summary(aggregator: _BundlePDict[str, _BundlePAny]) -> _BundlePDict[str, _BundlePAny]:
+    gate_statuses = aggregator.get("gate_statuses") if isinstance(aggregator.get("gate_statuses"), list) else []
+    failing = aggregator.get("failing_required_gates") if isinstance(aggregator.get("failing_required_gates"), list) else []
+    missing = aggregator.get("missing_required_gates") if isinstance(aggregator.get("missing_required_gates"), list) else []
+    category_rollup = aggregator.get("category_rollup") if isinstance(aggregator.get("category_rollup"), dict) else {}
+    required_gate_count = int(aggregator.get("required_gate_count") or len(gate_statuses) or 0)
+    passing_gate_count = int(aggregator.get("passing_required_gate_count") or 0)
+    completion_percent = int((passing_gate_count / required_gate_count) * 100) if required_gate_count else 0
+
+    return {
+        "format_version": "bundle_p_1000_turn_readiness_dashboard_summary_v1",
+        "source": "bundle_p_1000_turn_readiness_dashboard",
+        "ok": aggregator.get("ready_for_1000_turn_preflight") is True,
+        "advisory_only": True,
+        "status_label": _bundle_p_status_label(aggregator),
+        "status_class": _bundle_p_status_class(aggregator),
+        "ready_for_1000_turn_preflight": aggregator.get("ready_for_1000_turn_preflight") is True,
+        "ready_for_live_1000_turn_run": aggregator.get("ready_for_live_1000_turn_run") is True,
+        "required_gate_count": required_gate_count,
+        "passing_required_gate_count": passing_gate_count,
+        "missing_required_gate_count": len(missing),
+        "failing_required_gate_count": len(failing),
+        "completion_percent": completion_percent,
+        "missing_required_gates": list(missing),
+        "failing_required_gates": list(failing),
+        "category_rollup": category_rollup,
+        "recommended_next_step": aggregator.get("recommended_next_step") or "run_required_readiness_checks",
+    }
+
+
+def _bundle_p_write_dashboard_summary_if_possible(result_dir: _BundlePPath) -> _BundlePDict[str, _BundlePAny]:
+    aggregator = _bundle_p_load_json_file(result_dir / _BUNDLE_P_AGGREGATOR_FILE)
+    if not aggregator:
+        dashboard = {
+            "format_version": "bundle_p_1000_turn_readiness_dashboard_summary_v1",
+            "source": "bundle_p_1000_turn_readiness_dashboard",
+            "ok": False,
+            "advisory_only": True,
+            "status_label": "Missing Aggregator",
+            "status_class": "fail",
+            "missing_required_gates": ["one-thousand-turn-readiness-aggregator-summary.json"],
+            "recommended_next_step": "write_1000_turn_readiness_aggregator_first",
+        }
+    else:
+        dashboard = _bundle_p_build_dashboard_summary(aggregator)
+    _BUNDLE_P_ORIGINAL_PATH_WRITE_TEXT(
+        result_dir / _BUNDLE_P_DASHBOARD_FILE,
+        _bundle_p_json.dumps(dashboard, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return dashboard
+
+
+def _bundle_p_gate_rows(aggregator: _BundlePDict[str, _BundlePAny]) -> str:
+    rows: _BundlePList[str] = []
+    gate_statuses = aggregator.get("gate_statuses") if isinstance(aggregator.get("gate_statuses"), list) else []
+    for status in gate_statuses:
+        if not isinstance(status, dict):
+            continue
+        label = "pass" if status.get("ok") is True else "advisory"
+        rows.append(
+            "<tr>"
+            f"<th scope=\"row\">{_bundle_p_safe_html(status.get('name'))}</th>"
+            f"<td>{_bundle_p_safe_html(status.get('category'))}</td>"
+            f"<td>{_bundle_p_safe_html(label)}</td>"
+            f"<td>{_bundle_p_safe_html(status.get('advisory_failure_count', 0))}</td>"
+            "</tr>"
+        )
+    return "".join(rows) or "<tr><th scope=\"row\">status</th><td colspan=\"3\">no gate rows available</td></tr>"
+
+
+def _bundle_p_category_rows(dashboard: _BundlePDict[str, _BundlePAny]) -> str:
+    rows: _BundlePList[str] = []
+    rollup = dashboard.get("category_rollup") if isinstance(dashboard.get("category_rollup"), dict) else {}
+    for category, data in sorted(rollup.items()):
+        if not isinstance(data, dict):
+            continue
+        rows.append(
+            "<tr>"
+            f"<th scope=\"row\">{_bundle_p_safe_html(category)}</th>"
+            f"<td>{_bundle_p_safe_html(data.get('gate_count', 0))}</td>"
+            f"<td>{_bundle_p_safe_html(data.get('pass_count', 0))}</td>"
+            f"<td>{_bundle_p_safe_html(data.get('fail_count', 0))}</td>"
+            "</tr>"
+        )
+    return "".join(rows) or "<tr><th scope=\"row\">category</th><td colspan=\"3\">no category rollup available</td></tr>"
+
+
+def _bundle_p_render_dashboard_section(result_dir: _BundlePPath) -> str:
+    aggregator = _bundle_p_load_json_file(result_dir / _BUNDLE_P_AGGREGATOR_FILE)
+    dashboard = _bundle_p_load_json_file(result_dir / _BUNDLE_P_DASHBOARD_FILE)
+    if not dashboard:
+        dashboard = _bundle_p_write_dashboard_summary_if_possible(result_dir)
+    raw_json = _bundle_p_json.dumps(dashboard, indent=2, sort_keys=True, default=str)
+    status_class = dashboard.get("status_class") or "fail"
+    status_label = dashboard.get("status_label") or "Not Ready"
+    return (
+        '<section id="bundle-p-1000-turn-readiness-dashboard" class="bundle-p-1000-turn-readiness-dashboard">'
+        "<style>"
+        ".bundle-p-1000-turn-readiness-dashboard{margin:24px 0;padding:18px;border:1px solid rgba(148,163,184,.35);border-radius:16px;background:rgba(15,23,42,.04)}"
+        ".bundle-p-1000-turn-readiness-dashboard header{display:flex;align-items:center;justify-content:space-between;gap:10px}"
+        ".bundle-p-badge{font-size:.78rem;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid rgba(15,23,42,.18)}"
+        ".bundle-p-badge-pass{background:rgba(34,197,94,.16)}"
+        ".bundle-p-badge-warn{background:rgba(245,158,11,.16)}"
+        ".bundle-p-badge-fail{background:rgba(239,68,68,.16)}"
+        ".bundle-p-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:12px}"
+        ".bundle-p-card{padding:14px;border:1px solid rgba(148,163,184,.28);border-radius:14px;background:rgba(255,255,255,.72)}"
+        ".bundle-p-table{width:100%;border-collapse:collapse;font-size:.9rem}"
+        ".bundle-p-table th,.bundle-p-table td{padding:6px 8px;border-top:1px solid rgba(148,163,184,.25);text-align:left;vertical-align:top}"
+        ".bundle-p-raw-json{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:.82rem}"
+        "</style>"
+        "<header>"
+        "<h2>1000-Turn Readiness Dashboard</h2>"
+        f'<span class="bundle-p-badge bundle-p-badge-{_bundle_p_safe_html(status_class)}">{_bundle_p_safe_html(status_label)}</span>'
+        "</header>"
+        "<p>Rollup of long-run readiness gates from Bundle F through Bundle O.</p>"
+        f"<p>Progress: {_bundle_p_safe_html(dashboard.get('passing_required_gate_count', 0))}/{_bundle_p_safe_html(dashboard.get('required_gate_count', 0))} required gates passing ({_bundle_p_safe_html(dashboard.get('completion_percent', 0))}%).</p>"
+        f"<p>Recommended next step: {_bundle_p_safe_html(dashboard.get('recommended_next_step'))}</p>"
+        '<div class="bundle-p-grid">'
+        '<div class="bundle-p-card"><h3>Required Gates</h3><table class="bundle-p-table"><thead><tr><th>Gate</th><th>Category</th><th>Status</th><th>Failures</th></tr></thead><tbody>'
+        f"{_bundle_p_gate_rows(aggregator)}"
+        "</tbody></table></div>"
+        '<div class="bundle-p-card"><h3>Category Rollup</h3><table class="bundle-p-table"><thead><tr><th>Category</th><th>Gates</th><th>Pass</th><th>Fail</th></tr></thead><tbody>'
+        f"{_bundle_p_category_rows(dashboard)}"
+        "</tbody></table></div>"
+        "</div>"
+        '<details class="bundle-p-raw-details"><summary>Raw dashboard JSON</summary>'
+        f'<pre class="bundle-p-raw-json">{_bundle_p_safe_html(raw_json)}</pre>'
+        "</details>"
+        "</section>"
+    )
+
+
+def _bundle_p_looks_like_campaign_report(path: _BundlePPath, html_text: str) -> bool:
+    if path.suffix.lower() not in {".html", ".htm"}:
+        return False
+    lower = html_text.lower()
+    if "bundle-p-1000-turn-readiness-dashboard" in lower:
+        return False
+    return "autoplay campaign report" in lower or "campaign chronicle" in lower or ("autoplay" in str(path).lower() and "report" in str(path).lower())
+
+
+def _bundle_p_inject_dashboard_section(path: _BundlePPath, html_text: str) -> str:
+    if not _bundle_p_looks_like_campaign_report(path, html_text):
+        return html_text
+    lower = html_text.lower()
+    idx = lower.find("</main>")
+    if idx < 0:
+        idx = lower.find("</body>")
+    if idx < 0:
+        idx = len(html_text)
+    return html_text[:idx] + "\n" + _bundle_p_render_dashboard_section(path.parent) + "\n" + html_text[idx:]
+
+
+if not globals().get("_BUNDLE_P_PATH_WRITE_TEXT_PATCHED"):
+    _BUNDLE_P_ORIGINAL_PATH_WRITE_TEXT = _BundlePPath.write_text
+
+    def _bundle_p_write_text_with_readiness_dashboard(self, data, *args, **kwargs):
+        path = _BundlePPath(self)
+        if isinstance(data, str) and _bundle_p_looks_like_campaign_report(path, data):
+            try:
+                data = _bundle_p_inject_dashboard_section(path, data)
+            except Exception as exc:
+                data = data + "\n<!-- Bundle P dashboard injection skipped: " + _bundle_p_safe_html(f"{type(exc).__name__}: {exc}") + " -->\n"
+        result = _BUNDLE_P_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+        try:
+            if path.name == _BUNDLE_P_AGGREGATOR_FILE:
+                _bundle_p_write_dashboard_summary_if_possible(path.parent)
+        except Exception:
+            pass
+        return result
+
+    _BundlePPath.write_text = _bundle_p_write_text_with_readiness_dashboard
+    globals()["_BUNDLE_P_PATH_WRITE_TEXT_PATCHED"] = True
