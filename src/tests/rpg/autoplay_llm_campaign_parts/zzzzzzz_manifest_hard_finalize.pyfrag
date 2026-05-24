@@ -1,0 +1,65 @@
+# Final hard artifact manifest finalizer.
+# This is intentionally lexicographically last so it wraps every prior autoplay
+# main() wrapper and rewrites artifact-manifest.json after Bundle A/B/C/D sidecars.
+
+_MANIFEST_HARD_FINALIZE_PREV_MAIN = globals().get("main")
+
+from pathlib import Path as _MANIFEST_HARD_FINALIZE_Path  # noqa: E402
+
+from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
+    hard_finalize_artifact_manifest as _hard_finalize_artifact_manifest,
+)
+
+
+def _manifest_hard_finalize_repo_root():
+    here = _MANIFEST_HARD_FINALIZE_Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        if (parent / "resources").exists() or (parent / "src").exists():
+            if (parent / "src" / "tests" / "rpg").exists() or (parent / "resources" / "data").exists():
+                return parent
+    return _MANIFEST_HARD_FINALIZE_Path.cwd()
+
+
+def _manifest_hard_finalize_candidates():
+    roots = [
+        _manifest_hard_finalize_repo_root() / "resources" / "data" / "test-results",
+        _MANIFEST_HARD_FINALIZE_Path.cwd() / "resources" / "data" / "test-results",
+    ]
+    seen = set()
+    candidates = []
+    for base in roots:
+        if not base.exists():
+            continue
+        for path in base.rglob("hundred-turn-evaluation.json"):
+            parent = path.parent.resolve()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            candidates.append(parent)
+    candidates.sort(key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
+    return candidates[:5]
+
+
+def _manifest_hard_finalize_latest():
+    repairs = []
+    for path in _manifest_hard_finalize_candidates():
+        item = _hard_finalize_artifact_manifest(path)
+        repairs.append(item)
+        if item.get("applied"):
+            break
+    return {
+        "source": "manifest_hard_finalize_wrapper",
+        "applied": any(item.get("applied") for item in repairs),
+        "repairs": repairs,
+    }
+
+
+def main(argv=None):
+    if not callable(_MANIFEST_HARD_FINALIZE_PREV_MAIN):
+        raise RuntimeError("manifest_hard_finalize_previous_main_missing")
+    exit_code = _MANIFEST_HARD_FINALIZE_PREV_MAIN(argv)
+    try:
+        globals()["MANIFEST_HARD_FINALIZE_RESULT"] = _manifest_hard_finalize_latest()
+    except Exception as exc:
+        globals()["MANIFEST_HARD_FINALIZE_RESULT"] = {"source": "manifest_hard_finalize_wrapper", "applied": False, "error": repr(exc)}
+    return exit_code
