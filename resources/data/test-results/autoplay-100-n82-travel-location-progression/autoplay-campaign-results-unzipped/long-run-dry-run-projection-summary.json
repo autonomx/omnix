@@ -21,10 +21,10 @@
       "target_turns": 250,
       "base_turns": 100,
       "turn_ratio": 2.5,
-      "projected_wall_seconds_avg": 1636.458,
-      "projected_wall_hours_avg": 0.455,
-      "projected_p95_cumulative_seconds": 2268.646,
-      "projected_transcript_bytes": 7638250,
+      "projected_wall_seconds_avg": 1643.573,
+      "projected_wall_hours_avg": 0.457,
+      "projected_p95_cumulative_seconds": 2326.348,
+      "projected_transcript_bytes": 7629000,
       "projected_state_bytes_bounded": 5960,
       "projected_state_bytes_linear_risk": 14900,
       "state_budget_ok": true
@@ -33,10 +33,10 @@
       "target_turns": 300,
       "base_turns": 100,
       "turn_ratio": 3.0,
-      "projected_wall_seconds_avg": 1963.749,
-      "projected_wall_hours_avg": 0.545,
-      "projected_p95_cumulative_seconds": 2722.375,
-      "projected_transcript_bytes": 9165900,
+      "projected_wall_seconds_avg": 1972.287,
+      "projected_wall_hours_avg": 0.548,
+      "projected_p95_cumulative_seconds": 2791.618,
+      "projected_transcript_bytes": 9154800,
       "projected_state_bytes_bounded": 5960,
       "projected_state_bytes_linear_risk": 17880,
       "state_budget_ok": true
@@ -45,22 +45,22 @@
       "target_turns": 1000,
       "base_turns": 100,
       "turn_ratio": 10.0,
-      "projected_wall_seconds_avg": 6545.831,
-      "projected_wall_hours_avg": 1.818,
-      "projected_p95_cumulative_seconds": 9074.585,
-      "projected_transcript_bytes": 30553000,
+      "projected_wall_seconds_avg": 6574.291,
+      "projected_wall_hours_avg": 1.826,
+      "projected_p95_cumulative_seconds": 9305.393,
+      "projected_transcript_bytes": 30516000,
       "projected_state_bytes_bounded": 5960,
       "projected_state_bytes_linear_risk": 59600,
       "state_budget_ok": true
     }
   ],
   "performance_source": {
-    "avg_turn_seconds": 6.545831,
-    "p95_turn_seconds": 9.074584999999999
+    "avg_turn_seconds": 6.5742910000000006,
+    "p95_turn_seconds": 9.305393
   },
   "payload_budget_source": {
-    "average_row_bytes": 30553,
-    "projected_1000_turn_transcript_bytes": 30553000,
+    "average_row_bytes": 30516,
+    "projected_1000_turn_transcript_bytes": 30516000,
     "payload_budget_ok": true,
     "payload_budget_advisory_ok": true
   },

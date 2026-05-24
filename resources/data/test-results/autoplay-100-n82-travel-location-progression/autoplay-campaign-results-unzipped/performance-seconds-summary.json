@@ -2,162 +2,162 @@
   "source": "performance_seconds_v2_from_summary",
   "turn": {
     "count": 100,
-    "avg_seconds": 6.545831,
-    "p50_seconds": 6.960354000000001,
-    "p90_seconds": 8.229125,
-    "p95_seconds": 9.074584999999999,
-    "max_seconds": 12.845824
+    "avg_seconds": 6.5742910000000006,
+    "p50_seconds": 6.535292,
+    "p90_seconds": 8.816495999999999,
+    "p95_seconds": 9.305393,
+    "max_seconds": 12.687098
   },
   "blocking": {
     "count": 100,
-    "avg_seconds": 0.41401,
-    "p95_seconds": 0.376741,
-    "max_seconds": 6.131019
+    "avg_seconds": 0.37070299999999995,
+    "p95_seconds": 0.330097,
+    "max_seconds": 5.032355
   },
   "playable_blocking": {
     "count": 100,
-    "avg_seconds": 6.123105,
-    "p95_seconds": 8.811904,
-    "max_seconds": 12.415531000000001
+    "avg_seconds": 6.1350940000000005,
+    "p95_seconds": 9.035449,
+    "max_seconds": 12.093302
   },
-  "campaign_wall_seconds": 748.423,
+  "campaign_wall_seconds": 759.023,
   "artifact_write_seconds": 0.0,
-  "avg_turn_seconds": 6.545831,
-  "p95_turn_seconds": 9.074584999999999,
-  "max_turn_seconds": 12.845824,
+  "avg_turn_seconds": 6.5742910000000006,
+  "p95_turn_seconds": 9.305393,
+  "max_turn_seconds": 12.687098,
   "slowest_turns": [
     {
       "turn_index": 63,
       "player_action": "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
-      "turn_total_ms": 12845.824,
-      "player_agent_ms": 8095.949,
-      "manual_turn_ms": 4283.569,
-      "story_hooks_ms": 10.834,
+      "turn_total_ms": 12687.098,
+      "player_agent_ms": 7653.912,
+      "manual_turn_ms": 4398.574,
+      "story_hooks_ms": 15.848,
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0
     },
     {
       "turn_index": 71,
       "player_action": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
-      "turn_total_ms": 12693.955,
-      "player_agent_ms": 5872.293,
-      "manual_turn_ms": 6082.998,
-      "story_hooks_ms": 16.352,
-      "base_response_ms": 0.002,
+      "turn_total_ms": 11896.917,
+      "player_agent_ms": 6386.206,
+      "manual_turn_ms": 4963.932,
+      "story_hooks_ms": 11.367,
+      "base_response_ms": 0.001,
       "checkpoint_ms": 0.0
     },
     {
       "turn_index": 73,
       "player_action": "I capture the strike team's sealed orders before they can destroy them.",
-      "turn_total_ms": 12005.763,
-      "player_agent_ms": 6193.74,
-      "manual_turn_ms": 5208.294,
-      "story_hooks_ms": 16.74,
+      "turn_total_ms": 10913.791,
+      "player_agent_ms": 5154.284,
+      "manual_turn_ms": 4981.896,
+      "story_hooks_ms": 16.839,
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0
     },
     {
       "turn_index": 72,
       "player_action": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
-      "turn_total_ms": 11486.939,
-      "player_agent_ms": 6052.991,
-      "manual_turn_ms": 4859.472,
-      "story_hooks_ms": 11.267,
+      "turn_total_ms": 10316.627,
+      "player_agent_ms": 5583.786,
+      "manual_turn_ms": 4169.776,
+      "story_hooks_ms": 16.802,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 55,
+      "player_action": "I travel to the abandoned cooperage to search for the Silver Crow cache.",
+      "turn_total_ms": 9520.731,
+      "player_agent_ms": 8847.768,
+      "manual_turn_ms": 185.622,
+      "story_hooks_ms": 14.855,
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 98,
+      "player_action": "I return to Bran and Garran with Veska's leadership ledgers and proof of the Sable Chain command structure.",
+      "turn_total_ms": 9294.059,
+      "player_agent_ms": 8386.192,
+      "manual_turn_ms": 235.05,
+      "story_hooks_ms": 20.425,
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 11,
+      "player_action": "I warn Garran about the ambush signs on the road.",
+      "turn_total_ms": 9215.971,
+      "player_agent_ms": 8933.729,
+      "manual_turn_ms": 87.631,
+      "story_hooks_ms": 3.767,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 17,
+      "player_action": "I watch the bridge for hidden watchers.",
+      "turn_total_ms": 9142.0,
+      "player_agent_ms": 8778.287,
+      "manual_turn_ms": 111.263,
+      "story_hooks_ms": 4.629,
+      "base_response_ms": 0.001,
+      "checkpoint_ms": 0.0
+    },
+    {
+      "turn_index": 100,
+      "player_action": "I study the ledger entries to identify the hidden Sable Chain paymaster.",
+      "turn_total_ms": 9122.89,
+      "player_agent_ms": 7934.795,
+      "manual_turn_ms": 202.554,
+      "story_hooks_ms": 21.217,
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0
     },
     {
       "turn_index": 57,
       "player_action": "I open the hidden Silver Crow cache beneath the cooperage cellar.",
-      "turn_total_ms": 10092.08,
-      "player_agent_ms": 9338.201,
-      "manual_turn_ms": 136.556,
-      "story_hooks_ms": 14.667,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 15,
-      "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
-      "turn_total_ms": 9021.033,
-      "player_agent_ms": 8658.014,
-      "manual_turn_ms": 94.074,
-      "story_hooks_ms": 7.448,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 61,
-      "player_action": "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain.",
-      "turn_total_ms": 8787.31,
-      "player_agent_ms": 8117.099,
-      "manual_turn_ms": 178.692,
-      "story_hooks_ms": 15.425,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 51,
-      "player_action": "I review the evidence with Bran and Garran to decide how to identify the faction that backed Captain Voss.",
-      "turn_total_ms": 8578.667,
-      "player_agent_ms": 7820.533,
-      "manual_turn_ms": 166.618,
-      "story_hooks_ms": 13.844,
-      "base_response_ms": 0.001,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 35,
-      "player_action": "I eavesdrop on the meeting at the ruined tollhouse to learn who the contact serves.",
-      "turn_total_ms": 8544.45,
-      "player_agent_ms": 7967.764,
-      "manual_turn_ms": 212.034,
-      "story_hooks_ms": 7.204,
-      "base_response_ms": 0.002,
-      "checkpoint_ms": 0.0
-    },
-    {
-      "turn_index": 31,
-      "player_action": "I search the shrine stones and offering bowl for the hidden Black Briar contact token.",
-      "turn_total_ms": 8427.543,
-      "player_agent_ms": 7938.926,
-      "manual_turn_ms": 136.273,
-      "story_hooks_ms": 10.036,
+      "turn_total_ms": 8909.031,
+      "player_agent_ms": 8124.753,
+      "manual_turn_ms": 160.604,
+      "story_hooks_ms": 10.653,
       "base_response_ms": 0.001,
       "checkpoint_ms": 0.0
     }
   ],
   "performance_budget_summary": {
     "live_blocking": {
-      "avg_manual_turn_ms": 376.308,
-      "max_manual_turn_ms": 6082.998,
+      "avg_manual_turn_ms": 332.383,
+      "max_manual_turn_ms": 4981.896,
       "avg_human_playable_blocking_ms": 0.0,
       "max_human_playable_blocking_ms": 0.0,
       "blocking_metric_mode": "authoritative_deterministic_only",
-      "legacy_max_human_playable_blocking_ms": 6131.019,
+      "legacy_max_human_playable_blocking_ms": 5032.355,
       "max_player_agent_ms": 0.0,
       "max_manual_turn_ms_diagnostic": 0.0
     },
     "autoplay_only": {
-      "avg_player_agent_ms": 5709.096,
-      "max_player_agent_ms": 9338.201,
-      "avg_autoplay_blocking_ms": 6123.105,
-      "max_autoplay_blocking_ms": 12415.531
+      "avg_player_agent_ms": 5764.391,
+      "max_player_agent_ms": 8933.729,
+      "avg_autoplay_blocking_ms": 6135.094,
+      "max_autoplay_blocking_ms": 12093.302
     },
     "background_llm": {
       "total_jobs": 100,
       "narration_jobs": 0,
       "advisory_jobs": 0,
       "combined_background_llm_jobs": 100,
-      "background_job_seconds": 38.8,
+      "background_job_seconds": 54.021,
       "provider_queue_summary": {
-        "count": 3,
-        "avg_queue_wait_ms": 360.58,
-        "max_queue_wait_ms": 613.919,
-        "avg_run_ms": 12835.07,
-        "max_run_ms": 16098.968,
-        "avg_total_ms": 13195.649,
-        "max_total_ms": 16712.886
+        "count": 4,
+        "avg_queue_wait_ms": 4382.721,
+        "max_queue_wait_ms": 5932.964,
+        "avg_run_ms": 13438.918,
+        "max_run_ms": 15217.793,
+        "avg_total_ms": 17821.64,
+        "max_total_ms": 21005.359
       },
       "provider_queue_by_kind": {
         "deferred_narration": {
@@ -179,21 +179,21 @@
           "max_total_ms": 0.0
         },
         "combined_background_llm": {
-          "count": 3,
-          "avg_queue_wait_ms": 360.58,
-          "max_queue_wait_ms": 613.919,
-          "avg_run_ms": 12835.07,
-          "max_run_ms": 16098.968,
-          "avg_total_ms": 13195.649,
-          "max_total_ms": 16712.886
+          "count": 4,
+          "avg_queue_wait_ms": 4382.721,
+          "max_queue_wait_ms": 5932.964,
+          "avg_run_ms": 13438.918,
+          "max_run_ms": 15217.793,
+          "avg_total_ms": 17821.64,
+          "max_total_ms": 21005.359
         }
       },
       "source": "reconciled_background_jobs",
-      "legacy_final_drain_result_count": 4,
+      "legacy_final_drain_result_count": 5,
       "jobs_submitted": 100,
       "jobs_attached_total": 100,
-      "jobs_attached_pre_turn": 97,
-      "jobs_attached_final": 3,
+      "jobs_attached_pre_turn": 96,
+      "jobs_attached_final": 4,
       "pre_turn_drain_accounted": true,
       "failed_jobs": 0,
       "timeout_job_count": 0,

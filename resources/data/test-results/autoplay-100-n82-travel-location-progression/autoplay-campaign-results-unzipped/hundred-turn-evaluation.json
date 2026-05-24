@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.545831,
-        "p95_turn_seconds": 9.074584999999999
+        "avg_turn_seconds": 6.5742910000000006,
+        "p95_turn_seconds": 9.305393
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.55s, p95 9.07s."
+      "message": "Average turn latency 6.57s, p95 9.31s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -10133,7 +10133,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_ac8f9cc07d08"
+                "session_key": "autoplay_e8684d6d1d5d"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10164,7 +10164,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_ac8f9cc07d08"
+                "session_key": "autoplay_e8684d6d1d5d"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10225,7 +10225,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_ac8f9cc07d08"
+                "session_key": "autoplay_e8684d6d1d5d"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -11367,11 +11367,11 @@
       "ok": true,
       "advisory_ok": true,
       "row_count": 100,
-      "total_transcript_bytes": 3055353,
-      "average_row_bytes": 30553,
-      "max_row_bytes": 49468,
+      "total_transcript_bytes": 3051653,
+      "average_row_bytes": 30516,
+      "max_row_bytes": 49276,
       "max_compact_row_bytes": 120000,
-      "projected_1000_turn_transcript_bytes": 30553000,
+      "projected_1000_turn_transcript_bytes": 30516000,
       "max_projected_1000_turn_transcript_bytes": 200000000,
       "max_projected_1000_turn_review_bytes": 1000000000,
       "oversized_row_count": 0,
@@ -11379,15 +11379,15 @@
       "heavy_field_totals": [
         {
           "field": "presentation_soft_classification",
-          "bytes": 118280
+          "bytes": 118660
         },
         {
           "field": "presentation_hard_grounding",
-          "bytes": 36285
+          "bytes": 37680
         },
         {
           "field": "narration_before_meta_repair",
-          "bytes": 1059
+          "bytes": 1238
         }
       ],
       "recommended_actions": [
@@ -11419,10 +11419,10 @@
           "target_turns": 250,
           "base_turns": 100,
           "turn_ratio": 2.5,
-          "projected_wall_seconds_avg": 1636.458,
-          "projected_wall_hours_avg": 0.455,
-          "projected_p95_cumulative_seconds": 2268.646,
-          "projected_transcript_bytes": 7638250,
+          "projected_wall_seconds_avg": 1643.573,
+          "projected_wall_hours_avg": 0.457,
+          "projected_p95_cumulative_seconds": 2326.348,
+          "projected_transcript_bytes": 7629000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 14900,
           "state_budget_ok": true
@@ -11431,10 +11431,10 @@
           "target_turns": 300,
           "base_turns": 100,
           "turn_ratio": 3.0,
-          "projected_wall_seconds_avg": 1963.749,
-          "projected_wall_hours_avg": 0.545,
-          "projected_p95_cumulative_seconds": 2722.375,
-          "projected_transcript_bytes": 9165900,
+          "projected_wall_seconds_avg": 1972.287,
+          "projected_wall_hours_avg": 0.548,
+          "projected_p95_cumulative_seconds": 2791.618,
+          "projected_transcript_bytes": 9154800,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 17880,
           "state_budget_ok": true
@@ -11443,22 +11443,22 @@
           "target_turns": 1000,
           "base_turns": 100,
           "turn_ratio": 10.0,
-          "projected_wall_seconds_avg": 6545.831,
-          "projected_wall_hours_avg": 1.818,
-          "projected_p95_cumulative_seconds": 9074.585,
-          "projected_transcript_bytes": 30553000,
+          "projected_wall_seconds_avg": 6574.291,
+          "projected_wall_hours_avg": 1.826,
+          "projected_p95_cumulative_seconds": 9305.393,
+          "projected_transcript_bytes": 30516000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 59600,
           "state_budget_ok": true
         }
       ],
       "performance_source": {
-        "avg_turn_seconds": 6.545831,
-        "p95_turn_seconds": 9.074584999999999
+        "avg_turn_seconds": 6.5742910000000006,
+        "p95_turn_seconds": 9.305393
       },
       "payload_budget_source": {
-        "average_row_bytes": 30553,
-        "projected_1000_turn_transcript_bytes": 30553000,
+        "average_row_bytes": 30516,
+        "projected_1000_turn_transcript_bytes": 30516000,
         "payload_budget_ok": true,
         "payload_budget_advisory_ok": true
       },
@@ -12305,7 +12305,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_ac8f9cc07d08"
+              "session_key": "autoplay_e8684d6d1d5d"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12336,7 +12336,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_ac8f9cc07d08"
+              "session_key": "autoplay_e8684d6d1d5d"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12397,7 +12397,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_ac8f9cc07d08"
+              "session_key": "autoplay_e8684d6d1d5d"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
