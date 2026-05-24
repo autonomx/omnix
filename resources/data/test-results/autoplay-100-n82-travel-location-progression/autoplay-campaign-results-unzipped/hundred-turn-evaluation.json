@@ -114,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 6.327702,
-        "p95_turn_seconds": 9.053165000000002
+        "avg_turn_seconds": 10.249793,
+        "p95_turn_seconds": 19.616933
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 6.33s, p95 9.05s."
+      "message": "Average turn latency 10.25s, p95 19.62s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -10133,7 +10133,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_21dc950d60cd"
+                "session_key": "autoplay_05f4ca4c863c"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10164,7 +10164,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_21dc950d60cd"
+                "session_key": "autoplay_05f4ca4c863c"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10225,7 +10225,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_21dc950d60cd"
+                "session_key": "autoplay_05f4ca4c863c"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -11379,9 +11379,9 @@
           "target_turns": 250,
           "base_turns": 100,
           "turn_ratio": 2.5,
-          "projected_wall_seconds_avg": 1581.926,
-          "projected_wall_hours_avg": 0.439,
-          "projected_p95_cumulative_seconds": 2263.291,
+          "projected_wall_seconds_avg": 2562.448,
+          "projected_wall_hours_avg": 0.712,
+          "projected_p95_cumulative_seconds": 4904.233,
           "projected_transcript_bytes": 111000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 14900,
@@ -11391,9 +11391,9 @@
           "target_turns": 300,
           "base_turns": 100,
           "turn_ratio": 3.0,
-          "projected_wall_seconds_avg": 1898.311,
-          "projected_wall_hours_avg": 0.527,
-          "projected_p95_cumulative_seconds": 2715.95,
+          "projected_wall_seconds_avg": 3074.938,
+          "projected_wall_hours_avg": 0.854,
+          "projected_p95_cumulative_seconds": 5885.08,
           "projected_transcript_bytes": 133200,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 17880,
@@ -11403,9 +11403,9 @@
           "target_turns": 1000,
           "base_turns": 100,
           "turn_ratio": 10.0,
-          "projected_wall_seconds_avg": 6327.702,
-          "projected_wall_hours_avg": 1.758,
-          "projected_p95_cumulative_seconds": 9053.165,
+          "projected_wall_seconds_avg": 10249.793,
+          "projected_wall_hours_avg": 2.847,
+          "projected_p95_cumulative_seconds": 19616.933,
           "projected_transcript_bytes": 444000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 59600,
@@ -11413,8 +11413,8 @@
         }
       ],
       "performance_source": {
-        "avg_turn_seconds": 6.327702,
-        "p95_turn_seconds": 9.053165000000002
+        "avg_turn_seconds": 10.249793,
+        "p95_turn_seconds": 19.616933
       },
       "payload_budget_source": {
         "average_row_bytes": 444,
@@ -11609,6 +11609,225 @@
       ],
       "artifact_files": {
         "summary": "economy-resource-pressure-summary.json"
+      }
+    },
+    "readiness-report-projection-summary.json": {
+      "format_version": "bundle_d_readiness_report_projection_v1",
+      "source": "bundle_d_readiness_report_projection",
+      "ok": true,
+      "advisory_ok": true,
+      "failed_checks": [],
+      "checks": {
+        "evaluation_ok": true,
+        "readiness_ok": true,
+        "all_report_sections_ok": true,
+        "manifest_ok": true,
+        "manifest_non_empty": true,
+        "manifest_final_write_after_sidecars": true,
+        "all_sections_manifest_embedded": true,
+        "all_sections_physical": true
+      },
+      "section_count": 6,
+      "sections": [
+        {
+          "id": "survival-exit-criteria",
+          "title": "Survival Exit Criteria",
+          "artifact": "survival-exit-criteria-summary.json",
+          "ok": true,
+          "artifact_ok": true,
+          "advisory_ok": true,
+          "physical_exists": true,
+          "manifest_embedded": true,
+          "missing_keys": [],
+          "summary": {
+            "ok": true,
+            "drink_water_count": 4,
+            "eat_food_count": 2,
+            "blocked_relief_count": 0,
+            "capped_thirst_turns": 0
+          }
+        },
+        {
+          "id": "transcript-payload-budget",
+          "title": "Transcript Payload Budget",
+          "artifact": "transcript-payload-budget-summary.json",
+          "ok": true,
+          "artifact_ok": true,
+          "advisory_ok": true,
+          "physical_exists": true,
+          "manifest_embedded": true,
+          "missing_keys": [],
+          "summary": {
+            "ok": true,
+            "advisory_ok": true,
+            "projected_1000_turn_transcript_bytes": 444000,
+            "oversized_row_count": 0
+          }
+        },
+        {
+          "id": "long-run-dry-run-projection",
+          "title": "Long-Run Dry-Run Projection",
+          "artifact": "long-run-dry-run-projection-summary.json",
+          "ok": true,
+          "artifact_ok": true,
+          "advisory_ok": true,
+          "physical_exists": true,
+          "manifest_embedded": true,
+          "missing_keys": [],
+          "summary": {
+            "ok": true,
+            "advisory_ok": true,
+            "target_profiles": [
+              {
+                "target_turns": 250,
+                "base_turns": 100,
+                "turn_ratio": 2.5,
+                "projected_wall_seconds_avg": 2562.448,
+                "projected_wall_hours_avg": 0.712,
+                "projected_p95_cumulative_seconds": 4904.233,
+                "projected_transcript_bytes": 111000,
+                "projected_state_bytes_bounded": 5960,
+                "projected_state_bytes_linear_risk": 14900,
+                "state_budget_ok": true
+              },
+              {
+                "target_turns": 300,
+                "base_turns": 100,
+                "turn_ratio": 3.0,
+                "projected_wall_seconds_avg": 3074.938,
+                "projected_wall_hours_avg": 0.854,
+                "projected_p95_cumulative_seconds": 5885.08,
+                "projected_transcript_bytes": 133200,
+                "projected_state_bytes_bounded": 5960,
+                "projected_state_bytes_linear_risk": 17880,
+                "state_budget_ok": true
+              },
+              {
+                "target_turns": 1000,
+                "base_turns": 100,
+                "turn_ratio": 10.0,
+                "projected_wall_seconds_avg": 10249.793,
+                "projected_wall_hours_avg": 2.847,
+                "projected_p95_cumulative_seconds": 19616.933,
+                "projected_transcript_bytes": 444000,
+                "projected_state_bytes_bounded": 5960,
+                "projected_state_bytes_linear_risk": 59600,
+                "state_budget_ok": true
+              }
+            ],
+            "recommended_next_run": {
+              "profile": "dry_run_300",
+              "turns": 300,
+              "reason": "Intermediate endurance profile before a full 1000-turn LLM run."
+            }
+          }
+        },
+        {
+          "id": "content-exhaustion-forecast",
+          "title": "Content Exhaustion Forecast",
+          "artifact": "content-exhaustion-forecast-summary.json",
+          "ok": true,
+          "artifact_ok": true,
+          "advisory_ok": true,
+          "physical_exists": true,
+          "manifest_embedded": true,
+          "missing_keys": [],
+          "summary": {
+            "ok": true,
+            "advisory_ok": true,
+            "classification": "content_sufficient_for_requested_turns",
+            "turns_until_content_exhaustion_estimate": 200
+          }
+        },
+        {
+          "id": "npc-agency-schedule",
+          "title": "NPC Agency / Schedule Evidence",
+          "artifact": "npc-agency-schedule-summary.json",
+          "ok": true,
+          "artifact_ok": true,
+          "advisory_ok": true,
+          "physical_exists": true,
+          "manifest_embedded": true,
+          "missing_keys": [],
+          "summary": {
+            "ok": true,
+            "npc_count": 3,
+            "schedule_event_count": 32,
+            "memory_event_count": 182
+          }
+        },
+        {
+          "id": "economy-resource-pressure",
+          "title": "Economy / Resource Pressure",
+          "artifact": "economy-resource-pressure-summary.json",
+          "ok": true,
+          "artifact_ok": true,
+          "advisory_ok": true,
+          "physical_exists": true,
+          "manifest_embedded": true,
+          "missing_keys": [],
+          "summary": {
+            "ok": true,
+            "paid_count": 12,
+            "unpaid_count": 0,
+            "total_spent": {
+              "copper": 25,
+              "gold": 7
+            },
+            "ending_currency": {
+              "gold": 3,
+              "silver": 0,
+              "copper": 5
+            }
+          }
+        }
+      ],
+      "manifest_source": "bundle_b_long_run_projection_manifest",
+      "manifest_format_version": "bundle_abc_artifact_manifest_v2",
+      "report_nav_items": [
+        {
+          "id": "survival-exit-criteria",
+          "title": "Survival Exit Criteria",
+          "artifact": "survival-exit-criteria-summary.json",
+          "ok": true
+        },
+        {
+          "id": "transcript-payload-budget",
+          "title": "Transcript Payload Budget",
+          "artifact": "transcript-payload-budget-summary.json",
+          "ok": true
+        },
+        {
+          "id": "long-run-dry-run-projection",
+          "title": "Long-Run Dry-Run Projection",
+          "artifact": "long-run-dry-run-projection-summary.json",
+          "ok": true
+        },
+        {
+          "id": "content-exhaustion-forecast",
+          "title": "Content Exhaustion Forecast",
+          "artifact": "content-exhaustion-forecast-summary.json",
+          "ok": true
+        },
+        {
+          "id": "npc-agency-schedule",
+          "title": "NPC Agency / Schedule Evidence",
+          "artifact": "npc-agency-schedule-summary.json",
+          "ok": true
+        },
+        {
+          "id": "economy-resource-pressure",
+          "title": "Economy / Resource Pressure",
+          "artifact": "economy-resource-pressure-summary.json",
+          "ok": true
+        }
+      ],
+      "recommended_next_actions": [
+        "Render these sections in the HTML campaign report with a product-facing summary and collapsed JSON details.",
+        "Use this projection as the single report gate before 250/300-turn dry-run profiles."
+      ],
+      "artifact_files": {
+        "summary": "readiness-report-projection-summary.json"
       }
     }
   },
@@ -12334,7 +12553,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_21dc950d60cd"
+              "session_key": "autoplay_05f4ca4c863c"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12365,7 +12584,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_21dc950d60cd"
+              "session_key": "autoplay_05f4ca4c863c"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12426,7 +12645,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_21dc950d60cd"
+              "session_key": "autoplay_05f4ca4c863c"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -17860,5 +18079,15 @@
       "economy-resource-pressure-summary.json"
     ],
     "manifest_file": "artifact-manifest.json"
+  },
+  "bundle_d_artifacts": {
+    "source": "bundle_d_readiness_report_projection",
+    "readiness_report_projection_ok": true,
+    "readiness_report_projection_advisory_ok": true,
+    "section_count": 6,
+    "manifest_file": "artifact-manifest.json",
+    "files": [
+      "readiness-report-projection-summary.json"
+    ]
   }
 }

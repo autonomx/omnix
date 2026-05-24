@@ -100,5 +100,19 @@
     "source": "bundle_abc_final_artifact_manifest_repair",
     "manifest_file": "artifact-manifest.json",
     "final_write_after_sidecars": true
+  },
+  "bundle_d_artifacts_ok": true,
+  "readiness_report_projection_ok": true,
+  "readiness_report_projection_advisory_ok": true,
+  "bundle_d_artifact_manifest_path": "artifact-manifest.json",
+  "bundle_d_artifacts": {
+    "source": "bundle_d_readiness_report_projection",
+    "files": [
+      "readiness-report-projection-summary.json"
+    ],
+    "physical_presence": {
+      "readiness-report-projection-summary.json": true
+    },
+    "manifest_file": "artifact-manifest.json"
   }
 }
