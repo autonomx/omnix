@@ -34,12 +34,12 @@
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 68,
+    "metadata_repaired_count": 69,
     "category_reclassified_count": 49,
     "dialogue_relevance_repaired_count": 34,
     "service_resolver_veto_count": 1,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 68,
+      "provider_metadata_or_shape_repair": 69,
       "provider_category_reclassification": 49,
       "dialogue_action_relevance_repair": 34,
       "service_resolver_veto": 1,

@@ -115,6 +115,13 @@
     },
     "manifest_file": "artifact-manifest.json"
   },
+  "artifact_manifest_hard_finalized": {
+    "applied": true,
+    "source": "bundle_d_hard_artifact_manifest_finalizer",
+    "manifest_file": "artifact-manifest.json",
+    "ok": true,
+    "final_write_after_all_wrappers": true
+  },
   "bundle_d_manifest_repair": {
     "applied": true,
     "source": "bundle_abcd_final_artifact_manifest_repair",
