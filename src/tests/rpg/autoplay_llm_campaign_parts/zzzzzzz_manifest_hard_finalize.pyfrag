@@ -9,6 +9,9 @@ from pathlib import Path as _MANIFEST_HARD_FINALIZE_Path  # noqa: E402
 from app.rpg.session.artifact_export_invariant import (  # noqa: E402
     validate_artifact_export_invariant as _validate_artifact_export_invariant,
 )
+from app.rpg.session.artifact_manifest_digest import (  # noqa: E402
+    write_artifact_manifest_digest as _write_artifact_manifest_digest,
+)
 from app.rpg.session.autoplay_manifest_hard_finalize import (  # noqa: E402
     hard_finalize_artifact_manifest as _hard_finalize_artifact_manifest,
 )
@@ -62,7 +65,8 @@ def _manifest_hard_finalize_latest():
         item = _hard_finalize_artifact_manifest(path)
         zip_item = _finalize_manifest_in_result_zips(path)
         invariant = _validate_artifact_export_invariant(path)
-        repairs.append({"path": str(path), "mirror": mirror, "manifest": item, "zip_manifest": zip_item, "invariant": invariant})
+        digest = _write_artifact_manifest_digest(path) if invariant.get("ok") else {"applied": False, "reason": "invariant_failed"}
+        repairs.append({"path": str(path), "mirror": mirror, "manifest": item, "zip_manifest": zip_item, "invariant": invariant, "digest": digest})
         if invariant.get("ok"):
             break
         if mirror.get("applied") or item.get("applied") or zip_item.get("applied"):
@@ -85,9 +89,11 @@ def _manifest_hard_finalize_latest():
             item.get("mirror", {}).get("applied")
             or item.get("manifest", {}).get("applied")
             or item.get("zip_manifest", {}).get("applied")
+            or item.get("digest", {}).get("applied")
             for item in repairs
         ),
         "ok": any(item.get("invariant", {}).get("ok") for item in repairs),
+        "digest_ok": any(item.get("digest", {}).get("ok") for item in repairs),
         "repairs": repairs,
     }
 
