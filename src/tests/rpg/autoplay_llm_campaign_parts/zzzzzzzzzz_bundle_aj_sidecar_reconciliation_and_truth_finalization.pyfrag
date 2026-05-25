@@ -94,11 +94,24 @@ def _bundle_aj_json_score(payload: _BundleAJDict[str, _BundleAJAny]) -> float:
         score += 1000.0
     elif payload.get("ok") is False:
         score -= 50.0
+    # A truth-demoted readiness artifact is more correct than an older optimistic
+    # `ok: true` copy.  Without this, reconciliation can copy stale readiness
+    # back over Bundle AI's truth patch.
+    if payload.get("bundle_ai_truth_overrides_applied") is True:
+        score += 5000.0
+    if isinstance(payload.get("bundle_ai_truth_blocking_gates"), list):
+        score += 2500.0 + min(250.0, len(payload.get("bundle_ai_truth_blocking_gates") or []) * 25.0)
+    if payload.get("source") == "bundle_ai_progression_graph_runtime_edge_selection":
+        score += 2000.0
+    if str(payload.get("format_version") or "").startswith("bundle_ai_readiness_truth"):
+        score += 2000.0
     status = str(payload.get("status_label") or "").lower()
     if "missing" in status:
         score -= 250.0
     if "ready" in status or "synced" in status:
         score += 100.0
+    if "blocked" in status:
+        score += 25.0
     metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}
     score += len(metrics) * 2.0
     score += min(500.0, _bundle_aj_to_float(metrics.get("completed_turns"), 0.0) * 2.0)
@@ -337,7 +350,6 @@ def _bundle_aj_wrap_manifest_finalizer() -> None:
     def _bundle_aj_manifest_hard_finalize_latest():
         try:
             candidates = []
-            # If prior overlays expose candidate helpers, use them opportunistically after failures.
             result = finalizer()
             for value in list(globals().values()):
                 if isinstance(value, (str, _BundleAJPath)):
