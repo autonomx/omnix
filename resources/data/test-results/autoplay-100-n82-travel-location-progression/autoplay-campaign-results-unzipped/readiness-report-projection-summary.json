@@ -1,15 +1,13 @@
 {
   "format_version": "bundle_d_readiness_report_projection_v1",
   "source": "bundle_d_readiness_report_projection",
-  "ok": false,
-  "advisory_ok": false,
-  "failed_checks": [
-    "all_report_sections_ok"
-  ],
+  "ok": true,
+  "advisory_ok": true,
+  "failed_checks": [],
   "checks": {
     "evaluation_ok": true,
     "readiness_ok": true,
-    "all_report_sections_ok": false,
+    "all_report_sections_ok": true,
     "manifest_ok": true,
     "manifest_non_empty": true,
     "manifest_final_write_after_sidecars": true,
@@ -49,7 +47,7 @@
       "summary": {
         "ok": true,
         "advisory_ok": true,
-        "projected_1000_turn_transcript_bytes": 445000,
+        "projected_1000_turn_transcript_bytes": 444000,
         "oversized_row_count": 0
       }
     },
@@ -71,10 +69,10 @@
             "target_turns": 250,
             "base_turns": 100,
             "turn_ratio": 2.5,
-            "projected_wall_seconds_avg": 1965.059,
-            "projected_wall_hours_avg": 0.546,
-            "projected_p95_cumulative_seconds": 3358.793,
-            "projected_transcript_bytes": 111250,
+            "projected_wall_seconds_avg": 1622.914,
+            "projected_wall_hours_avg": 0.451,
+            "projected_p95_cumulative_seconds": 2346.108,
+            "projected_transcript_bytes": 111000,
             "projected_state_bytes_bounded": 5960,
             "projected_state_bytes_linear_risk": 14900,
             "state_budget_ok": true
@@ -83,10 +81,10 @@
             "target_turns": 300,
             "base_turns": 100,
             "turn_ratio": 3.0,
-            "projected_wall_seconds_avg": 2358.071,
-            "projected_wall_hours_avg": 0.655,
-            "projected_p95_cumulative_seconds": 4030.551,
-            "projected_transcript_bytes": 133500,
+            "projected_wall_seconds_avg": 1947.497,
+            "projected_wall_hours_avg": 0.541,
+            "projected_p95_cumulative_seconds": 2815.329,
+            "projected_transcript_bytes": 133200,
             "projected_state_bytes_bounded": 5960,
             "projected_state_bytes_linear_risk": 17880,
             "state_budget_ok": true
@@ -95,10 +93,10 @@
             "target_turns": 1000,
             "base_turns": 100,
             "turn_ratio": 10.0,
-            "projected_wall_seconds_avg": 7860.236,
-            "projected_wall_hours_avg": 2.183,
-            "projected_p95_cumulative_seconds": 13435.17,
-            "projected_transcript_bytes": 445000,
+            "projected_wall_seconds_avg": 6491.657,
+            "projected_wall_hours_avg": 1.803,
+            "projected_p95_cumulative_seconds": 9384.43,
+            "projected_transcript_bytes": 444000,
             "projected_state_bytes_bounded": 5960,
             "projected_state_bytes_linear_risk": 59600,
             "state_budget_ok": true
@@ -115,17 +113,17 @@
       "id": "content-exhaustion-forecast",
       "title": "Content Exhaustion Forecast",
       "artifact": "content-exhaustion-forecast-summary.json",
-      "ok": false,
-      "artifact_ok": false,
-      "advisory_ok": false,
+      "ok": true,
+      "artifact_ok": true,
+      "advisory_ok": true,
       "physical_exists": true,
       "manifest_embedded": true,
       "missing_keys": [],
       "summary": {
-        "ok": false,
-        "advisory_ok": false,
+        "ok": true,
+        "advisory_ok": true,
         "classification": "content_sufficient_for_requested_turns",
-        "turns_until_content_exhaustion_estimate": 100
+        "turns_until_content_exhaustion_estimate": 400
       }
     },
     {
@@ -142,7 +140,7 @@
         "ok": true,
         "npc_count": 3,
         "schedule_event_count": 32,
-        "memory_event_count": 7
+        "memory_event_count": 175
       }
     },
     {
@@ -196,7 +194,7 @@
       "id": "content-exhaustion-forecast",
       "title": "Content Exhaustion Forecast",
       "artifact": "content-exhaustion-forecast-summary.json",
-      "ok": false
+      "ok": true
     },
     {
       "id": "npc-agency-schedule",

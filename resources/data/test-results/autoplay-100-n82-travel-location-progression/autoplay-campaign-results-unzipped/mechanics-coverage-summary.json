@@ -6,10 +6,23 @@
   "mechanics": {
     "travel": {
       "required": true,
-      "count": 2,
+      "count": 15,
       "turns": [
         10,
-        15
+        15,
+        26,
+        28,
+        32,
+        33,
+        38,
+        42,
+        45,
+        59,
+        71,
+        86,
+        93,
+        95,
+        98
       ],
       "examples": [
         {
@@ -25,18 +38,40 @@
           "evidence_source": "explicit_payload",
           "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
           "mechanic": null
+        },
+        {
+          "turn": 26,
+          "reason": "location_changed",
+          "evidence_source": "explicit_payload",
+          "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+          "mechanic": null
+        },
+        {
+          "turn": 28,
+          "reason": "location_changed",
+          "evidence_source": "explicit_payload",
+          "player_action": "I travel to the old mill ruins to follow the marked coin lead.",
+          "mechanic": null
+        },
+        {
+          "turn": 32,
+          "reason": "location_changed",
+          "evidence_source": "explicit_payload",
+          "player_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
+          "mechanic": null
         }
       ],
       "evidence_source_counts": {
         "mechanic_opportunity_resolver": 1,
-        "explicit_payload": 1
+        "explicit_payload": 12,
+        "direct_graph": 2
       },
-      "real_count": 2,
+      "real_count": 15,
       "injected_count": 0
     },
     "npc_interaction": {
       "required": true,
-      "count": 11,
+      "count": 22,
       "turns": [
         1,
         2,
@@ -48,7 +83,18 @@
         9,
         11,
         12,
-        18
+        18,
+        27,
+        41,
+        44,
+        47,
+        52,
+        54,
+        57,
+        65,
+        78,
+        87,
+        100
       ],
       "examples": [
         {
@@ -88,14 +134,14 @@
         }
       ],
       "evidence_source_counts": {
-        "scenario_graph": 11
+        "scenario_graph": 22
       },
-      "real_count": 11,
+      "real_count": 22,
       "injected_count": 0
     },
     "quest_progress": {
       "required": true,
-      "count": 18,
+      "count": 96,
       "turns": [
         1,
         2,
@@ -114,7 +160,85 @@
         15,
         16,
         17,
-        18
+        18,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100
       ],
       "examples": [
         {
@@ -154,17 +278,20 @@
         }
       ],
       "evidence_source_counts": {
-        "scenario_graph": 18
+        "scenario_graph": 96
       },
-      "real_count": 18,
+      "real_count": 96,
       "injected_count": 0
     },
     "service_or_lodging": {
       "required": true,
-      "count": 2,
+      "count": 5,
       "turns": [
         1,
-        13
+        13,
+        21,
+        22,
+        52
       ],
       "examples": [
         {
@@ -180,13 +307,34 @@
           "evidence_source": "explicit_payload",
           "player_action": "I buy two rations from Bran.",
           "mechanic": "buying"
+        },
+        {
+          "turn": 21,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 22,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 52,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction.",
+          "mechanic": null
         }
       ],
       "evidence_source_counts": {
-        "direct_graph": 1,
+        "direct_graph": 4,
         "explicit_payload": 1
       },
-      "real_count": 2,
+      "real_count": 5,
       "injected_count": 0
     },
     "buying": {
@@ -218,10 +366,13 @@
     },
     "currency_change": {
       "required": true,
-      "count": 2,
+      "count": 5,
       "turns": [
         1,
-        13
+        13,
+        21,
+        22,
+        52
       ],
       "examples": [
         {
@@ -237,13 +388,34 @@
           "evidence_source": "explicit_payload",
           "player_action": "I buy two rations from Bran.",
           "mechanic": "buying"
+        },
+        {
+          "turn": 21,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 22,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 52,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction.",
+          "mechanic": null
         }
       ],
       "evidence_source_counts": {
-        "direct_graph": 1,
+        "direct_graph": 4,
         "explicit_payload": 1
       },
-      "real_count": 2,
+      "real_count": 5,
       "injected_count": 0
     },
     "inventory_change": {
@@ -269,7 +441,7 @@
     },
     "party_recruitment": {
       "required": true,
-      "count": 89,
+      "count": 29,
       "turns": [
         9,
         10,
@@ -278,88 +450,28 @@
         14,
         15,
         18,
-        19,
         20,
         21,
         22,
         23,
         24,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        31,
-        32,
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
-        40,
-        41,
         42,
         43,
         44,
-        45,
-        46,
         47,
         48,
         49,
-        50,
-        51,
-        52,
         53,
         54,
         55,
-        56,
-        57,
-        58,
-        59,
-        60,
-        61,
-        62,
-        63,
-        64,
-        65,
         66,
         67,
-        68,
-        69,
-        70,
-        71,
-        72,
-        73,
         74,
         75,
-        76,
-        77,
         78,
         79,
-        80,
-        81,
-        82,
-        83,
-        84,
-        85,
-        86,
-        87,
-        88,
-        89,
         90,
-        91,
-        92,
-        93,
-        94,
-        95,
-        96,
-        97,
-        98,
-        99,
-        100
+        91
       ],
       "examples": [
         {
@@ -399,399 +511,144 @@
         }
       ],
       "evidence_source_counts": {
-        "direct_graph": 89
+        "direct_graph": 29
       },
-      "real_count": 89,
+      "real_count": 29,
       "injected_count": 0
     },
     "combat_started": {
       "required": true,
-      "count": 82,
+      "count": 4,
       "turns": [
-        19,
         20,
         21,
         22,
-        23,
-        24,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        31,
-        32,
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
-        40,
-        41,
-        42,
-        43,
-        44,
-        45,
-        46,
-        47,
-        48,
-        49,
-        50,
-        51,
-        52,
-        53,
-        54,
-        55,
-        56,
-        57,
-        58,
-        59,
-        60,
-        61,
-        62,
-        63,
-        64,
-        65,
-        66,
-        67,
-        68,
-        69,
-        70,
-        71,
-        72,
-        73,
-        74,
-        75,
-        76,
-        77,
-        78,
-        79,
-        80,
-        81,
-        82,
-        83,
-        84,
-        85,
-        86,
-        87,
-        88,
-        89,
-        90,
-        91,
-        92,
-        93,
-        94,
-        95,
-        96,
-        97,
-        98,
-        99,
-        100
+        23
       ],
       "examples": [
-        {
-          "turn": 19,
-          "reason": "combat_result",
-          "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-          "mechanic": "combat_resolved"
-        },
         {
           "turn": 20,
           "reason": "combat_result",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 21,
           "reason": "combat_result",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 22,
           "reason": "combat_result",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 23,
           "reason": "combat_result",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
           "mechanic": "combat_resolved"
         }
       ],
       "evidence_source_counts": {
-        "explicit_payload": 82
+        "explicit_payload": 4
       },
-      "real_count": 82,
+      "real_count": 4,
       "injected_count": 0
     },
     "combat_resolved": {
       "required": true,
-      "count": 82,
+      "count": 4,
       "turns": [
-        19,
         20,
         21,
         22,
-        23,
-        24,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        31,
-        32,
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
-        40,
-        41,
-        42,
-        43,
-        44,
-        45,
-        46,
-        47,
-        48,
-        49,
-        50,
-        51,
-        52,
-        53,
-        54,
-        55,
-        56,
-        57,
-        58,
-        59,
-        60,
-        61,
-        62,
-        63,
-        64,
-        65,
-        66,
-        67,
-        68,
-        69,
-        70,
-        71,
-        72,
-        73,
-        74,
-        75,
-        76,
-        77,
-        78,
-        79,
-        80,
-        81,
-        82,
-        83,
-        84,
-        85,
-        86,
-        87,
-        88,
-        89,
-        90,
-        91,
-        92,
-        93,
-        94,
-        95,
-        96,
-        97,
-        98,
-        99,
-        100
+        23
       ],
       "examples": [
-        {
-          "turn": 19,
-          "reason": "resolved_mechanic",
-          "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-          "mechanic": "combat_resolved"
-        },
         {
           "turn": 20,
           "reason": "resolved_mechanic",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 21,
           "reason": "resolved_mechanic",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 22,
           "reason": "resolved_mechanic",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 23,
           "reason": "resolved_mechanic",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
           "mechanic": "combat_resolved"
         }
       ],
       "evidence_source_counts": {
-        "explicit_payload": 82
+        "explicit_payload": 4
       },
-      "real_count": 82,
+      "real_count": 4,
       "injected_count": 0
     },
     "xp_gain": {
       "required": true,
-      "count": 82,
+      "count": 4,
       "turns": [
-        19,
         20,
         21,
         22,
-        23,
-        24,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        31,
-        32,
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
-        40,
-        41,
-        42,
-        43,
-        44,
-        45,
-        46,
-        47,
-        48,
-        49,
-        50,
-        51,
-        52,
-        53,
-        54,
-        55,
-        56,
-        57,
-        58,
-        59,
-        60,
-        61,
-        62,
-        63,
-        64,
-        65,
-        66,
-        67,
-        68,
-        69,
-        70,
-        71,
-        72,
-        73,
-        74,
-        75,
-        76,
-        77,
-        78,
-        79,
-        80,
-        81,
-        82,
-        83,
-        84,
-        85,
-        86,
-        87,
-        88,
-        89,
-        90,
-        91,
-        92,
-        93,
-        94,
-        95,
-        96,
-        97,
-        98,
-        99,
-        100
+        23
       ],
       "examples": [
-        {
-          "turn": 19,
-          "reason": "xp_delta",
-          "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-          "mechanic": "combat_resolved"
-        },
         {
           "turn": 20,
           "reason": "xp_delta",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 21,
           "reason": "xp_delta",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 22,
           "reason": "xp_delta",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
           "mechanic": "combat_resolved"
         },
         {
           "turn": 23,
           "reason": "xp_delta",
           "evidence_source": "explicit_payload",
-          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
           "mechanic": "combat_resolved"
         }
       ],
       "evidence_source_counts": {
-        "explicit_payload": 82
+        "explicit_payload": 4
       },
-      "real_count": 82,
+      "real_count": 4,
       "injected_count": 0
     },
     "level_up": {
@@ -829,7 +686,7 @@
   "real_coverage_rate": 1.0,
   "available_mechanic_counts": {
     "buying": 20,
-    "combat_started": 90,
+    "combat_started": 81,
     "party_recruitment": 10,
     "service_or_lodging": 20,
     "travel": 10
@@ -1088,14 +945,14 @@
     },
     {
       "turn_index": 32,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
       "turn_index": 33,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I travel to the north road shrine to follow the Black Briar contact lead.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1166,8 +1023,8 @@
     },
     {
       "turn_index": 45,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I go to the magistrate hall and request a public hearing against Captain Voss.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1250,8 +1107,8 @@
     },
     {
       "turn_index": 59,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I travel to the abandoned cooperage to search for the Silver Crow cache.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1322,8 +1179,8 @@
     },
     {
       "turn_index": 71,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I follow the watchers to the River Gate warehouses.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1412,8 +1269,8 @@
     },
     {
       "turn_index": 86,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1454,8 +1311,8 @@
     },
     {
       "turn_index": 93,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I travel to the old north watchpost to follow Veska's courier trail.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1466,8 +1323,8 @@
     },
     {
       "turn_index": 95,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I intercept Veska's courier before the message can leave the old north watchpost.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1484,8 +1341,8 @@
     },
     {
       "turn_index": 98,
-      "mechanic": "combat_started",
-      "candidate_action": "I confront the bandit scouts blocking the mill road.",
+      "mechanic": null,
+      "candidate_action": "I travel to the ridge hideout before Veska's leadership cell can relocate.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {

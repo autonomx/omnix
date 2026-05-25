@@ -1,7 +1,7 @@
 {
   "format_version": "pressure_pacing_summary_v1",
   "ok": true,
-  "accepted_pressure_event_count": 663,
+  "accepted_pressure_event_count": 207,
   "rejected_pressure_event_count": 0,
   "rejected_world_signal_count": 0,
   "rejected_by_reason": {},
@@ -9,8 +9,8 @@
   "rejected_turns": [],
   "rejected_events": [],
   "rejected_world_signals": [],
-  "direct_graph_pressure_count": 663,
-  "accepted_pressure_count": 663,
-  "pressure_event_count": 663,
+  "direct_graph_pressure_count": 207,
+  "accepted_pressure_count": 207,
+  "pressure_event_count": 207,
   "direct_graph_pacing_bridge_active": true
 }

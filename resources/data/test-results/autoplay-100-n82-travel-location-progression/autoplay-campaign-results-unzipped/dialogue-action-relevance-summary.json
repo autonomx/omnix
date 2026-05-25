@@ -4,22 +4,25 @@
   "checked_count": 100,
   "mismatch_count": 0,
   "mismatch_rate": 0.0,
-  "repaired_count": 91,
-  "repaired_rate": 0.91,
+  "repaired_count": 39,
+  "repaired_rate": 0.39,
   "unrepaired_count": 0,
   "unrepaired_rate": 0.0,
   "source_gate_block_count": 0,
   "by_action_kind": {
-    "dialogue": 93,
-    "investigation": 2,
-    "travel": 2,
+    "dialogue": 37,
+    "investigation": 8,
+    "travel": 10,
     "economy": 1,
-    "mixed": 2
+    "mixed": 32,
+    "combat": 3,
+    "evidence": 9
   },
   "by_dialogue_kind": {
-    "social_investigation": 92,
-    "general": 6,
-    "commerce": 2
+    "social_investigation": 44,
+    "general": 49,
+    "commerce": 2,
+    "combat": 5
   },
   "by_reason": {},
   "examples": [
@@ -46,12 +49,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "dialogue",
-          "proposed_category": "service",
+          "proposed_category": "mixed",
           "fallback_category": "general",
           "secondary_categories": [],
           "confidence": 0.45,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The primary goal is inquiring about lodging (Service), but this is done via spoken word to Bran, making dialogue the secondary intent.",
+          "reason": "provider_intent_supported_but_specific_fallback_preferred",
+          "provider_reason": "The player explicitly inquires about lodging (Service) while simultaneously questioning the atmosphere (Dialogue).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -82,7 +85,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Put the question plainly, and I will keep to what I know."
+        "line": "Ask it plainly, and I will answer what I know."
       },
       "after_repair": {
         "ok": true,
@@ -103,12 +106,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "dialogue",
-          "proposed_category": "service",
+          "proposed_category": "mixed",
           "fallback_category": "general",
           "secondary_categories": [],
           "confidence": 0.45,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The primary goal is inquiring about lodging (Service), but this is done via spoken word to Bran, making dialogue the secondary intent.",
+          "reason": "provider_intent_supported_but_specific_fallback_preferred",
+          "provider_reason": "The player explicitly inquires about lodging (Service) while simultaneously questioning the atmosphere (Dialogue).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -158,7 +161,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking Bran a direct question about an event (the cloaked traveler's direction), which fits dialogue/investigation perfectly.",
+          "provider_reason": "The player explicitly asks Bran for information regarding a past event (the traveler's direction).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -189,7 +192,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Ask it plainly, and I will answer what I know."
+        "line": "Put the question plainly, and I will keep to what I know."
       },
       "after_repair": {
         "ok": true,
@@ -217,7 +220,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking Bran a direct question about an event (the cloaked traveler's direction), which fits dialogue/investigation perfectly.",
+          "provider_reason": "The player explicitly asks Bran for information regarding a past event (the traveler's direction).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -265,7 +268,7 @@
           "secondary_categories": [],
           "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking a question (social/dialogue) about a physical feature (road/bridge), making 'dialogue' the best fit over pure 'travel'.",
+          "provider_reason": "The player is directly questioning Bran about the geographical features of a specific route, making 'dialogue' primary and 'travel' secondary.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -322,7 +325,7 @@
           "secondary_categories": [],
           "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is asking a question (social/dialogue) about a physical feature (road/bridge), making 'dialogue' the best fit over pure 'travel'.",
+          "provider_reason": "The player is directly questioning Bran about the geographical features of a specific route, making 'dialogue' primary and 'travel' secondary.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -367,10 +370,12 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asks a question to an NPC about a specific location (the mill bridge).",
+          "provider_reason": "The core interaction is asking for information (social/dialogue) about a specific location (mill bridge), which serves as an investigation probe.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -424,10 +429,12 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asks a question to an NPC about a specific location (the mill bridge).",
+          "provider_reason": "The core interaction is asking for information (social/dialogue) about a specific location (mill bridge), which serves as an investigation probe.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -477,7 +484,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is reporting evidence (trail, blood, bridge story) to an NPC, Bran, which is fundamentally a social dialogue interaction focused on investigation.",
+          "provider_reason": "The player is reporting evidence (trail, blood, bridge) to an NPC (Bran), which fundamentally requires dialogue interaction while serving the purpose of investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -508,7 +515,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Then we stop circling guesses and follow the strongest mark."
+        "line": "Good. Proof narrows the road; show me which direction it leaves open."
       },
       "after_repair": {
         "ok": true,
@@ -536,7 +543,7 @@
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is reporting evidence (trail, blood, bridge story) to an NPC, Bran, which is fundamentally a social dialogue interaction focused on investigation.",
+          "provider_reason": "The player is reporting evidence (trail, blood, bridge) to an NPC (Bran), which fundamentally requires dialogue interaction while serving the purpose of investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -581,10 +588,12 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asks Bran a direct question regarding travel patterns, which is inherently dialogue but serves an investigative purpose.",
+          "provider_reason": "The player explicitly asks an NPC a direct question regarding past movement, which is inherently investigative.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -615,7 +624,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Bran",
-        "line": "Ask straight, and I will not dress the answer up."
+        "line": "Name what you need answered, and I will stay with the facts."
       },
       "after_repair": {
         "ok": true,
@@ -638,10 +647,12 @@
           "primary_category": "dialogue",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [],
-          "confidence": 0.45,
+          "secondary_categories": [
+            "investigation"
+          ],
+          "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player explicitly asks Bran a direct question regarding travel patterns, which is inherently dialogue but serves an investigative purpose.",
+          "provider_reason": "The player explicitly asks an NPC a direct question regarding past movement, which is inherently investigative.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -689,9 +700,9 @@
           "secondary_categories": [
             "investigation"
           ],
-          "confidence": 1.0,
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement (travel), but since it's directed towards a specific location known for activity, 'investigation' is a strong secondary fit.",
+          "provider_reason": "The primary action is movement ('travel'), but the destination (Garran's wagon yard) implies a specific investigative goal.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -745,9 +756,9 @@
           "secondary_categories": [
             "investigation"
           ],
-          "confidence": 1.0,
+          "confidence": 0.95,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement (travel), but since it's directed towards a specific location known for activity, 'investigation' is a strong secondary fit.",
+          "provider_reason": "The primary action is movement ('travel'), but the destination (Garran's wagon yard) implies a specific investigative goal.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -793,11 +804,11 @@
           "proposed_category": "dialogue",
           "fallback_category": "general",
           "secondary_categories": [
-            "evidence"
+            "investigation"
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is speaking to Garran (dialogue) while actively presenting proof of the potential ambush.",
+          "provider_reason": "The core action is reporting evidence (evidence) through speech to Garran, which falls under dialogue/investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -828,7 +839,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Garran",
-        "line": "That gives us more than rumor. Now we follow the part that names someone."
+        "line": "Good. Proof narrows the road; show me which direction it leaves open."
       },
       "after_repair": {
         "ok": true,
@@ -852,11 +863,11 @@
           "proposed_category": "dialogue",
           "fallback_category": "general",
           "secondary_categories": [
-            "evidence"
+            "investigation"
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The core action is speaking to Garran (dialogue) while actively presenting proof of the potential ambush.",
+          "provider_reason": "The core action is reporting evidence (evidence) through speech to Garran, which falls under dialogue/investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -902,11 +913,11 @@
           "proposed_category": "dialogue",
           "fallback_category": "general",
           "secondary_categories": [
-            "investigation"
+            "travel"
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is directly asking an NPC (Garran) for information about a route, which falls under dialogue seeking investigation results.",
+          "provider_reason": "The core action is asking an NPC a question about routes, which falls under dialogue but strongly implies a travel consideration.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -937,7 +948,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Garran",
-        "line": "Put the question plainly, and I will keep to what I know."
+        "line": "Name what you need answered, and I will stay with the facts."
       },
       "after_repair": {
         "ok": true,
@@ -961,11 +972,11 @@
           "proposed_category": "dialogue",
           "fallback_category": "general",
           "secondary_categories": [
-            "investigation"
+            "travel"
           ],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is directly asking an NPC (Garran) for information about a route, which falls under dialogue seeking investigation results.",
+          "provider_reason": "The core action is asking an NPC a question about routes, which falls under dialogue but strongly implies a travel consideration.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1008,14 +1019,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "mixed",
-          "proposed_category": "travel",
+          "proposed_category": "general",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
+          "secondary_categories": [],
           "confidence": 1.0,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The primary goal is preparation for travel along a specific route.",
+          "reason": "provider_intent_supported_but_specific_fallback_preferred",
+          "provider_reason": "The player's action is an active contribution to preparation, which observes the state of readiness and movement planning.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1046,7 +1055,7 @@
       "final_narration": "The evidence gives the investigation a firmer shape, connecting the current lead to the next step.",
       "final_npc": {
         "speaker": "Garran",
-        "line": "Then we follow the part that can be checked, not the part that merely sounds right."
+        "line": "That gives us a direction. Now we need the next solid piece of proof."
       },
       "after_repair": {
         "ok": true,
@@ -1067,14 +1076,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "mixed",
-          "proposed_category": "travel",
+          "proposed_category": "general",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
+          "secondary_categories": [],
           "confidence": 1.0,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The primary goal is preparation for travel along a specific route.",
+          "reason": "provider_intent_supported_but_specific_fallback_preferred",
+          "provider_reason": "The player's action is an active contribution to preparation, which observes the state of readiness and movement planning.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1119,12 +1126,10 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement along a defined route, but taking the 'quarry road' implies investigation of that specific path.",
+          "provider_reason": "The primary action is movement along a specific route ('take the quarry road'), and this inherently involves exploration/observation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1175,12 +1180,10 @@
           "primary_category": "travel",
           "proposed_category": "travel",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_supported",
-          "provider_reason": "The primary action is movement along a defined route, but taking the 'quarry road' implies investigation of that specific path.",
+          "provider_reason": "The primary action is movement along a specific route ('take the quarry road'), and this inherently involves exploration/observation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1228,7 +1231,7 @@
           "secondary_categories": [],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is actively searching/observing for specific signs (tracks, hiding places) along a defined route.",
+          "provider_reason": "The core activity is observing/scouting for signs, which fits investigation best.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1282,7 +1285,7 @@
           "secondary_categories": [],
           "confidence": 1.0,
           "reason": "provider_intent_supported",
-          "provider_reason": "The player is actively searching/observing for specific signs (tracks, hiding places) along a defined route.",
+          "provider_reason": "The core activity is observing/scouting for signs, which fits investigation best.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1327,12 +1330,10 @@
           "primary_category": "mixed",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is giving an instruction/suggestion to Garran (a form of dialogue) intended to guide the immediate observation/investigation action.",
+          "provider_reason": "The player's input is a direct instruction/statement to an NPC, which requires a spoken response (dialogue) while also being a form of observation about the current situation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1363,7 +1364,7 @@
       "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
       "final_npc": {
         "speaker": "Garran",
-        "line": "Then say it clearly and we decide what changes because of it."
+        "line": "Then we should move before someone else decides the next step for us."
       },
       "after_repair": {
         "ok": true,
@@ -1386,12 +1387,10 @@
           "primary_category": "mixed",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is giving an instruction/suggestion to Garran (a form of dialogue) intended to guide the immediate observation/investigation action.",
+          "provider_reason": "The player's input is a direct instruction/statement to an NPC, which requires a spoken response (dialogue) while also being a form of observation about the current situation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": false,
@@ -1413,8 +1412,8 @@
     },
     {
       "turn_index": 19,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "dialogue_source": "direct_graph_execution",
+      "player_action": "Report the current findings to Mira and ask which route edge should advance next.",
+      "dialogue_source": "deterministic_social_graph_line",
       "relevance": {
         "ok": true,
         "action_kind": "social",
@@ -1422,8 +1421,8 @@
         "display_source": "",
         "npc_speaker": "",
         "severity": 3,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
+        "player_action": "Report the current findings to Mira and ask which route edge should advance next.",
+        "narration_preview": "Mira reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
         "npc_line_preview": "",
         "action_kind_before_presentation_intent_sync": "social",
         "validated_presentation_category": "dialogue",
@@ -1433,18 +1432,16 @@
           "provider_intent_ok": false,
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
-          "primary_category": "combat",
+          "primary_category": "mixed",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player's primary action is asking questions, which falls under dialogue, specifically seeking investigative information.",
+          "provider_reason": "The player is directly reporting findings (social/investigation) and asking a direct question about future movement.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
-            "combat": true,
+            "combat": false,
             "economy": false,
             "service": false,
             "travel": false,
@@ -1464,24 +1461,27 @@
       },
       "source_gate": {
         "ok": true,
-        "action_kind": "travel",
+        "action_kind": "commerce",
         "display_source": "",
         "blocked_reasons": []
       },
       "repaired": true,
-      "final_narration": "The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.",
-      "final_npc": {},
+      "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
+      "final_npc": {
+        "speaker": "Mira",
+        "line": "That gives us more than rumor. Now we follow the part that names someone."
+      },
       "after_repair": {
         "ok": true,
         "action_kind": "social",
-        "dialogue_kind": "travel",
+        "dialogue_kind": "commerce",
         "display_source": "deterministic_action_relevance_fallback",
         "npc_speaker": "",
         "severity": 0,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
+        "player_action": "Report the current findings to Mira and ask which route edge should advance next.",
+        "narration_preview": "The exchange is handled as a practical transaction, with coin and goods kept to the authoritative result.",
         "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "combat",
+        "action_kind_before_presentation_intent_sync": "mixed",
         "validated_presentation_category": "dialogue",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
@@ -1489,18 +1489,16 @@
           "provider_intent_ok": false,
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
-          "primary_category": "combat",
+          "primary_category": "mixed",
           "proposed_category": "dialogue",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
+          "secondary_categories": [],
+          "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player's primary action is asking questions, which falls under dialogue, specifically seeking investigative information.",
+          "provider_reason": "The player is directly reporting findings (social/investigation) and asking a direct question about future movement.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
-            "combat": true,
+            "combat": false,
             "economy": false,
             "service": false,
             "travel": false,
@@ -1519,20 +1517,20 @@
     },
     {
       "turn_index": 20,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
       "dialogue_source": "direct_graph_execution",
       "relevance": {
         "ok": true,
-        "action_kind": "social",
+        "action_kind": "combat",
         "dialogue_kind": "social_investigation",
         "display_source": "",
         "npc_speaker": "",
         "severity": 3,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
+        "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
+        "narration_preview": "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead.",
         "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "social",
-        "validated_presentation_category": "dialogue",
+        "action_kind_before_presentation_intent_sync": "combat",
+        "validated_presentation_category": "combat",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -1540,14 +1538,14 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "dialogue",
+          "proposed_category": "travel",
           "fallback_category": "general",
           "secondary_categories": [
             "investigation"
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly asking an NPC specific questions about investigation progress and next steps.",
+          "provider_reason": "The core action is resolving a blocker on a road, which directly advances travel and reveals clues (investigation).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -1579,16 +1577,16 @@
       "final_npc": {},
       "after_repair": {
         "ok": true,
-        "action_kind": "social",
+        "action_kind": "combat",
         "dialogue_kind": "travel",
         "display_source": "deterministic_action_relevance_fallback",
         "npc_speaker": "",
         "severity": 0,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
         "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
         "npc_line_preview": "",
         "action_kind_before_presentation_intent_sync": "combat",
-        "validated_presentation_category": "dialogue",
+        "validated_presentation_category": "combat",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -1596,14 +1594,14 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "dialogue",
+          "proposed_category": "travel",
           "fallback_category": "general",
           "secondary_categories": [
             "investigation"
           ],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly asking an NPC specific questions about investigation progress and next steps.",
+          "provider_reason": "The core action is resolving a blocker on a road, which directly advances travel and reveals clues (investigation).",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -1625,20 +1623,20 @@
     },
     {
       "turn_index": 21,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
       "dialogue_source": "direct_graph_execution",
       "relevance": {
         "ok": true,
-        "action_kind": "social",
+        "action_kind": "combat",
         "dialogue_kind": "social_investigation",
         "display_source": "",
         "npc_speaker": "",
         "severity": 3,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
+        "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
+        "narration_preview": "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead.",
         "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "social",
-        "validated_presentation_category": "dialogue",
+        "action_kind_before_presentation_intent_sync": "combat",
+        "validated_presentation_category": "combat",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -1646,14 +1644,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "dialogue",
+          "proposed_category": "service",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
+          "secondary_categories": [],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly questioning an NPC (Garran) about specific unresolved clues, changes, and future travel nodes.",
+          "provider_reason": "The player's primary goal is to inquire about services (restock, repair, recruit) at a specific location.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -1685,16 +1681,16 @@
       "final_npc": {},
       "after_repair": {
         "ok": true,
-        "action_kind": "social",
+        "action_kind": "combat",
         "dialogue_kind": "travel",
         "display_source": "deterministic_action_relevance_fallback",
         "npc_speaker": "",
         "severity": 0,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
         "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
         "npc_line_preview": "",
         "action_kind_before_presentation_intent_sync": "combat",
-        "validated_presentation_category": "dialogue",
+        "validated_presentation_category": "combat",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -1702,14 +1698,12 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "dialogue",
+          "proposed_category": "service",
           "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
+          "secondary_categories": [],
           "confidence": 1.0,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly questioning an NPC (Garran) about specific unresolved clues, changes, and future travel nodes.",
+          "provider_reason": "The player's primary goal is to inquire about services (restock, repair, recruit) at a specific location.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -1731,7 +1725,7 @@
     },
     {
       "turn_index": 22,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
       "dialogue_source": "direct_graph_execution",
       "relevance": {
         "ok": true,
@@ -1740,219 +1734,7 @@
         "display_source": "",
         "npc_speaker": "",
         "severity": 3,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
-        "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "social",
-        "validated_presentation_category": "dialogue",
-        "validated_presentation_intent": {
-          "format_version": "validated_presentation_intent_v1",
-          "ok": true,
-          "provider_intent_ok": false,
-          "validated_intent_ok": true,
-          "provider_intent_repaired": true,
-          "primary_category": "combat",
-          "proposed_category": "dialogue",
-          "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly questioning Garran about specific elements of an ongoing investigation (wagon-road clues, changes, next node).",
-          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
-          "support": {
-            "combat": true,
-            "economy": false,
-            "service": false,
-            "travel": false,
-            "evidence": false,
-            "investigation": false,
-            "dialogue": false,
-            "quest": false,
-            "lore": false,
-            "stealth": false,
-            "social": false,
-            "mixed": true,
-            "general": true
-          }
-        },
-        "presentation_intent_sync_repaired": true,
-        "presentation_intent_sync_reason": "stale_category_mismatch_reasons_cleared"
-      },
-      "source_gate": {
-        "ok": true,
-        "action_kind": "travel",
-        "display_source": "",
-        "blocked_reasons": []
-      },
-      "repaired": true,
-      "final_narration": "The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.",
-      "final_npc": {},
-      "after_repair": {
-        "ok": true,
-        "action_kind": "social",
-        "dialogue_kind": "travel",
-        "display_source": "deterministic_action_relevance_fallback",
-        "npc_speaker": "",
-        "severity": 0,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
-        "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "combat",
-        "validated_presentation_category": "dialogue",
-        "validated_presentation_intent": {
-          "format_version": "validated_presentation_intent_v1",
-          "ok": true,
-          "provider_intent_ok": false,
-          "validated_intent_ok": true,
-          "provider_intent_repaired": true,
-          "primary_category": "combat",
-          "proposed_category": "dialogue",
-          "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly questioning Garran about specific elements of an ongoing investigation (wagon-road clues, changes, next node).",
-          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
-          "support": {
-            "combat": true,
-            "economy": false,
-            "service": false,
-            "travel": false,
-            "evidence": false,
-            "investigation": false,
-            "dialogue": false,
-            "quest": false,
-            "lore": false,
-            "stealth": false,
-            "social": false,
-            "mixed": true,
-            "general": true
-          }
-        }
-      }
-    },
-    {
-      "turn_index": 23,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "dialogue_source": "direct_graph_execution",
-      "relevance": {
-        "ok": true,
-        "action_kind": "social",
-        "dialogue_kind": "social_investigation",
-        "display_source": "",
-        "npc_speaker": "",
-        "severity": 3,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
-        "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "social",
-        "validated_presentation_category": "dialogue",
-        "validated_presentation_intent": {
-          "format_version": "validated_presentation_intent_v1",
-          "ok": true,
-          "provider_intent_ok": false,
-          "validated_intent_ok": true,
-          "provider_intent_repaired": true,
-          "primary_category": "combat",
-          "proposed_category": "dialogue",
-          "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player directly asks Garran three specific questions regarding unresolved clues, changes, and next route node.",
-          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
-          "support": {
-            "combat": true,
-            "economy": false,
-            "service": false,
-            "travel": false,
-            "evidence": false,
-            "investigation": false,
-            "dialogue": false,
-            "quest": false,
-            "lore": false,
-            "stealth": false,
-            "social": false,
-            "mixed": true,
-            "general": true
-          }
-        },
-        "presentation_intent_sync_repaired": true,
-        "presentation_intent_sync_reason": "stale_category_mismatch_reasons_cleared"
-      },
-      "source_gate": {
-        "ok": true,
-        "action_kind": "travel",
-        "display_source": "",
-        "blocked_reasons": []
-      },
-      "repaired": true,
-      "final_narration": "The fight resolves in your favor, leaving the road briefly safer. You gain 5 XP from surviving the clash.",
-      "final_npc": {},
-      "after_repair": {
-        "ok": true,
-        "action_kind": "social",
-        "dialogue_kind": "travel",
-        "display_source": "deterministic_action_relevance_fallback",
-        "npc_speaker": "",
-        "severity": 0,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
-        "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "combat",
-        "validated_presentation_category": "dialogue",
-        "validated_presentation_intent": {
-          "format_version": "validated_presentation_intent_v1",
-          "ok": true,
-          "provider_intent_ok": false,
-          "validated_intent_ok": true,
-          "provider_intent_repaired": true,
-          "primary_category": "combat",
-          "proposed_category": "dialogue",
-          "fallback_category": "general",
-          "secondary_categories": [
-            "investigation"
-          ],
-          "confidence": 1.0,
-          "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player directly asks Garran three specific questions regarding unresolved clues, changes, and next route node.",
-          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
-          "support": {
-            "combat": true,
-            "economy": false,
-            "service": false,
-            "travel": false,
-            "evidence": false,
-            "investigation": false,
-            "dialogue": false,
-            "quest": false,
-            "lore": false,
-            "stealth": false,
-            "social": false,
-            "mixed": true,
-            "general": true
-          }
-        }
-      }
-    },
-    {
-      "turn_index": 24,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "dialogue_source": "direct_graph_execution",
-      "relevance": {
-        "ok": true,
-        "action_kind": "social",
-        "dialogue_kind": "social_investigation",
-        "display_source": "",
-        "npc_speaker": "",
-        "severity": 3,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
         "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
         "npc_line_preview": "",
         "action_kind_before_presentation_intent_sync": "social",
@@ -1969,7 +1751,7 @@
           "secondary_categories": [],
           "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player directly asks Garran three specific questions related to investigation progress (clues, changes, next node).",
+          "provider_reason": "The player is explicitly asking an NPC (Bran) to verify evidence, which falls under dialogue used for investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -2006,7 +1788,7 @@
         "display_source": "deterministic_action_relevance_fallback",
         "npc_speaker": "",
         "severity": 0,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
         "narration_preview": "The exchange is handled as a practical transaction, with coin and goods kept to the authoritative result.",
         "npc_line_preview": "",
         "action_kind_before_presentation_intent_sync": "combat",
@@ -2023,7 +1805,7 @@
           "secondary_categories": [],
           "confidence": 0.45,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player directly asks Garran three specific questions related to investigation progress (clues, changes, next node).",
+          "provider_reason": "The player is explicitly asking an NPC (Bran) to verify evidence, which falls under dialogue used for investigation.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -2044,21 +1826,21 @@
       }
     },
     {
-      "turn_index": 25,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "turn_index": 23,
+      "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
       "dialogue_source": "direct_graph_execution",
       "relevance": {
         "ok": true,
-        "action_kind": "social",
+        "action_kind": "combat",
         "dialogue_kind": "social_investigation",
         "display_source": "",
         "npc_speaker": "",
         "severity": 3,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
+        "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
+        "narration_preview": "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead.",
         "npc_line_preview": "",
-        "action_kind_before_presentation_intent_sync": "social",
-        "validated_presentation_category": "dialogue",
+        "action_kind_before_presentation_intent_sync": "combat",
+        "validated_presentation_category": "combat",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -2066,14 +1848,14 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "dialogue",
+          "proposed_category": "travel",
           "fallback_category": "general",
           "secondary_categories": [
             "investigation"
           ],
-          "confidence": 1.0,
+          "confidence": 0.95,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly querying Garran (implied, as he is the source of the information) about specific unresolved clues and next steps.",
+          "provider_reason": "The player is actively choosing an alternative route/path, which directly relates to travel and investigation of that path.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -2105,16 +1887,16 @@
       "final_npc": {},
       "after_repair": {
         "ok": true,
-        "action_kind": "social",
+        "action_kind": "combat",
         "dialogue_kind": "travel",
         "display_source": "deterministic_action_relevance_fallback",
         "npc_speaker": "",
         "severity": 0,
-        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
         "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
         "npc_line_preview": "",
         "action_kind_before_presentation_intent_sync": "combat",
-        "validated_presentation_category": "dialogue",
+        "validated_presentation_category": "combat",
         "validated_presentation_intent": {
           "format_version": "validated_presentation_intent_v1",
           "ok": true,
@@ -2122,14 +1904,14 @@
           "validated_intent_ok": true,
           "provider_intent_repaired": true,
           "primary_category": "combat",
-          "proposed_category": "dialogue",
+          "proposed_category": "travel",
           "fallback_category": "general",
           "secondary_categories": [
             "investigation"
           ],
-          "confidence": 1.0,
+          "confidence": 0.95,
           "reason": "provider_intent_not_supported_by_authoritative_turn",
-          "provider_reason": "The player is directly querying Garran (implied, as he is the source of the information) about specific unresolved clues and next steps.",
+          "provider_reason": "The player is actively choosing an alternative route/path, which directly relates to travel and investigation of that path.",
           "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
           "support": {
             "combat": true,
@@ -2143,6 +1925,216 @@
             "lore": false,
             "stealth": false,
             "social": false,
+            "mixed": true,
+            "general": true
+          }
+        }
+      }
+    },
+    {
+      "turn_index": 24,
+      "player_action": "I question the captured bandit.",
+      "dialogue_source": "deterministic_social_graph_line",
+      "relevance": {
+        "ok": true,
+        "action_kind": "social",
+        "dialogue_kind": "social_investigation",
+        "display_source": "",
+        "npc_speaker": "",
+        "severity": 3,
+        "player_action": "I question the captured bandit about who hired them and why they targeted Garran's wagon.",
+        "narration_preview": "Local Patron reacts to the question, and the surrounding noise seems to thin as the conversation draws attention.",
+        "npc_line_preview": "",
+        "action_kind_before_presentation_intent_sync": "social",
+        "validated_presentation_category": "dialogue",
+        "validated_presentation_intent": {
+          "format_version": "validated_presentation_intent_v1",
+          "ok": true,
+          "provider_intent_ok": true,
+          "validated_intent_ok": true,
+          "provider_intent_repaired": false,
+          "primary_category": "dialogue",
+          "proposed_category": "dialogue",
+          "fallback_category": "general",
+          "secondary_categories": [],
+          "confidence": 0.45,
+          "reason": "provider_intent_supported",
+          "provider_reason": "The player's direct question is an inquiry, requiring a verbal response that advances investigation.",
+          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
+          "support": {
+            "combat": false,
+            "economy": false,
+            "service": false,
+            "travel": false,
+            "evidence": false,
+            "investigation": false,
+            "dialogue": true,
+            "quest": false,
+            "lore": false,
+            "stealth": false,
+            "social": true,
+            "mixed": true,
+            "general": true
+          }
+        },
+        "presentation_intent_sync_repaired": true,
+        "presentation_intent_sync_reason": "stale_category_mismatch_reasons_cleared"
+      },
+      "source_gate": {
+        "ok": true,
+        "action_kind": "commerce",
+        "display_source": "",
+        "blocked_reasons": []
+      },
+      "repaired": true,
+      "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
+      "final_npc": {
+        "speaker": "Garran",
+        "line": "Name what you need answered, and I will stay with the facts."
+      },
+      "after_repair": {
+        "ok": true,
+        "action_kind": "social",
+        "dialogue_kind": "commerce",
+        "display_source": "deterministic_action_relevance_fallback",
+        "npc_speaker": "",
+        "severity": 0,
+        "player_action": "I question the captured bandit about who hired them and why they targeted Garran's wagon.",
+        "narration_preview": "The exchange is handled as a practical transaction, with coin and goods kept to the authoritative result.",
+        "npc_line_preview": "",
+        "action_kind_before_presentation_intent_sync": "social",
+        "validated_presentation_category": "dialogue",
+        "validated_presentation_intent": {
+          "format_version": "validated_presentation_intent_v1",
+          "ok": true,
+          "provider_intent_ok": true,
+          "validated_intent_ok": true,
+          "provider_intent_repaired": false,
+          "primary_category": "dialogue",
+          "proposed_category": "dialogue",
+          "fallback_category": "general",
+          "secondary_categories": [],
+          "confidence": 0.45,
+          "reason": "provider_intent_supported",
+          "provider_reason": "The player's direct question is an inquiry, requiring a verbal response that advances investigation.",
+          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
+          "support": {
+            "combat": false,
+            "economy": false,
+            "service": false,
+            "travel": false,
+            "evidence": false,
+            "investigation": false,
+            "dialogue": true,
+            "quest": false,
+            "lore": false,
+            "stealth": false,
+            "social": true,
+            "mixed": true,
+            "general": true
+          }
+        }
+      }
+    },
+    {
+      "turn_index": 27,
+      "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+      "dialogue_source": "deterministic_social_graph_line",
+      "relevance": {
+        "ok": true,
+        "action_kind": "social",
+        "dialogue_kind": "commerce",
+        "display_source": "",
+        "npc_speaker": "",
+        "severity": 3,
+        "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+        "narration_preview": "The practical request lands against the unease of the room, making ordinary business feel less ordinary.",
+        "npc_line_preview": "",
+        "action_kind_before_presentation_intent_sync": "social",
+        "validated_presentation_category": "dialogue",
+        "validated_presentation_intent": {
+          "format_version": "validated_presentation_intent_v1",
+          "ok": true,
+          "provider_intent_ok": true,
+          "validated_intent_ok": true,
+          "provider_intent_repaired": false,
+          "primary_category": "dialogue",
+          "proposed_category": "dialogue",
+          "fallback_category": "general",
+          "secondary_categories": [],
+          "confidence": 0.45,
+          "reason": "provider_intent_supported",
+          "provider_reason": "The player is directly asking an NPC for information regarding a specific location (the old mill).",
+          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
+          "support": {
+            "combat": false,
+            "economy": false,
+            "service": false,
+            "travel": false,
+            "evidence": false,
+            "investigation": false,
+            "dialogue": true,
+            "quest": false,
+            "lore": false,
+            "stealth": false,
+            "social": true,
+            "mixed": true,
+            "general": true
+          }
+        },
+        "presentation_intent_sync_repaired": true,
+        "presentation_intent_sync_reason": "stale_category_mismatch_reasons_cleared"
+      },
+      "source_gate": {
+        "ok": true,
+        "action_kind": "travel",
+        "display_source": "",
+        "blocked_reasons": []
+      },
+      "repaired": true,
+      "final_narration": "The conversation focuses on the immediate lead, pressing for names, places, and evidence that can move the investigation forward.",
+      "final_npc": {
+        "speaker": "Bran",
+        "line": "Name what you need answered, and I will stay with the facts."
+      },
+      "after_repair": {
+        "ok": true,
+        "action_kind": "social",
+        "dialogue_kind": "travel",
+        "display_source": "deterministic_action_relevance_fallback",
+        "npc_speaker": "",
+        "severity": 0,
+        "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+        "narration_preview": "The movement resolves through the current route and location state without adding unrelated conversation.",
+        "npc_line_preview": "",
+        "action_kind_before_presentation_intent_sync": "social",
+        "validated_presentation_category": "dialogue",
+        "validated_presentation_intent": {
+          "format_version": "validated_presentation_intent_v1",
+          "ok": true,
+          "provider_intent_ok": true,
+          "validated_intent_ok": true,
+          "provider_intent_repaired": false,
+          "primary_category": "dialogue",
+          "proposed_category": "dialogue",
+          "fallback_category": "general",
+          "secondary_categories": [],
+          "confidence": 0.45,
+          "reason": "provider_intent_supported",
+          "provider_reason": "The player is directly asking an NPC for information regarding a specific location (the old mill).",
+          "provider_intent_parse_source": "combined_background_llm_result.presentation_intent",
+          "support": {
+            "combat": false,
+            "economy": false,
+            "service": false,
+            "travel": false,
+            "evidence": false,
+            "investigation": false,
+            "dialogue": true,
+            "quest": false,
+            "lore": false,
+            "stealth": false,
+            "social": true,
             "mixed": true,
             "general": true
           }

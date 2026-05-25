@@ -158,7 +158,7 @@
   "format_version": "bundle_m_encounter_lifecycle_v2_summary_v1",
   "metrics": {
     "action_count": 8,
-    "existing_encounter_count": 315,
+    "existing_encounter_count": 470,
     "outcome_state_count": 6,
     "participant_role_count": 5,
     "recovery_hook_count": 5,

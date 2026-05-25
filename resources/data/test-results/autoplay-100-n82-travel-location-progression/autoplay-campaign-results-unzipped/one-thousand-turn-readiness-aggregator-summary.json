@@ -116,7 +116,7 @@
       "failed_check_count": 0,
       "metrics": {
         "action_count": 8,
-        "existing_encounter_count": 315,
+        "existing_encounter_count": 470,
         "outcome_state_count": 6,
         "participant_role_count": 5,
         "recovery_hook_count": 5,
@@ -137,7 +137,7 @@
         "access_block_count": 8,
         "access_unlock_count": 12,
         "consequence_rule_count": 8,
-        "existing_consequence_count": 315,
+        "existing_consequence_count": 470,
         "faction_count": 4,
         "standing_axis_count": 5
       },
@@ -159,8 +159,8 @@
         "max_projected_state_bytes": 50331648,
         "max_state_bytes": 16777216,
         "max_world_event_retained_rows": 250,
-        "projected_1000_turn_state_bytes": 34261380,
-        "state_bytes": 3426138,
+        "projected_1000_turn_state_bytes": 34902150,
+        "state_bytes": 3490215,
         "turn_count": 100,
         "world_event_retained_rows": 1
       },

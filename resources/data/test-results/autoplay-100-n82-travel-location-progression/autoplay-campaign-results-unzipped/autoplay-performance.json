@@ -1,183 +1,183 @@
 {
-  "artifact_write_ms": 104223.345,
-  "avg_human_playable_blocking_ms": 239.263,
-  "avg_playable_blocking_ms": 7498.959,
-  "avg_turn_ms": 7860.236,
-  "campaign_wall_ms": 1075134.615,
-  "campaign_wall_seconds": 1075.135,
-  "max_human_playable_blocking_ms": 460.784,
-  "max_playable_blocking_ms": 16813.214,
-  "max_turn_ms": 17222.335,
-  "median_turn_ms": 7647.924,
-  "min_turn_ms": 3503.715,
-  "p90_turn_ms": 12343.654,
-  "p95_human_playable_blocking_ms": 352.158,
-  "p95_playable_blocking_ms": 13051.063,
-  "p95_turn_ms": 13435.17,
+  "artifact_write_ms": 108427.622,
+  "avg_human_playable_blocking_ms": 440.732,
+  "avg_playable_blocking_ms": 6059.36,
+  "avg_turn_ms": 6491.657,
+  "campaign_wall_ms": 856683.888,
+  "campaign_wall_seconds": 856.684,
+  "max_human_playable_blocking_ms": 7171.486,
+  "max_playable_blocking_ms": 12781.054,
+  "max_turn_ms": 13425.207,
+  "median_turn_ms": 6355.392,
+  "min_turn_ms": 3364.386,
+  "p90_turn_ms": 8223.562,
+  "p95_human_playable_blocking_ms": 498.735,
+  "p95_playable_blocking_ms": 8997.745,
+  "p95_turn_ms": 9384.43,
   "slowest_turns": [
-    {
-      "base_response_ms": 0.002,
-      "checkpoint_ms": 0.0,
-      "manual_turn_ms": 158.245,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 16620.703,
-      "story_hooks_ms": 8.573,
-      "turn_index": 82,
-      "turn_total_ms": 17222.335
-    },
-    {
-      "base_response_ms": 0.018,
-      "checkpoint_ms": 0.0,
-      "manual_turn_ms": 269.313,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 14503.448,
-      "story_hooks_ms": 13.627,
-      "turn_index": 76,
-      "turn_total_ms": 15198.274
-    },
     {
       "base_response_ms": 0.001,
       "checkpoint_ms": 0.0,
-      "manual_turn_ms": 227.199,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 14292.69,
-      "story_hooks_ms": 11.681,
-      "turn_index": 88,
-      "turn_total_ms": 14971.396
+      "manual_turn_ms": 4559.088,
+      "player_action": "I meet with Bran and Garran to plan how to move against the Sable Chain before they strike back.",
+      "player_agent_ms": 8179.405,
+      "story_hooks_ms": 11.129,
+      "turn_index": 67,
+      "turn_total_ms": 13425.207
     },
     {
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0,
-      "manual_turn_ms": 240.899,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 14249.82,
-      "story_hooks_ms": 8.312,
-      "turn_index": 52,
-      "turn_total_ms": 14915.456
+      "manual_turn_ms": 5669.614,
+      "player_action": "I intercept the Sable Chain strike team before they can burn the safehouse evidence.",
+      "player_agent_ms": 5803.877,
+      "story_hooks_ms": 17.078,
+      "turn_index": 76,
+      "turn_total_ms": 12156.656
     },
     {
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0,
-      "manual_turn_ms": 215.292,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 13869.535,
-      "story_hooks_ms": 8.732,
-      "turn_index": 92,
-      "turn_total_ms": 14549.022
+      "manual_turn_ms": 7128.664,
+      "player_action": "I help Bran and Garran prepare the safehouse defense and protect the evidence before the Sable Chain strike.",
+      "player_agent_ms": 4347.16,
+      "story_hooks_ms": 11.765,
+      "turn_index": 75,
+      "turn_total_ms": 12089.911
     },
     {
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0,
-      "manual_turn_ms": 223.763,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 12736.756,
-      "story_hooks_ms": 9.2,
-      "turn_index": 94,
-      "turn_total_ms": 13376.546
+      "manual_turn_ms": 4724.931,
+      "player_action": "I capture the strike team's sealed orders before they can destroy them.",
+      "player_agent_ms": 6452.865,
+      "story_hooks_ms": 13.944,
+      "turn_index": 77,
+      "turn_total_ms": 11788.332
     },
     {
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0,
-      "manual_turn_ms": 232.33,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 12529.927,
-      "story_hooks_ms": 11.66,
+      "manual_turn_ms": 297.678,
+      "player_action": "I rush back to warn Bran and Garran that the Sable Chain plans to burn the evidence and silence witnesses.",
+      "player_agent_ms": 9041.298,
+      "story_hooks_ms": 17.107,
+      "turn_index": 74,
+      "turn_total_ms": 9950.724
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 152.403,
+      "player_action": "I gather Bran and Garran to plan how to use the proof against Captain Voss.",
+      "player_agent_ms": 8793.184,
+      "story_hooks_ms": 8.361,
+      "turn_index": 43,
+      "turn_total_ms": 9354.625
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 464.774,
+      "player_action": "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes.",
+      "player_agent_ms": 8164.914,
+      "story_hooks_ms": 17.213,
+      "turn_index": 72,
+      "turn_total_ms": 9199.92
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 109.846,
+      "player_action": "Report the current findings to Mira and ask which route edge should advance next.",
+      "player_agent_ms": 8331.248,
+      "story_hooks_ms": 6.442,
+      "turn_index": 19,
+      "turn_total_ms": 8709.483
+    },
+    {
+      "base_response_ms": 0.002,
+      "checkpoint_ms": 0.0,
+      "manual_turn_ms": 227.777,
+      "player_action": "I secure the Silver Crow ledger, the manifest, and Marlowe's proof before the Sable Chain can steal them.",
+      "player_agent_ms": 7865.329,
+      "story_hooks_ms": 11.128,
       "turn_index": 68,
-      "turn_total_ms": 13203.356
+      "turn_total_ms": 8641.078
     },
     {
       "base_response_ms": 0.002,
       "checkpoint_ms": 0.0,
-      "manual_turn_ms": 136.998,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 12604.291,
-      "story_hooks_ms": 11.899,
-      "turn_index": 70,
-      "turn_total_ms": 13201.411
-    },
-    {
-      "base_response_ms": 0.002,
-      "checkpoint_ms": 0.0,
-      "manual_turn_ms": 219.076,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 12304.832,
-      "story_hooks_ms": 12.748,
-      "turn_index": 78,
-      "turn_total_ms": 12964.724
-    },
-    {
-      "base_response_ms": 0.002,
-      "checkpoint_ms": 0.0,
-      "manual_turn_ms": 279.883,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_agent_ms": 11777.903,
-      "story_hooks_ms": 13.328,
-      "turn_index": 90,
-      "turn_total_ms": 12527.224
+      "manual_turn_ms": 147.006,
+      "player_action": "I shadow the hooded Black Briar contact from the shrine without revealing myself.",
+      "player_agent_ms": 7817.213,
+      "story_hooks_ms": 7.174,
+      "turn_index": 37,
+      "turn_total_ms": 8416.683
     }
   ],
   "stage_summary": {
     "background_enqueue_ms": {
-      "avg_ms": 6.87,
+      "avg_ms": 7.08,
       "count": 100,
-      "max_ms": 89.918,
-      "total_ms": 687.009
+      "max_ms": 25.567,
+      "total_ms": 708.014
     },
     "base_response_ms": {
-      "avg_ms": 0.003,
+      "avg_ms": 0.002,
       "count": 100,
-      "max_ms": 0.034,
-      "total_ms": 0.27
+      "max_ms": 0.03,
+      "total_ms": 0.226
     },
     "human_playable_blocking_ms": {
-      "avg_ms": 239.263,
+      "avg_ms": 440.732,
       "count": 100,
-      "max_ms": 460.784,
-      "total_ms": 23926.262
+      "max_ms": 7171.486,
+      "total_ms": 44073.223
     },
     "manual_turn_ms": {
-      "avg_ms": 208.632,
+      "avg_ms": 400.36,
       "count": 100,
-      "max_ms": 427.365,
-      "total_ms": 20863.224
+      "max_ms": 7128.664,
+      "total_ms": 40036.021
     },
     "playable_blocking_ms": {
-      "avg_ms": 7498.959,
+      "avg_ms": 6059.36,
       "count": 100,
-      "max_ms": 16813.214,
-      "total_ms": 749895.936
+      "max_ms": 12781.054,
+      "total_ms": 605935.994
     },
     "player_agent_ms": {
-      "avg_ms": 7259.697,
+      "avg_ms": 5618.628,
       "count": 100,
-      "max_ms": 16620.703,
-      "total_ms": 725969.674
+      "max_ms": 9041.298,
+      "total_ms": 561862.771
     },
     "progress_eval_ms": {
-      "avg_ms": 0.189,
+      "avg_ms": 1.631,
       "count": 100,
-      "max_ms": 0.237,
-      "total_ms": 18.881
+      "max_ms": 145.702,
+      "total_ms": 163.076
     },
     "record_build_ms": {
-      "avg_ms": 16.541,
+      "avg_ms": 22.341,
       "count": 100,
-      "max_ms": 131.686,
-      "total_ms": 1654.099
+      "max_ms": 214.514,
+      "total_ms": 2234.139
     },
     "state_bounds_ms": {
-      "avg_ms": 4.819,
+      "avg_ms": 5.276,
       "count": 100,
-      "max_ms": 6.855,
-      "total_ms": 481.927
+      "max_ms": 9.024,
+      "total_ms": 527.59
     },
     "story_hooks_ms": {
-      "avg_ms": 9.079,
+      "avg_ms": 11.122,
       "count": 100,
-      "max_ms": 14.358,
-      "total_ms": 907.861
+      "max_ms": 20.676,
+      "total_ms": 1112.171
     }
   },
   "turn_count": 100,
-  "turns_per_second": 0.093
+  "turns_per_second": 0.1167
 }

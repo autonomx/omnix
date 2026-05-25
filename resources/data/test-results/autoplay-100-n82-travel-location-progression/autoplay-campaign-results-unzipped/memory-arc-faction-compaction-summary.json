@@ -4,7 +4,7 @@
   "budget_evidence": {
     "faction_budget_ok": true,
     "faction_bytes": 242,
-    "faction_event_count": 2,
+    "faction_event_count": 50,
     "npc_memory_budget_ok": true,
     "npc_memory_bytes": 2,
     "story_arc_budget_ok": true,

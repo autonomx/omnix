@@ -1,8 +1,8 @@
 {
   "format_version": "story_arc_aftermath_summary_v1",
   "ok": true,
-  "aftermath_event_count": 670,
-  "world_signal_count": 14,
+  "aftermath_event_count": 382,
+  "world_signal_count": 350,
   "npc_memory_event_count": 0,
   "followup_hook_count": 0,
   "faction_event_count": 0,
@@ -13,5 +13,5 @@
   "followup_hooks": [],
   "faction_events": [],
   "seeded_events": [],
-  "direct_graph_aftermath_count": 670
+  "direct_graph_aftermath_count": 382
 }

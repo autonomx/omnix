@@ -1,11 +1,11 @@
 {
   "format_version": "faction_consequence_summary_v1",
   "ok": true,
-  "event_count": 2,
-  "world_signal_count": 2,
+  "event_count": 50,
+  "world_signal_count": 50,
   "by_faction": {},
   "by_kind": {
-    "direct_graph_faction_consequence": 2
+    "direct_graph_faction_consequence": 50
   },
   "events": [],
   "world_signals": [],
@@ -23,5 +23,5 @@
       "history": []
     }
   },
-  "direct_graph_faction_consequence_count": 2
+  "direct_graph_faction_consequence_count": 50
 }

@@ -4,8 +4,8 @@
   "checked_count": 100,
   "mismatch_count": 0,
   "mismatch_rate": 0.0,
-  "repaired_count": 88,
-  "repaired_rate": 0.88,
+  "repaired_count": 13,
+  "repaired_rate": 0.13,
   "unrepaired_count": 0,
   "unrepaired_rate": 0.0,
   "forced_override_count": 0,
@@ -164,354 +164,180 @@
       "player_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush."
     },
     {
-      "turn_index": 19,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "ok": true,
-      "mismatches": {},
-      "before_repair": {
-        "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
-        "mismatch_count": 1,
-        "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
-          }
-        },
-        "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-        }
-      },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-    },
-    {
       "turn_index": 20,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
       "ok": true,
       "mismatches": {},
       "before_repair": {
         "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "canonical_turn_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
         "candidate_count": 3,
         "mismatch_count": 1,
         "mismatches": {
           "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+            "expected": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
             "actual": "I protect the wagon and fight the bandits."
           }
         },
         "candidates": {
           "canonical_turn_action": "I protect the wagon and fight the bandits.",
           "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+          "progress_quality.player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node."
         }
       },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+      "progress_quality_player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
+      "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node."
     },
     {
       "turn_index": 21,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
       "ok": true,
       "mismatches": {},
       "before_repair": {
         "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "canonical_turn_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
         "candidate_count": 3,
         "mismatch_count": 1,
         "mismatches": {
           "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+            "expected": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
             "actual": "I protect the wagon and fight the bandits."
           }
         },
         "candidates": {
           "canonical_turn_action": "I protect the wagon and fight the bandits.",
           "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+          "progress_quality.player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues."
         }
       },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+      "progress_quality_player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
+      "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues."
     },
     {
       "turn_index": 22,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
       "ok": true,
       "mismatches": {},
       "before_repair": {
         "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "canonical_turn_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
         "candidate_count": 3,
         "mismatch_count": 1,
         "mismatches": {
           "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+            "expected": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
             "actual": "I protect the wagon and fight the bandits."
           }
         },
         "candidates": {
           "canonical_turn_action": "I protect the wagon and fight the bandits.",
           "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+          "progress_quality.player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues."
         }
       },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+      "progress_quality_player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
+      "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues."
     },
     {
       "turn_index": 23,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
       "ok": true,
       "mismatches": {},
       "before_repair": {
         "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "canonical_turn_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
         "candidate_count": 3,
         "mismatch_count": 1,
         "mismatches": {
           "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+            "expected": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
             "actual": "I protect the wagon and fight the bandits."
           }
         },
         "candidates": {
           "canonical_turn_action": "I protect the wagon and fight the bandits.",
           "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+          "progress_quality.player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording."
         }
       },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-    },
-    {
-      "turn_index": 24,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "ok": true,
-      "mismatches": {},
-      "before_repair": {
-        "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
-        "mismatch_count": 1,
-        "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
-          }
-        },
-        "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-        }
-      },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+      "progress_quality_player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
+      "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording."
     },
     {
       "turn_index": 25,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
       "ok": true,
       "mismatches": {},
       "before_repair": {
         "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "canonical_turn_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
         "candidate_count": 3,
         "mismatch_count": 1,
         "mismatches": {
           "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
+            "expected": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+            "actual": "I search the bandit's satchel for proof."
           }
         },
         "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+          "canonical_turn_action": "I search the bandit's satchel for proof.",
+          "player_action": "I search the bandit's satchel for proof.",
+          "progress_quality.player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill."
         }
       },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+      "progress_quality_player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill.",
+      "player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill."
     },
     {
       "turn_index": 26,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
       "ok": true,
       "mismatches": {},
       "before_repair": {
         "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+        "canonical_turn_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
         "candidate_count": 3,
         "mismatch_count": 1,
         "mismatches": {
           "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
+            "expected": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+            "actual": "I return to Bran with the marked coin proof."
           }
         },
         "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+          "canonical_turn_action": "I return to Bran with the marked coin proof.",
+          "player_action": "I return to Bran with the marked coin proof.",
+          "progress_quality.player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill."
         }
       },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+      "progress_quality_player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
+      "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill."
     },
     {
-      "turn_index": 27,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "turn_index": 81,
+      "canonical_turn_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
       "ok": true,
       "mismatches": {},
       "before_repair": {
         "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
+        "canonical_turn_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+        "candidate_count": 4,
         "mismatch_count": 1,
         "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
+          "result.action": {
+            "expected": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+            "actual": "The travel action resolves according to the turn contract."
           }
         },
         "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+          "canonical_turn_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+          "player_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+          "progress_quality.player_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+          "result.action": "The travel action resolves according to the turn contract."
         }
       },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-    },
-    {
-      "turn_index": 28,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "ok": true,
-      "mismatches": {},
-      "before_repair": {
-        "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
-        "mismatch_count": 1,
-        "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
-          }
-        },
-        "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-        }
-      },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-    },
-    {
-      "turn_index": 29,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "ok": true,
-      "mismatches": {},
-      "before_repair": {
-        "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
-        "mismatch_count": 1,
-        "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
-          }
-        },
-        "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-        }
-      },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-    },
-    {
-      "turn_index": 30,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "ok": true,
-      "mismatches": {},
-      "before_repair": {
-        "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
-        "mismatch_count": 1,
-        "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
-          }
-        },
-        "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-        }
-      },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-    },
-    {
-      "turn_index": 31,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "ok": true,
-      "mismatches": {},
-      "before_repair": {
-        "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
-        "mismatch_count": 1,
-        "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
-          }
-        },
-        "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-        }
-      },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-    },
-    {
-      "turn_index": 32,
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "ok": true,
-      "mismatches": {},
-      "before_repair": {
-        "ok": false,
-        "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-        "candidate_count": 3,
-        "mismatch_count": 1,
-        "mismatches": {
-          "player_action": {
-            "expected": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-            "actual": "I protect the wagon and fight the bandits."
-          }
-        },
-        "candidates": {
-          "canonical_turn_action": "I protect the wagon and fight the bandits.",
-          "player_action": "I protect the wagon and fight the bandits.",
-          "progress_quality.player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
-        }
-      },
-      "progress_quality_player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next."
+      "progress_quality_player_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route.",
+      "player_action": "I warn the east road teamsters that the Sable Chain handler plans to choke the supply route."
     }
   ]
 }

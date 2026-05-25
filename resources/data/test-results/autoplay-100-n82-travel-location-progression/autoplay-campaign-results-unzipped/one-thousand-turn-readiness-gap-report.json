@@ -70,7 +70,7 @@
           "story_arc_budget_ok": true,
           "faction_bytes": 242,
           "faction_budget_ok": true,
-          "faction_event_count": 2
+          "faction_event_count": 50
         }
       },
       "expected": "old NPC memories are dropped or summarized by deterministic budget policy",
@@ -92,7 +92,7 @@
           "story_arc_budget_ok": true,
           "faction_bytes": 242,
           "faction_budget_ok": true,
-          "faction_event_count": 2
+          "faction_event_count": 50
         }
       },
       "expected": "old arc/faction/pressure history is compacted or summarized",
@@ -161,8 +161,8 @@
       "severity": "advisory",
       "value": {
         "encounter_count": 1,
-        "event_count": 328,
-        "direct_graph_combat_count": 328
+        "event_count": 16,
+        "direct_graph_combat_count": 16
       },
       "expected": "some deterministic combat/consequence coverage exists",
       "message": "Combat must at least appear in the deterministic run.",
@@ -173,12 +173,12 @@
       "ok": true,
       "severity": "advisory",
       "value": {
-        "real_round_event_count": 164,
-        "real_attack_event_count": 328,
-        "real_damage_event_count": 5638,
-        "real_resolution_event_count": 832,
-        "direct_graph_combat_count": 328,
-        "abstract_round_event_count": 164,
+        "real_round_event_count": 31,
+        "real_attack_event_count": 274,
+        "real_damage_event_count": 6367,
+        "real_resolution_event_count": 70,
+        "direct_graph_combat_count": 16,
+        "abstract_round_event_count": 8,
         "direct_graph_rounds_ok": true,
         "missing_real_lifecycle_parts": []
       },
@@ -191,8 +191,8 @@
       "ok": true,
       "severity": "advisory",
       "value": {
-        "event_count": 2,
-        "world_signal_count": 2,
+        "event_count": 50,
+        "world_signal_count": 50,
         "faction_compaction_count": 0
       },
       "expected": "faction consequences exist",
@@ -204,7 +204,7 @@
       "ok": true,
       "severity": "advisory",
       "value": {
-        "repaired_count": 91,
+        "repaired_count": 39,
         "repair_or_mismatch_rate": 0.0
       },
       "expected": "dialogue/action relevance repairs stay below 35%",
@@ -219,11 +219,11 @@
         "ok": true,
         "budget_1000_turn_bytes": 786432000,
         "turns_sampled": 100,
-        "operational_bytes_sampled": 2984661,
-        "operational_bytes_per_turn": 29846.61,
-        "operational_projected_1000_turn_bytes": 29846610,
-        "full_debug_bytes_sampled": 287762333,
-        "full_debug_projected_1000_turn_bytes": 2877623330,
+        "operational_bytes_sampled": 3015414,
+        "operational_bytes_per_turn": 30154.14,
+        "operational_projected_1000_turn_bytes": 30154140,
+        "full_debug_bytes_sampled": 320799737,
+        "full_debug_projected_1000_turn_bytes": 3207997370,
         "monolithic_full_transcript_written": false,
         "policy": "n1176_review_chunks_are_operational; monolithic full-transcript.json is opt-in debug output"
       },
@@ -272,9 +272,9 @@
     "ok": true,
     "advisory_only": true,
     "dialogue_repair_count_source": "dialogue-action-relevance-summary.json",
-    "previous_gap_dialogue_repaired_count": 91,
-    "refreshed_gap_dialogue_repaired_count": 91,
-    "artifact_dialogue_repaired_count": 91,
+    "previous_gap_dialogue_repaired_count": 39,
+    "refreshed_gap_dialogue_repaired_count": 39,
+    "artifact_dialogue_repaired_count": 39,
     "previous_gap_repair_or_mismatch_rate": 0.0,
     "refreshed_gap_repair_or_mismatch_rate": 0.0,
     "artifact_repair_or_mismatch_rate": 0.0,

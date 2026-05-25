@@ -2,21 +2,22 @@
   "format_version": "dialogue_stale_source_summary_v1",
   "ok": true,
   "checked_count": 100,
-  "repaired_count": 91,
-  "repair_rate": 0.91,
+  "repaired_count": 39,
+  "repair_rate": 0.39,
   "by_source": {
-    "scenario_progression_graph": 13,
-    "llm_player_agent": 78
+    "scenario_progression_graph": 34,
+    "llm_player_agent": 5
   },
   "by_reason": {
-    "empty_presentation": 91
+    "empty_presentation": 34,
+    "unsupported_combat_claim_preselection_suppressed": 5
   },
   "by_action_category": {
-    "mixed": 90,
+    "mixed": 38,
     "travel": 1
   },
   "by_presentation_category": {
-    "general": 91
+    "general": 39
   },
   "examples": [
     {
@@ -125,57 +126,57 @@
     },
     {
       "turn_index": 19,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Report the current findings to Mira and ask which route edge should advance next.",
+      "canonical_turn_action": "Report the current findings to Mira and ask which route edge should advance next.",
       "source": "llm_player_agent",
       "reason": "empty_presentation",
       "selected_narration_preview": ""
     },
     {
       "turn_index": 20,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
+      "canonical_turn_action": "Resolve the immediate blocker at Old Wagon Road so bandit pressure and missing wagon clues can advance to the next route node.",
       "source": "llm_player_agent",
       "reason": "empty_presentation",
       "selected_narration_preview": ""
     },
     {
       "turn_index": 21,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
+      "canonical_turn_action": "Restock, repair, or recruit at Old Wagon Road before pushing deeper into bandit pressure and missing wagon clues.",
       "source": "llm_player_agent",
       "reason": "empty_presentation",
       "selected_narration_preview": ""
     },
     {
       "turn_index": 22,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
+      "canonical_turn_action": "Ask a different witness near Old Wagon Road to verify the last clue before continuing bandit pressure and missing wagon clues.",
       "source": "llm_player_agent",
       "reason": "empty_presentation",
       "selected_narration_preview": ""
     },
     {
       "turn_index": 23,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "player_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
+      "canonical_turn_action": "Check the alternate path from Old Wagon Road to Roadside Shrine instead of repeating the same objective wording.",
       "source": "llm_player_agent",
       "reason": "empty_presentation",
       "selected_narration_preview": ""
     },
     {
       "turn_index": 24,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "source": "llm_player_agent",
+      "player_action": "I question the captured bandit.",
+      "canonical_turn_action": "I question the captured bandit.",
+      "source": "scenario_progression_graph",
       "reason": "empty_presentation",
       "selected_narration_preview": ""
     },
     {
-      "turn_index": 25,
-      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
-      "source": "llm_player_agent",
+      "turn_index": 27,
+      "player_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+      "canonical_turn_action": "I ask Bran what he knows about the old mill and who might be using it now.",
+      "source": "scenario_progression_graph",
       "reason": "empty_presentation",
       "selected_narration_preview": ""
     }

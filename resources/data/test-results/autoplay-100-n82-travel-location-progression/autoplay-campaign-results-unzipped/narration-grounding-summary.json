@@ -2,17 +2,23 @@
   "ok": true,
   "checked_count": 100,
   "invalid_count": 0,
-  "fallback_used_count": 0,
+  "fallback_used_count": 5,
   "violation_counts": {},
   "selected_candidate_counts": {
-    "primary": 100
+    "deterministic_fallback": 0,
+    "llm_safe_fallback": 10,
+    "primary": 95
   },
   "fallback_source_counts": {
-    "none": 100
+    "deterministic_fallback": 0,
+    "llm_safe_fallback": 10,
+    "none": 95
   },
-  "primary_violation_counts": {},
-  "unsupported_combat_claim_preselection_suppressed_count": 0,
-  "raw_unsupported_combat_claim_count": 0,
+  "primary_violation_counts": {
+    "unsupported_combat_claim": 5
+  },
+  "unsupported_combat_claim_preselection_suppressed_count": 5,
+  "raw_unsupported_combat_claim_count": 5,
   "unsupported_combat_claim_preselection_suppression_match_ok": true,
   "format_version": "narration_grounding_summary_v2_n11621"
 }

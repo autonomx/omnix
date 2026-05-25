@@ -4,8 +4,8 @@
   "npc_count": 3,
   "schedule_event_count": 32,
   "agency_event_count": 32,
-  "world_signal_count": 7,
-  "memory_event_count": 7,
+  "world_signal_count": 175,
+  "memory_event_count": 175,
   "npc_presence": {
     "npc:bran": {
       "npc_id": "npc:bran",
@@ -908,8 +908,8 @@
   ],
   "world_signals": [],
   "memory_events": [],
-  "direct_graph_agency_count": 7,
-  "event_count": 7,
+  "direct_graph_agency_count": 175,
+  "event_count": 175,
   "n119_goal_agency": {
     "format_version": "n1193_npc_goal_agency_summary_v2",
     "ok": true,

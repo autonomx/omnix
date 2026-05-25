@@ -17,10 +17,10 @@
   "service_resolver_veto_summary": {
     "format_version": "n11619_service_veto_regression_summary_v1",
     "ok": true,
-    "candidate_document_service_false_positive_action_count": 0,
+    "candidate_document_service_false_positive_action_count": 32,
     "vetoed_count": 0,
     "remaining_violation_count": 0,
-    "prompt_only_service_category_block_count": 0,
+    "prompt_only_service_category_block_count": 32,
     "vetoed_rate": 0.0,
     "vetoed_turns": [],
     "remaining_violations": [],
@@ -28,17 +28,17 @@
   },
   "repair_pressure_breakdown": {
     "format_version": "n11620_repair_pressure_breakdown_v4",
-    "metadata_repaired_count": 96,
-    "category_reclassified_count": 86,
-    "dialogue_relevance_repaired_count": 91,
+    "metadata_repaired_count": 69,
+    "category_reclassified_count": 49,
+    "dialogue_relevance_repaired_count": 39,
     "service_resolver_veto_count": 0,
     "dominant_sources": {
-      "provider_metadata_or_shape_repair": 96,
-      "provider_category_reclassification": 86,
-      "dialogue_action_relevance_repair": 91,
+      "provider_metadata_or_shape_repair": 69,
+      "provider_category_reclassification": 49,
+      "dialogue_action_relevance_repair": 39,
       "service_resolver_veto": 0,
       "unsupported_combat_claim_suppressed": 0,
-      "unsupported_combat_claim_preselection_suppressed": 0
+      "unsupported_combat_claim_preselection_suppressed": 5
     },
     "note": "Counts are diagnostic repair pressure, not additional authoritative simulation outcomes.",
     "dialogue_relevance_repair_count_source": "dialogue_action_relevance_summary",
@@ -49,8 +49,8 @@
       "category_count": 0
     },
     "unsupported_combat_claim_suppressed_count": 0,
-    "unsupported_combat_claim_preselection_suppressed_count": 0,
-    "raw_unsupported_combat_claim_count": 0,
+    "unsupported_combat_claim_preselection_suppressed_count": 5,
+    "raw_unsupported_combat_claim_count": 5,
     "unsupported_combat_claim_preselection_suppression_match_ok": true,
     "metadata_repair_count_source": "background_presentation_attachment_summary",
     "category_reclassified_count_source": "background_presentation_attachment_summary"
@@ -58,18 +58,147 @@
   "prompt_contract_service_veto_summary": {
     "format_version": "n11618_prompt_contract_veto_regression_summary_v4",
     "ok": true,
-    "synced_count": 0,
+    "synced_count": 32,
     "remaining_violation_count": 0,
     "guidance_only_offender_count_suppressed": 0,
-    "synced_turns": [],
+    "synced_turns": [
+      {
+        "turn_index": 25,
+        "player_action": "I search the bandit's satchel for letters, marked coins, or anything tying them to the old mill."
+      },
+      {
+        "turn_index": 26,
+        "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill."
+      },
+      {
+        "turn_index": 28,
+        "player_action": "I travel to the old mill ruins to follow the marked coin lead."
+      },
+      {
+        "turn_index": 29,
+        "player_action": "I inspect the old mill cellar, trapdoor, and floor marks for signs of recent use."
+      },
+      {
+        "turn_index": 31,
+        "player_action": "I read the wax-sealed order from the hidden smuggler cache."
+      },
+      {
+        "turn_index": 34,
+        "player_action": "I inspect the shrine grounds for fresh tracks, ash, hidden marks, or signs of the Black Briar contact."
+      },
+      {
+        "turn_index": 40,
+        "player_action": "I recover the tollhouse manifest before the Black Briar contact can remove it."
+      },
+      {
+        "turn_index": 41,
+        "player_action": "I confront the Black Briar contact with the recovered manifest and demand the truth about Captain Voss."
+      },
+      {
+        "turn_index": 42,
+        "player_action": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks."
+      },
+      {
+        "turn_index": 46,
+        "player_action": "I present the tollhouse manifest and marked evidence to the magistrate."
+      },
+      {
+        "turn_index": 50,
+        "player_action": "I answer Captain Voss's accusation by tying the manifest, the marked coin, and the witnesses together."
+      },
+      {
+        "turn_index": 51,
+        "player_action": "I press Captain Voss to explain why his initials appear on the tollhouse manifest."
+      },
+      {
+        "turn_index": 56,
+        "player_action": "I study the manifest payment marks to trace who funded Captain Voss."
+      },
+      {
+        "turn_index": 57,
+        "player_action": "I ask Bran what he knows about the Silver Crow cipher on Voss's payment marks."
+      },
+      {
+        "turn_index": 60,
+        "player_action": "I inspect the cooperage cellar for hidden doors, cargo marks, or the Silver Crow cache."
+      },
+      {
+        "turn_index": 62,
+        "player_action": "I read and decipher the coded Silver Crow ledger from the hidden cache."
+      },
+      {
+        "turn_index": 63,
+        "player_action": "I compare the ledger names and seals to identify the Sable Chain agent funding the Silver Crow."
+      },
+      {
+        "turn_index": 64,
+        "player_action": "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence."
+      },
+      {
+        "turn_index": 65,
+        "player_action": "I confront Agent Marlowe with the Silver Crow ledger and demand the truth about the Sable Chain."
+      },
+      {
+        "turn_index": 68,
+        "player_action": "I secure the Silver Crow ledger, the manifest, and Marlowe's proof before the Sable Chain can steal them."
+      },
+      {
+        "turn_index": 72,
+        "player_action": "I inspect the River Gate warehouse marks, crates, and chalk signs for Sable Chain codes."
+      },
+      {
+        "turn_index": 73,
+        "player_action": "I search the warehouse office for Sable Chain countermove orders."
+      },
+      {
+        "turn_index": 77,
+        "player_action": "I capture the strike team's sealed orders before they can destroy them."
+      },
+      {
+        "turn_index": 78,
+        "player_action": "I report to Bran and Garran that the Sable Chain countermove failed and the sealed orders point to a higher handler."
+      },
+      {
+        "turn_index": 79,
+        "player_action": "I review the sealed orders with Bran and Garran to identify the higher Sable Chain handler."
+      },
+      {
+        "turn_index": 80,
+        "player_action": "I decode the handler's route cipher from the sealed orders."
+      },
+      {
+        "turn_index": 83,
+        "player_action": "I disable the false toll markers the Sable Chain placed along the east road."
+      },
+      {
+        "turn_index": 89,
+        "player_action": "I study the captured route papers to identify the Sable Chain handler's signature."
+      },
+      {
+        "turn_index": 92,
+        "player_action": "I trace Veska's courier route from the captured route papers and sealed orders."
+      },
+      {
+        "turn_index": 94,
+        "player_action": "I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail."
+      },
+      {
+        "turn_index": 96,
+        "player_action": "I recover Veska's coded message from the intercepted courier."
+      },
+      {
+        "turn_index": 97,
+        "player_action": "I decode Veska's coded message to learn where the Sable Chain leadership is moving."
+      }
+    ],
     "remaining_violations": [],
     "policy": "veto_only_no_forced_investigation_classification_llm_keeps_intent_classification",
     "scan_mode": "strictly_bounded_prompt_targets_only_guidance_aware"
   },
   "unsupported_combat_claim_cleanup": {
     "format_version": "unsupported_combat_claim_cleanup_v2_n11621",
-    "preselection_suppressed_count": 0,
-    "raw_unsupported_combat_claim_count": 0,
+    "preselection_suppressed_count": 5,
+    "raw_unsupported_combat_claim_count": 5,
     "suppression_match_ok": true,
     "ok": true,
     "policy": "unsupported combat claims are sanitized into llm_safe_fallback before deterministic fallback selection"

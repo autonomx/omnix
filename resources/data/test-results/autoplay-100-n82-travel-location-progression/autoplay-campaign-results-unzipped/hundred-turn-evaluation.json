@@ -32,16 +32,20 @@
         "selected_output_invalid_count": 0,
         "provider_json_parse_failed_count": 0,
         "provider_invalid_count": 0,
-        "fallback_used_count": 0,
-        "fallback_used_rate": 0.0,
+        "fallback_used_count": 5,
+        "fallback_used_rate": 0.05,
         "deterministic_fallback_count": 0,
         "deterministic_fallback_rate": 0.0,
-        "llm_safe_fallback_count": 0,
+        "llm_safe_fallback_count": 15,
         "fallback_source_counts": {
-          "none": 100
+          "deterministic_fallback": 0,
+          "llm_safe_fallback": 15,
+          "none": 95
         },
         "selected_candidate_counts": {
-          "primary": 100
+          "deterministic_fallback": 0,
+          "llm_safe_fallback": 15,
+          "primary": 95
         },
         "violation_counts": {},
         "notes": [
@@ -49,8 +53,8 @@
           "selected output is considered safe if deterministic fallback or safe_fallback was selected and no selected_output_invalid_count is reported.",
           "deterministic fallback is allowed up to 10% for 100-turn smoke evaluation."
         ],
-        "unsupported_combat_claim_preselection_suppressed_count": 0,
-        "raw_unsupported_combat_claim_count": 0,
+        "unsupported_combat_claim_preselection_suppressed_count": 5,
+        "raw_unsupported_combat_claim_count": 5,
         "unsupported_combat_claim_preselection_suppression_match_ok": true
       },
       "expected": {
@@ -110,13 +114,13 @@
     "performance_turn_latency": {
       "ok": true,
       "value": {
-        "avg_turn_seconds": 7.860236,
-        "p95_turn_seconds": 13.43517
+        "avg_turn_seconds": 6.491657,
+        "p95_turn_seconds": 9.38443
       },
       "expected": {
         "p95_turn_seconds": "<= 30.0"
       },
-      "message": "Average turn latency 7.86s, p95 13.44s."
+      "message": "Average turn latency 6.49s, p95 9.38s."
     },
     "mechanics_coverage_required": {
       "ok": true,
@@ -151,9 +155,9 @@
     "story_arc_aftermath_present": {
       "ok": true,
       "value": {
-        "aftermath_event_count": 670,
-        "direct_graph_aftermath_count": 670,
-        "world_signal_count": 14,
+        "aftermath_event_count": 382,
+        "direct_graph_aftermath_count": 382,
+        "world_signal_count": 350,
         "npc_memory_event_count": 0,
         "followup_hook_count": 0,
         "seeded_followup_arc_count": 0
@@ -165,7 +169,7 @@
       "ok": true,
       "value": {
         "faction_count": 2,
-        "direct_graph_reputation_event_count": 7,
+        "direct_graph_reputation_event_count": 175,
         "factions": [
           {
             "faction_id": "faction:rusty_flagon_locals",
@@ -189,8 +193,8 @@
     "followup_arc_progression_present": {
       "ok": true,
       "value": {
-        "progression_event_count": 677,
-        "direct_graph_progression_count": 677,
+        "progression_event_count": 557,
+        "direct_graph_progression_count": 557,
         "progressed_count": 0,
         "progressed_arc_ids": [],
         "world_signal_count": 0
@@ -201,9 +205,9 @@
     "faction_pressure_present": {
       "ok": true,
       "value": {
-        "pressure_event_count": 663,
-        "direct_graph_pressure_count": 663,
-        "world_signal_count": 663,
+        "pressure_event_count": 207,
+        "direct_graph_pressure_count": 207,
+        "world_signal_count": 207,
         "by_faction": {}
       },
       "expected": "at least one faction pressure event",
@@ -235,9 +239,9 @@
     "pressure_pacing_active": {
       "ok": true,
       "value": {
-        "accepted_pressure_count": 663,
-        "accepted_pressure_event_count": 663,
-        "direct_graph_pressure_count": 663,
+        "accepted_pressure_count": 207,
+        "accepted_pressure_event_count": 207,
+        "direct_graph_pressure_count": 207,
         "direct_graph_pacing_bridge_active": true,
         "rejected_pressure_event_count": 0,
         "rejected_by_reason": {}
@@ -260,8 +264,8 @@
     "escalation_arc_progression_present": {
       "ok": true,
       "value": {
-        "progression_event_count": 991,
-        "direct_graph_escalation_count": 991,
+        "progression_event_count": 223,
+        "direct_graph_escalation_count": 223,
         "progressed_count": 0,
         "progressed_arc_ids": [],
         "pressure_event_count": 0,
@@ -325,12 +329,12 @@
     "npc_agency_present": {
       "ok": true,
       "value": {
-        "event_count": 7,
-        "direct_graph_agency_count": 7,
+        "event_count": 175,
+        "direct_graph_agency_count": 175,
         "npc_count": 3,
         "schedule_event_count": 32,
         "agency_event_count": 0,
-        "memory_event_count": 7
+        "memory_event_count": 175
       },
       "expected": "at least one deterministic NPC agency event",
       "message": "100-turn readiness should demonstrate schedule-driven NPC agency."
@@ -359,12 +363,12 @@
       "ok": true,
       "value": {
         "encounter_count": 1,
-        "event_count": 328,
+        "event_count": 16,
         "injury_count": 0,
         "consequence_event_count": 1,
         "economy_hint_count": 0,
         "by_outcome": {
-          "direct_graph_resolved": 164
+          "direct_graph_resolved": 8
         }
       },
       "expected": "at least one deterministic combat encounter with lifecycle events",
@@ -373,11 +377,11 @@
     "faction_consequence_present": {
       "ok": true,
       "value": {
-        "event_count": 2,
-        "world_signal_count": 2,
+        "event_count": 50,
+        "world_signal_count": 50,
         "by_faction": {},
         "by_kind": {
-          "direct_graph_faction_consequence": 2
+          "direct_graph_faction_consequence": 50
         }
       },
       "expected": "at least one deterministic long-term faction consequence",
@@ -386,12 +390,12 @@
     "npc_reaction_present": {
       "ok": true,
       "value": {
-        "event_count": 2,
-        "memory_event_count": 2,
-        "world_signal_count": 2,
+        "event_count": 50,
+        "memory_event_count": 50,
+        "world_signal_count": 50,
         "by_npc": {},
         "by_kind": {
-          "direct_graph_npc_reaction": 2
+          "direct_graph_npc_reaction": 50
         }
       },
       "expected": "at least one deterministic NPC reaction to faction/consequence state",
@@ -403,7 +407,7 @@
         "checked_count": 100,
         "mismatch_count": 0,
         "mismatch_rate": 0.0,
-        "repaired_count": 91,
+        "repaired_count": 39,
         "unrepaired_count": 0,
         "source_gate_block_count": 0,
         "by_reason": {}
@@ -417,7 +421,7 @@
         "checked_count": 100,
         "mismatch_count": 0,
         "mismatch_rate": 0.0,
-        "repaired_count": 88,
+        "repaired_count": 13,
         "unrepaired_count": 0,
         "by_field": {}
       },
@@ -1417,6 +1421,44 @@
       },
       {
         "turn_index": 52,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 53,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 54,
         "hunger": 52,
         "thirst": 73,
         "fatigue": 27,
@@ -1437,7 +1479,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 53,
+        "turn_index": 55,
         "hunger": 53,
         "thirst": 75,
         "fatigue": 28,
@@ -1458,7 +1500,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 54,
+        "turn_index": 56,
         "hunger": 54,
         "thirst": 77,
         "fatigue": 29,
@@ -1479,7 +1521,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 55,
+        "turn_index": 57,
         "hunger": 55,
         "thirst": 79,
         "fatigue": 30,
@@ -1500,7 +1542,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 56,
+        "turn_index": 58,
         "hunger": 26,
         "thirst": 81,
         "fatigue": 31,
@@ -1521,7 +1563,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 57,
+        "turn_index": 59,
         "hunger": 27,
         "thirst": 83,
         "fatigue": 32,
@@ -1542,7 +1584,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 58,
+        "turn_index": 60,
         "hunger": 28,
         "thirst": 85,
         "fatigue": 33,
@@ -1563,7 +1605,26 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 59,
+        "turn_index": 61,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 62,
         "hunger": 29,
         "thirst": 87,
         "fatigue": 34,
@@ -1584,7 +1645,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 60,
+        "turn_index": 63,
         "hunger": 30,
         "thirst": 89,
         "fatigue": 35,
@@ -1605,7 +1666,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 61,
+        "turn_index": 64,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 36,
@@ -1626,7 +1687,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 62,
+        "turn_index": 65,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 37,
@@ -1645,7 +1706,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 63,
+        "turn_index": 66,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 38,
@@ -1664,7 +1725,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 64,
+        "turn_index": 67,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 39,
@@ -1683,7 +1744,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 65,
+        "turn_index": 68,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 40,
@@ -1702,7 +1763,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 66,
+        "turn_index": 69,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 41,
@@ -1723,7 +1784,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 67,
+        "turn_index": 70,
         "hunger": 37,
         "thirst": 73,
         "fatigue": 42,
@@ -1744,7 +1805,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 68,
+        "turn_index": 71,
         "hunger": 38,
         "thirst": 75,
         "fatigue": 43,
@@ -1765,7 +1826,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 69,
+        "turn_index": 72,
         "hunger": 39,
         "thirst": 77,
         "fatigue": 44,
@@ -1786,7 +1847,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 70,
+        "turn_index": 73,
         "hunger": 40,
         "thirst": 79,
         "fatigue": 45,
@@ -1807,7 +1868,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 71,
+        "turn_index": 74,
         "hunger": 41,
         "thirst": 81,
         "fatigue": 46,
@@ -1828,7 +1889,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 72,
+        "turn_index": 75,
         "hunger": 42,
         "thirst": 83,
         "fatigue": 47,
@@ -1849,7 +1910,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 73,
+        "turn_index": 76,
         "hunger": 43,
         "thirst": 85,
         "fatigue": 48,
@@ -1870,7 +1931,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 74,
+        "turn_index": 77,
         "hunger": 44,
         "thirst": 87,
         "fatigue": 49,
@@ -1891,7 +1952,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 75,
+        "turn_index": 78,
         "hunger": 45,
         "thirst": 89,
         "fatigue": 50,
@@ -1912,7 +1973,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 76,
+        "turn_index": 79,
         "hunger": 46,
         "thirst": 61,
         "fatigue": 26,
@@ -1933,7 +1994,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 77,
+        "turn_index": 80,
         "hunger": 47,
         "thirst": 63,
         "fatigue": 27,
@@ -1952,7 +2013,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 78,
+        "turn_index": 81,
         "hunger": 48,
         "thirst": 65,
         "fatigue": 28,
@@ -1971,7 +2032,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 79,
+        "turn_index": 82,
         "hunger": 49,
         "thirst": 67,
         "fatigue": 29,
@@ -1990,7 +2051,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 80,
+        "turn_index": 83,
         "hunger": 50,
         "thirst": 69,
         "fatigue": 30,
@@ -2009,7 +2070,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 81,
+        "turn_index": 84,
         "hunger": 51,
         "thirst": 71,
         "fatigue": 31,
@@ -2030,7 +2091,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 82,
+        "turn_index": 85,
         "hunger": 52,
         "thirst": 73,
         "fatigue": 32,
@@ -2051,7 +2112,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 83,
+        "turn_index": 86,
         "hunger": 53,
         "thirst": 75,
         "fatigue": 33,
@@ -2072,7 +2133,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 84,
+        "turn_index": 87,
         "hunger": 54,
         "thirst": 77,
         "fatigue": 34,
@@ -2093,7 +2154,26 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 85,
+        "turn_index": 88,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 89,
         "hunger": 55,
         "thirst": 79,
         "fatigue": 35,
@@ -2114,7 +2194,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 86,
+        "turn_index": 90,
         "hunger": 26,
         "thirst": 81,
         "fatigue": 36,
@@ -2135,7 +2215,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 87,
+        "turn_index": 91,
         "hunger": 27,
         "thirst": 83,
         "fatigue": 37,
@@ -2156,7 +2236,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 88,
+        "turn_index": 92,
         "hunger": 28,
         "thirst": 85,
         "fatigue": 38,
@@ -2177,7 +2257,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 89,
+        "turn_index": 93,
         "hunger": 29,
         "thirst": 87,
         "fatigue": 39,
@@ -2198,7 +2278,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 90,
+        "turn_index": 94,
         "hunger": 30,
         "thirst": 89,
         "fatigue": 40,
@@ -2219,7 +2299,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 91,
+        "turn_index": 95,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 41,
@@ -2240,7 +2320,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 92,
+        "turn_index": 96,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 42,
@@ -2259,7 +2339,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 93,
+        "turn_index": 97,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 43,
@@ -2278,7 +2358,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 94,
+        "turn_index": 98,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 44,
@@ -2297,7 +2377,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 95,
+        "turn_index": 99,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 45,
@@ -2316,94 +2396,10 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 96,
+        "turn_index": 100,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 46,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 97,
-        "hunger": 37,
-        "thirst": 73,
-        "fatigue": 47,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 98,
-        "hunger": 38,
-        "thirst": 75,
-        "fatigue": 48,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 99,
-        "hunger": 39,
-        "thirst": 77,
-        "fatigue": 49,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 100,
-        "hunger": 40,
-        "thirst": 79,
-        "fatigue": 50,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -2423,9 +2419,9 @@
     ],
     "trend_row_count": 100,
     "pressure_turn_count": 100,
-    "survival_warning_count": 38,
+    "survival_warning_count": 34,
     "warning_counts_by_type": {
-      "thirst_high": 38
+      "thirst_high": 34
     },
     "relief_action_count": 7,
     "relief_counts_by_kind": {
@@ -2459,9 +2455,9 @@
     ],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
-      "hunger_delta": 38,
-      "thirst_delta": 76,
-      "fatigue_delta": 48
+      "hunger_delta": 34,
+      "thirst_delta": 68,
+      "fatigue_delta": 44
     },
     "max_needs": {
       "hunger": 55,
@@ -2469,9 +2465,9 @@
       "fatigue": 50
     },
     "final_needs": {
-      "hunger": 40,
-      "thirst": 79,
-      "fatigue": 50
+      "hunger": 36,
+      "thirst": 71,
+      "fatigue": 46
     },
     "balance_summary": {
       "format_version": "n1278_survival_balance_summary_v1",
@@ -2513,7 +2509,7 @@
       "promotion_called_rows": 100,
       "promotion_promoted_rows": 5,
       "persistence_called_rows": 100,
-      "persistence_applied_rows": 99,
+      "persistence_applied_rows": 95,
       "override_called_rows": 100,
       "override_applied_rows": 3,
       "turn_contract_attached_rows": 100,
@@ -2835,7 +2831,7 @@
       ],
       "applied_samples": [
         {
-          "turn_index": 61,
+          "turn_index": 64,
           "override_called": true,
           "override_applied": true,
           "override_reason": "critical_thirst_hard_override",
@@ -2854,7 +2850,7 @@
           }
         },
         {
-          "turn_index": 76,
+          "turn_index": 79,
           "override_called": true,
           "override_applied": true,
           "override_reason": "critical_thirst_hard_override",
@@ -2873,7 +2869,7 @@
           }
         },
         {
-          "turn_index": 91,
+          "turn_index": 95,
           "override_called": true,
           "override_applied": true,
           "override_reason": "critical_thirst_hard_override",
@@ -2902,11 +2898,11 @@
         "resource_change_rows": 100,
         "climate_tick_source_rows": 100,
         "survival_action_rows": 7,
-        "survival_suggestion_rows": 9,
+        "survival_suggestion_rows": 8,
         "relief_applied_rows": 7,
-        "warning_rows": 38,
-        "nonzero_need_rows": 99,
-        "nonzero_delta_rows": 98,
+        "warning_rows": 34,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 94,
         "runtime_probe_rows": 100,
         "critical_thirst_override_called_rows": 100,
         "critical_thirst_override_applied_rows": 3
@@ -2932,11 +2928,11 @@
         "resource_change_rows": 100,
         "climate_tick_source_rows": 100,
         "survival_action_rows": 7,
-        "survival_suggestion_rows": 9,
+        "survival_suggestion_rows": 8,
         "relief_applied_rows": 7,
-        "warning_rows": 38,
-        "nonzero_need_rows": 99,
-        "nonzero_delta_rows": 98,
+        "warning_rows": 34,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 94,
         "runtime_probe_rows": 100,
         "critical_thirst_override_called_rows": 100,
         "critical_thirst_override_applied_rows": 3
@@ -3925,6 +3921,44 @@
     },
     {
       "turn_index": 52,
+      "hunger": 0,
+      "thirst": 0,
+      "fatigue": 0,
+      "hunger_delta": 0,
+      "thirst_delta": 0,
+      "fatigue_delta": 0,
+      "warning_count": 0,
+      "warnings": [],
+      "relief_action_kind": "",
+      "relief_applied": false,
+      "relief_blocked": false,
+      "source_present": true,
+      "runtime_probe_present": true,
+      "critical_thirst_override_called": true,
+      "critical_thirst_override_applied": false,
+      "critical_thirst_override_reason": "thirst_below_critical_threshold"
+    },
+    {
+      "turn_index": 53,
+      "hunger": 0,
+      "thirst": 0,
+      "fatigue": 0,
+      "hunger_delta": 0,
+      "thirst_delta": 0,
+      "fatigue_delta": 0,
+      "warning_count": 0,
+      "warnings": [],
+      "relief_action_kind": "",
+      "relief_applied": false,
+      "relief_blocked": false,
+      "source_present": true,
+      "runtime_probe_present": true,
+      "critical_thirst_override_called": true,
+      "critical_thirst_override_applied": false,
+      "critical_thirst_override_reason": "thirst_below_critical_threshold"
+    },
+    {
+      "turn_index": 54,
       "hunger": 52,
       "thirst": 73,
       "fatigue": 27,
@@ -3945,7 +3979,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 53,
+      "turn_index": 55,
       "hunger": 53,
       "thirst": 75,
       "fatigue": 28,
@@ -3966,7 +4000,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 54,
+      "turn_index": 56,
       "hunger": 54,
       "thirst": 77,
       "fatigue": 29,
@@ -3987,7 +4021,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 55,
+      "turn_index": 57,
       "hunger": 55,
       "thirst": 79,
       "fatigue": 30,
@@ -4008,7 +4042,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 56,
+      "turn_index": 58,
       "hunger": 26,
       "thirst": 81,
       "fatigue": 31,
@@ -4029,7 +4063,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 57,
+      "turn_index": 59,
       "hunger": 27,
       "thirst": 83,
       "fatigue": 32,
@@ -4050,7 +4084,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 58,
+      "turn_index": 60,
       "hunger": 28,
       "thirst": 85,
       "fatigue": 33,
@@ -4071,7 +4105,26 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 59,
+      "turn_index": 61,
+      "hunger": 0,
+      "thirst": 0,
+      "fatigue": 0,
+      "hunger_delta": 0,
+      "thirst_delta": 0,
+      "fatigue_delta": 0,
+      "warning_count": 0,
+      "warnings": [],
+      "relief_action_kind": "",
+      "relief_applied": false,
+      "relief_blocked": false,
+      "source_present": true,
+      "runtime_probe_present": true,
+      "critical_thirst_override_called": true,
+      "critical_thirst_override_applied": false,
+      "critical_thirst_override_reason": "thirst_below_critical_threshold"
+    },
+    {
+      "turn_index": 62,
       "hunger": 29,
       "thirst": 87,
       "fatigue": 34,
@@ -4092,7 +4145,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 60,
+      "turn_index": 63,
       "hunger": 30,
       "thirst": 89,
       "fatigue": 35,
@@ -4113,7 +4166,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 61,
+      "turn_index": 64,
       "hunger": 31,
       "thirst": 61,
       "fatigue": 36,
@@ -4134,7 +4187,7 @@
       "critical_thirst_override_reason": "critical_thirst_hard_override"
     },
     {
-      "turn_index": 62,
+      "turn_index": 65,
       "hunger": 32,
       "thirst": 63,
       "fatigue": 37,
@@ -4153,7 +4206,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 63,
+      "turn_index": 66,
       "hunger": 33,
       "thirst": 65,
       "fatigue": 38,
@@ -4172,7 +4225,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 64,
+      "turn_index": 67,
       "hunger": 34,
       "thirst": 67,
       "fatigue": 39,
@@ -4191,7 +4244,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 65,
+      "turn_index": 68,
       "hunger": 35,
       "thirst": 69,
       "fatigue": 40,
@@ -4210,7 +4263,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 66,
+      "turn_index": 69,
       "hunger": 36,
       "thirst": 71,
       "fatigue": 41,
@@ -4231,7 +4284,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 67,
+      "turn_index": 70,
       "hunger": 37,
       "thirst": 73,
       "fatigue": 42,
@@ -4252,7 +4305,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 68,
+      "turn_index": 71,
       "hunger": 38,
       "thirst": 75,
       "fatigue": 43,
@@ -4273,7 +4326,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 69,
+      "turn_index": 72,
       "hunger": 39,
       "thirst": 77,
       "fatigue": 44,
@@ -4294,7 +4347,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 70,
+      "turn_index": 73,
       "hunger": 40,
       "thirst": 79,
       "fatigue": 45,
@@ -4315,7 +4368,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 71,
+      "turn_index": 74,
       "hunger": 41,
       "thirst": 81,
       "fatigue": 46,
@@ -4336,7 +4389,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 72,
+      "turn_index": 75,
       "hunger": 42,
       "thirst": 83,
       "fatigue": 47,
@@ -4357,7 +4410,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 73,
+      "turn_index": 76,
       "hunger": 43,
       "thirst": 85,
       "fatigue": 48,
@@ -4378,7 +4431,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 74,
+      "turn_index": 77,
       "hunger": 44,
       "thirst": 87,
       "fatigue": 49,
@@ -4399,7 +4452,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 75,
+      "turn_index": 78,
       "hunger": 45,
       "thirst": 89,
       "fatigue": 50,
@@ -4420,7 +4473,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 76,
+      "turn_index": 79,
       "hunger": 46,
       "thirst": 61,
       "fatigue": 26,
@@ -4441,7 +4494,7 @@
       "critical_thirst_override_reason": "critical_thirst_hard_override"
     },
     {
-      "turn_index": 77,
+      "turn_index": 80,
       "hunger": 47,
       "thirst": 63,
       "fatigue": 27,
@@ -4460,7 +4513,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 78,
+      "turn_index": 81,
       "hunger": 48,
       "thirst": 65,
       "fatigue": 28,
@@ -4479,7 +4532,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 79,
+      "turn_index": 82,
       "hunger": 49,
       "thirst": 67,
       "fatigue": 29,
@@ -4498,7 +4551,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 80,
+      "turn_index": 83,
       "hunger": 50,
       "thirst": 69,
       "fatigue": 30,
@@ -4517,7 +4570,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 81,
+      "turn_index": 84,
       "hunger": 51,
       "thirst": 71,
       "fatigue": 31,
@@ -4538,7 +4591,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 82,
+      "turn_index": 85,
       "hunger": 52,
       "thirst": 73,
       "fatigue": 32,
@@ -4559,7 +4612,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 83,
+      "turn_index": 86,
       "hunger": 53,
       "thirst": 75,
       "fatigue": 33,
@@ -4580,7 +4633,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 84,
+      "turn_index": 87,
       "hunger": 54,
       "thirst": 77,
       "fatigue": 34,
@@ -4601,7 +4654,26 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 85,
+      "turn_index": 88,
+      "hunger": 0,
+      "thirst": 0,
+      "fatigue": 0,
+      "hunger_delta": 0,
+      "thirst_delta": 0,
+      "fatigue_delta": 0,
+      "warning_count": 0,
+      "warnings": [],
+      "relief_action_kind": "",
+      "relief_applied": false,
+      "relief_blocked": false,
+      "source_present": true,
+      "runtime_probe_present": true,
+      "critical_thirst_override_called": true,
+      "critical_thirst_override_applied": false,
+      "critical_thirst_override_reason": "thirst_below_critical_threshold"
+    },
+    {
+      "turn_index": 89,
       "hunger": 55,
       "thirst": 79,
       "fatigue": 35,
@@ -4622,7 +4694,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 86,
+      "turn_index": 90,
       "hunger": 26,
       "thirst": 81,
       "fatigue": 36,
@@ -4643,7 +4715,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 87,
+      "turn_index": 91,
       "hunger": 27,
       "thirst": 83,
       "fatigue": 37,
@@ -4664,7 +4736,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 88,
+      "turn_index": 92,
       "hunger": 28,
       "thirst": 85,
       "fatigue": 38,
@@ -4685,7 +4757,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 89,
+      "turn_index": 93,
       "hunger": 29,
       "thirst": 87,
       "fatigue": 39,
@@ -4706,7 +4778,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 90,
+      "turn_index": 94,
       "hunger": 30,
       "thirst": 89,
       "fatigue": 40,
@@ -4727,7 +4799,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 91,
+      "turn_index": 95,
       "hunger": 31,
       "thirst": 61,
       "fatigue": 41,
@@ -4748,7 +4820,7 @@
       "critical_thirst_override_reason": "critical_thirst_hard_override"
     },
     {
-      "turn_index": 92,
+      "turn_index": 96,
       "hunger": 32,
       "thirst": 63,
       "fatigue": 42,
@@ -4767,7 +4839,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 93,
+      "turn_index": 97,
       "hunger": 33,
       "thirst": 65,
       "fatigue": 43,
@@ -4786,7 +4858,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 94,
+      "turn_index": 98,
       "hunger": 34,
       "thirst": 67,
       "fatigue": 44,
@@ -4805,7 +4877,7 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 95,
+      "turn_index": 99,
       "hunger": 35,
       "thirst": 69,
       "fatigue": 45,
@@ -4824,94 +4896,10 @@
       "critical_thirst_override_reason": "thirst_below_critical_threshold"
     },
     {
-      "turn_index": 96,
+      "turn_index": 100,
       "hunger": 36,
       "thirst": 71,
       "fatigue": 46,
-      "hunger_delta": 1,
-      "thirst_delta": 2,
-      "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
-      "relief_action_kind": "",
-      "relief_applied": false,
-      "relief_blocked": false,
-      "source_present": true,
-      "runtime_probe_present": true,
-      "critical_thirst_override_called": true,
-      "critical_thirst_override_applied": false,
-      "critical_thirst_override_reason": "thirst_below_critical_threshold"
-    },
-    {
-      "turn_index": 97,
-      "hunger": 37,
-      "thirst": 73,
-      "fatigue": 47,
-      "hunger_delta": 1,
-      "thirst_delta": 2,
-      "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
-      "relief_action_kind": "",
-      "relief_applied": false,
-      "relief_blocked": false,
-      "source_present": true,
-      "runtime_probe_present": true,
-      "critical_thirst_override_called": true,
-      "critical_thirst_override_applied": false,
-      "critical_thirst_override_reason": "thirst_below_critical_threshold"
-    },
-    {
-      "turn_index": 98,
-      "hunger": 38,
-      "thirst": 75,
-      "fatigue": 48,
-      "hunger_delta": 1,
-      "thirst_delta": 2,
-      "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
-      "relief_action_kind": "",
-      "relief_applied": false,
-      "relief_blocked": false,
-      "source_present": true,
-      "runtime_probe_present": true,
-      "critical_thirst_override_called": true,
-      "critical_thirst_override_applied": false,
-      "critical_thirst_override_reason": "thirst_below_critical_threshold"
-    },
-    {
-      "turn_index": 99,
-      "hunger": 39,
-      "thirst": 77,
-      "fatigue": 49,
-      "hunger_delta": 1,
-      "thirst_delta": 2,
-      "fatigue_delta": 1,
-      "warning_count": 1,
-      "warnings": [
-        "thirst_high"
-      ],
-      "relief_action_kind": "",
-      "relief_applied": false,
-      "relief_blocked": false,
-      "source_present": true,
-      "runtime_probe_present": true,
-      "critical_thirst_override_called": true,
-      "critical_thirst_override_applied": false,
-      "critical_thirst_override_reason": "thirst_below_critical_threshold"
-    },
-    {
-      "turn_index": 100,
-      "hunger": 40,
-      "thirst": 79,
-      "fatigue": 50,
       "hunger_delta": 1,
       "thirst_delta": 2,
       "fatigue_delta": 1,
@@ -4938,13 +4926,13 @@
     {
       "id": "n1251-survival-source",
       "title": "N125.1 Real Survival Metric Source Evidence",
-      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>100</td></tr><tr><td>climate_tick_source_rows</td><td>100</td></tr><tr><td>survival_action_rows</td><td>7</td></tr><tr><td>survival_suggestion_rows</td><td>9</td></tr><tr><td>relief_applied_rows</td><td>7</td></tr><tr><td>warning_rows</td><td>38</td></tr><tr><td>nonzero_need_rows</td><td>99</td></tr><tr><td>nonzero_delta_rows</td><td>98</td></tr><tr><td>runtime_probe_rows</td><td>100</td></tr><tr><td>critical_thirst_override_called_rows</td><td>100</td></tr><tr><td>critical_thirst_override_applied_rows</td><td>3</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1251-survival-source\" class=\"report-section n1251-survival-source\">\n  <h2>N125.1 Real Survival Metric Source Evidence</h2>\n  <p><strong>Gate:</strong> survival_metric_source_ok = True (advisory)</p>\n  <p><strong>Reasons:</strong> none</p>\n  <table><thead><tr><th>Coverage field</th><th>Count</th></tr></thead><tbody><tr><td>row_count</td><td>100</td></tr><tr><td>climate_survival_rows</td><td>100</td></tr><tr><td>resource_change_rows</td><td>100</td></tr><tr><td>climate_tick_source_rows</td><td>100</td></tr><tr><td>survival_action_rows</td><td>7</td></tr><tr><td>survival_suggestion_rows</td><td>8</td></tr><tr><td>relief_applied_rows</td><td>7</td></tr><tr><td>warning_rows</td><td>34</td></tr><tr><td>nonzero_need_rows</td><td>95</td></tr><tr><td>nonzero_delta_rows</td><td>94</td></tr><tr><td>runtime_probe_rows</td><td>100</td></tr><tr><td>critical_thirst_override_called_rows</td><td>100</td></tr><tr><td>critical_thirst_override_applied_rows</td><td>3</td></tr></tbody></table>\n</section>",
       "source": "survival-metric-source-summary.json"
     },
     {
       "id": "n1234-survival-pressure",
       "title": "N123.4 Survival Pressure vs Player Response",
-      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>99</span></div>\n    <div><strong>Warnings</strong><span>38</span></div>\n    <div><strong>Relief actions</strong><span>7</span></div>\n    <div><strong>Blocked relief</strong><span>0</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>29</td><td>87</td><td>39</td><td></td><td>thirst_high</td></tr><tr><td>90</td><td>30</td><td>89</td><td>40</td><td></td><td>thirst_high</td></tr><tr><td>91</td><td>31</td><td>61</td><td>41</td><td>drink_water</td><td>thirst_high</td></tr><tr><td>92</td><td>32</td><td>63</td><td>42</td><td></td><td></td></tr><tr><td>93</td><td>33</td><td>65</td><td>43</td><td></td><td></td></tr><tr><td>94</td><td>34</td><td>67</td><td>44</td><td></td><td></td></tr><tr><td>95</td><td>35</td><td>69</td><td>45</td><td></td><td></td></tr><tr><td>96</td><td>36</td><td>71</td><td>46</td><td></td><td>thirst_high</td></tr><tr><td>97</td><td>37</td><td>73</td><td>47</td><td></td><td>thirst_high</td></tr><tr><td>98</td><td>38</td><td>75</td><td>48</td><td></td><td>thirst_high</td></tr><tr><td>99</td><td>39</td><td>77</td><td>49</td><td></td><td>thirst_high</td></tr><tr><td>100</td><td>40</td><td>79</td><td>50</td><td></td><td>thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td>Autoplay Field Ration</td><td>1</td></tr><tr><td>Autoplay Field Ration</td><td>1</td></tr><tr><td>Autoplay Waterskin</td><td>1</td></tr><tr><td>Emergency Water Cache</td><td>3</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
+      "html": "<section id=\"n1234-survival-pressure\" class=\"report-section n1234-survival-pressure\">\n  <h2>N123.4 Survival Pressure vs Player Response</h2>\n  <div class=\"metric-grid\">\n    <div><strong>Pressure turns</strong><span>95</span></div>\n    <div><strong>Warnings</strong><span>34</span></div>\n    <div><strong>Relief actions</strong><span>7</span></div>\n    <div><strong>Blocked relief</strong><span>0</span></div>\n  </div>\n  <h3>Recent survival trend</h3>\n  <table><thead><tr><th>Turn</th><th>Hunger</th><th>Thirst</th><th>Fatigue</th><th>Relief</th><th>Warnings</th></tr></thead><tbody><tr><td>89</td><td>55</td><td>79</td><td>35</td><td></td><td>thirst_high</td></tr><tr><td>90</td><td>26</td><td>81</td><td>36</td><td>eat_food</td><td>thirst_high</td></tr><tr><td>91</td><td>27</td><td>83</td><td>37</td><td></td><td>thirst_high</td></tr><tr><td>92</td><td>28</td><td>85</td><td>38</td><td></td><td>thirst_high</td></tr><tr><td>93</td><td>29</td><td>87</td><td>39</td><td></td><td>thirst_high</td></tr><tr><td>94</td><td>30</td><td>89</td><td>40</td><td></td><td>thirst_high</td></tr><tr><td>95</td><td>31</td><td>61</td><td>41</td><td>drink_water</td><td>thirst_high</td></tr><tr><td>96</td><td>32</td><td>63</td><td>42</td><td></td><td></td></tr><tr><td>97</td><td>33</td><td>65</td><td>43</td><td></td><td></td></tr><tr><td>98</td><td>34</td><td>67</td><td>44</td><td></td><td></td></tr><tr><td>99</td><td>35</td><td>69</td><td>45</td><td></td><td></td></tr><tr><td>100</td><td>36</td><td>71</td><td>46</td><td></td><td>thirst_high</td></tr></tbody></table>\n  <h3>Inventory consumed</h3>\n  <table><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td>Autoplay Field Ration</td><td>1</td></tr><tr><td>Autoplay Field Ration</td><td>1</td></tr><tr><td>Autoplay Waterskin</td><td>1</td></tr><tr><td>Emergency Water Cache</td><td>3</td></tr></tbody></table>\n  <h3>Service relief purchases</h3>\n  <table><thead><tr><th>Service</th><th>Purchases</th><th>Blocked</th></tr></thead><tbody><tr><td colspan='3'>None</td></tr></tbody></table>\n</section>",
       "source": "transcript.turn_contract.climate_survival.resource_changes.effect_result.survival_action"
     }
   ],
@@ -5927,6 +5915,44 @@
         },
         {
           "turn_index": 52,
+          "hunger": 0,
+          "thirst": 0,
+          "fatigue": 0,
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0,
+          "warning_count": 0,
+          "warnings": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "source_present": true,
+          "runtime_probe_present": true,
+          "critical_thirst_override_called": true,
+          "critical_thirst_override_applied": false,
+          "critical_thirst_override_reason": "thirst_below_critical_threshold"
+        },
+        {
+          "turn_index": 53,
+          "hunger": 0,
+          "thirst": 0,
+          "fatigue": 0,
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0,
+          "warning_count": 0,
+          "warnings": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "source_present": true,
+          "runtime_probe_present": true,
+          "critical_thirst_override_called": true,
+          "critical_thirst_override_applied": false,
+          "critical_thirst_override_reason": "thirst_below_critical_threshold"
+        },
+        {
+          "turn_index": 54,
           "hunger": 52,
           "thirst": 73,
           "fatigue": 27,
@@ -5947,7 +5973,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 53,
+          "turn_index": 55,
           "hunger": 53,
           "thirst": 75,
           "fatigue": 28,
@@ -5968,7 +5994,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 54,
+          "turn_index": 56,
           "hunger": 54,
           "thirst": 77,
           "fatigue": 29,
@@ -5989,7 +6015,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 55,
+          "turn_index": 57,
           "hunger": 55,
           "thirst": 79,
           "fatigue": 30,
@@ -6010,7 +6036,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 56,
+          "turn_index": 58,
           "hunger": 26,
           "thirst": 81,
           "fatigue": 31,
@@ -6031,7 +6057,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 57,
+          "turn_index": 59,
           "hunger": 27,
           "thirst": 83,
           "fatigue": 32,
@@ -6052,7 +6078,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 58,
+          "turn_index": 60,
           "hunger": 28,
           "thirst": 85,
           "fatigue": 33,
@@ -6073,7 +6099,26 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 59,
+          "turn_index": 61,
+          "hunger": 0,
+          "thirst": 0,
+          "fatigue": 0,
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0,
+          "warning_count": 0,
+          "warnings": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "source_present": true,
+          "runtime_probe_present": true,
+          "critical_thirst_override_called": true,
+          "critical_thirst_override_applied": false,
+          "critical_thirst_override_reason": "thirst_below_critical_threshold"
+        },
+        {
+          "turn_index": 62,
           "hunger": 29,
           "thirst": 87,
           "fatigue": 34,
@@ -6094,7 +6139,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 60,
+          "turn_index": 63,
           "hunger": 30,
           "thirst": 89,
           "fatigue": 35,
@@ -6115,7 +6160,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 61,
+          "turn_index": 64,
           "hunger": 31,
           "thirst": 61,
           "fatigue": 36,
@@ -6136,7 +6181,7 @@
           "critical_thirst_override_reason": "critical_thirst_hard_override"
         },
         {
-          "turn_index": 62,
+          "turn_index": 65,
           "hunger": 32,
           "thirst": 63,
           "fatigue": 37,
@@ -6155,7 +6200,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 63,
+          "turn_index": 66,
           "hunger": 33,
           "thirst": 65,
           "fatigue": 38,
@@ -6174,7 +6219,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 64,
+          "turn_index": 67,
           "hunger": 34,
           "thirst": 67,
           "fatigue": 39,
@@ -6193,7 +6238,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 65,
+          "turn_index": 68,
           "hunger": 35,
           "thirst": 69,
           "fatigue": 40,
@@ -6212,7 +6257,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 66,
+          "turn_index": 69,
           "hunger": 36,
           "thirst": 71,
           "fatigue": 41,
@@ -6233,7 +6278,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 67,
+          "turn_index": 70,
           "hunger": 37,
           "thirst": 73,
           "fatigue": 42,
@@ -6254,7 +6299,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 68,
+          "turn_index": 71,
           "hunger": 38,
           "thirst": 75,
           "fatigue": 43,
@@ -6275,7 +6320,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 69,
+          "turn_index": 72,
           "hunger": 39,
           "thirst": 77,
           "fatigue": 44,
@@ -6296,7 +6341,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 70,
+          "turn_index": 73,
           "hunger": 40,
           "thirst": 79,
           "fatigue": 45,
@@ -6317,7 +6362,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 71,
+          "turn_index": 74,
           "hunger": 41,
           "thirst": 81,
           "fatigue": 46,
@@ -6338,7 +6383,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 72,
+          "turn_index": 75,
           "hunger": 42,
           "thirst": 83,
           "fatigue": 47,
@@ -6359,7 +6404,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 73,
+          "turn_index": 76,
           "hunger": 43,
           "thirst": 85,
           "fatigue": 48,
@@ -6380,7 +6425,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 74,
+          "turn_index": 77,
           "hunger": 44,
           "thirst": 87,
           "fatigue": 49,
@@ -6401,7 +6446,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 75,
+          "turn_index": 78,
           "hunger": 45,
           "thirst": 89,
           "fatigue": 50,
@@ -6422,7 +6467,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 76,
+          "turn_index": 79,
           "hunger": 46,
           "thirst": 61,
           "fatigue": 26,
@@ -6443,7 +6488,7 @@
           "critical_thirst_override_reason": "critical_thirst_hard_override"
         },
         {
-          "turn_index": 77,
+          "turn_index": 80,
           "hunger": 47,
           "thirst": 63,
           "fatigue": 27,
@@ -6462,7 +6507,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 78,
+          "turn_index": 81,
           "hunger": 48,
           "thirst": 65,
           "fatigue": 28,
@@ -6481,7 +6526,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 79,
+          "turn_index": 82,
           "hunger": 49,
           "thirst": 67,
           "fatigue": 29,
@@ -6500,7 +6545,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 80,
+          "turn_index": 83,
           "hunger": 50,
           "thirst": 69,
           "fatigue": 30,
@@ -6519,7 +6564,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 81,
+          "turn_index": 84,
           "hunger": 51,
           "thirst": 71,
           "fatigue": 31,
@@ -6540,7 +6585,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 82,
+          "turn_index": 85,
           "hunger": 52,
           "thirst": 73,
           "fatigue": 32,
@@ -6561,7 +6606,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 83,
+          "turn_index": 86,
           "hunger": 53,
           "thirst": 75,
           "fatigue": 33,
@@ -6582,7 +6627,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 84,
+          "turn_index": 87,
           "hunger": 54,
           "thirst": 77,
           "fatigue": 34,
@@ -6603,7 +6648,26 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 85,
+          "turn_index": 88,
+          "hunger": 0,
+          "thirst": 0,
+          "fatigue": 0,
+          "hunger_delta": 0,
+          "thirst_delta": 0,
+          "fatigue_delta": 0,
+          "warning_count": 0,
+          "warnings": [],
+          "relief_action_kind": "",
+          "relief_applied": false,
+          "relief_blocked": false,
+          "source_present": true,
+          "runtime_probe_present": true,
+          "critical_thirst_override_called": true,
+          "critical_thirst_override_applied": false,
+          "critical_thirst_override_reason": "thirst_below_critical_threshold"
+        },
+        {
+          "turn_index": 89,
           "hunger": 55,
           "thirst": 79,
           "fatigue": 35,
@@ -6624,7 +6688,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 86,
+          "turn_index": 90,
           "hunger": 26,
           "thirst": 81,
           "fatigue": 36,
@@ -6645,7 +6709,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 87,
+          "turn_index": 91,
           "hunger": 27,
           "thirst": 83,
           "fatigue": 37,
@@ -6666,7 +6730,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 88,
+          "turn_index": 92,
           "hunger": 28,
           "thirst": 85,
           "fatigue": 38,
@@ -6687,7 +6751,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 89,
+          "turn_index": 93,
           "hunger": 29,
           "thirst": 87,
           "fatigue": 39,
@@ -6708,7 +6772,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 90,
+          "turn_index": 94,
           "hunger": 30,
           "thirst": 89,
           "fatigue": 40,
@@ -6729,7 +6793,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 91,
+          "turn_index": 95,
           "hunger": 31,
           "thirst": 61,
           "fatigue": 41,
@@ -6750,7 +6814,7 @@
           "critical_thirst_override_reason": "critical_thirst_hard_override"
         },
         {
-          "turn_index": 92,
+          "turn_index": 96,
           "hunger": 32,
           "thirst": 63,
           "fatigue": 42,
@@ -6769,7 +6833,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 93,
+          "turn_index": 97,
           "hunger": 33,
           "thirst": 65,
           "fatigue": 43,
@@ -6788,7 +6852,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 94,
+          "turn_index": 98,
           "hunger": 34,
           "thirst": 67,
           "fatigue": 44,
@@ -6807,7 +6871,7 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 95,
+          "turn_index": 99,
           "hunger": 35,
           "thirst": 69,
           "fatigue": 45,
@@ -6826,94 +6890,10 @@
           "critical_thirst_override_reason": "thirst_below_critical_threshold"
         },
         {
-          "turn_index": 96,
+          "turn_index": 100,
           "hunger": 36,
           "thirst": 71,
           "fatigue": 46,
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "source_present": true,
-          "runtime_probe_present": true,
-          "critical_thirst_override_called": true,
-          "critical_thirst_override_applied": false,
-          "critical_thirst_override_reason": "thirst_below_critical_threshold"
-        },
-        {
-          "turn_index": 97,
-          "hunger": 37,
-          "thirst": 73,
-          "fatigue": 47,
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "source_present": true,
-          "runtime_probe_present": true,
-          "critical_thirst_override_called": true,
-          "critical_thirst_override_applied": false,
-          "critical_thirst_override_reason": "thirst_below_critical_threshold"
-        },
-        {
-          "turn_index": 98,
-          "hunger": 38,
-          "thirst": 75,
-          "fatigue": 48,
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "source_present": true,
-          "runtime_probe_present": true,
-          "critical_thirst_override_called": true,
-          "critical_thirst_override_applied": false,
-          "critical_thirst_override_reason": "thirst_below_critical_threshold"
-        },
-        {
-          "turn_index": 99,
-          "hunger": 39,
-          "thirst": 77,
-          "fatigue": 49,
-          "hunger_delta": 1,
-          "thirst_delta": 2,
-          "fatigue_delta": 1,
-          "warning_count": 1,
-          "warnings": [
-            "thirst_high"
-          ],
-          "relief_action_kind": "",
-          "relief_applied": false,
-          "relief_blocked": false,
-          "source_present": true,
-          "runtime_probe_present": true,
-          "critical_thirst_override_called": true,
-          "critical_thirst_override_applied": false,
-          "critical_thirst_override_reason": "thirst_below_critical_threshold"
-        },
-        {
-          "turn_index": 100,
-          "hunger": 40,
-          "thirst": 79,
-          "fatigue": 50,
           "hunger_delta": 1,
           "thirst_delta": 2,
           "fatigue_delta": 1,
@@ -6933,9 +6913,9 @@
       ],
       "trend_row_count": 100,
       "pressure_turn_count": 100,
-      "survival_warning_count": 38,
+      "survival_warning_count": 34,
       "warning_counts_by_type": {
-        "thirst_high": 38
+        "thirst_high": 34
       },
       "relief_action_count": 7,
       "relief_counts_by_kind": {
@@ -6969,9 +6949,9 @@
       ],
       "service_relief_purchases_summary": [],
       "net_resource_deltas": {
-        "hunger_delta": 38,
-        "thirst_delta": 76,
-        "fatigue_delta": 48
+        "hunger_delta": 34,
+        "thirst_delta": 68,
+        "fatigue_delta": 44
       },
       "max_needs": {
         "hunger": 55,
@@ -6979,9 +6959,9 @@
         "fatigue": 50
       },
       "final_needs": {
-        "hunger": 40,
-        "thirst": 79,
-        "fatigue": 50
+        "hunger": 36,
+        "thirst": 71,
+        "fatigue": 46
       },
       "balance_summary": {
         "format_version": "n1278_survival_balance_summary_v1",
@@ -7023,7 +7003,7 @@
         "promotion_called_rows": 100,
         "promotion_promoted_rows": 5,
         "persistence_called_rows": 100,
-        "persistence_applied_rows": 99,
+        "persistence_applied_rows": 95,
         "override_called_rows": 100,
         "override_applied_rows": 3,
         "turn_contract_attached_rows": 100,
@@ -7345,7 +7325,7 @@
         ],
         "applied_samples": [
           {
-            "turn_index": 61,
+            "turn_index": 64,
             "override_called": true,
             "override_applied": true,
             "override_reason": "critical_thirst_hard_override",
@@ -7364,7 +7344,7 @@
             }
           },
           {
-            "turn_index": 76,
+            "turn_index": 79,
             "override_called": true,
             "override_applied": true,
             "override_reason": "critical_thirst_hard_override",
@@ -7383,7 +7363,7 @@
             }
           },
           {
-            "turn_index": 91,
+            "turn_index": 95,
             "override_called": true,
             "override_applied": true,
             "override_reason": "critical_thirst_hard_override",
@@ -7412,11 +7392,11 @@
           "resource_change_rows": 100,
           "climate_tick_source_rows": 100,
           "survival_action_rows": 7,
-          "survival_suggestion_rows": 9,
+          "survival_suggestion_rows": 8,
           "relief_applied_rows": 7,
-          "warning_rows": 38,
-          "nonzero_need_rows": 99,
-          "nonzero_delta_rows": 98,
+          "warning_rows": 34,
+          "nonzero_need_rows": 95,
+          "nonzero_delta_rows": 94,
           "runtime_probe_rows": 100,
           "critical_thirst_override_called_rows": 100,
           "critical_thirst_override_applied_rows": 3
@@ -7442,11 +7422,11 @@
           "resource_change_rows": 100,
           "climate_tick_source_rows": 100,
           "survival_action_rows": 7,
-          "survival_suggestion_rows": 9,
+          "survival_suggestion_rows": 8,
           "relief_applied_rows": 7,
-          "warning_rows": 38,
-          "nonzero_need_rows": 99,
-          "nonzero_delta_rows": 98,
+          "warning_rows": 34,
+          "nonzero_need_rows": 95,
+          "nonzero_delta_rows": 94,
           "runtime_probe_rows": 100,
           "critical_thirst_override_called_rows": 100,
           "critical_thirst_override_applied_rows": 3
@@ -8435,6 +8415,44 @@
       },
       {
         "turn_index": 52,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 53,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 54,
         "hunger": 52,
         "thirst": 73,
         "fatigue": 27,
@@ -8455,7 +8473,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 53,
+        "turn_index": 55,
         "hunger": 53,
         "thirst": 75,
         "fatigue": 28,
@@ -8476,7 +8494,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 54,
+        "turn_index": 56,
         "hunger": 54,
         "thirst": 77,
         "fatigue": 29,
@@ -8497,7 +8515,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 55,
+        "turn_index": 57,
         "hunger": 55,
         "thirst": 79,
         "fatigue": 30,
@@ -8518,7 +8536,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 56,
+        "turn_index": 58,
         "hunger": 26,
         "thirst": 81,
         "fatigue": 31,
@@ -8539,7 +8557,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 57,
+        "turn_index": 59,
         "hunger": 27,
         "thirst": 83,
         "fatigue": 32,
@@ -8560,7 +8578,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 58,
+        "turn_index": 60,
         "hunger": 28,
         "thirst": 85,
         "fatigue": 33,
@@ -8581,7 +8599,26 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 59,
+        "turn_index": 61,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 62,
         "hunger": 29,
         "thirst": 87,
         "fatigue": 34,
@@ -8602,7 +8639,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 60,
+        "turn_index": 63,
         "hunger": 30,
         "thirst": 89,
         "fatigue": 35,
@@ -8623,7 +8660,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 61,
+        "turn_index": 64,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 36,
@@ -8644,7 +8681,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 62,
+        "turn_index": 65,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 37,
@@ -8663,7 +8700,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 63,
+        "turn_index": 66,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 38,
@@ -8682,7 +8719,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 64,
+        "turn_index": 67,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 39,
@@ -8701,7 +8738,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 65,
+        "turn_index": 68,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 40,
@@ -8720,7 +8757,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 66,
+        "turn_index": 69,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 41,
@@ -8741,7 +8778,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 67,
+        "turn_index": 70,
         "hunger": 37,
         "thirst": 73,
         "fatigue": 42,
@@ -8762,7 +8799,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 68,
+        "turn_index": 71,
         "hunger": 38,
         "thirst": 75,
         "fatigue": 43,
@@ -8783,7 +8820,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 69,
+        "turn_index": 72,
         "hunger": 39,
         "thirst": 77,
         "fatigue": 44,
@@ -8804,7 +8841,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 70,
+        "turn_index": 73,
         "hunger": 40,
         "thirst": 79,
         "fatigue": 45,
@@ -8825,7 +8862,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 71,
+        "turn_index": 74,
         "hunger": 41,
         "thirst": 81,
         "fatigue": 46,
@@ -8846,7 +8883,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 72,
+        "turn_index": 75,
         "hunger": 42,
         "thirst": 83,
         "fatigue": 47,
@@ -8867,7 +8904,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 73,
+        "turn_index": 76,
         "hunger": 43,
         "thirst": 85,
         "fatigue": 48,
@@ -8888,7 +8925,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 74,
+        "turn_index": 77,
         "hunger": 44,
         "thirst": 87,
         "fatigue": 49,
@@ -8909,7 +8946,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 75,
+        "turn_index": 78,
         "hunger": 45,
         "thirst": 89,
         "fatigue": 50,
@@ -8930,7 +8967,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 76,
+        "turn_index": 79,
         "hunger": 46,
         "thirst": 61,
         "fatigue": 26,
@@ -8951,7 +8988,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 77,
+        "turn_index": 80,
         "hunger": 47,
         "thirst": 63,
         "fatigue": 27,
@@ -8970,7 +9007,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 78,
+        "turn_index": 81,
         "hunger": 48,
         "thirst": 65,
         "fatigue": 28,
@@ -8989,7 +9026,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 79,
+        "turn_index": 82,
         "hunger": 49,
         "thirst": 67,
         "fatigue": 29,
@@ -9008,7 +9045,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 80,
+        "turn_index": 83,
         "hunger": 50,
         "thirst": 69,
         "fatigue": 30,
@@ -9027,7 +9064,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 81,
+        "turn_index": 84,
         "hunger": 51,
         "thirst": 71,
         "fatigue": 31,
@@ -9048,7 +9085,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 82,
+        "turn_index": 85,
         "hunger": 52,
         "thirst": 73,
         "fatigue": 32,
@@ -9069,7 +9106,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 83,
+        "turn_index": 86,
         "hunger": 53,
         "thirst": 75,
         "fatigue": 33,
@@ -9090,7 +9127,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 84,
+        "turn_index": 87,
         "hunger": 54,
         "thirst": 77,
         "fatigue": 34,
@@ -9111,7 +9148,26 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 85,
+        "turn_index": 88,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 89,
         "hunger": 55,
         "thirst": 79,
         "fatigue": 35,
@@ -9132,7 +9188,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 86,
+        "turn_index": 90,
         "hunger": 26,
         "thirst": 81,
         "fatigue": 36,
@@ -9153,7 +9209,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 87,
+        "turn_index": 91,
         "hunger": 27,
         "thirst": 83,
         "fatigue": 37,
@@ -9174,7 +9230,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 88,
+        "turn_index": 92,
         "hunger": 28,
         "thirst": 85,
         "fatigue": 38,
@@ -9195,7 +9251,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 89,
+        "turn_index": 93,
         "hunger": 29,
         "thirst": 87,
         "fatigue": 39,
@@ -9216,7 +9272,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 90,
+        "turn_index": 94,
         "hunger": 30,
         "thirst": 89,
         "fatigue": 40,
@@ -9237,7 +9293,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 91,
+        "turn_index": 95,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 41,
@@ -9258,7 +9314,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 92,
+        "turn_index": 96,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 42,
@@ -9277,7 +9333,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 93,
+        "turn_index": 97,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 43,
@@ -9296,7 +9352,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 94,
+        "turn_index": 98,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 44,
@@ -9315,7 +9371,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 95,
+        "turn_index": 99,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 45,
@@ -9334,94 +9390,10 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 96,
+        "turn_index": 100,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 46,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 97,
-        "hunger": 37,
-        "thirst": 73,
-        "fatigue": 47,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 98,
-        "hunger": 38,
-        "thirst": 75,
-        "fatigue": 48,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 99,
-        "hunger": 39,
-        "thirst": 77,
-        "fatigue": 49,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 100,
-        "hunger": 40,
-        "thirst": 79,
-        "fatigue": 50,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -9488,8 +9460,8 @@
       "failed_gates": [],
       "turn_count": 100,
       "pressure_turn_count": 100,
-      "survival_warning_count": 38,
-      "survival_suggestion_rows": 9,
+      "survival_warning_count": 34,
+      "survival_suggestion_rows": 8,
       "relief_action_count": 7,
       "blocked_relief_count": 0,
       "inventory_consumed_summary": [
@@ -9540,35 +9512,35 @@
             "delta": -24
           },
           {
-            "turn_index": 56,
+            "turn_index": 58,
             "need": "hunger",
             "before_estimate": 55,
             "after": 26,
             "delta": -29
           },
           {
-            "turn_index": 61,
+            "turn_index": 64,
             "need": "thirst",
             "before_estimate": 89,
             "after": 61,
             "delta": -28
           },
           {
-            "turn_index": 76,
+            "turn_index": 79,
             "need": "thirst",
             "before_estimate": 89,
             "after": 61,
             "delta": -28
           },
           {
-            "turn_index": 86,
+            "turn_index": 90,
             "need": "hunger",
             "before_estimate": 55,
             "after": 26,
             "delta": -29
           },
           {
-            "turn_index": 91,
+            "turn_index": 95,
             "need": "thirst",
             "before_estimate": 89,
             "after": 61,
@@ -9577,9 +9549,9 @@
         ]
       },
       "net_resource_deltas": {
-        "hunger_delta": 38,
-        "thirst_delta": 76,
-        "fatigue_delta": 48
+        "hunger_delta": 34,
+        "thirst_delta": 68,
+        "fatigue_delta": 44
       },
       "max_needs": {
         "hunger": 55,
@@ -9587,9 +9559,9 @@
         "fatigue": 50
       },
       "final_needs": {
-        "hunger": 40,
-        "thirst": 79,
-        "fatigue": 50
+        "hunger": 36,
+        "thirst": 71,
+        "fatigue": 46
       },
       "pressure_response_rows": [
         {
@@ -10109,7 +10081,7 @@
           "inventory_consumed": []
         },
         {
-          "turn_index": 56,
+          "turn_index": 58,
           "action_kind": "eat_food",
           "applied": true,
           "blocked": false,
@@ -10139,7 +10111,7 @@
           ]
         },
         {
-          "turn_index": 61,
+          "turn_index": 64,
           "action_kind": "drink_water",
           "applied": true,
           "blocked": false,
@@ -10161,7 +10133,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_07cb5e5bce15"
+                "session_key": "autoplay_21780d96a0db"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10170,7 +10142,7 @@
           ]
         },
         {
-          "turn_index": 76,
+          "turn_index": 79,
           "action_kind": "drink_water",
           "applied": true,
           "blocked": false,
@@ -10192,7 +10164,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_07cb5e5bce15"
+                "session_key": "autoplay_21780d96a0db"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10201,7 +10173,7 @@
           ]
         },
         {
-          "turn_index": 86,
+          "turn_index": 90,
           "action_kind": "eat_food",
           "applied": true,
           "blocked": false,
@@ -10231,7 +10203,7 @@
           ]
         },
         {
-          "turn_index": 91,
+          "turn_index": 95,
           "action_kind": "drink_water",
           "applied": true,
           "blocked": false,
@@ -10253,7 +10225,7 @@
                 "source": "n12711_critical_thirst_emergency_water_source",
                 "need": "thirst",
                 "need_value": 91,
-                "session_key": "autoplay_07cb5e5bce15"
+                "session_key": "autoplay_21780d96a0db"
               },
               "quantity": 1,
               "item_id": "emergency_water_cache_1",
@@ -10271,11 +10243,11 @@
           "resource_change_rows": 100,
           "climate_tick_source_rows": 100,
           "survival_action_rows": 7,
-          "survival_suggestion_rows": 9,
+          "survival_suggestion_rows": 8,
           "relief_applied_rows": 7,
-          "warning_rows": 38,
-          "nonzero_need_rows": 99,
-          "nonzero_delta_rows": 98,
+          "warning_rows": 34,
+          "nonzero_need_rows": 95,
+          "nonzero_delta_rows": 94,
           "runtime_probe_rows": 100,
           "critical_thirst_override_called_rows": 100,
           "critical_thirst_override_applied_rows": 3
@@ -10804,12 +10776,12 @@
     ],
     "survival-autoplay-response-metrics.json": {
       "format_version": "n1241_survival_autoplay_response_metrics_v1",
-      "survival_suggestion_seen_count": 9,
+      "survival_suggestion_seen_count": 8,
       "survival_suggestion_taken_count": 4,
-      "survival_suggestion_ignored_count": 5,
+      "survival_suggestion_ignored_count": 4,
       "high_pressure_unanswered_turn_count": 0,
       "blocked_relief_loop_count": 0,
-      "taken_rate": 0.4444444444444444
+      "taken_rate": 0.5
     },
     "survival-supply-metrics.json": {
       "format_version": "n1243_survival_supply_metrics_v1",
@@ -10826,12 +10798,12 @@
       "reasons": [],
       "metrics": {
         "format_version": "n1241_survival_autoplay_response_metrics_v1",
-        "survival_suggestion_seen_count": 9,
+        "survival_suggestion_seen_count": 8,
         "survival_suggestion_taken_count": 4,
-        "survival_suggestion_ignored_count": 5,
+        "survival_suggestion_ignored_count": 4,
         "high_pressure_unanswered_turn_count": 0,
         "blocked_relief_loop_count": 0,
-        "taken_rate": 0.4444444444444444
+        "taken_rate": 0.5
       },
       "thresholds": {
         "max_high_pressure_unanswered_turns": 5,
@@ -10848,11 +10820,11 @@
         "resource_change_rows": 100,
         "climate_tick_source_rows": 100,
         "survival_action_rows": 7,
-        "survival_suggestion_rows": 9,
+        "survival_suggestion_rows": 8,
         "relief_applied_rows": 7,
-        "warning_rows": 38,
-        "nonzero_need_rows": 99,
-        "nonzero_delta_rows": 98,
+        "warning_rows": 34,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 94,
         "runtime_probe_rows": 100,
         "critical_thirst_override_called_rows": 100,
         "critical_thirst_override_applied_rows": 3
@@ -10878,11 +10850,11 @@
         "resource_change_rows": 100,
         "climate_tick_source_rows": 100,
         "survival_action_rows": 7,
-        "survival_suggestion_rows": 9,
+        "survival_suggestion_rows": 8,
         "relief_applied_rows": 7,
-        "warning_rows": 38,
-        "nonzero_need_rows": 99,
-        "nonzero_delta_rows": 98,
+        "warning_rows": 34,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 94,
         "runtime_probe_rows": 100,
         "critical_thirst_override_called_rows": 100,
         "critical_thirst_override_applied_rows": 3
@@ -10999,7 +10971,7 @@
         "promotion_called_rows": 100,
         "promotion_promoted_rows": 5,
         "persistence_called_rows": 100,
-        "persistence_applied_rows": 99,
+        "persistence_applied_rows": 95,
         "override_called_rows": 100,
         "override_applied_rows": 3,
         "turn_contract_attached_rows": 100,
@@ -11321,7 +11293,7 @@
         ],
         "applied_samples": [
           {
-            "turn_index": 61,
+            "turn_index": 64,
             "override_called": true,
             "override_applied": true,
             "override_reason": "critical_thirst_hard_override",
@@ -11340,7 +11312,7 @@
             }
           },
           {
-            "turn_index": 76,
+            "turn_index": 79,
             "override_called": true,
             "override_applied": true,
             "override_reason": "critical_thirst_hard_override",
@@ -11359,7 +11331,7 @@
             }
           },
           {
-            "turn_index": 91,
+            "turn_index": 95,
             "override_called": true,
             "override_applied": true,
             "override_reason": "critical_thirst_hard_override",
@@ -11395,11 +11367,11 @@
       "ok": true,
       "advisory_ok": true,
       "row_count": 100,
-      "total_transcript_bytes": 2984461,
-      "average_row_bytes": 29844,
-      "max_row_bytes": 37690,
+      "total_transcript_bytes": 3015214,
+      "average_row_bytes": 30152,
+      "max_row_bytes": 37815,
       "max_compact_row_bytes": 120000,
-      "projected_1000_turn_transcript_bytes": 29844000,
+      "projected_1000_turn_transcript_bytes": 30152000,
       "max_projected_1000_turn_transcript_bytes": 200000000,
       "max_projected_1000_turn_review_bytes": 1000000000,
       "oversized_row_count": 0,
@@ -11407,11 +11379,11 @@
       "heavy_field_totals": [
         {
           "field": "presentation_soft_classification",
-          "bytes": 118165
+          "bytes": 118432
         },
         {
           "field": "presentation_hard_grounding",
-          "bytes": 44633
+          "bytes": 37213
         }
       ],
       "recommended_actions": [
@@ -11443,10 +11415,10 @@
           "target_turns": 250,
           "base_turns": 100,
           "turn_ratio": 2.5,
-          "projected_wall_seconds_avg": 1965.059,
-          "projected_wall_hours_avg": 0.546,
-          "projected_p95_cumulative_seconds": 3358.793,
-          "projected_transcript_bytes": 7461000,
+          "projected_wall_seconds_avg": 1622.914,
+          "projected_wall_hours_avg": 0.451,
+          "projected_p95_cumulative_seconds": 2346.108,
+          "projected_transcript_bytes": 7538000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 14900,
           "state_budget_ok": true
@@ -11455,10 +11427,10 @@
           "target_turns": 300,
           "base_turns": 100,
           "turn_ratio": 3.0,
-          "projected_wall_seconds_avg": 2358.071,
-          "projected_wall_hours_avg": 0.655,
-          "projected_p95_cumulative_seconds": 4030.551,
-          "projected_transcript_bytes": 8953200,
+          "projected_wall_seconds_avg": 1947.497,
+          "projected_wall_hours_avg": 0.541,
+          "projected_p95_cumulative_seconds": 2815.329,
+          "projected_transcript_bytes": 9045600,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 17880,
           "state_budget_ok": true
@@ -11467,22 +11439,22 @@
           "target_turns": 1000,
           "base_turns": 100,
           "turn_ratio": 10.0,
-          "projected_wall_seconds_avg": 7860.236,
-          "projected_wall_hours_avg": 2.183,
-          "projected_p95_cumulative_seconds": 13435.17,
-          "projected_transcript_bytes": 29844000,
+          "projected_wall_seconds_avg": 6491.657,
+          "projected_wall_hours_avg": 1.803,
+          "projected_p95_cumulative_seconds": 9384.43,
+          "projected_transcript_bytes": 30152000,
           "projected_state_bytes_bounded": 5960,
           "projected_state_bytes_linear_risk": 59600,
           "state_budget_ok": true
         }
       ],
       "performance_source": {
-        "avg_turn_seconds": 7.860236,
-        "p95_turn_seconds": 13.43517
+        "avg_turn_seconds": 6.491657,
+        "p95_turn_seconds": 9.38443
       },
       "payload_budget_source": {
-        "average_row_bytes": 29844,
-        "projected_1000_turn_transcript_bytes": 29844000,
+        "average_row_bytes": 30152,
+        "projected_1000_turn_transcript_bytes": 30152000,
         "payload_budget_ok": true,
         "payload_budget_advisory_ok": true
       },
@@ -11536,16 +11508,13 @@
     "content-exhaustion-forecast-summary.json": {
       "format_version": "n131_content_exhaustion_forecast_summary_v1",
       "source": "n131_story_content_graph_exhaustion_forecast",
-      "ok": false,
-      "advisory_ok": false,
-      "failed_checks": [
-        "graph_progression_density_ok",
-        "unique_node_density_ok"
-      ],
+      "ok": true,
+      "advisory_ok": true,
+      "failed_checks": [],
       "checks": {
         "readiness_content_classification_ok": true,
-        "graph_progression_density_ok": false,
-        "unique_node_density_ok": false,
+        "graph_progression_density_ok": true,
+        "unique_node_density_ok": true,
         "waiting_for_next_graph_pack_ok": true,
         "campaign_graphs_not_fully_exhausted_ok": true,
         "available_next_graph_count_ok": true,
@@ -11558,17 +11527,17 @@
       "turns_executed": 100,
       "classification": "content_sufficient_for_requested_turns",
       "graph_count": 9,
-      "completed_graph_count": 0,
-      "active_graph_count": 9,
-      "available_next_graph_count": 9,
+      "completed_graph_count": 7,
+      "active_graph_count": 2,
+      "available_next_graph_count": 2,
       "campaign_graphs_complete": false,
       "waiting_for_next_graph_pack": false,
-      "progression_changed_count": 18,
-      "unique_progression_node_count": 18,
-      "graph_progression_density": 0.18,
-      "unique_node_density": 0.18,
-      "completed_graph_ratio": 0.0,
-      "turns_until_content_exhaustion_estimate": 100,
+      "progression_changed_count": 96,
+      "unique_progression_node_count": 96,
+      "graph_progression_density": 0.96,
+      "unique_node_density": 0.96,
+      "completed_graph_ratio": 0.7777777777777778,
+      "turns_until_content_exhaustion_estimate": 400,
       "story_arc_resolution": {
         "completed_count": 2,
         "failed_count": 0,
@@ -11578,24 +11547,24 @@
         }
       },
       "followup_arc_progression": {
-        "progression_event_count": 677,
-        "direct_graph_progression_count": 677,
+        "progression_event_count": 557,
+        "direct_graph_progression_count": 557,
         "progressed_count": 0,
         "progressed_arc_ids": [],
         "world_signal_count": 0
       },
       "escalation_arc_progression": {
-        "progression_event_count": 991,
-        "direct_graph_escalation_count": 991,
+        "progression_event_count": 223,
+        "direct_graph_escalation_count": 223,
         "progressed_count": 0,
         "progressed_arc_ids": [],
         "pressure_event_count": 0,
         "world_signal_count": 0
       },
       "pressure_pacing": {
-        "accepted_pressure_count": 663,
-        "accepted_pressure_event_count": 663,
-        "direct_graph_pressure_count": 663,
+        "accepted_pressure_count": 207,
+        "accepted_pressure_event_count": 207,
+        "direct_graph_pressure_count": 207,
         "direct_graph_pacing_bridge_active": true,
         "rejected_pressure_event_count": 0,
         "rejected_by_reason": {}
@@ -11659,8 +11628,8 @@
     "failed_gates": [],
     "turn_count": 100,
     "pressure_turn_count": 100,
-    "survival_warning_count": 38,
-    "survival_suggestion_rows": 9,
+    "survival_warning_count": 34,
+    "survival_suggestion_rows": 8,
     "relief_action_count": 7,
     "blocked_relief_count": 0,
     "inventory_consumed_summary": [
@@ -11711,35 +11680,35 @@
           "delta": -24
         },
         {
-          "turn_index": 56,
+          "turn_index": 58,
           "need": "hunger",
           "before_estimate": 55,
           "after": 26,
           "delta": -29
         },
         {
-          "turn_index": 61,
+          "turn_index": 64,
           "need": "thirst",
           "before_estimate": 89,
           "after": 61,
           "delta": -28
         },
         {
-          "turn_index": 76,
+          "turn_index": 79,
           "need": "thirst",
           "before_estimate": 89,
           "after": 61,
           "delta": -28
         },
         {
-          "turn_index": 86,
+          "turn_index": 90,
           "need": "hunger",
           "before_estimate": 55,
           "after": 26,
           "delta": -29
         },
         {
-          "turn_index": 91,
+          "turn_index": 95,
           "need": "thirst",
           "before_estimate": 89,
           "after": 61,
@@ -11748,9 +11717,9 @@
       ]
     },
     "net_resource_deltas": {
-      "hunger_delta": 38,
-      "thirst_delta": 76,
-      "fatigue_delta": 48
+      "hunger_delta": 34,
+      "thirst_delta": 68,
+      "fatigue_delta": 44
     },
     "max_needs": {
       "hunger": 55,
@@ -11758,9 +11727,9 @@
       "fatigue": 50
     },
     "final_needs": {
-      "hunger": 40,
-      "thirst": 79,
-      "fatigue": 50
+      "hunger": 36,
+      "thirst": 71,
+      "fatigue": 46
     },
     "pressure_response_rows": [
       {
@@ -12280,7 +12249,7 @@
         "inventory_consumed": []
       },
       {
-        "turn_index": 56,
+        "turn_index": 58,
         "action_kind": "eat_food",
         "applied": true,
         "blocked": false,
@@ -12310,7 +12279,7 @@
         ]
       },
       {
-        "turn_index": 61,
+        "turn_index": 64,
         "action_kind": "drink_water",
         "applied": true,
         "blocked": false,
@@ -12332,7 +12301,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_07cb5e5bce15"
+              "session_key": "autoplay_21780d96a0db"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12341,7 +12310,7 @@
         ]
       },
       {
-        "turn_index": 76,
+        "turn_index": 79,
         "action_kind": "drink_water",
         "applied": true,
         "blocked": false,
@@ -12363,7 +12332,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_07cb5e5bce15"
+              "session_key": "autoplay_21780d96a0db"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12372,7 +12341,7 @@
         ]
       },
       {
-        "turn_index": 86,
+        "turn_index": 90,
         "action_kind": "eat_food",
         "applied": true,
         "blocked": false,
@@ -12402,7 +12371,7 @@
         ]
       },
       {
-        "turn_index": 91,
+        "turn_index": 95,
         "action_kind": "drink_water",
         "applied": true,
         "blocked": false,
@@ -12424,7 +12393,7 @@
               "source": "n12711_critical_thirst_emergency_water_source",
               "need": "thirst",
               "need_value": 91,
-              "session_key": "autoplay_07cb5e5bce15"
+              "session_key": "autoplay_21780d96a0db"
             },
             "quantity": 1,
             "item_id": "emergency_water_cache_1",
@@ -12442,11 +12411,11 @@
         "resource_change_rows": 100,
         "climate_tick_source_rows": 100,
         "survival_action_rows": 7,
-        "survival_suggestion_rows": 9,
+        "survival_suggestion_rows": 8,
         "relief_applied_rows": 7,
-        "warning_rows": 38,
-        "nonzero_need_rows": 99,
-        "nonzero_delta_rows": 98,
+        "warning_rows": 34,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 94,
         "runtime_probe_rows": 100,
         "critical_thirst_override_called_rows": 100,
         "critical_thirst_override_applied_rows": 3
@@ -12498,12 +12467,12 @@
   },
   "survival_autoplay_response_metrics": {
     "format_version": "n1241_survival_autoplay_response_metrics_v1",
-    "survival_suggestion_seen_count": 9,
+    "survival_suggestion_seen_count": 8,
     "survival_suggestion_taken_count": 4,
-    "survival_suggestion_ignored_count": 5,
+    "survival_suggestion_ignored_count": 4,
     "high_pressure_unanswered_turn_count": 0,
     "blocked_relief_loop_count": 0,
-    "taken_rate": 0.4444444444444444
+    "taken_rate": 0.5
   },
   "survival_supply_metrics": {
     "format_version": "n1243_survival_supply_metrics_v1",
@@ -13889,12 +13858,12 @@
     "reasons": [],
     "metrics": {
       "format_version": "n1241_survival_autoplay_response_metrics_v1",
-      "survival_suggestion_seen_count": 9,
+      "survival_suggestion_seen_count": 8,
       "survival_suggestion_taken_count": 4,
-      "survival_suggestion_ignored_count": 5,
+      "survival_suggestion_ignored_count": 4,
       "high_pressure_unanswered_turn_count": 0,
       "blocked_relief_loop_count": 0,
-      "taken_rate": 0.4444444444444444
+      "taken_rate": 0.5
     },
     "thresholds": {
       "max_high_pressure_unanswered_turns": 5,
@@ -14880,6 +14849,44 @@
       },
       {
         "turn_index": 52,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 53,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 54,
         "hunger": 52,
         "thirst": 73,
         "fatigue": 27,
@@ -14900,7 +14907,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 53,
+        "turn_index": 55,
         "hunger": 53,
         "thirst": 75,
         "fatigue": 28,
@@ -14921,7 +14928,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 54,
+        "turn_index": 56,
         "hunger": 54,
         "thirst": 77,
         "fatigue": 29,
@@ -14942,7 +14949,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 55,
+        "turn_index": 57,
         "hunger": 55,
         "thirst": 79,
         "fatigue": 30,
@@ -14963,7 +14970,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 56,
+        "turn_index": 58,
         "hunger": 26,
         "thirst": 81,
         "fatigue": 31,
@@ -14984,7 +14991,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 57,
+        "turn_index": 59,
         "hunger": 27,
         "thirst": 83,
         "fatigue": 32,
@@ -15005,7 +15012,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 58,
+        "turn_index": 60,
         "hunger": 28,
         "thirst": 85,
         "fatigue": 33,
@@ -15026,7 +15033,26 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 59,
+        "turn_index": 61,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 62,
         "hunger": 29,
         "thirst": 87,
         "fatigue": 34,
@@ -15047,7 +15073,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 60,
+        "turn_index": 63,
         "hunger": 30,
         "thirst": 89,
         "fatigue": 35,
@@ -15068,7 +15094,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 61,
+        "turn_index": 64,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 36,
@@ -15089,7 +15115,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 62,
+        "turn_index": 65,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 37,
@@ -15108,7 +15134,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 63,
+        "turn_index": 66,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 38,
@@ -15127,7 +15153,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 64,
+        "turn_index": 67,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 39,
@@ -15146,7 +15172,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 65,
+        "turn_index": 68,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 40,
@@ -15165,7 +15191,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 66,
+        "turn_index": 69,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 41,
@@ -15186,7 +15212,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 67,
+        "turn_index": 70,
         "hunger": 37,
         "thirst": 73,
         "fatigue": 42,
@@ -15207,7 +15233,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 68,
+        "turn_index": 71,
         "hunger": 38,
         "thirst": 75,
         "fatigue": 43,
@@ -15228,7 +15254,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 69,
+        "turn_index": 72,
         "hunger": 39,
         "thirst": 77,
         "fatigue": 44,
@@ -15249,7 +15275,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 70,
+        "turn_index": 73,
         "hunger": 40,
         "thirst": 79,
         "fatigue": 45,
@@ -15270,7 +15296,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 71,
+        "turn_index": 74,
         "hunger": 41,
         "thirst": 81,
         "fatigue": 46,
@@ -15291,7 +15317,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 72,
+        "turn_index": 75,
         "hunger": 42,
         "thirst": 83,
         "fatigue": 47,
@@ -15312,7 +15338,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 73,
+        "turn_index": 76,
         "hunger": 43,
         "thirst": 85,
         "fatigue": 48,
@@ -15333,7 +15359,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 74,
+        "turn_index": 77,
         "hunger": 44,
         "thirst": 87,
         "fatigue": 49,
@@ -15354,7 +15380,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 75,
+        "turn_index": 78,
         "hunger": 45,
         "thirst": 89,
         "fatigue": 50,
@@ -15375,7 +15401,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 76,
+        "turn_index": 79,
         "hunger": 46,
         "thirst": 61,
         "fatigue": 26,
@@ -15396,7 +15422,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 77,
+        "turn_index": 80,
         "hunger": 47,
         "thirst": 63,
         "fatigue": 27,
@@ -15415,7 +15441,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 78,
+        "turn_index": 81,
         "hunger": 48,
         "thirst": 65,
         "fatigue": 28,
@@ -15434,7 +15460,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 79,
+        "turn_index": 82,
         "hunger": 49,
         "thirst": 67,
         "fatigue": 29,
@@ -15453,7 +15479,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 80,
+        "turn_index": 83,
         "hunger": 50,
         "thirst": 69,
         "fatigue": 30,
@@ -15472,7 +15498,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 81,
+        "turn_index": 84,
         "hunger": 51,
         "thirst": 71,
         "fatigue": 31,
@@ -15493,7 +15519,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 82,
+        "turn_index": 85,
         "hunger": 52,
         "thirst": 73,
         "fatigue": 32,
@@ -15514,7 +15540,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 83,
+        "turn_index": 86,
         "hunger": 53,
         "thirst": 75,
         "fatigue": 33,
@@ -15535,7 +15561,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 84,
+        "turn_index": 87,
         "hunger": 54,
         "thirst": 77,
         "fatigue": 34,
@@ -15556,7 +15582,26 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 85,
+        "turn_index": 88,
+        "hunger": 0,
+        "thirst": 0,
+        "fatigue": 0,
+        "hunger_delta": 0,
+        "thirst_delta": 0,
+        "fatigue_delta": 0,
+        "warning_count": 0,
+        "warnings": [],
+        "relief_action_kind": "",
+        "relief_applied": false,
+        "relief_blocked": false,
+        "source_present": true,
+        "runtime_probe_present": true,
+        "critical_thirst_override_called": true,
+        "critical_thirst_override_applied": false,
+        "critical_thirst_override_reason": "thirst_below_critical_threshold"
+      },
+      {
+        "turn_index": 89,
         "hunger": 55,
         "thirst": 79,
         "fatigue": 35,
@@ -15577,7 +15622,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 86,
+        "turn_index": 90,
         "hunger": 26,
         "thirst": 81,
         "fatigue": 36,
@@ -15598,7 +15643,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 87,
+        "turn_index": 91,
         "hunger": 27,
         "thirst": 83,
         "fatigue": 37,
@@ -15619,7 +15664,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 88,
+        "turn_index": 92,
         "hunger": 28,
         "thirst": 85,
         "fatigue": 38,
@@ -15640,7 +15685,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 89,
+        "turn_index": 93,
         "hunger": 29,
         "thirst": 87,
         "fatigue": 39,
@@ -15661,7 +15706,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 90,
+        "turn_index": 94,
         "hunger": 30,
         "thirst": 89,
         "fatigue": 40,
@@ -15682,7 +15727,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 91,
+        "turn_index": 95,
         "hunger": 31,
         "thirst": 61,
         "fatigue": 41,
@@ -15703,7 +15748,7 @@
         "critical_thirst_override_reason": "critical_thirst_hard_override"
       },
       {
-        "turn_index": 92,
+        "turn_index": 96,
         "hunger": 32,
         "thirst": 63,
         "fatigue": 42,
@@ -15722,7 +15767,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 93,
+        "turn_index": 97,
         "hunger": 33,
         "thirst": 65,
         "fatigue": 43,
@@ -15741,7 +15786,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 94,
+        "turn_index": 98,
         "hunger": 34,
         "thirst": 67,
         "fatigue": 44,
@@ -15760,7 +15805,7 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 95,
+        "turn_index": 99,
         "hunger": 35,
         "thirst": 69,
         "fatigue": 45,
@@ -15779,94 +15824,10 @@
         "critical_thirst_override_reason": "thirst_below_critical_threshold"
       },
       {
-        "turn_index": 96,
+        "turn_index": 100,
         "hunger": 36,
         "thirst": 71,
         "fatigue": 46,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 97,
-        "hunger": 37,
-        "thirst": 73,
-        "fatigue": 47,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 98,
-        "hunger": 38,
-        "thirst": 75,
-        "fatigue": 48,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 99,
-        "hunger": 39,
-        "thirst": 77,
-        "fatigue": 49,
-        "hunger_delta": 1,
-        "thirst_delta": 2,
-        "fatigue_delta": 1,
-        "warning_count": 1,
-        "warnings": [
-          "thirst_high"
-        ],
-        "relief_action_kind": "",
-        "relief_applied": false,
-        "relief_blocked": false,
-        "source_present": true,
-        "runtime_probe_present": true,
-        "critical_thirst_override_called": true,
-        "critical_thirst_override_applied": false,
-        "critical_thirst_override_reason": "thirst_below_critical_threshold"
-      },
-      {
-        "turn_index": 100,
-        "hunger": 40,
-        "thirst": 79,
-        "fatigue": 50,
         "hunger_delta": 1,
         "thirst_delta": 2,
         "fatigue_delta": 1,
@@ -15886,9 +15847,9 @@
     ],
     "trend_row_count": 100,
     "pressure_turn_count": 100,
-    "survival_warning_count": 38,
+    "survival_warning_count": 34,
     "warning_counts_by_type": {
-      "thirst_high": 38
+      "thirst_high": 34
     },
     "relief_action_count": 7,
     "relief_counts_by_kind": {
@@ -15922,9 +15883,9 @@
     ],
     "service_relief_purchases_summary": [],
     "net_resource_deltas": {
-      "hunger_delta": 38,
-      "thirst_delta": 76,
-      "fatigue_delta": 48
+      "hunger_delta": 34,
+      "thirst_delta": 68,
+      "fatigue_delta": 44
     },
     "max_needs": {
       "hunger": 55,
@@ -15932,9 +15893,9 @@
       "fatigue": 50
     },
     "final_needs": {
-      "hunger": 40,
-      "thirst": 79,
-      "fatigue": 50
+      "hunger": 36,
+      "thirst": 71,
+      "fatigue": 46
     },
     "balance_summary": {
       "format_version": "n1278_survival_balance_summary_v1",
@@ -15976,7 +15937,7 @@
       "promotion_called_rows": 100,
       "promotion_promoted_rows": 5,
       "persistence_called_rows": 100,
-      "persistence_applied_rows": 99,
+      "persistence_applied_rows": 95,
       "override_called_rows": 100,
       "override_applied_rows": 3,
       "turn_contract_attached_rows": 100,
@@ -16298,7 +16259,7 @@
       ],
       "applied_samples": [
         {
-          "turn_index": 61,
+          "turn_index": 64,
           "override_called": true,
           "override_applied": true,
           "override_reason": "critical_thirst_hard_override",
@@ -16317,7 +16278,7 @@
           }
         },
         {
-          "turn_index": 76,
+          "turn_index": 79,
           "override_called": true,
           "override_applied": true,
           "override_reason": "critical_thirst_hard_override",
@@ -16336,7 +16297,7 @@
           }
         },
         {
-          "turn_index": 91,
+          "turn_index": 95,
           "override_called": true,
           "override_applied": true,
           "override_reason": "critical_thirst_hard_override",
@@ -16365,11 +16326,11 @@
         "resource_change_rows": 100,
         "climate_tick_source_rows": 100,
         "survival_action_rows": 7,
-        "survival_suggestion_rows": 9,
+        "survival_suggestion_rows": 8,
         "relief_applied_rows": 7,
-        "warning_rows": 38,
-        "nonzero_need_rows": 99,
-        "nonzero_delta_rows": 98,
+        "warning_rows": 34,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 94,
         "runtime_probe_rows": 100,
         "critical_thirst_override_called_rows": 100,
         "critical_thirst_override_applied_rows": 3
@@ -16395,11 +16356,11 @@
         "resource_change_rows": 100,
         "climate_tick_source_rows": 100,
         "survival_action_rows": 7,
-        "survival_suggestion_rows": 9,
+        "survival_suggestion_rows": 8,
         "relief_applied_rows": 7,
-        "warning_rows": 38,
-        "nonzero_need_rows": 99,
-        "nonzero_delta_rows": 98,
+        "warning_rows": 34,
+        "nonzero_need_rows": 95,
+        "nonzero_delta_rows": 94,
         "runtime_probe_rows": 100,
         "critical_thirst_override_called_rows": 100,
         "critical_thirst_override_applied_rows": 3
@@ -17792,11 +17753,11 @@
       "resource_change_rows": 100,
       "climate_tick_source_rows": 100,
       "survival_action_rows": 7,
-      "survival_suggestion_rows": 9,
+      "survival_suggestion_rows": 8,
       "relief_applied_rows": 7,
-      "warning_rows": 38,
-      "nonzero_need_rows": 99,
-      "nonzero_delta_rows": 98,
+      "warning_rows": 34,
+      "nonzero_need_rows": 95,
+      "nonzero_delta_rows": 94,
       "runtime_probe_rows": 100,
       "critical_thirst_override_called_rows": 100,
       "critical_thirst_override_applied_rows": 3
@@ -17822,11 +17783,11 @@
       "resource_change_rows": 100,
       "climate_tick_source_rows": 100,
       "survival_action_rows": 7,
-      "survival_suggestion_rows": 9,
+      "survival_suggestion_rows": 8,
       "relief_applied_rows": 7,
-      "warning_rows": 38,
-      "nonzero_need_rows": 99,
-      "nonzero_delta_rows": 98,
+      "warning_rows": 34,
+      "nonzero_need_rows": 95,
+      "nonzero_delta_rows": 94,
       "runtime_probe_rows": 100,
       "critical_thirst_override_called_rows": 100,
       "critical_thirst_override_applied_rows": 3
@@ -17850,7 +17811,7 @@
   "bundle_b_artifacts": {
     "source": "bundle_b_long_run_projection_manifest",
     "long_run_projection_ok": true,
-    "content_exhaustion_forecast_ok": false,
+    "content_exhaustion_forecast_ok": true,
     "files": [
       "long-run-dry-run-projection-summary.json",
       "content-exhaustion-forecast-summary.json"
