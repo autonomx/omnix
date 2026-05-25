@@ -1,0 +1,102 @@
+# Bundle AC — 1000-Turn Profile Loop Guard
+#
+# Late overlay for Bundle Q/S profiles.  The 1000-turn preflight run exposed a
+# stale player-agent loop around turn 600 where the exact same action repeated
+# for many turns while background LLM results lagged far behind.  The harness
+# already exposes parser-supported loop/diversity controls; this fragment makes
+# the 1000-turn profiles opt into those controls so long runs fail fast instead
+# of burning hundreds more turns.
+
+from typing import Any as _BundleACAny, List as _BundleACList, Tuple as _BundleACTuple
+
+_BUNDLE_AC_LOOP_GUARD_ARGS: _BundleACList[str] = [
+    "--stop-on-loop",
+    "--max-repeated-actions", "4",
+    "--max-no-progress-turns", "12",
+    "--action-diversity-window", "8",
+    "--min-action-diversity-rate", "0.25",
+    "--player-agent-anti-loop-streak-threshold", "3",
+]
+_BUNDLE_AC_LOOP_GUARD_FLAGS = {
+    "--stop-on-loop",
+    "--max-repeated-actions",
+    "--max-no-progress-turns",
+    "--action-diversity-window",
+    "--min-action-diversity-rate",
+    "--player-agent-anti-loop-streak-threshold",
+}
+
+
+def _bundle_ac_flag_set(argv: _BundleACList[str]) -> set[str]:
+    return {str(arg).split("=", 1)[0] for arg in argv if str(arg).startswith("--")}
+
+
+def _bundle_ac_append_missing_pairs(argv: _BundleACList[str], additions: _BundleACList[str]) -> _BundleACList[str]:
+    expanded = list(argv)
+    supplied = _bundle_ac_flag_set(expanded)
+    index = 0
+    while index < len(additions):
+        flag = additions[index]
+        if flag not in supplied:
+            expanded.append(flag)
+            if index + 1 < len(additions) and not additions[index + 1].startswith("--"):
+                expanded.append(additions[index + 1])
+                index += 1
+        elif index + 1 < len(additions) and not additions[index + 1].startswith("--"):
+            index += 1
+        index += 1
+    return expanded
+
+
+def _bundle_ac_patch_profile(profile_name: str, profile: _BundleACAny) -> None:
+    if isinstance(profile, dict):
+        canonical = profile.get("canonical_cli_args")
+        if isinstance(canonical, list):
+            profile["canonical_cli_args"] = _bundle_ac_append_missing_pairs([str(part) for part in canonical], _BUNDLE_AC_LOOP_GUARD_ARGS)
+        defaults = profile.setdefault("defaults", {}) if isinstance(profile.setdefault("defaults", {}), dict) else {}
+        if isinstance(defaults, dict):
+            defaults.setdefault("stop_on_loop", True)
+            defaults.setdefault("max_repeated_actions", 4)
+            defaults.setdefault("max_no_progress_turns", 12)
+            defaults.setdefault("action_diversity_window", 8)
+            defaults.setdefault("min_action_diversity_rate", 0.25)
+            defaults.setdefault("player_agent_anti_loop_streak_threshold", 3)
+
+
+def _bundle_ac_wrap_missing_flags(original_func):
+    def _wrapped(argv):
+        missing = list(original_func(argv)) if callable(original_func) else []
+        supplied = _bundle_ac_flag_set(list(argv or []))
+        for flag in _BUNDLE_AC_LOOP_GUARD_FLAGS:
+            if flag not in supplied and flag not in missing:
+                missing.append(flag)
+        return missing
+    return _wrapped
+
+
+def _bundle_ac_wrap_append_profile_args(original_func):
+    def _wrapped(argv):
+        expanded = list(original_func(argv)) if callable(original_func) else list(argv or [])
+        return _bundle_ac_append_missing_pairs(expanded, _BUNDLE_AC_LOOP_GUARD_ARGS)
+    return _wrapped
+
+
+if not globals().get("_BUNDLE_AC_1000_PROFILE_LOOP_GUARD_PATCHED"):
+    _bundle_ac_patch_profile("preflight_1000", globals().get("_BUNDLE_Q_PROFILE"))
+    _bundle_ac_patch_profile("live_1000", globals().get("_BUNDLE_S_PROFILE"))
+
+    if callable(globals().get("_bundle_q_missing_command_flags")):
+        _BUNDLE_AC_ORIGINAL_Q_MISSING_COMMAND_FLAGS = globals()["_bundle_q_missing_command_flags"]
+        globals()["_bundle_q_missing_command_flags"] = _bundle_ac_wrap_missing_flags(_BUNDLE_AC_ORIGINAL_Q_MISSING_COMMAND_FLAGS)
+    if callable(globals().get("_bundle_s_missing_command_flags")):
+        _BUNDLE_AC_ORIGINAL_S_MISSING_COMMAND_FLAGS = globals()["_bundle_s_missing_command_flags"]
+        globals()["_bundle_s_missing_command_flags"] = _bundle_ac_wrap_missing_flags(_BUNDLE_AC_ORIGINAL_S_MISSING_COMMAND_FLAGS)
+
+    if callable(globals().get("_bundle_q_append_missing_profile_args")):
+        _BUNDLE_AC_ORIGINAL_Q_APPEND_PROFILE_ARGS = globals()["_bundle_q_append_missing_profile_args"]
+        globals()["_bundle_q_append_missing_profile_args"] = _bundle_ac_wrap_append_profile_args(_BUNDLE_AC_ORIGINAL_Q_APPEND_PROFILE_ARGS)
+    if callable(globals().get("_bundle_s_append_missing_profile_args")):
+        _BUNDLE_AC_ORIGINAL_S_APPEND_PROFILE_ARGS = globals()["_bundle_s_append_missing_profile_args"]
+        globals()["_bundle_s_append_missing_profile_args"] = _bundle_ac_wrap_append_profile_args(_BUNDLE_AC_ORIGINAL_S_APPEND_PROFILE_ARGS)
+
+    globals()["_BUNDLE_AC_1000_PROFILE_LOOP_GUARD_PATCHED"] = True
