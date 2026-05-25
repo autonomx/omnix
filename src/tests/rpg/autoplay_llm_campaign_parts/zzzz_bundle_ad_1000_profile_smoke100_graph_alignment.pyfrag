@@ -1,0 +1,195 @@
+# Bundle AD — 1000-Turn Profile Smoke-100 Graph Alignment
+#
+# The first 1000-turn preflight reached turn ~600 but the player agent began
+# repeating a generic active-objective check-in.  The proven 100-turn command
+# uses more than a turn count: it enables the goal-directed quest runner,
+# compact LLM player-agent context, goal-pressure repair, objective no-progress
+# limits, and pre-turn advisory carry/promotion controls.  This late overlay
+# aligns the 1000-turn preflight/live profiles with that smoke_100 gameplay
+# graph/progression setup while keeping caller-supplied values authoritative.
+
+from typing import Any as _BundleADAny, List as _BundleADList
+
+_BUNDLE_AD_SMOKE100_GRAPH_ARGS: _BundleADList[str] = [
+    "--player-agent", "llm",
+    "--player-agent-context-mode", "compact",
+    "--player-agent-cache", "on",
+    "--scenario-seed", "tavern_story_seed",
+    "--latency-profile", "playable",
+    "--strategy", "goal_directed_quest_runner",
+    "--autoplay-base-response", "deterministic",
+    "--deferred-advisory-promotion", "on",
+    "--checkpoint-mode", "background",
+    "--background-workers", "3",
+    "--provider-workers", "2",
+    "--debug-provider-shape",
+    "--debug-autoplay-stage-timing",
+    "--player-agent-goal-pressure",
+    "--player-agent-goal-pressure-repair",
+    "--goal-pressure-no-change-threshold", "8",
+    "--goal-pressure-passive-rate-threshold", "0.45",
+    "--max-player-agent-fallback-rate", "0.25",
+    "--min-meaningful-progress-rate", "0.10",
+    "--max-churn-only-rate", "0.95",
+    "--max-churn-only-streak", "8",
+    "--max-objective-target-no-progress-streak", "8",
+    "--campaign-minutes-per-turn", "60",
+    "--journal-every-turns", "5",
+    "--pre-turn-background-drain-ms", "500",
+    "--pre-turn-advisory-promotion-max-rows", "1",
+    "--pre-turn-advisory-fast-path",
+    "--pre-turn-advisory-carry-candidate-limit", "12",
+    "--pre-turn-advisory-carry-pending-limit", "12",
+    "--pre-turn-advisory-carry-accepted-limit", "20",
+    "--pre-turn-advisory-carry-rejected-limit", "20",
+    "--final-background-drain-timeout-seconds", "90",
+    "--cancel-unfinished-background-on-final-timeout",
+    "--force-exit-after-artifacts-on-background-timeout",
+]
+_BUNDLE_AD_SMOKE100_GRAPH_FLAGS = {
+    "--player-agent",
+    "--player-agent-context-mode",
+    "--player-agent-cache",
+    "--scenario-seed",
+    "--latency-profile",
+    "--strategy",
+    "--autoplay-base-response",
+    "--deferred-advisory-promotion",
+    "--checkpoint-mode",
+    "--background-workers",
+    "--provider-workers",
+    "--debug-provider-shape",
+    "--debug-autoplay-stage-timing",
+    "--player-agent-goal-pressure",
+    "--player-agent-goal-pressure-repair",
+    "--goal-pressure-no-change-threshold",
+    "--goal-pressure-passive-rate-threshold",
+    "--max-player-agent-fallback-rate",
+    "--min-meaningful-progress-rate",
+    "--max-churn-only-rate",
+    "--max-churn-only-streak",
+    "--max-objective-target-no-progress-streak",
+    "--campaign-minutes-per-turn",
+    "--journal-every-turns",
+    "--pre-turn-background-drain-ms",
+    "--pre-turn-advisory-promotion-max-rows",
+    "--pre-turn-advisory-fast-path",
+    "--pre-turn-advisory-carry-candidate-limit",
+    "--pre-turn-advisory-carry-pending-limit",
+    "--pre-turn-advisory-carry-accepted-limit",
+    "--pre-turn-advisory-carry-rejected-limit",
+    "--final-background-drain-timeout-seconds",
+    "--cancel-unfinished-background-on-final-timeout",
+    "--force-exit-after-artifacts-on-background-timeout",
+}
+_BUNDLE_AD_VALUE_FLAGS = {
+    "--player-agent",
+    "--player-agent-context-mode",
+    "--player-agent-cache",
+    "--scenario-seed",
+    "--latency-profile",
+    "--strategy",
+    "--autoplay-base-response",
+    "--deferred-advisory-promotion",
+    "--checkpoint-mode",
+    "--background-workers",
+    "--provider-workers",
+    "--goal-pressure-no-change-threshold",
+    "--goal-pressure-passive-rate-threshold",
+    "--max-player-agent-fallback-rate",
+    "--min-meaningful-progress-rate",
+    "--max-churn-only-rate",
+    "--max-churn-only-streak",
+    "--max-objective-target-no-progress-streak",
+    "--campaign-minutes-per-turn",
+    "--journal-every-turns",
+    "--pre-turn-background-drain-ms",
+    "--pre-turn-advisory-promotion-max-rows",
+    "--pre-turn-advisory-carry-candidate-limit",
+    "--pre-turn-advisory-carry-pending-limit",
+    "--pre-turn-advisory-carry-accepted-limit",
+    "--pre-turn-advisory-carry-rejected-limit",
+    "--final-background-drain-timeout-seconds",
+}
+
+
+def _bundle_ad_flag_set(argv: _BundleADList[str]) -> set[str]:
+    return {str(arg).split("=", 1)[0] for arg in argv if str(arg).startswith("--")}
+
+
+def _bundle_ad_append_missing_profile_args(argv: _BundleADList[str], additions: _BundleADList[str]) -> _BundleADList[str]:
+    expanded = list(argv)
+    supplied = _bundle_ad_flag_set(expanded)
+    index = 0
+    while index < len(additions):
+        flag = additions[index]
+        has_value = flag in _BUNDLE_AD_VALUE_FLAGS and index + 1 < len(additions)
+        if flag not in supplied:
+            expanded.append(flag)
+            if has_value:
+                expanded.append(additions[index + 1])
+        if has_value:
+            index += 2
+        else:
+            index += 1
+    return expanded
+
+
+def _bundle_ad_patch_profile(profile: _BundleADAny) -> None:
+    if not isinstance(profile, dict):
+        return
+    canonical = profile.get("canonical_cli_args")
+    if isinstance(canonical, list):
+        profile["canonical_cli_args"] = _bundle_ad_append_missing_profile_args([str(part) for part in canonical], _BUNDLE_AD_SMOKE100_GRAPH_ARGS)
+    defaults = profile.setdefault("defaults", {}) if isinstance(profile.setdefault("defaults", {}), dict) else {}
+    if isinstance(defaults, dict):
+        defaults.setdefault("player_agent", "llm")
+        defaults.setdefault("player_agent_context_mode", "compact")
+        defaults.setdefault("player_agent_cache", "on")
+        defaults.setdefault("scenario_seed", "tavern_story_seed")
+        defaults.setdefault("latency_profile", "playable")
+        defaults.setdefault("strategy", "goal_directed_quest_runner")
+        defaults.setdefault("autoplay_base_response", "deterministic")
+        defaults.setdefault("goal_pressure_enabled", True)
+        defaults.setdefault("goal_pressure_repair_enabled", True)
+        defaults.setdefault("max_objective_target_no_progress_streak", 8)
+        defaults.setdefault("pre_turn_advisory_fast_path", True)
+
+
+def _bundle_ad_wrap_missing_flags(original_func):
+    def _wrapped(argv):
+        missing = list(original_func(argv)) if callable(original_func) else []
+        supplied = _bundle_ad_flag_set(list(argv or []))
+        for flag in sorted(_BUNDLE_AD_SMOKE100_GRAPH_FLAGS):
+            if flag not in supplied and flag not in missing:
+                missing.append(flag)
+        return missing
+    return _wrapped
+
+
+def _bundle_ad_wrap_append_profile_args(original_func):
+    def _wrapped(argv):
+        expanded = list(original_func(argv)) if callable(original_func) else list(argv or [])
+        return _bundle_ad_append_missing_profile_args(expanded, _BUNDLE_AD_SMOKE100_GRAPH_ARGS)
+    return _wrapped
+
+
+if not globals().get("_BUNDLE_AD_1000_PROFILE_SMOKE100_GRAPH_ALIGNMENT_PATCHED"):
+    _bundle_ad_patch_profile(globals().get("_BUNDLE_Q_PROFILE"))
+    _bundle_ad_patch_profile(globals().get("_BUNDLE_S_PROFILE"))
+
+    if callable(globals().get("_bundle_q_missing_command_flags")):
+        _BUNDLE_AD_ORIGINAL_Q_MISSING_COMMAND_FLAGS = globals()["_bundle_q_missing_command_flags"]
+        globals()["_bundle_q_missing_command_flags"] = _bundle_ad_wrap_missing_flags(_BUNDLE_AD_ORIGINAL_Q_MISSING_COMMAND_FLAGS)
+    if callable(globals().get("_bundle_s_missing_command_flags")):
+        _BUNDLE_AD_ORIGINAL_S_MISSING_COMMAND_FLAGS = globals()["_bundle_s_missing_command_flags"]
+        globals()["_bundle_s_missing_command_flags"] = _bundle_ad_wrap_missing_flags(_BUNDLE_AD_ORIGINAL_S_MISSING_COMMAND_FLAGS)
+
+    if callable(globals().get("_bundle_q_append_missing_profile_args")):
+        _BUNDLE_AD_ORIGINAL_Q_APPEND_PROFILE_ARGS = globals()["_bundle_q_append_missing_profile_args"]
+        globals()["_bundle_q_append_missing_profile_args"] = _bundle_ad_wrap_append_profile_args(_BUNDLE_AD_ORIGINAL_Q_APPEND_PROFILE_ARGS)
+    if callable(globals().get("_bundle_s_append_missing_profile_args")):
+        _BUNDLE_AD_ORIGINAL_S_APPEND_PROFILE_ARGS = globals()["_bundle_s_append_missing_profile_args"]
+        globals()["_bundle_s_append_missing_profile_args"] = _bundle_ad_wrap_append_profile_args(_BUNDLE_AD_ORIGINAL_S_APPEND_PROFILE_ARGS)
+
+    globals()["_BUNDLE_AD_1000_PROFILE_SMOKE100_GRAPH_ALIGNMENT_PATCHED"] = True
