@@ -4,7 +4,7 @@
     "required_archive_artifacts_present"
   ],
   "advisory_only": true,
-  "archive_digest_sha256": "aacf7195e895818ec1bf1446d2250efba9f08a3ca04496991a5c1a81f569ba2b",
+  "archive_digest_sha256": "f34600c7e0ce48f7634ad6b111e16c0958c19c2d29adf506b5675a3b9e9a0d2b",
   "archive_index_ready": false,
   "checks": {
     "archive_digest_available": true,
@@ -18,7 +18,7 @@
     "missing_required_archive_file_count": 2,
     "present_tracked_file_count": 10,
     "required_archive_file_count": 4,
-    "total_present_bytes": 100267111,
+    "total_present_bytes": 98316352,
     "tracked_file_count": 13
   },
   "missing_required_archive_artifacts": [
@@ -33,15 +33,15 @@
       "file": "one-thousand-turn-readiness-aggregator-summary.json",
       "present": true,
       "required_for_archive": false,
-      "sha256": "ee6c67769121fc4455b5cef22232bc88443fd98ab40fac2046b526515fb92f00",
-      "size_bytes": 8070
+      "sha256": "c1b53bbf0bcace498968c8d0df06d0120c608e5a423a2acb7f8cfe37a34d63f9",
+      "size_bytes": 8142
     },
     {
       "file": "one-thousand-turn-readiness-dashboard-summary.json",
       "present": true,
       "required_for_archive": false,
-      "sha256": "0ff64ce7a9143072a5b128ef877ef6fe666f110207330609d6f56a5b1f06a061",
-      "size_bytes": 1864
+      "sha256": "04945125f70f2aa73eecb17172f2fae13eaffe1b46eb8a26af6f6d914ba1e136",
+      "size_bytes": 1849
     },
     {
       "file": "one-thousand-turn-preflight-profile-summary.json",
@@ -68,21 +68,21 @@
       "file": "one-thousand-turn-live-result-summary.json",
       "present": true,
       "required_for_archive": false,
-      "sha256": "146934b22ca41fff5df4791bc12ab6e8ba293b96d5db198af757c8cfd8f0ee45",
+      "sha256": "d8b3187d5e56c322c33a841eda0488c96e8e4366aa6eb8b035660d3e9751699d",
       "size_bytes": 1858
     },
     {
       "file": "one-thousand-turn-release-candidate-dashboard-summary.json",
       "present": true,
       "required_for_archive": false,
-      "sha256": "2059911389f5771df8e796d80c15a9c481ed1193fadc7bafdd4e0c7ef52c65c1",
-      "size_bytes": 1458
+      "sha256": "5b1b1f72aea3fbd094578db130af3906c411f0bd877415e96db86043aa646472",
+      "size_bytes": 1513
     },
     {
       "file": "one-thousand-turn-release-candidate-handoff-manifest.json",
       "present": true,
       "required_for_archive": true,
-      "sha256": "6f426e3cb7831bacb6cb1c27469c5ec8f4040090dd4992ad92526f18744e4205",
+      "sha256": "fd6544b380475625fd542d1472e8672bbce01bb4aa67c548cf763440b4b3a3df",
       "size_bytes": 6211
     },
     {
@@ -110,15 +110,15 @@
       "file": "autoplay-campaign-report.html",
       "present": true,
       "required_for_archive": false,
-      "sha256": "357ca1774eaca61246d4cd48f033b7fb67d1e0179bb4a4c176be3514482043b8",
-      "size_bytes": 38797277
+      "sha256": "3a07e90f894f9a4a58259b1a1a93e7e86b2c2b9819dcb825192be64115b356fd",
+      "size_bytes": 38470168
     },
     {
       "file": "autoplay-campaign-results.zip",
       "present": true,
       "required_for_archive": false,
-      "sha256": "ce5720d2787f958aab0ff84aa8e75c2ac2904f149b7bebe6a135d0a7e373f5a8",
-      "size_bytes": 61440436
+      "sha256": "b338e913babe55c589e1957a7b3c82dd05e315f5a4bac4d811142b4a03367607",
+      "size_bytes": 59816674
     }
   ]
 }

@@ -1,5 +1,6 @@
 {
   "advisory_only": true,
+  "bundle_al_truth_source_consistency_applied": true,
   "failing_required_gates": [
     "bundle_ai_truth:dialogue_repair_rate_ok",
     "bundle_ai_truth:preflight_result_ok_or_not_present",
@@ -7,15 +8,12 @@
     "bundle_ai_truth:live_result_ok_or_not_present",
     "bundle_ai_truth:release_candidate_ready_if_live_present"
   ],
-  "format_version": "bundle_aj_readiness_dashboard_reconciled_v1",
+  "format_version": "bundle_al_readiness_dashboard_truth_consistent_v1",
   "ok": false,
-  "passing_required_gate_count": 9,
-  "present_required_gate_count": 9,
   "ready_for_1000_turn_preflight": false,
   "ready_for_live_1000_turn_run": false,
-  "recommended_next_step": "fix_progression_density_and_repair_rate_before_1000_turn_preflight",
-  "required_gate_count": 9,
-  "source": "bundle_aj_sidecar_reconciliation_and_truth_finalization",
+  "recommended_next_step": "fix_truth_blocking_gates_before_1000_turn_preflight",
+  "source": "bundle_al_progression_graph_materialization_truth_consistency",
   "status_class": "fail",
   "status_label": "Readiness Blocked"
 }

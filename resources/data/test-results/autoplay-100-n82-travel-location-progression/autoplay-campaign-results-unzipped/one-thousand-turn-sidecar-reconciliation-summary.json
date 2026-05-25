@@ -18,7 +18,7 @@
   "synced_sidecars": [
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-live-result-summary.json",
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-preflight-result-summary.json",
-    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-readiness-aggregator-summary.json"
+    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-readiness-aggregator-summary.json"
   ],
   "truth_written": [
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-readiness-truth-summary.json",

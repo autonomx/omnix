@@ -13,12 +13,12 @@
       {
         "file": "autoplay-campaign-report.html",
         "present": true,
-        "size_bytes": 38797277
+        "size_bytes": 38470168
       },
       {
         "file": "autoplay-campaign-results.zip",
         "present": true,
-        "size_bytes": 61440436
+        "size_bytes": 59816674
       },
       {
         "file": "artifact-manifest-digest.json",
@@ -31,12 +31,12 @@
       {
         "file": "one-thousand-turn-readiness-aggregator-summary.json",
         "present": true,
-        "size_bytes": 8070
+        "size_bytes": 8142
       },
       {
         "file": "one-thousand-turn-readiness-dashboard-summary.json",
         "present": true,
-        "size_bytes": 1864
+        "size_bytes": 1849
       },
       {
         "file": "one-thousand-turn-preflight-profile-summary.json",
@@ -61,7 +61,7 @@
       {
         "file": "one-thousand-turn-release-candidate-dashboard-summary.json",
         "present": true,
-        "size_bytes": 1458
+        "size_bytes": 1513
       }
     ],
     "required_file_count": 7

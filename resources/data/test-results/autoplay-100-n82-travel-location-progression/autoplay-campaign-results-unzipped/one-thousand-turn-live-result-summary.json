@@ -3,13 +3,14 @@
     "live_profile_ready",
     "preflight_promoted_live_run",
     "no_required_gate_failures",
+    "blocking_turn_p95_within_live_budget",
     "zipped_results_artifact_present"
   ],
   "advisory_only": true,
   "checks": {
     "artifact_manifest_ok": true,
     "background_drain_within_live_budget": true,
-    "blocking_turn_p95_within_live_budget": true,
+    "blocking_turn_p95_within_live_budget": false,
     "campaign_report_artifact_present": true,
     "completed_target_turns": true,
     "live_profile_ready": false,
@@ -26,8 +27,8 @@
   "format_version": "bundle_t_live_1000_result_summary_v1",
   "metrics": {
     "background_drain_seconds": 0.0,
-    "blocking_turn_p95_seconds": 9.967001,
-    "campaign_report_size_bytes": 38065182,
+    "blocking_turn_p95_seconds": 20.400757000000002,
+    "campaign_report_size_bytes": 37741019,
     "completed_turns": 100,
     "dashboard_failure_count": 0,
     "live_profile_failure_count": 0,

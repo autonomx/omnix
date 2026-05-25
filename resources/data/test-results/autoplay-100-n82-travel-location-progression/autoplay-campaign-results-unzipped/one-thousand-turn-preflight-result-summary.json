@@ -25,7 +25,7 @@
   "metrics": {
     "aggregator_failure_count": 0,
     "background_drain_seconds": 0.0,
-    "blocking_turn_p95_seconds": 9.967001,
+    "blocking_turn_p95_seconds": 20.400757000000002,
     "completed_turns": 100,
     "dashboard_failure_count": 0,
     "max_background_drain_seconds": 120.0,

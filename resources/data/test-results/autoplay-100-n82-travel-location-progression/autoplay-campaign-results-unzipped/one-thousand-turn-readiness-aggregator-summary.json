@@ -8,6 +8,7 @@
     "release_candidate_ready_if_live_present"
   ],
   "bundle_ai_truth_overrides_applied": true,
+  "bundle_al_truth_source_consistency_applied": true,
   "category_rollup": {
     "artifacts": {
       "fail_count": 0,
@@ -173,8 +174,8 @@
         "max_projected_state_bytes": 50331648,
         "max_state_bytes": 16777216,
         "max_world_event_retained_rows": 250,
-        "projected_1000_turn_state_bytes": 34659710,
-        "state_bytes": 3465971,
+        "projected_1000_turn_state_bytes": 33702050,
+        "state_bytes": 3370205,
         "turn_count": 100,
         "world_event_retained_rows": 1
       },
@@ -273,10 +274,10 @@
   "passing_required_gate_count": 9,
   "present_required_gate_count": 9,
   "ready_for_1000_turn_preflight": false,
-  "ready_for_1000_turn_preflight_before_bundle_ai_truth": true,
+  "ready_for_1000_turn_preflight_before_bundle_ai_truth": false,
   "ready_for_live_1000_turn_run": false,
-  "ready_for_live_1000_turn_run_before_bundle_ai_truth": true,
-  "recommended_next_step": "fix_progression_density_and_repair_rate_before_1000_turn_preflight",
+  "ready_for_live_1000_turn_run_before_bundle_ai_truth": false,
+  "recommended_next_step": "fix_truth_blocking_gates_before_1000_turn_preflight",
   "required_gate_count": 9,
   "source": "bundle_o_1000_turn_readiness_aggregator",
   "total_advisory_failure_count": 0,
