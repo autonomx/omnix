@@ -161,6 +161,12 @@ def _bundle_am_fill_node(node: _BundleAMAny, inherited_graph: bool = False) -> _
         filled_nodes = 0
         out: _BundleAMDict[str, _BundleAMAny] = {}
         for key, value in node.items():
+            # Do not recursively treat an empty presentation container as its own
+            # graph turn.  The parent graph node will receive exactly one filled
+            # presentation, avoiding double filled-node counts.
+            if graph and key in {"presentation", "selected_presentation"} and _bundle_am_empty(value):
+                out[key] = value
+                continue
             child, child_changed, child_filled = _bundle_am_fill_node(value, graph)
             out[key] = child
             changed += child_changed
@@ -224,8 +230,10 @@ def _bundle_am_fill_artifact(path: _BundleAMPath) -> _BundleAMTuple[int, int]:
 
 def _bundle_am_graph_empty_repair_count(result_dir: _BundleAMPath) -> int:
     stale = _bundle_am_load_json(result_dir / "dialogue-stale-source-summary.json")
-    by_source = stale.get("by_source") if isinstance(stale.get("by_source"), dict) else {}
-    by_reason = stale.get("by_reason") if isinstance(stale.get("by_reason"), dict) else {}
+    raw_by_source = stale.get("raw_by_source_before_bundle_am") if isinstance(stale.get("raw_by_source_before_bundle_am"), dict) else None
+    raw_by_reason = stale.get("raw_by_reason_before_bundle_am") if isinstance(stale.get("raw_by_reason_before_bundle_am"), dict) else None
+    by_source = raw_by_source or (stale.get("by_source") if isinstance(stale.get("by_source"), dict) else {})
+    by_reason = raw_by_reason or (stale.get("by_reason") if isinstance(stale.get("by_reason"), dict) else {})
     return min(_bundle_am_to_int(by_source.get("scenario_progression_graph"), 0), _bundle_am_to_int(by_reason.get("empty_presentation"), 0))
 
 
@@ -270,7 +278,7 @@ def _bundle_am_patch_stale_source(result_dir: _BundleAMPath) -> _BundleAMDict[st
         return {}
     raw_by_source = dict(summary.get("raw_by_source_before_bundle_am") if isinstance(summary.get("raw_by_source_before_bundle_am"), dict) else summary.get("by_source", {}))
     raw_by_reason = dict(summary.get("raw_by_reason_before_bundle_am") if isinstance(summary.get("raw_by_reason_before_bundle_am"), dict) else summary.get("by_reason", {}))
-    graph_empty = min(_bundle_am_to_int(raw_by_source.get("scenario_progression_graph"), 0), _bundle_am_to_int(raw_by_reason.get("empty_presentation"), 0))
+    graph_empty = min(_bundle_am_to_int(raw_by_source.get("scenario_progression_graph", 0)), _bundle_am_to_int(raw_by_reason.get("empty_presentation", 0)))
     by_source = dict(raw_by_source)
     by_reason = dict(raw_by_reason)
     by_source["scenario_progression_graph"] = max(0, _bundle_am_to_int(by_source.get("scenario_progression_graph"), 0) - graph_empty)
