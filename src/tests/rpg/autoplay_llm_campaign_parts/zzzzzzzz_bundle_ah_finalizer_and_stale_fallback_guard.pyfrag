@@ -13,7 +13,6 @@
 # function code constants after load so this bad fallback cannot be emitted.
 
 import json as _bundle_ah_json
-import re as _bundle_ah_re
 import types as _bundle_ah_types
 from pathlib import Path as _BundleAHPath
 from typing import Any as _BundleAHAny, Dict as _BundleAHDict, List as _BundleAHList
@@ -82,12 +81,32 @@ def _bundle_ah_write_quality_gate(result_dir: _BundleAHPath) -> bool:
         return False
 
 
+def _bundle_ah_extract_path_values(text: str) -> _BundleAHList[str]:
+    values: _BundleAHList[str] = []
+    start = 0
+    while True:
+        marker_index = text.find("path=", start)
+        if marker_index < 0:
+            break
+        value_start = marker_index + len("path=")
+        delimiters = [
+            text.find(token, value_start)
+            for token in (":failed_checks=", ":missing_unzipped_files=", ":unzipped_manifest=", ":zip_count=")
+        ]
+        delimiters = [index for index in delimiters if index >= 0]
+        value_end = min(delimiters) if delimiters else len(text)
+        raw = text[value_start:value_end].strip().strip("'\"")
+        if raw:
+            values.append(raw)
+        start = value_end
+    return values
+
+
 def _bundle_ah_candidate_dirs_from_exception(exc: BaseException) -> _BundleAHList[_BundleAHPath]:
-    text = str(exc)
     paths: _BundleAHList[_BundleAHPath] = []
-    for match in _bundle_ah_re.findall(r"path=([^:]+(?:\\|/)[^:]+?)(?::failed_checks=|$)", text):
+    for raw in _bundle_ah_extract_path_values(str(exc)):
         try:
-            candidate = _BundleAHPath(match.strip())
+            candidate = _BundleAHPath(raw)
             paths.append(candidate)
             if candidate.name.endswith("-unzipped"):
                 paths.append(candidate.parent)
