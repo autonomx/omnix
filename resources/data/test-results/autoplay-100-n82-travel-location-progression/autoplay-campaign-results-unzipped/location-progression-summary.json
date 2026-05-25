@@ -1,5 +1,5 @@
 {
-  "visited_location_count": 11,
+  "visited_location_count": 12,
   "visited_locations": [
     "scene:rusty_flagon",
     "location:wagon_yard",
@@ -11,9 +11,10 @@
     "location:black_ford",
     "location:old_north_watchpost",
     "location:ridge_hideout",
-    "location:mill_bridge_road"
+    "location:mill_bridge_road",
+    "location:rusty_flagon_tavern"
   ],
-  "travel_turn_count": 14,
+  "travel_turn_count": 16,
   "blocked_travel_turn_count": 0,
   "travel_intent_turn_count": 16,
   "travel_turns": [
@@ -125,6 +126,20 @@
       "turn": 6,
       "source": "progress_timeline.location_changed",
       "from_location": "scene:rusty_flagon",
+      "to_location": "location:mill_bridge_road",
+      "summary": "Location changed to location:mill_bridge_road."
+    },
+    {
+      "turn": 26,
+      "source": "progress_timeline.location_changed",
+      "from_location": "location:mill_bridge_road",
+      "to_location": "location:rusty_flagon_tavern",
+      "summary": "Location changed to location:rusty_flagon_tavern."
+    },
+    {
+      "turn": 27,
+      "source": "progress_timeline.location_changed",
+      "from_location": "location:rusty_flagon_tavern",
       "to_location": "location:mill_bridge_road",
       "summary": "Location changed to location:mill_bridge_road."
     }

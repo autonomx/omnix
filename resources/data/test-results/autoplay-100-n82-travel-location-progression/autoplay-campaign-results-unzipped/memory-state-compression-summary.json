@@ -19,8 +19,8 @@
     "max_projected_state_bytes": 50331648,
     "max_state_bytes": 16777216,
     "max_world_event_retained_rows": 250,
-    "projected_1000_turn_state_bytes": 34902150,
-    "state_bytes": 3490215,
+    "projected_1000_turn_state_bytes": 34293090,
+    "state_bytes": 3429309,
     "turn_count": 100,
     "world_event_retained_rows": 1
   },

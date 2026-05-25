@@ -1,5 +1,13 @@
 {
   "advisory_only": true,
+  "bundle_ai_truth_blocking_gates": [
+    "dialogue_repair_rate_ok",
+    "preflight_result_ok_or_not_present",
+    "preflight_promoted_before_live",
+    "live_result_ok_or_not_present",
+    "release_candidate_ready_if_live_present"
+  ],
+  "bundle_ai_truth_overrides_applied": true,
   "category_rollup": {
     "artifacts": {
       "fail_count": 0,
@@ -47,7 +55,13 @@
       "pass_count": 3
     }
   },
-  "failing_required_gates": [],
+  "failing_required_gates": [
+    "bundle_ai_truth:dialogue_repair_rate_ok",
+    "bundle_ai_truth:preflight_result_ok_or_not_present",
+    "bundle_ai_truth:preflight_promoted_before_live",
+    "bundle_ai_truth:live_result_ok_or_not_present",
+    "bundle_ai_truth:release_candidate_ready_if_live_present"
+  ],
   "format_version": "bundle_o_1000_turn_readiness_aggregator_summary_v1",
   "gate_statuses": [
     {
@@ -159,8 +173,8 @@
         "max_projected_state_bytes": 50331648,
         "max_state_bytes": 16777216,
         "max_world_event_retained_rows": 250,
-        "projected_1000_turn_state_bytes": 34902150,
-        "state_bytes": 3490215,
+        "projected_1000_turn_state_bytes": 34293090,
+        "state_bytes": 3429309,
         "turn_count": 100,
         "world_event_retained_rows": 1
       },
@@ -231,7 +245,7 @@
     }
   ],
   "missing_required_gates": [],
-  "ok": true,
+  "ok": false,
   "optional_gate_statuses": [
     {
       "advisory_failure_count": 0,
@@ -258,9 +272,11 @@
   ],
   "passing_required_gate_count": 9,
   "present_required_gate_count": 9,
-  "ready_for_1000_turn_preflight": true,
-  "ready_for_live_1000_turn_run": true,
-  "recommended_next_step": "run_1000_turn_preflight",
+  "ready_for_1000_turn_preflight": false,
+  "ready_for_1000_turn_preflight_before_bundle_ai_truth": true,
+  "ready_for_live_1000_turn_run": false,
+  "ready_for_live_1000_turn_run_before_bundle_ai_truth": true,
+  "recommended_next_step": "fix_progression_density_and_repair_rate_before_1000_turn_preflight",
   "required_gate_count": 9,
   "source": "bundle_o_1000_turn_readiness_aggregator",
   "total_advisory_failure_count": 0,
