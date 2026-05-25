@@ -64,10 +64,9 @@ def test_bundle_ai_repairs_static_bad_fallback_actions_in_nested_artifact_payloa
 def test_bundle_ai_repair_json_artifact_rewrites_bad_static_actions(tmp_path):
     namespace = _load_bundle_ai_namespace()
     artifact = tmp_path / "turn-action-consistency-summary.json"
-    # Use the original writer so this fixture is not auto-repaired by Bundle AI's
-    # Path.write_text wrapper before the direct repair helper is exercised.
-    namespace["_BUNDLE_AI_ORIGINAL_PATH_WRITE_TEXT"](
-        artifact,
+    # Use write_bytes so the fixture bypasses every Path.write_text wrapper that
+    # previous fragment loads may have installed in this pytest process.
+    artifact.write_bytes(
         json.dumps(
             {
                 "examples": [
@@ -77,8 +76,7 @@ def test_bundle_ai_repair_json_artifact_rewrites_bad_static_actions(tmp_path):
                     }
                 ]
             }
-        ),
-        encoding="utf-8",
+        ).encode("utf-8")
     )
 
     changed = namespace["_bundle_ai_repair_json_artifact"](artifact)
