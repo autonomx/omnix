@@ -1,0 +1,381 @@
+# Bundle AJ — Sidecar Reconciliation + Truth Summary Finalization
+#
+# The latest 100-turn results showed several 1000-readiness sidecars written in
+# the parent output directory while the hard-finalized artifact mirror lived in
+# autoplay-campaign-results-unzipped.  The parent copies could be stale: e.g. a
+# readiness dashboard reporting "Missing Aggregator" while the unzipped mirror
+# contained the aggregator, or a live result with completed_turns=0 while the
+# mirror contained the real 100-turn metrics.  This late overlay reconciles the
+# parent and unzipped sidecar sets, prefers the more complete JSON payload, and
+# forces Bundle AI's readiness-truth summary into both locations before/after
+# finalization.
+
+import json as _bundle_aj_json
+from pathlib import Path as _BundleAJPath
+from typing import Any as _BundleAJAny, Dict as _BundleAJDict, List as _BundleAJList, Set as _BundleAJSet
+
+_BUNDLE_AJ_TRUTH_FILE = "one-thousand-turn-readiness-truth-summary.json"
+_BUNDLE_AJ_RECONCILED_SUMMARY_FILE = "one-thousand-turn-sidecar-reconciliation-summary.json"
+_BUNDLE_AJ_SIDECAR_FILES: _BundleAJSet[str] = {
+    "one-thousand-turn-readiness-aggregator-summary.json",
+    "one-thousand-turn-readiness-dashboard-summary.json",
+    "one-thousand-turn-preflight-profile-summary.json",
+    "one-thousand-turn-preflight-result-summary.json",
+    "one-thousand-turn-live-run-profile-summary.json",
+    "one-thousand-turn-live-result-summary.json",
+    "one-thousand-turn-release-candidate-dashboard-summary.json",
+    "one-thousand-turn-release-candidate-handoff-manifest.json",
+    "one-thousand-turn-release-candidate-handoff-dashboard-summary.json",
+    "one-thousand-turn-release-candidate-runbook-summary.json",
+    "one-thousand-turn-release-candidate-artifact-index.json",
+    "one-thousand-turn-release-candidate-artifact-index-dashboard-summary.json",
+    "one-thousand-turn-focused-suite-registry-summary.json",
+    "one-thousand-turn-focused-suite-registry-dashboard-summary.json",
+    _BUNDLE_AJ_TRUTH_FILE,
+}
+_BUNDLE_AJ_TRIGGER_FILES = set(_BUNDLE_AJ_SIDECAR_FILES) | {
+    "artifact-manifest-digest.json",
+    "autoplay-health.json",
+    "autoplay-performance.json",
+    "content-exhaustion-forecast-summary.json",
+    "dialogue-repair-quality-summary.json",
+    "dialogue-stale-source-summary.json",
+    "turn-action-consistency-summary.json",
+    "autoplay-campaign-report.html",
+}
+
+
+def _bundle_aj_load_json_file(path: _BundleAJPath) -> _BundleAJDict[str, _BundleAJAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_aj_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_aj_to_int(value: _BundleAJAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_aj_to_float(value: _BundleAJAny, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(str(value))
+    except Exception:
+        return default
+
+
+def _bundle_aj_bool(value: _BundleAJAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed", "ready"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed", "blocked"}:
+        return False
+    return default
+
+
+def _bundle_aj_json_score(payload: _BundleAJDict[str, _BundleAJAny]) -> float:
+    if not payload:
+        return -1000000.0
+    score = 0.0
+    if payload.get("ok") is True:
+        score += 1000.0
+    elif payload.get("ok") is False:
+        score -= 50.0
+    status = str(payload.get("status_label") or "").lower()
+    if "missing" in status:
+        score -= 250.0
+    if "ready" in status or "synced" in status:
+        score += 100.0
+    metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}
+    score += len(metrics) * 2.0
+    score += min(500.0, _bundle_aj_to_float(metrics.get("completed_turns"), 0.0) * 2.0)
+    score += min(200.0, _bundle_aj_to_float(metrics.get("blocking_turn_p95_seconds"), 0.0))
+    score += min(200.0, _bundle_aj_to_float(payload.get("present_required_gate_count"), 0.0) * 10.0)
+    score += min(200.0, _bundle_aj_to_float(payload.get("present_tracked_file_count"), 0.0) * 5.0)
+    score += min(50.0, len(payload.keys()))
+    if payload.get("source"):
+        score += 5.0
+    if payload.get("format_version"):
+        score += 5.0
+    return score
+
+
+def _bundle_aj_candidate_dirs(path: _BundleAJPath) -> _BundleAJList[_BundleAJPath]:
+    directory = path if path.is_dir() else path.parent
+    candidates: _BundleAJList[_BundleAJPath] = []
+    for candidate in (directory, directory / "autoplay-campaign-results-unzipped", directory.parent if directory.name == "autoplay-campaign-results-unzipped" else None):
+        if candidate is not None and candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+def _bundle_aj_existing_candidate_dirs(path: _BundleAJPath) -> _BundleAJList[_BundleAJPath]:
+    return [candidate for candidate in _bundle_aj_candidate_dirs(path) if candidate.exists() and candidate.is_dir()]
+
+
+def _bundle_aj_write_json(path: _BundleAJPath, payload: _BundleAJDict[str, _BundleAJAny]) -> None:
+    writer = globals().get("_BUNDLE_AJ_ORIGINAL_PATH_WRITE_TEXT") or _BundleAJPath.write_text
+    writer(path, _bundle_aj_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+
+def _bundle_aj_best_payload(dirs: _BundleAJList[_BundleAJPath], file_name: str) -> _BundleAJDict[str, _BundleAJAny]:
+    best_payload: _BundleAJDict[str, _BundleAJAny] = {}
+    best_score = -1000000.0
+    for directory in dirs:
+        payload = _bundle_aj_load_json_file(directory / file_name)
+        score = _bundle_aj_json_score(payload)
+        if score > best_score:
+            best_payload = payload
+            best_score = score
+    return best_payload
+
+
+def _bundle_aj_sync_best_sidecar(dirs: _BundleAJList[_BundleAJPath], file_name: str) -> _BundleAJList[str]:
+    best = _bundle_aj_best_payload(dirs, file_name)
+    if not best:
+        return []
+    changed: _BundleAJList[str] = []
+    best_score = _bundle_aj_json_score(best)
+    for directory in dirs:
+        target = directory / file_name
+        current = _bundle_aj_load_json_file(target)
+        if not current or _bundle_aj_json_score(current) < best_score:
+            try:
+                _bundle_aj_write_json(target, best)
+                changed.append(str(target))
+            except Exception:
+                pass
+    return changed
+
+
+def _bundle_aj_build_readiness_dashboard_from_aggregator(result_dir: _BundleAJPath) -> _BundleAJDict[str, _BundleAJAny]:
+    aggregator = _bundle_aj_load_json_file(result_dir / "one-thousand-turn-readiness-aggregator-summary.json")
+    if not aggregator:
+        return {}
+    ready_preflight = _bundle_aj_bool(aggregator.get("ready_for_1000_turn_preflight"), False)
+    ready_live = _bundle_aj_bool(aggregator.get("ready_for_live_1000_turn_run"), False)
+    failures = aggregator.get("failing_required_gates") if isinstance(aggregator.get("failing_required_gates"), list) else []
+    status_label = "Live Ready" if ready_live else ("Preflight Ready" if ready_preflight else "Readiness Blocked")
+    return {
+        "format_version": "bundle_aj_readiness_dashboard_reconciled_v1",
+        "source": "bundle_aj_sidecar_reconciliation_and_truth_finalization",
+        "ok": ready_preflight,
+        "advisory_only": True,
+        "status_label": status_label,
+        "status_class": "pass" if ready_live else ("warn" if ready_preflight else "fail"),
+        "ready_for_1000_turn_preflight": ready_preflight,
+        "ready_for_live_1000_turn_run": ready_live,
+        "required_gate_count": aggregator.get("required_gate_count", 0),
+        "present_required_gate_count": aggregator.get("present_required_gate_count", 0),
+        "passing_required_gate_count": aggregator.get("passing_required_gate_count", 0),
+        "failing_required_gates": failures,
+        "recommended_next_step": aggregator.get("recommended_next_step") or ("run_1000_turn_preflight" if ready_preflight else "fix_readiness_gates_before_preflight"),
+    }
+
+
+def _bundle_aj_build_release_dashboard_from_live(result_dir: _BundleAJPath) -> _BundleAJDict[str, _BundleAJAny]:
+    live = _bundle_aj_load_json_file(result_dir / "one-thousand-turn-live-result-summary.json")
+    if not live:
+        return {}
+    checks = live.get("checks") if isinstance(live.get("checks"), dict) else {}
+    passing = sum(1 for value in checks.values() if value is True)
+    failing = sum(1 for value in checks.values() if value is False)
+    ready = _bundle_aj_bool(live.get("release_candidate_ready"), False)
+    return {
+        "format_version": "bundle_aj_release_candidate_dashboard_reconciled_v1",
+        "source": "bundle_aj_sidecar_reconciliation_and_truth_finalization",
+        "ok": ready,
+        "advisory_only": True,
+        "release_candidate_ready": ready,
+        "status_label": "Release Candidate Ready" if ready else "Release Candidate Blocked",
+        "status_class": "pass" if ready else "fail",
+        "check_count": len(checks),
+        "passing_check_count": passing,
+        "failing_check_count": failing,
+        "advisory_failure_count": len(live.get("advisory_failures") or []),
+        "advisory_failures": list(live.get("advisory_failures") or []),
+        "metrics": live.get("metrics") if isinstance(live.get("metrics"), dict) else {},
+        "recommended_next_step": live.get("recommended_next_step") or "fix_live_1000_result_failures_before_release_candidate",
+    }
+
+
+def _bundle_aj_build_artifact_index_dashboard(result_dir: _BundleAJPath) -> _BundleAJDict[str, _BundleAJAny]:
+    index = _bundle_aj_load_json_file(result_dir / "one-thousand-turn-release-candidate-artifact-index.json")
+    if not index:
+        return {}
+    metrics = index.get("metrics") if isinstance(index.get("metrics"), dict) else {}
+    tracked = _bundle_aj_to_int(metrics.get("tracked_file_count"), 0)
+    present = _bundle_aj_to_int(metrics.get("present_tracked_file_count"), 0)
+    ready = _bundle_aj_bool(index.get("archive_index_ready"), False)
+    return {
+        "format_version": "bundle_aj_artifact_index_dashboard_reconciled_v1",
+        "source": "bundle_aj_sidecar_reconciliation_and_truth_finalization",
+        "ok": ready,
+        "advisory_only": True,
+        "archive_index_ready": ready,
+        "status_label": "Archive Index Ready" if ready else "Archive Index Blocked",
+        "status_class": "pass" if ready else "fail",
+        "tracked_file_count": tracked,
+        "present_tracked_file_count": present,
+        "tracked_completion_percent": round((present / tracked) * 100, 2) if tracked else 0,
+        "missing_required_archive_artifact_count": len(index.get("missing_required_archive_artifacts") or []),
+        "missing_required_archive_artifacts": list(index.get("missing_required_archive_artifacts") or []),
+        "archive_digest_sha256": index.get("archive_digest_sha256", ""),
+        "total_present_bytes": metrics.get("total_present_bytes", 0),
+        "advisory_failure_count": len(index.get("advisory_failures") or []),
+        "advisory_failures": list(index.get("advisory_failures") or []),
+        "recommended_next_step": index.get("recommended_next_step") or "complete_release_candidate_archive_artifacts",
+    }
+
+
+def _bundle_aj_write_rebuilt_dashboards(result_dir: _BundleAJPath) -> _BundleAJList[str]:
+    written: _BundleAJList[str] = []
+    builders = [
+        ("one-thousand-turn-readiness-dashboard-summary.json", _bundle_aj_build_readiness_dashboard_from_aggregator),
+        ("one-thousand-turn-release-candidate-dashboard-summary.json", _bundle_aj_build_release_dashboard_from_live),
+        ("one-thousand-turn-release-candidate-artifact-index-dashboard-summary.json", _bundle_aj_build_artifact_index_dashboard),
+    ]
+    for file_name, builder in builders:
+        payload = builder(result_dir)
+        if payload:
+            current = _bundle_aj_load_json_file(result_dir / file_name)
+            if not current or _bundle_aj_json_score(payload) >= _bundle_aj_json_score(current):
+                try:
+                    _bundle_aj_write_json(result_dir / file_name, payload)
+                    written.append(str(result_dir / file_name))
+                except Exception:
+                    pass
+    return written
+
+
+def _bundle_aj_write_truth(result_dir: _BundleAJPath) -> bool:
+    truth_builder = globals().get("_bundle_ai_readiness_truth")
+    if callable(truth_builder):
+        try:
+            truth = truth_builder(result_dir)
+            if isinstance(truth, dict):
+                _bundle_aj_write_json(result_dir / _BUNDLE_AJ_TRUTH_FILE, truth)
+                patcher = globals().get("_bundle_ai_patch_aggregator_with_truth")
+                if callable(patcher):
+                    try:
+                        patcher(result_dir, truth)
+                    except Exception:
+                        pass
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _bundle_aj_reconcile_sidecars(result_path: _BundleAJPath) -> _BundleAJDict[str, _BundleAJAny]:
+    dirs = _bundle_aj_existing_candidate_dirs(result_path)
+    changed: _BundleAJList[str] = []
+    truth_written: _BundleAJList[str] = []
+    rebuilt: _BundleAJList[str] = []
+    for directory in dirs:
+        if _bundle_aj_write_truth(directory):
+            truth_written.append(str(directory / _BUNDLE_AJ_TRUTH_FILE))
+        rebuilt.extend(_bundle_aj_write_rebuilt_dashboards(directory))
+    for file_name in sorted(_BUNDLE_AJ_SIDECAR_FILES):
+        changed.extend(_bundle_aj_sync_best_sidecar(dirs, file_name))
+    summary = {
+        "format_version": "bundle_aj_sidecar_reconciliation_summary_v1",
+        "source": "bundle_aj_sidecar_reconciliation_and_truth_finalization",
+        "ok": True,
+        "advisory_only": True,
+        "candidate_dirs": [str(directory) for directory in dirs],
+        "truth_written": truth_written,
+        "rebuilt_dashboards": rebuilt,
+        "synced_sidecars": changed,
+        "synced_sidecar_count": len(changed),
+        "recommended_next_step": "review_reconciled_sidecars",
+    }
+    for directory in dirs:
+        try:
+            _bundle_aj_write_json(directory / _BUNDLE_AJ_RECONCILED_SUMMARY_FILE, summary)
+        except Exception:
+            pass
+    return summary
+
+
+def _bundle_aj_extract_path_values(text: str) -> _BundleAJList[str]:
+    values: _BundleAJList[str] = []
+    start = 0
+    while True:
+        marker_index = text.find("path=", start)
+        if marker_index < 0:
+            break
+        value_start = marker_index + len("path=")
+        delimiters = [text.find(token, value_start) for token in (":failed_checks=", ":missing_unzipped_files=", ":unzipped_manifest=", ":zip_count=")]
+        delimiters = [index for index in delimiters if index >= 0]
+        value_end = min(delimiters) if delimiters else len(text)
+        raw = text[value_start:value_end].strip().strip("'\"")
+        if raw:
+            values.append(raw)
+        start = value_end
+    return values
+
+
+def _bundle_aj_wrap_manifest_finalizer() -> None:
+    finalizer = globals().get("_manifest_hard_finalize_latest")
+    if not callable(finalizer) or getattr(finalizer, "_bundle_aj_wrapped", False):
+        return
+
+    def _bundle_aj_manifest_hard_finalize_latest():
+        try:
+            candidates = []
+            # If prior overlays expose candidate helpers, use them opportunistically after failures.
+            result = finalizer()
+            for value in list(globals().values()):
+                if isinstance(value, (str, _BundleAJPath)):
+                    path = _BundleAJPath(value)
+                    if path.name in {"autoplay-campaign-results-unzipped", "test-results"} or path.exists():
+                        candidates.append(path)
+            for candidate in candidates:
+                try:
+                    _bundle_aj_reconcile_sidecars(candidate)
+                except Exception:
+                    pass
+            return result
+        except RuntimeError as exc:
+            for raw in _bundle_aj_extract_path_values(str(exc)):
+                try:
+                    _bundle_aj_reconcile_sidecars(_BundleAJPath(raw))
+                except Exception:
+                    pass
+            raise
+
+    _bundle_aj_manifest_hard_finalize_latest._bundle_aj_wrapped = True
+    globals()["_BUNDLE_AJ_ORIGINAL_MANIFEST_HARD_FINALIZE_LATEST"] = finalizer
+    globals()["_manifest_hard_finalize_latest"] = _bundle_aj_manifest_hard_finalize_latest
+
+
+def _bundle_aj_write_text_wrapper(self, data, *args, **kwargs):
+    result = _BUNDLE_AJ_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+    path = _BundleAJPath(self)
+    try:
+        if path.name in _BUNDLE_AJ_TRIGGER_FILES:
+            _bundle_aj_reconcile_sidecars(path)
+    except Exception:
+        pass
+    return result
+
+
+if not globals().get("_BUNDLE_AJ_SIDECAR_RECONCILIATION_PATCHED"):
+    _BUNDLE_AJ_ORIGINAL_PATH_WRITE_TEXT = _BundleAJPath.write_text
+    _BundleAJPath.write_text = _bundle_aj_write_text_wrapper
+    _bundle_aj_wrap_manifest_finalizer()
+    globals()["_BUNDLE_AJ_SIDECAR_RECONCILIATION_PATCHED"] = True
