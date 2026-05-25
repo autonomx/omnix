@@ -1,0 +1,218 @@
+# Bundle AE — 1000-Turn Progression Graph Expansion
+#
+# The first 1000-turn preflight exposed that profile controls alone are not
+# enough: once the player agent lost concrete graph pressure it repeated a vague
+# active-objective action for many turns.  This late fragment adds a deterministic
+# long-run progression graph contract with concrete route chains, objective-stage
+# edges, fallback action templates, and stale-loop replacement actions.  It also
+# writes validation artifacts so the graph can be checked before spending hours
+# on another 1000-turn run.
+
+import json as _bundle_ae_json
+from pathlib import Path as _BundleAEPath
+from typing import Any as _BundleAEAny, Dict as _BundleAEDict, List as _BundleAEList
+
+_BUNDLE_AE_GRAPH_FILE = "one-thousand-turn-progression-graph.json"
+_BUNDLE_AE_SUMMARY_FILE = "one-thousand-turn-progression-graph-summary.json"
+_BUNDLE_AE_TRIGGER_FILES = {
+    "one-thousand-turn-preflight-profile-summary.json",
+    "one-thousand-turn-live-run-profile-summary.json",
+    "one-thousand-turn-focused-suite-registry-summary.json",
+}
+_BUNDLE_AE_TARGET_TURNS = 1000
+_BUNDLE_AE_MIN_ROUTE_CHAINS = 8
+_BUNDLE_AE_MIN_OBJECTIVE_EDGES = 72
+_BUNDLE_AE_MIN_ESTIMATED_CAPACITY = 1000
+_BUNDLE_AE_REQUIRED_VERBS = {"ask", "travel", "investigate", "report", "resolve", "restock"}
+_BUNDLE_AE_GENERIC_REPEAT_MARKERS = (
+    "focus on the active",
+    "check in with garran and focus",
+    "active wagon-road objective",
+    "continue the objective",
+)
+
+
+def _bundle_ae_route_chain(chain_id: str, title: str, locations: _BundleAEList[str], npcs: _BundleAEList[str], pressure: str) -> _BundleAEDict[str, _BundleAEAny]:
+    return {
+        "id": chain_id,
+        "title": title,
+        "locations": locations,
+        "key_npcs": npcs,
+        "pressure": pressure,
+        "turn_budget": max(72, len(locations) * 18),
+    }
+
+
+def _bundle_ae_build_1000_progression_graph() -> _BundleAEDict[str, _BundleAEAny]:
+    route_chains = [
+        _bundle_ae_route_chain("tavern_to_wagon_road", "Tavern Leads to the Wagon Road", ["Bran's Tavern", "North Gate", "Old Wagon Road", "Roadside Shrine", "Split-Mile Marker"], ["Bran", "Garran", "Mira"], "bandit pressure and missing wagon clues"),
+        _bundle_ae_route_chain("wagon_road_to_haunted_mill", "Wagon Road to Haunted Mill", ["Split-Mile Marker", "Ash Hollow", "Haunted Mill", "Mill Cellar", "Dry Creek Ford"], ["Garran", "Elsa", "Veska"], "mill evidence and safe route discovery"),
+        _bundle_ae_route_chain("mill_to_bridge_watch", "Mill Evidence to Bridge Watch", ["Dry Creek Ford", "Stonebridge Camp", "East Watchtower", "Bridge Tollhouse", "River Road"], ["Captain Ilyen", "Tollkeeper Ren", "Sable Scout"], "bridge control and faction checkpoints"),
+        _bundle_ae_route_chain("bridge_to_sable_safehouse", "Bridge Watch to Sable Safehouse", ["River Road", "Abandoned Orchard", "Sable Safehouse", "Hidden Cellar", "Smuggler Cut"], ["Handler Veska", "Bran", "Garran"], "safehouse infiltration and handler pursuit"),
+        _bundle_ae_route_chain("safehouse_to_voss_backers", "Safehouse to Voss Backers", ["Smuggler Cut", "Voss Counting Room", "Copper Lane", "Backer Ledger Vault", "Guildhall Annex"], ["Voss Clerk", "Marra", "Ledger Guard"], "financial proof and backer exposure"),
+        _bundle_ae_route_chain("guildhall_to_refugee_route", "Guildhall to Refugee Route", ["Guildhall Annex", "South Road Refuge", "Wayfarer Camp", "Old Quarry", "Beacon Ridge"], ["Mira", "Quartermaster Oren", "Refugee Scout"], "supply pressure and civilian route security"),
+        _bundle_ae_route_chain("quarry_to_bandit_redoubt", "Quarry to Bandit Redoubt", ["Old Quarry", "Ravine Switchback", "Bandit Redoubt", "Watchfire Yard", "Redoubt Storehouse"], ["Red Scar Captain", "Garran", "Bran"], "bandit command disruption and revenge arc"),
+        _bundle_ae_route_chain("redoubt_to_endgame_route", "Redoubt to Endgame Route", ["Redoubt Storehouse", "Cinder Pass", "Ruined Signal Tower", "Old Border Keep", "Dawn Road"], ["Handler Veska", "Captain Ilyen", "Mira"], "handler endgame and road reopening"),
+        _bundle_ae_route_chain("dawn_road_epilogue_loops", "Dawn Road Epilogue Loops", ["Dawn Road", "Bran's Tavern", "North Gate", "Wayfarer Camp", "Guildhall Annex"], ["Bran", "Mira", "Garran"], "post-resolution repairs, reputation consequences, and route maintenance"),
+    ]
+    stage_templates = [
+        {"stage": "ask", "verb": "ask", "template": "Ask {npc} at {location} for the next concrete lead on {objective}."},
+        {"stage": "travel", "verb": "travel", "template": "Travel from {location} toward {next_location}, watching for route changes tied to {objective}."},
+        {"stage": "investigate", "verb": "investigate", "template": "Investigate {location} for physical evidence, witnesses, or route hazards linked to {objective}."},
+        {"stage": "report", "verb": "report", "template": "Report the current findings to {npc} and ask which route edge should advance next."},
+        {"stage": "resolve", "verb": "resolve", "template": "Resolve the immediate blocker at {location} so {objective} can advance to the next route node."},
+        {"stage": "restock", "verb": "restock", "template": "Restock, repair, or recruit at {location} before pushing deeper into {objective}."},
+        {"stage": "follow_up", "verb": "ask", "template": "Ask a different witness near {location} to verify the last clue before continuing {objective}."},
+        {"stage": "route_check", "verb": "travel", "template": "Check the alternate path from {location} to {next_location} instead of repeating the same objective wording."},
+    ]
+    objective_edges: _BundleAEList[_BundleAEDict[str, _BundleAEAny]] = []
+    for chain in route_chains:
+        locations = chain["locations"]
+        npcs = chain["key_npcs"]
+        for index, location in enumerate(locations):
+            next_location = locations[(index + 1) % len(locations)]
+            for template_index, template in enumerate(stage_templates):
+                edge_id = f"{chain['id']}:{index + 1}:{template['stage']}"
+                objective_edges.append({
+                    "id": edge_id,
+                    "chain_id": chain["id"],
+                    "location": location,
+                    "next_location": next_location,
+                    "npc": npcs[(index + template_index) % len(npcs)],
+                    "verb": template["verb"],
+                    "stage": template["stage"],
+                    "objective": chain["pressure"],
+                    "action_template": template["template"],
+                    "repeat_escape": template["stage"] in {"follow_up", "route_check", "restock"},
+                })
+    stale_loop_replacements = [
+        "Ask Garran which exact wagon-road clue is still unresolved, then choose the next route node.",
+        "Travel from the current camp to the next named road marker instead of rechecking the objective.",
+        "Investigate the nearest physical clue on the wagon road and record what changed.",
+        "Report the repeated stall to Bran and ask for an alternate witness or route.",
+        "Restock and choose a different route edge if the wagon-road objective has not changed.",
+        "Resolve the current blocker by naming the obstacle, the NPC responsible, and the next location to visit.",
+    ]
+    return {
+        "format_version": "bundle_ae_1000_progression_graph_v1",
+        "source": "bundle_ae_1000_progression_graph_expansion",
+        "target_turns": _BUNDLE_AE_TARGET_TURNS,
+        "route_chains": route_chains,
+        "stage_templates": stage_templates,
+        "objective_edges": objective_edges,
+        "stale_loop_replacements": stale_loop_replacements,
+        "generic_repeat_markers": list(_BUNDLE_AE_GENERIC_REPEAT_MARKERS),
+        "action_selection_policy": {
+            "avoid_generic_focus_actions": True,
+            "prefer_named_location_edges": True,
+            "prefer_named_npc_requests": True,
+            "cycle_repeat_escape_edges_after_repeated_objective": True,
+            "fallback_after_same_action_streak": 3,
+        },
+    }
+
+
+def _bundle_ae_estimated_turn_capacity(graph: _BundleAEDict[str, _BundleAEAny]) -> int:
+    route_chains = graph.get("route_chains") if isinstance(graph.get("route_chains"), list) else []
+    objective_edges = graph.get("objective_edges") if isinstance(graph.get("objective_edges"), list) else []
+    replacements = graph.get("stale_loop_replacements") if isinstance(graph.get("stale_loop_replacements"), list) else []
+    return sum(int(chain.get("turn_budget") or 0) for chain in route_chains if isinstance(chain, dict)) + len(objective_edges) * 8 + len(replacements) * 24
+
+
+def _bundle_ae_validate_progression_graph(graph: _BundleAEDict[str, _BundleAEAny]) -> _BundleAEDict[str, _BundleAEAny]:
+    route_chains = graph.get("route_chains") if isinstance(graph.get("route_chains"), list) else []
+    objective_edges = graph.get("objective_edges") if isinstance(graph.get("objective_edges"), list) else []
+    stage_templates = graph.get("stage_templates") if isinstance(graph.get("stage_templates"), list) else []
+    replacements = graph.get("stale_loop_replacements") if isinstance(graph.get("stale_loop_replacements"), list) else []
+    edge_ids = [edge.get("id") for edge in objective_edges if isinstance(edge, dict)]
+    verbs = {str(template.get("verb")) for template in stage_templates if isinstance(template, dict)}
+    replacement_text = "\n".join(str(item).lower() for item in replacements)
+    estimated_capacity = _bundle_ae_estimated_turn_capacity(graph)
+    checks = {
+        "route_chain_count_ready": len(route_chains) >= _BUNDLE_AE_MIN_ROUTE_CHAINS,
+        "objective_edge_count_ready": len(objective_edges) >= _BUNDLE_AE_MIN_OBJECTIVE_EDGES,
+        "objective_edge_ids_unique": len(edge_ids) == len(set(edge_ids)),
+        "required_verbs_covered": _BUNDLE_AE_REQUIRED_VERBS.issubset(verbs),
+        "stale_loop_replacements_present": len(replacements) >= 6,
+        "stale_loop_replacements_are_concrete": all(marker not in replacement_text for marker in _BUNDLE_AE_GENERIC_REPEAT_MARKERS),
+        "estimated_turn_capacity_ready": estimated_capacity >= _BUNDLE_AE_MIN_ESTIMATED_CAPACITY,
+        "repeat_escape_edges_present": any(isinstance(edge, dict) and edge.get("repeat_escape") for edge in objective_edges),
+    }
+    failures = [name for name, ok in checks.items() if not ok]
+    return {
+        "format_version": "bundle_ae_1000_progression_graph_summary_v1",
+        "source": "bundle_ae_1000_progression_graph_expansion",
+        "ok": not failures,
+        "advisory_only": True,
+        "progression_graph_ready": not failures,
+        "checks": checks,
+        "advisory_failures": failures,
+        "metrics": {
+            "target_turns": _BUNDLE_AE_TARGET_TURNS,
+            "route_chain_count": len(route_chains),
+            "objective_edge_count": len(objective_edges),
+            "stage_template_count": len(stage_templates),
+            "stale_loop_replacement_count": len(replacements),
+            "estimated_turn_capacity": estimated_capacity,
+            "required_verb_count": len(_BUNDLE_AE_REQUIRED_VERBS),
+            "covered_required_verb_count": len(_BUNDLE_AE_REQUIRED_VERBS.intersection(verbs)),
+        },
+        "route_chain_ids": [chain.get("id") for chain in route_chains if isinstance(chain, dict)],
+        "required_verbs": sorted(_BUNDLE_AE_REQUIRED_VERBS),
+        "covered_verbs": sorted(verbs),
+        "recommended_next_step": "run_1000_turn_preflight_with_progression_graph" if not failures else "expand_1000_turn_progression_graph_before_preflight",
+    }
+
+
+def _bundle_ae_replacement_for_stale_action(action_text: _BundleAEAny, turn_index: int = 0) -> str:
+    graph = _bundle_ae_build_1000_progression_graph()
+    replacements = graph["stale_loop_replacements"]
+    text = str(action_text or "").lower()
+    if any(marker in text for marker in _BUNDLE_AE_GENERIC_REPEAT_MARKERS):
+        return replacements[int(turn_index or 0) % len(replacements)]
+    return str(action_text or "")
+
+
+def _bundle_ae_write_graph_artifacts(result_dir: _BundleAEPath):
+    try:
+        graph = _bundle_ae_build_1000_progression_graph()
+        summary = _bundle_ae_validate_progression_graph(graph)
+        _BUNDLE_AE_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_AE_GRAPH_FILE, _bundle_ae_json.dumps(graph, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        _BUNDLE_AE_ORIGINAL_PATH_WRITE_TEXT(result_dir / _BUNDLE_AE_SUMMARY_FILE, _bundle_ae_json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return summary
+    except Exception:
+        return None
+
+
+def _bundle_ae_patch_profile(profile: _BundleAEAny) -> None:
+    if not isinstance(profile, dict):
+        return
+    defaults = profile.setdefault("defaults", {}) if isinstance(profile.setdefault("defaults", {}), dict) else {}
+    if isinstance(defaults, dict):
+        defaults.setdefault("progression_graph_enabled", True)
+        defaults.setdefault("progression_graph_profile", "bundle_ae_1000_progression_graph_v1")
+        defaults.setdefault("progression_graph_min_capacity", _BUNDLE_AE_MIN_ESTIMATED_CAPACITY)
+        defaults.setdefault("stale_loop_replacement_enabled", True)
+
+
+if not globals().get("_BUNDLE_AE_1000_PROGRESSION_GRAPH_PATCHED"):
+    _bundle_ae_patch_profile(globals().get("_BUNDLE_Q_PROFILE"))
+    _bundle_ae_patch_profile(globals().get("_BUNDLE_S_PROFILE"))
+
+    if not globals().get("_BUNDLE_AE_PATH_WRITE_TEXT_PATCHED"):
+        _BUNDLE_AE_ORIGINAL_PATH_WRITE_TEXT = _BundleAEPath.write_text
+
+        def _bundle_ae_write_text_with_progression_graph(self, data, *args, **kwargs):
+            result = _BUNDLE_AE_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+            path = _BundleAEPath(self)
+            try:
+                if path.name in _BUNDLE_AE_TRIGGER_FILES:
+                    _bundle_ae_write_graph_artifacts(path.parent)
+            except Exception:
+                pass
+            return result
+
+        _BundleAEPath.write_text = _bundle_ae_write_text_with_progression_graph
+        globals()["_BUNDLE_AE_PATH_WRITE_TEXT_PATCHED"] = True
+
+    globals()["_BUNDLE_AE_1000_PROGRESSION_GRAPH_PATCHED"] = True
