@@ -64,7 +64,10 @@ def test_bundle_ai_repairs_static_bad_fallback_actions_in_nested_artifact_payloa
 def test_bundle_ai_repair_json_artifact_rewrites_bad_static_actions(tmp_path):
     namespace = _load_bundle_ai_namespace()
     artifact = tmp_path / "turn-action-consistency-summary.json"
-    artifact.write_text(
+    # Use the original writer so this fixture is not auto-repaired by Bundle AI's
+    # Path.write_text wrapper before the direct repair helper is exercised.
+    namespace["_BUNDLE_AI_ORIGINAL_PATH_WRITE_TEXT"](
+        artifact,
         json.dumps(
             {
                 "examples": [
@@ -85,6 +88,30 @@ def test_bundle_ai_repair_json_artifact_rewrites_bad_static_actions(tmp_path):
     action = repaired["examples"][0]["player_action"]
     assert "which exact wagon-road clue is unresolved" not in action.lower()
     assert action
+
+
+def test_bundle_ai_write_text_wrapper_auto_repairs_named_artifacts(tmp_path):
+    namespace = _load_bundle_ai_namespace()
+    artifact = tmp_path / "turn-action-consistency-summary.json"
+
+    artifact.write_text(
+        json.dumps(
+            {
+                "examples": [
+                    {
+                        "turn_index": 19,
+                        "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    repaired = json.loads(artifact.read_text(encoding="utf-8"))
+
+    action = repaired["examples"][0]["player_action"]
+    assert "which exact wagon-road clue is unresolved" not in action.lower()
+    assert "bundle_ai_runtime_edge_repairs" in repaired["examples"][0]
 
 
 def test_bundle_ai_wraps_stale_fallback_returning_functions():
