@@ -1,0 +1,423 @@
+# Bundle AL — Progression Graph Materialization + Truth Source Consistency
+#
+# Bundle AK made the unzipped mirror smaller and copied many one-thousand-turn
+# sidecars, but the latest 100-turn run still missed the progression graph files
+# inside autoplay-campaign-results-unzipped.  It also showed readiness truth using
+# stale/missing dialogue repair inputs: truth reported repair_rate=0.0 while the
+# final dialogue-repair-quality-summary.json reported 0.39.  AL materializes the
+# progression graph from Bundle AE's source builder into both parent and unzipped
+# locations, then rewrites truth/aggregator/dashboard sidecars from the actual
+# final repair artifact.
+
+import json as _bundle_al_json
+from pathlib import Path as _BundleALPath
+from typing import Any as _BundleALAny, Dict as _BundleALDict, List as _BundleALList, Tuple as _BundleALTuple
+
+_BUNDLE_AL_UNZIPPED_DIR_NAME = "autoplay-campaign-results-unzipped"
+_BUNDLE_AL_GRAPH_FILE = "one-thousand-turn-progression-graph.json"
+_BUNDLE_AL_GRAPH_SUMMARY_FILE = "one-thousand-turn-progression-graph-summary.json"
+_BUNDLE_AL_TRUTH_FILE = "one-thousand-turn-readiness-truth-summary.json"
+_BUNDLE_AL_AGGREGATOR_FILE = "one-thousand-turn-readiness-aggregator-summary.json"
+_BUNDLE_AL_DASHBOARD_FILE = "one-thousand-turn-readiness-dashboard-summary.json"
+_BUNDLE_AL_AK_SUMMARY_FILE = "one-thousand-turn-slim-unzipped-mirror-summary.json"
+_BUNDLE_AL_SUMMARY_FILE = "one-thousand-turn-materialization-truth-consistency-summary.json"
+_BUNDLE_AL_REPAIR_FILE = "dialogue-repair-quality-summary.json"
+_BUNDLE_AL_MAX_REPAIR_RATE = 0.25
+_BUNDLE_AL_TRIGGER_NAMES = {
+    _BUNDLE_AL_REPAIR_FILE,
+    _BUNDLE_AL_TRUTH_FILE,
+    _BUNDLE_AL_AGGREGATOR_FILE,
+    _BUNDLE_AL_DASHBOARD_FILE,
+    _BUNDLE_AL_AK_SUMMARY_FILE,
+    _BUNDLE_AL_GRAPH_FILE,
+    _BUNDLE_AL_GRAPH_SUMMARY_FILE,
+    "content-exhaustion-forecast-summary.json",
+    "artifact-manifest-digest.json",
+    "autoplay-health.json",
+    "quality-gate-summary.json",
+}
+
+
+def _bundle_al_load_json_file(path: _BundleALPath) -> _BundleALDict[str, _BundleALAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_al_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_al_write_json(path: _BundleALPath, payload: _BundleALDict[str, _BundleALAny]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = _bundle_al_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def _bundle_al_to_float(value: _BundleALAny, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(str(value))
+    except Exception:
+        return default
+
+
+def _bundle_al_bool(value: _BundleALAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed", "ready"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed", "blocked"}:
+        return False
+    return default
+
+
+def _bundle_al_parent_and_unzipped(path: _BundleALPath) -> _BundleALTuple[_BundleALPath, _BundleALPath]:
+    directory = path if path.is_dir() else path.parent
+    if directory.name == _BUNDLE_AL_UNZIPPED_DIR_NAME:
+        return directory.parent, directory
+    return directory, directory / _BUNDLE_AL_UNZIPPED_DIR_NAME
+
+
+def _bundle_al_existing_dirs(path: _BundleALPath) -> _BundleALList[_BundleALPath]:
+    parent, unzipped = _bundle_al_parent_and_unzipped(path)
+    dirs: _BundleALList[_BundleALPath] = []
+    for candidate in (parent, unzipped):
+        if candidate.exists() and candidate.is_dir() and candidate not in dirs:
+            dirs.append(candidate)
+    return dirs
+
+
+def _bundle_al_build_graph() -> _BundleALTuple[_BundleALDict[str, _BundleALAny], _BundleALDict[str, _BundleALAny]]:
+    builder = globals().get("_bundle_ae_build_1000_progression_graph")
+    validator = globals().get("_bundle_ae_validate_progression_graph")
+    if callable(builder):
+        try:
+            graph = builder()
+            if isinstance(graph, dict):
+                if callable(validator):
+                    summary = validator(graph)
+                else:
+                    objective_edges = graph.get("objective_edges") if isinstance(graph.get("objective_edges"), list) else []
+                    route_chains = graph.get("route_chains") if isinstance(graph.get("route_chains"), list) else []
+                    summary = {
+                        "format_version": "bundle_al_progression_graph_summary_fallback_v1",
+                        "source": "bundle_al_progression_graph_materialization_truth_consistency",
+                        "ok": bool(objective_edges),
+                        "progression_graph_ready": bool(objective_edges),
+                        "advisory_only": True,
+                        "metrics": {
+                            "route_chain_count": len(route_chains),
+                            "objective_edge_count": len(objective_edges),
+                        },
+                        "advisory_failures": [] if objective_edges else ["objective_edges_present"],
+                    }
+                return graph, summary if isinstance(summary, dict) else {}
+        except Exception as exc:
+            return {}, {
+                "format_version": "bundle_al_progression_graph_summary_error_v1",
+                "source": "bundle_al_progression_graph_materialization_truth_consistency",
+                "ok": False,
+                "progression_graph_ready": False,
+                "advisory_only": True,
+                "advisory_failures": ["progression_graph_builder_error"],
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+    return {}, {
+        "format_version": "bundle_al_progression_graph_summary_missing_builder_v1",
+        "source": "bundle_al_progression_graph_materialization_truth_consistency",
+        "ok": False,
+        "progression_graph_ready": False,
+        "advisory_only": True,
+        "advisory_failures": ["bundle_ae_graph_builder_missing"],
+    }
+
+
+def _bundle_al_materialize_graphs(result_path: _BundleALPath) -> _BundleALDict[str, _BundleALAny]:
+    graph, graph_summary = _bundle_al_build_graph()
+    dirs = _bundle_al_existing_dirs(result_path)
+    written: _BundleALList[str] = []
+    for directory in dirs:
+        try:
+            if graph:
+                _bundle_al_write_json(directory / _BUNDLE_AL_GRAPH_FILE, graph)
+                written.append(str(directory / _BUNDLE_AL_GRAPH_FILE))
+            if graph_summary:
+                _bundle_al_write_json(directory / _BUNDLE_AL_GRAPH_SUMMARY_FILE, graph_summary)
+                written.append(str(directory / _BUNDLE_AL_GRAPH_SUMMARY_FILE))
+        except Exception:
+            pass
+    return {
+        "graph_ready": bool(graph_summary.get("progression_graph_ready") or graph_summary.get("ok")),
+        "graph_written_paths": written,
+        "graph_written_path_count": len(written),
+        "graph_route_chain_count": len(graph.get("route_chains") or []) if isinstance(graph.get("route_chains"), list) else 0,
+        "graph_objective_edge_count": len(graph.get("objective_edges") or []) if isinstance(graph.get("objective_edges"), list) else 0,
+    }
+
+
+def _bundle_al_best_repair_payload(dirs: _BundleALList[_BundleALPath]) -> _BundleALTuple[_BundleALDict[str, _BundleALAny], str]:
+    best_payload: _BundleALDict[str, _BundleALAny] = {}
+    best_path = ""
+    best_score = -1.0
+    for directory in dirs:
+        path = directory / _BUNDLE_AL_REPAIR_FILE
+        payload = _bundle_al_load_json_file(path)
+        if not payload:
+            continue
+        score = 0.0
+        if "repair_rate" in payload:
+            score += 1000.0
+        score += _bundle_al_to_float(payload.get("checked_count"), 0.0)
+        if payload.get("product_quality_ok") is False:
+            score += 10.0
+        if score > best_score:
+            best_payload = payload
+            best_path = str(path)
+            best_score = score
+    return best_payload, best_path
+
+
+def _bundle_al_truth_with_actual_repair(result_dir: _BundleALPath, base_truth: _BundleALDict[str, _BundleALAny] | None = None) -> _BundleALDict[str, _BundleALAny]:
+    dirs = _bundle_al_existing_dirs(result_dir)
+    truth = dict(base_truth or {})
+    if not truth:
+        ai_truth_builder = globals().get("_BUNDLE_AL_ORIGINAL_AI_READINESS_TRUTH")
+        if callable(ai_truth_builder):
+            try:
+                maybe_truth = ai_truth_builder(result_dir)
+                if isinstance(maybe_truth, dict):
+                    truth = dict(maybe_truth)
+            except Exception:
+                truth = {}
+    if not truth:
+        truth = {
+            "format_version": "bundle_ai_readiness_truth_summary_v1",
+            "source": "bundle_ai_progression_graph_runtime_edge_selection",
+            "advisory_only": True,
+            "checks": {},
+            "metrics": {},
+            "truth_blocking_gates": [],
+        }
+    checks = dict(truth.get("checks") if isinstance(truth.get("checks"), dict) else {})
+    metrics = dict(truth.get("metrics") if isinstance(truth.get("metrics"), dict) else {})
+    repair, repair_path = _bundle_al_best_repair_payload(dirs)
+    repair_rate = _bundle_al_to_float(repair.get("repair_rate"), _bundle_al_to_float(metrics.get("dialogue_repair_rate"), 0.0))
+    max_repair_rate = _bundle_al_to_float(repair.get("max_recommended_repair_rate"), _BUNDLE_AL_MAX_REPAIR_RATE)
+    repair_ok = repair_rate <= max_repair_rate
+    checks["dialogue_repair_rate_ok"] = repair_ok
+    metrics["dialogue_repair_rate"] = repair_rate
+    metrics["max_dialogue_repair_rate"] = max_repair_rate
+    metrics["dialogue_repair_checked_count"] = repair.get("checked_count", metrics.get("dialogue_repair_checked_count", 0))
+    metrics["dialogue_repair_repaired_count"] = repair.get("repaired_count", metrics.get("dialogue_repair_repaired_count", 0))
+    metrics["dialogue_repair_source_file"] = repair_path
+    existing_blockers = [str(item) for item in truth.get("truth_blocking_gates", []) if isinstance(item, str)]
+    blockers = [item for item in existing_blockers if item != "dialogue_repair_rate_ok"]
+    if not repair_ok:
+        blockers.insert(0, "dialogue_repair_rate_ok")
+    # Preserve other false checks as blockers when the base truth forgot them.
+    for name, ok in checks.items():
+        if ok is False and name not in blockers:
+            blockers.append(str(name))
+    ready_for_1000 = not blockers
+    ready_for_live = ready_for_1000 and _bundle_al_bool(truth.get("ready_for_live_1000_turn_run"), False)
+    truth.update({
+        "format_version": truth.get("format_version") or "bundle_ai_readiness_truth_summary_v1",
+        "source": truth.get("source") or "bundle_ai_progression_graph_runtime_edge_selection",
+        "advisory_only": True,
+        "checks": checks,
+        "metrics": metrics,
+        "truth_blocking_gates": blockers,
+        "ok": ready_for_1000,
+        "ready_for_1000_turn_preflight": ready_for_1000,
+        "ready_for_live_1000_turn_run": ready_for_live,
+        "recommended_next_step": "run_1000_turn_preflight" if ready_for_1000 else "fix_truth_blocking_gates_before_1000_turn_preflight",
+        "bundle_al_truth_source_consistency_applied": True,
+    })
+    return truth
+
+
+def _bundle_al_patch_aggregator_with_truth(result_dir: _BundleALPath, truth: _BundleALDict[str, _BundleALAny]) -> bool:
+    path = result_dir / _BUNDLE_AL_AGGREGATOR_FILE
+    aggregator = _bundle_al_load_json_file(path)
+    if not aggregator:
+        return False
+    current_failures = [str(item) for item in aggregator.get("failing_required_gates", []) if isinstance(item, str)]
+    non_truth_failures = [item for item in current_failures if not item.startswith("bundle_ai_truth:")]
+    truth_blockers = [str(item) for item in truth.get("truth_blocking_gates", []) if isinstance(item, str)]
+    truth_failures = [f"bundle_ai_truth:{item}" for item in truth_blockers]
+    patched = dict(aggregator)
+    patched["bundle_ai_truth_overrides_applied"] = True
+    patched["bundle_al_truth_source_consistency_applied"] = True
+    patched["bundle_ai_truth_blocking_gates"] = truth_blockers
+    patched["failing_required_gates"] = non_truth_failures + truth_failures
+    patched["ready_for_1000_turn_preflight"] = not truth_blockers and not non_truth_failures
+    patched["ready_for_live_1000_turn_run"] = bool(patched["ready_for_1000_turn_preflight"] and truth.get("ready_for_live_1000_turn_run"))
+    patched["ok"] = bool(patched["ready_for_1000_turn_preflight"])
+    patched["recommended_next_step"] = truth.get("recommended_next_step")
+    _bundle_al_write_json(path, patched)
+    return True
+
+
+def _bundle_al_write_readiness_dashboard(result_dir: _BundleALPath) -> bool:
+    aggregator = _bundle_al_load_json_file(result_dir / _BUNDLE_AL_AGGREGATOR_FILE)
+    if not aggregator:
+        return False
+    ready_preflight = _bundle_al_bool(aggregator.get("ready_for_1000_turn_preflight"), False)
+    ready_live = _bundle_al_bool(aggregator.get("ready_for_live_1000_turn_run"), False)
+    failures = aggregator.get("failing_required_gates") if isinstance(aggregator.get("failing_required_gates"), list) else []
+    dashboard = {
+        "format_version": "bundle_al_readiness_dashboard_truth_consistent_v1",
+        "source": "bundle_al_progression_graph_materialization_truth_consistency",
+        "ok": ready_preflight,
+        "advisory_only": True,
+        "status_label": "Live Ready" if ready_live else ("Preflight Ready" if ready_preflight else "Readiness Blocked"),
+        "status_class": "pass" if ready_live else ("warn" if ready_preflight else "fail"),
+        "ready_for_1000_turn_preflight": ready_preflight,
+        "ready_for_live_1000_turn_run": ready_live,
+        "failing_required_gates": failures,
+        "bundle_al_truth_source_consistency_applied": True,
+        "recommended_next_step": aggregator.get("recommended_next_step"),
+    }
+    _bundle_al_write_json(result_dir / _BUNDLE_AL_DASHBOARD_FILE, dashboard)
+    return True
+
+
+def _bundle_al_write_truth_to_dirs(result_path: _BundleALPath) -> _BundleALDict[str, _BundleALAny]:
+    dirs = _bundle_al_existing_dirs(result_path)
+    written: _BundleALList[str] = []
+    patched_aggregators: _BundleALList[str] = []
+    dashboards: _BundleALList[str] = []
+    truth_by_dir: _BundleALDict[str, _BundleALAny] = {}
+    for directory in dirs:
+        truth = _bundle_al_truth_with_actual_repair(directory)
+        _bundle_al_write_json(directory / _BUNDLE_AL_TRUTH_FILE, truth)
+        written.append(str(directory / _BUNDLE_AL_TRUTH_FILE))
+        if _bundle_al_patch_aggregator_with_truth(directory, truth):
+            patched_aggregators.append(str(directory / _BUNDLE_AL_AGGREGATOR_FILE))
+        if _bundle_al_write_readiness_dashboard(directory):
+            dashboards.append(str(directory / _BUNDLE_AL_DASHBOARD_FILE))
+        truth_by_dir[str(directory)] = truth
+    return {
+        "truth_written_paths": written,
+        "truth_written_path_count": len(written),
+        "aggregator_patched_paths": patched_aggregators,
+        "aggregator_patched_path_count": len(patched_aggregators),
+        "dashboard_written_paths": dashboards,
+        "dashboard_written_path_count": len(dashboards),
+        "truth_by_dir": truth_by_dir,
+    }
+
+
+def _bundle_al_patch_ak_summary(result_path: _BundleALPath) -> _BundleALList[str]:
+    dirs = _bundle_al_existing_dirs(result_path)
+    patched_paths: _BundleALList[str] = []
+    for directory in dirs:
+        path = directory / _BUNDLE_AL_AK_SUMMARY_FILE
+        payload = _bundle_al_load_json_file(path)
+        if not payload:
+            continue
+        graph_present = (directory / _BUNDLE_AL_GRAPH_FILE).exists()
+        graph_summary_present = (directory / _BUNDLE_AL_GRAPH_SUMMARY_FILE).exists()
+        payload["progression_graph_present"] = graph_present
+        payload["progression_graph_summary_present"] = graph_summary_present
+        payload["bundle_al_materialization_applied"] = True
+        payload["ok"] = bool(graph_present and graph_summary_present and not payload.get("review_artifacts_present_after"))
+        if not payload["ok"]:
+            failures = payload.get("advisory_failures") if isinstance(payload.get("advisory_failures"), list) else []
+            if not graph_present and "progression_graph_present" not in failures:
+                failures.append("progression_graph_present")
+            if not graph_summary_present and "progression_graph_summary_present" not in failures:
+                failures.append("progression_graph_summary_present")
+            payload["advisory_failures"] = failures
+        _bundle_al_write_json(path, payload)
+        patched_paths.append(str(path))
+    return patched_paths
+
+
+def _bundle_al_finalize_materialization_and_truth(result_path: _BundleALPath) -> _BundleALDict[str, _BundleALAny]:
+    graph_result = _bundle_al_materialize_graphs(result_path)
+    truth_result = _bundle_al_write_truth_to_dirs(result_path)
+    ak_patched = _bundle_al_patch_ak_summary(result_path)
+    dirs = _bundle_al_existing_dirs(result_path)
+    graph_paths_ok = all((directory / _BUNDLE_AL_GRAPH_FILE).exists() and (directory / _BUNDLE_AL_GRAPH_SUMMARY_FILE).exists() for directory in dirs)
+    summary = {
+        "format_version": "bundle_al_materialization_truth_consistency_summary_v1",
+        "source": "bundle_al_progression_graph_materialization_truth_consistency",
+        "ok": bool(graph_paths_ok),
+        "advisory_only": True,
+        "candidate_dirs": [str(directory) for directory in dirs],
+        "graph_paths_ok": graph_paths_ok,
+        "graph_result": graph_result,
+        "truth_result": truth_result,
+        "ak_summary_patched_paths": ak_patched,
+        "ak_summary_patched_path_count": len(ak_patched),
+        "recommended_next_step": "review_materialized_graph_and_truth_consistency" if graph_paths_ok else "fix_progression_graph_materialization",
+    }
+    for directory in dirs:
+        try:
+            _bundle_al_write_json(directory / _BUNDLE_AL_SUMMARY_FILE, summary)
+        except Exception:
+            pass
+    return summary
+
+
+def _bundle_al_ai_readiness_truth_wrapper(result_dir):
+    base = {}
+    original = globals().get("_BUNDLE_AL_ORIGINAL_AI_READINESS_TRUTH")
+    if callable(original):
+        try:
+            maybe = original(result_dir)
+            if isinstance(maybe, dict):
+                base = maybe
+        except Exception:
+            base = {}
+    return _bundle_al_truth_with_actual_repair(_BundleALPath(result_dir), base)
+
+
+def _bundle_al_wrap_manifest_finalizer() -> None:
+    finalizer = globals().get("_manifest_hard_finalize_latest")
+    if not callable(finalizer) or getattr(finalizer, "_bundle_al_wrapped", False):
+        return
+
+    def _bundle_al_manifest_hard_finalize_latest():
+        result = finalizer()
+        for value in list(globals().values()):
+            try:
+                if isinstance(value, (str, _BundleALPath)):
+                    candidate = _BundleALPath(value)
+                    if candidate.exists() and (candidate.name == _BUNDLE_AL_UNZIPPED_DIR_NAME or (candidate / _BUNDLE_AL_UNZIPPED_DIR_NAME).exists()):
+                        _bundle_al_finalize_materialization_and_truth(candidate)
+            except Exception:
+                pass
+        return result
+
+    _bundle_al_manifest_hard_finalize_latest._bundle_al_wrapped = True
+    globals()["_BUNDLE_AL_ORIGINAL_MANIFEST_HARD_FINALIZE_LATEST"] = finalizer
+    globals()["_manifest_hard_finalize_latest"] = _bundle_al_manifest_hard_finalize_latest
+
+
+def _bundle_al_write_text_wrapper(self, data, *args, **kwargs):
+    result = _BUNDLE_AL_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+    path = _BundleALPath(self)
+    try:
+        if path.name in _BUNDLE_AL_TRIGGER_NAMES or path.name.startswith("one-thousand-turn-"):
+            _bundle_al_finalize_materialization_and_truth(path)
+    except Exception:
+        pass
+    return result
+
+
+if not globals().get("_BUNDLE_AL_MATERIALIZATION_TRUTH_CONSISTENCY_PATCHED"):
+    _BUNDLE_AL_ORIGINAL_PATH_WRITE_TEXT = _BundleALPath.write_text
+    _BundleALPath.write_text = _bundle_al_write_text_wrapper
+    if callable(globals().get("_bundle_ai_readiness_truth")) and not globals().get("_BUNDLE_AL_ORIGINAL_AI_READINESS_TRUTH"):
+        globals()["_BUNDLE_AL_ORIGINAL_AI_READINESS_TRUTH"] = globals()["_bundle_ai_readiness_truth"]
+        globals()["_bundle_ai_readiness_truth"] = _bundle_al_ai_readiness_truth_wrapper
+    _bundle_al_wrap_manifest_finalizer()
+    globals()["_BUNDLE_AL_MATERIALIZATION_TRUTH_CONSISTENCY_PATCHED"] = True
