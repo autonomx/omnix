@@ -10,7 +10,6 @@
 # raise normally.
 
 import json as _bundle_ag_json
-import re as _bundle_ag_re
 from pathlib import Path as _BundleAGPath
 from typing import Any as _BundleAGAny, Dict as _BundleAGDict, List as _BundleAGList
 
@@ -164,12 +163,32 @@ def _bundle_ag_patch_manifest_files(result_dir: _BundleAGPath) -> None:
             pass
 
 
+def _bundle_ag_extract_path_values(text: str) -> _BundleAGList[str]:
+    values: _BundleAGList[str] = []
+    start = 0
+    while True:
+        marker_index = text.find("path=", start)
+        if marker_index < 0:
+            break
+        value_start = marker_index + len("path=")
+        delimiters = [
+            text.find(token, value_start)
+            for token in (":failed_checks=", ":missing_unzipped_files=", ":unzipped_manifest=", ":zip_count=")
+        ]
+        delimiters = [index for index in delimiters if index >= 0]
+        value_end = min(delimiters) if delimiters else len(text)
+        raw = text[value_start:value_end].strip().strip("'\"")
+        if raw:
+            values.append(raw)
+        start = value_end
+    return values
+
+
 def _bundle_ag_candidate_dirs_from_exception(exc: BaseException) -> _BundleAGList[_BundleAGPath]:
-    text = str(exc)
     paths: _BundleAGList[_BundleAGPath] = []
-    for match in _bundle_ag_re.findall(r"path=([^:]+(?:\\|/)[^:]+?)(?::failed_checks=|$)", text):
+    for raw in _bundle_ag_extract_path_values(str(exc)):
         try:
-            candidate = _BundleAGPath(match.strip())
+            candidate = _BundleAGPath(raw)
             paths.append(candidate)
             if candidate.name.endswith("-unzipped"):
                 paths.append(candidate.parent)
