@@ -8,7 +8,7 @@
   "injury_count": 0,
   "consequence_event_count": 1,
   "economy_hint_count": 0,
-  "total_round_events": 8,
+  "total_round_events": 245,
   "by_outcome": {
     "direct_graph_resolved": 8
   },
@@ -52,28 +52,315 @@
       24,
       25,
       26,
-      42,
-      67
+      42
     ],
-    "real_round_event_count": 8,
-    "real_attack_event_count": 886,
-    "real_damage_event_count": 4911,
+    "real_round_event_count": 245,
+    "real_attack_event_count": 518,
+    "real_damage_event_count": 7489,
     "real_resolution_event_count": 70,
     "direct_graph_only": false,
     "missing_real_lifecycle_parts": [],
     "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
     "round_events": [
       {
-        "turn": 77,
-        "type": null,
-        "summary": "",
-        "raw_preview": "{\"action\": \"Combat initiated (Round 1)\", \"combat_narration_accepted\": true, \"combat_narration_attempted\": true, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], \"facts\": {\"actor_id\": \"\", \"actor_name\": \"\", \"attack_roll\": null, \"attack_total\": null, \"combat_ended\": false, \"damage_applied\": null, \"defeated\": false, \"hit\": null, \"next_actor_id\": \"player\", \"party_defeated\": false, \"reason\": \"combat_started\", \"round\": 1, \"target_defense\": null, \"target_hp_after\": -"
+        "turn": 26,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
       },
       {
-        "turn": 77,
+        "turn": 27,
         "type": null,
-        "summary": "",
-        "raw_preview": "{\"action\": \"Combat initiated (Round 1)\", \"followup_hooks\": [\"player_turn_start\", \"enemy:bandit_1_next_action\"], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The bandit raises a rusty cutlass, preparing for the clash. A tense silence hangs in the air as you prepare your opening move against the enemy. The encounter has officially begun, and the first round is underway with you currently taking action.\", \"npc\": {\"line\": \"\", \"speaker\": \"Bandit\"}, \"reward\": \"\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 27,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 27,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 27,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 28,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 28,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 28,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 28,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 29,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 29,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 29,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 29,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 30,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 30,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 30,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 30,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 31,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 31,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 31,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 31,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 32,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 32,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 32,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 32,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 33,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 33,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 33,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 33,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 34,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 34,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 34,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 34,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 35,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 35,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 35,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 35,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 36,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 36,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 36,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 36,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 37,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 37,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 37,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 37,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 38,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 38,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 38,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 39,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       },
       {
         "turn": 20,
@@ -166,606 +453,606 @@
     ],
     "attack_events": [
       {
-        "turn": 24,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\"}"
-      },
-      {
-        "turn": 24,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\"}"
-      },
-      {
-        "turn": 25,
-        "type": null,
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 25,
-        "type": null,
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 25,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994550+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:d57d16fa7ee6d11c\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 25,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 25,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994459+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:fc66f7fc075afdd1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"tur"
-      },
-      {
-        "turn": 25,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 25,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\"}"
-      },
-      {
-        "turn": 25,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\"}"
-      },
-      {
-        "turn": 26,
-        "type": null,
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 26,
-        "type": null,
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"turn_index\": 25}"
-      },
-      {
         "turn": 26,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994550+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:d57d16fa7ee6d11c\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 26,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 26,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994459+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:fc66f7fc075afdd1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"tur"
-      },
-      {
-        "turn": 26,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 26,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\"}"
-      },
-      {
-        "turn": 26,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
       },
       {
         "turn": 27,
         "type": null,
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 27,
-        "type": null,
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       },
       {
         "turn": 27,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994550+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:d57d16fa7ee6d11c\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
       },
       {
         "turn": 27,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
       },
       {
         "turn": 27,
         "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994459+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:fc66f7fc075afdd1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"tur"
-      },
-      {
-        "turn": 27,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 27,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\"}"
-      },
-      {
-        "turn": 27,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
       },
       {
         "turn": 28,
         "type": null,
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 28,
-        "type": null,
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       },
       {
         "turn": 28,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994550+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:d57d16fa7ee6d11c\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
       },
       {
         "turn": 28,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
       },
       {
         "turn": 28,
         "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994459+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:fc66f7fc075afdd1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"tur"
-      },
-      {
-        "turn": 28,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 28,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\"}"
-      },
-      {
-        "turn": 28,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
       },
       {
         "turn": 29,
         "type": null,
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"turn_index\": 25}"
-      },
-      {
-        "turn": 29,
-        "type": null,
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       },
       {
         "turn": 29,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994550+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:d57d16fa7ee6d11c\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
       },
       {
         "turn": 29,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
       },
       {
         "turn": 29,
         "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994459+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:fc66f7fc075afdd1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"tur"
-      },
-      {
-        "turn": 29,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 29,
-        "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\"}"
-      },
-      {
-        "turn": 29,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
       },
       {
         "turn": 30,
         "type": null,
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       },
       {
         "turn": 30,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 30,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 30,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 31,
         "type": null,
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       },
       {
-        "turn": 30,
+        "turn": 31,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994550+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:d57d16fa7ee6d11c\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:8d5184e214df37ef\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
       },
       {
-        "turn": 30,
+        "turn": 31,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"grounded_target\": \"Bran\", \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\", \"target\": \"Bran\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
       },
       {
-        "turn": 30,
+        "turn": 31,
         "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T19:14:33.994459+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:fc66f7fc075afdd1\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:c87f2f2798501616\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"tur"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
       },
       {
-        "turn": 30,
-        "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\", \"target\": \"Bran\"}"
+        "turn": 32,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       },
       {
-        "turn": 30,
+        "turn": 32,
         "type": "semantic_intent",
-        "summary": "Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.",
-        "raw_preview": "{\"confidence\": 0.85, \"intent\": \"investigation\", \"kind\": \"semantic_intent\", \"summary\": \"Extracting key intelligence about the hostile party and their motive for attacking the caravan near the ridge hideout.\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
       },
       {
-        "turn": 30,
+        "turn": 32,
         "type": "semantic_intent",
-        "summary": "The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).",
-        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"The bandit provides direct answers regarding who hired them (North Gate merchants) and why they attacked Garran's wagon (to retrieve contents of a strongbox).\"}"
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 32,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 33,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 33,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 33,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 33,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 34,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 34,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 34,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 34,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 35,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 35,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 35,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 35,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 36,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 36,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 36,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 36,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 37,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 37,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 37,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 37,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 38,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 38,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 27, \"created_at\": \"2026-05-25T20:20:06.694869+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:26:semantic_intent:875fca6d66d59eae\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 27}"
+      },
+      {
+        "turn": 38,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"grounded_target\": \"Bran\", \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 38,
+        "type": "semantic_intent",
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"confidence\": 0.95, \"intent\": \"evidence\", \"kind\": \"semantic_intent\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\"}"
+      },
+      {
+        "turn": 39,
+        "type": null,
+        "summary": "Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.",
+        "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:6b037bb91d9fd57e\", \"summary\": \"Presenting tangible proof to Bran linking the ambush attack directly back to the area surrounding the old mill.\", \"turn_index\": 27}"
       }
     ],
     "damage_events": [
       {
         "turn": 1,
         "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}"
+        "summary": "Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a765e1fbac35c55d\", \"summary\": \"Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.\", \"turn_index\": 96}"
+      },
+      {
+        "turn": 1,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:e9329f275849e3fa\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 95}"
       },
       {
         "turn": 1,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+      },
+      {
+        "turn": 1,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}"
+      },
+      {
+        "turn": 1,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}"
       },
       {
         "turn": 1,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}"
       },
       {
         "turn": 1,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7a63a21f18944b2\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).\", \"turn_index\": 98}"
-      },
-      {
-        "turn": 1,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c3b55dce6871c41c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)\", \"turn_index\": 96}"
-      },
-      {
-        "turn": 1,
-        "type": "Lore/Intelligence",
-        "summary": "Confirmation of a high-level handler's passage via an official courier from the old north watchpost.",
-        "raw_preview": "{\"kind\": \"Lore/Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:d1efbf6024aa50ee\", \"summary\": \"Confirmation of a high-level handler's passage via an official courier from the old north watchpost.\", \"turn_index\": 96}"
+        "type": "Handler Movement",
+        "summary": "The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.",
+        "raw_preview": "{\"kind\": \"Handler Movement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:56e0551cf5eba7c7\", \"summary\": \"The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.\", \"turn_index\": 96}"
       },
       {
         "turn": 2,
         "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}"
+        "summary": "Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a765e1fbac35c55d\", \"summary\": \"Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.\", \"turn_index\": 96}"
+      },
+      {
+        "turn": 2,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:e9329f275849e3fa\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 95}"
       },
       {
         "turn": 2,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+      },
+      {
+        "turn": 2,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}"
+      },
+      {
+        "turn": 2,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}"
       },
       {
         "turn": 2,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}"
       },
       {
         "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7a63a21f18944b2\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).\", \"turn_index\": 98}"
-      },
-      {
-        "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c3b55dce6871c41c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)\", \"turn_index\": 96}"
-      },
-      {
-        "turn": 2,
-        "type": "Lore/Intelligence",
-        "summary": "Confirmation of a high-level handler's passage via an official courier from the old north watchpost.",
-        "raw_preview": "{\"kind\": \"Lore/Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:d1efbf6024aa50ee\", \"summary\": \"Confirmation of a high-level handler's passage via an official courier from the old north watchpost.\", \"turn_index\": 96}"
-      },
-      {
-        "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
-      },
-      {
-        "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
+        "type": "Handler Movement",
+        "summary": "The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.",
+        "raw_preview": "{\"kind\": \"Handler Movement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:56e0551cf5eba7c7\", \"summary\": \"The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.\", \"turn_index\": 96}"
       },
       {
         "turn": 3,
         "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}"
+        "summary": "Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a765e1fbac35c55d\", \"summary\": \"Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.\", \"turn_index\": 96}"
       },
       {
         "turn": 3,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+      },
+      {
+        "turn": 3,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}"
+      },
+      {
+        "turn": 3,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}"
       },
       {
         "turn": 3,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}"
       },
       {
         "turn": 3,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7a63a21f18944b2\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).\", \"turn_index\": 98}"
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 3}"
-      },
-      {
-        "turn": 3,
-        "type": "future_hook",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T19:14:32.788470+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:08d2457223eb2062\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}"
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
-      },
-      {
-        "turn": 4,
-        "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}"
-      },
-      {
-        "turn": 4,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 3}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}"
       },
       {
         "turn": 4,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+      },
+      {
+        "turn": 4,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}"
+      },
+      {
+        "turn": 4,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}"
       },
       {
         "turn": 4,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}"
       },
       {
         "turn": 4,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"turn_index\": 100}"
       },
       {
         "turn": 4,
         "type": "Immediate Investigation Prompt",
-        "summary": "Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
-      },
-      {
-        "turn": 4,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:362cddc6106da57b\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 4}"
-      },
-      {
-        "turn": 4,
-        "type": "future_hook",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T19:14:32.807065+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:f1ca3cfc80f8d72f\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:362cddc6106da57b\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit"
-      },
-      {
-        "turn": 4,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:7992b1c739e94198\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 4}"
       },
       {
         "turn": 4,
         "type": "future_hook",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T19:14:32.788470+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:08d2457223eb2062\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T20:20:05.550091+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:1fea47b08d5ce818\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:7992b1c739e94198\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}"
       },
       {
         "turn": 4,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}"
       },
       {
         "turn": 4,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
-      },
-      {
-        "turn": 5,
-        "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}"
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:362cddc6106da57b\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 4}"
-      },
-      {
-        "turn": 5,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 3}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:7992b1c739e94198\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 4}"
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}"
+      },
+      {
+        "turn": 5,
+        "type": "Investigation Prompt (Bran)",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}"
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}"
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:340cb508406585e1\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 5}"
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).\"}"
+      },
+      {
+        "turn": 5,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5d18dfbd240f98ae\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"turn_index\": 5}"
       },
       {
         "turn": 5,
         "type": "future_hook",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-25T19:14:32.828410+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:4:future_hook:a692fcf2c8b59cb7\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:340cb508406585e1\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 5}"
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-25T20:20:05.570631+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"target\": \"Bran\", \"turn_index\": 100}, \"projection_id\": \"adv:4:future_hook:47eb973f50d1a1dc\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5d18dfbd240f98ae\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", "
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}"
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"target\": \"Bran\", \"turn_index\": 100}"
       },
       {
         "turn": 5,
         "type": "future_hook",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T19:14:32.807065+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:f1ca3cfc80f8d72f\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:362cddc6106da57b\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T20:20:05.550091+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:1fea47b08d5ce818\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:7992b1c739e94198\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}"
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}"
-      },
-      {
-        "turn": 5,
-        "type": "future_hook",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T19:14:32.788470+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:08d2457223eb2062\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}"
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"turn_index\": 100}"
       },
       {
         "turn": 5,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}"
-      },
-      {
-        "turn": 6,
-        "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}"
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}"
       },
       {
         "turn": 6,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:340cb508406585e1\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 5}"
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5d18dfbd240f98ae\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"turn_index\": 5}"
+      },
+      {
+        "turn": 6,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:7992b1c739e94198\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 4}"
+      },
+      {
+        "turn": 6,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}"
+      },
+      {
+        "turn": 6,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}"
+      },
+      {
+        "turn": 6,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f052e4d0c99b73ae\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).\", \"turn_index\": 6}"
+      },
+      {
+        "turn": 6,
+        "type": "future_hook",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-25T20:20:05.610118+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:future_hook:082eff448bcd3eb8\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:f052e4d0c99b73ae\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}"
+      },
+      {
+        "turn": 6,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 100).\", \"target\": \"Bran\"}"
+      },
+      {
+        "turn": 6,
+        "type": "future_hook",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-25T20:20:05.570631+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"target\": \"Bran\", \"turn_index\": 100}, \"projection_id\": \"adv:4:future_hook:47eb973f50d1a1dc\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5d18dfbd240f98ae\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", "
+      },
+      {
+        "turn": 6,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"target\": \"Bran\", \"turn_index\": 100}"
       }
     ],
     "resolution_events": [
@@ -1074,8 +1361,21 @@
       {
         "turn": 1,
         "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}",
+        "summary": "Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a765e1fbac35c55d\", \"summary\": \"Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.\", \"turn_index\": 96}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 1,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:e9329f275849e3fa\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 95}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1088,7 +1388,33 @@
         "turn": 1,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 1,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 1,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1101,7 +1427,7 @@
         "turn": 1,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1112,35 +1438,9 @@
       },
       {
         "turn": 1,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7a63a21f18944b2\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).\", \"turn_index\": 98}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 1,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c3b55dce6871c41c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)\", \"turn_index\": 96}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 1,
-        "type": "Lore/Intelligence",
-        "summary": "Confirmation of a high-level handler's passage via an official courier from the old north watchpost.",
-        "raw_preview": "{\"kind\": \"Lore/Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:d1efbf6024aa50ee\", \"summary\": \"Confirmation of a high-level handler's passage via an official courier from the old north watchpost.\", \"turn_index\": 96}",
+        "type": "Handler Movement",
+        "summary": "The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.",
+        "raw_preview": "{\"kind\": \"Handler Movement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:56e0551cf5eba7c7\", \"summary\": \"The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.\", \"turn_index\": 96}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1152,8 +1452,21 @@
       {
         "turn": 2,
         "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}",
+        "summary": "Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a765e1fbac35c55d\", \"summary\": \"Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.\", \"turn_index\": 96}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 2,
+        "type": null,
+        "summary": "Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:e9329f275849e3fa\", \"summary\": \"Fast deterministic interpretation of player input: I inspect the old north watchpost for courier signs, Sable Chain marks, and Veska's trail.\", \"turn_index\": 95}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1166,7 +1479,33 @@
         "turn": 2,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 2,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 2,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1179,7 +1518,7 @@
         "turn": 2,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1190,61 +1529,9 @@
       },
       {
         "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7a63a21f18944b2\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).\", \"turn_index\": 98}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c3b55dce6871c41c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran may bring this up next.)\", \"turn_index\": 96}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 2,
-        "type": "Lore/Intelligence",
-        "summary": "Confirmation of a high-level handler's passage via an official courier from the old north watchpost.",
-        "raw_preview": "{\"kind\": \"Lore/Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:d1efbf6024aa50ee\", \"summary\": \"Confirmation of a high-level handler's passage via an official courier from the old north watchpost.\", \"turn_index\": 96}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 2,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}",
+        "type": "Handler Movement",
+        "summary": "The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.",
+        "raw_preview": "{\"kind\": \"Handler Movement\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:56e0551cf5eba7c7\", \"summary\": \"The key figure, Handler Veska, has been confirmed to have moved through or past the ridge hideout area via this watchpost route.\", \"turn_index\": 96}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1256,8 +1543,8 @@
       {
         "turn": 3,
         "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}",
+        "summary": "Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.",
+        "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:a765e1fbac35c55d\", \"summary\": \"Successfully intercepted Veska's courier just before they left the old north watchpost, gaining immediate access to their message.\", \"turn_index\": 96}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1270,7 +1557,33 @@
         "turn": 3,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:255f4c018d9c3687\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 3,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 3,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1283,7 +1596,7 @@
         "turn": 3,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 99}",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1295,73 +1608,8 @@
       {
         "turn": 3,
         "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c7a63a21f18944b2\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Bran may bring this up next).\", \"turn_index\": 98}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"future_hook_id\": \"npc_evo:Bran:future_hook:projection:b7e5878f7f5a02ac\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 3}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": "future_hook",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T19:14:32.788470+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:08d2457223eb2062\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"target\": \"Bran\"}",
-        "flags": {
-          "round": false,
-          "damage": true,
-          "resolution": false,
-          "attack": false,
-          "combat": true
-        }
-      },
-      {
-        "turn": 3,
-        "type": "Immediate Investigation Prompt",
-        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\"}",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1372,9 +1620,35 @@
       },
       {
         "turn": 4,
-        "type": null,
-        "summary": "You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.",
-        "raw_preview": "{\"intent\": \"investigate\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:504ce1767142d7d0\", \"summary\": \"You have successfully inspected the north watchpost, confirming key markers like courier signs, Sable Chain insignia, and Handler Veska’s trail.\", \"turn_index\": 95}",
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:bde2d72c988e5a46\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 100}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 4,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3608f85930db0ffc\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 4,
+        "type": "Investigation Prompt (Bran)",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
+        "raw_preview": "{\"kind\": \"Investigation Prompt (Bran)\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:c99ad3df5bbdc2c3\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 97}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1387,7 +1661,20 @@
         "turn": 4,
         "type": "Immediate Investigation Prompt",
         "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).",
-        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:a0e2ffbc3ff1deba\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 3}",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:42009fb9b4276e1c\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by this evidence).\", \"turn_index\": 96}",
+        "flags": {
+          "round": false,
+          "damage": true,
+          "resolution": false,
+          "attack": false,
+          "combat": true
+        }
+      },
+      {
+        "turn": 4,
+        "type": "Immediate Investigation Prompt",
+        "summary": "Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).",
+        "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran strongly suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Triggered by general investigation progress).\", \"turn_index\": 100}",
         "flags": {
           "round": false,
           "damage": true,
@@ -1406,8 +1693,8 @@
       "direct_graph_resolved_count": 8,
       "consequence_event_count": 1,
       "abstract_round_event_count": 8,
-      "real_attack_event_count": 886,
-      "real_damage_event_count": 4911,
+      "real_attack_event_count": 518,
+      "real_damage_event_count": 7489,
       "real_resolution_event_count": 70,
       "direct_graph_combat_turns": [
         20,
@@ -1509,8 +1796,8 @@
     }
   },
   "real_combat_lifecycle_ok": true,
-  "real_round_event_count": 8,
-  "real_damage_event_count": 4911,
+  "real_round_event_count": 245,
+  "real_damage_event_count": 7489,
   "real_resolution_event_count": 70,
   "n1211_direct_graph_round_evidence": {
     "format_version": "n1211_direct_graph_combat_round_summary_v1",
@@ -1521,8 +1808,8 @@
     "direct_graph_resolved_count": 8,
     "consequence_event_count": 1,
     "abstract_round_event_count": 8,
-    "real_attack_event_count": 886,
-    "real_damage_event_count": 4911,
+    "real_attack_event_count": 518,
+    "real_damage_event_count": 7489,
     "real_resolution_event_count": 70,
     "direct_graph_combat_turns": [
       20,
