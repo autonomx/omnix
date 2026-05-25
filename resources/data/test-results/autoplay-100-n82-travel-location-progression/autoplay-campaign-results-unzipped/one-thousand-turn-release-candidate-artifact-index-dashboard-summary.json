@@ -1,0 +1,25 @@
+{
+  "advisory_failure_count": 2,
+  "advisory_failures": [
+    "runbook_summary_ready",
+    "required_archive_artifacts_present"
+  ],
+  "advisory_only": true,
+  "archive_digest_sha256": "aacf7195e895818ec1bf1446d2250efba9f08a3ca04496991a5c1a81f569ba2b",
+  "archive_index_ready": false,
+  "format_version": "bundle_aj_artifact_index_dashboard_reconciled_v1",
+  "missing_required_archive_artifact_count": 2,
+  "missing_required_archive_artifacts": [
+    "one-thousand-turn-release-candidate-runbook.md",
+    "one-thousand-turn-release-candidate-runbook-summary.json"
+  ],
+  "ok": false,
+  "present_tracked_file_count": 10,
+  "recommended_next_step": "complete_release_candidate_archive_artifacts",
+  "source": "bundle_aj_sidecar_reconciliation_and_truth_finalization",
+  "status_class": "fail",
+  "status_label": "Archive Index Blocked",
+  "total_present_bytes": 100267111,
+  "tracked_completion_percent": 76.92,
+  "tracked_file_count": 13
+}

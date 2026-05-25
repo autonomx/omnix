@@ -1,0 +1,19 @@
+{
+  "advisory_failure_count": 1,
+  "advisory_failures": [
+    "one-thousand-turn-release-candidate-handoff-manifest.json"
+  ],
+  "advisory_only": true,
+  "artifact_completion_percent": 0,
+  "command_count": 0,
+  "format_version": "bundle_w_release_candidate_handoff_dashboard_summary_v1",
+  "missing_required_file_count": 0,
+  "ok": false,
+  "present_required_file_count": 0,
+  "recommended_next_step": "write_release_candidate_handoff_manifest_first",
+  "release_candidate_handoff_ready": false,
+  "required_file_count": 0,
+  "source": "bundle_w_release_candidate_handoff_dashboard",
+  "status_class": "fail",
+  "status_label": "Handoff Missing"
+}

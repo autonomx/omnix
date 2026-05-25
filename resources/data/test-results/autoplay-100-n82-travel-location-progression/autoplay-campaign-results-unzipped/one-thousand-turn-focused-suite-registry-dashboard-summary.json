@@ -1,0 +1,22 @@
+{
+  "advisory_failure_count": 1,
+  "advisory_failures": [
+    "one-thousand-turn-focused-suite-registry-summary.json"
+  ],
+  "advisory_only": true,
+  "canonical_command_arg_count": 0,
+  "canonical_command_text": "",
+  "duplicate_test_file_count": 0,
+  "first_test_file": "",
+  "focused_suite_registry_ready": false,
+  "format_version": "bundle_ab_focused_suite_registry_dashboard_summary_v1",
+  "handoff_command_arg_count": 0,
+  "last_test_file": "",
+  "missing_test_file_count": 0,
+  "ok": false,
+  "recommended_next_step": "write_focused_suite_registry_summary_first",
+  "source": "bundle_ab_focused_suite_registry_dashboard",
+  "status_class": "fail",
+  "status_label": "Focused Suite Missing",
+  "test_file_count": 0
+}

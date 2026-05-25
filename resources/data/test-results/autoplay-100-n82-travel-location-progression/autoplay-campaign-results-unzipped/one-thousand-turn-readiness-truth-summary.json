@@ -1,0 +1,39 @@
+{
+  "advisory_only": true,
+  "checks": {
+    "content_exhaustion_forecast_ok": true,
+    "dialogue_repair_rate_ok": true,
+    "graph_progression_density_ok": true,
+    "live_result_ok_or_not_present": false,
+    "preflight_promoted_before_live": false,
+    "preflight_result_ok_or_not_present": false,
+    "release_candidate_ready_if_live_present": false,
+    "turn_action_repair_rate_observed": true,
+    "unique_node_density_ok": true
+  },
+  "format_version": "bundle_ai_readiness_truth_summary_v1",
+  "metrics": {
+    "dialogue_repair_rate": 0.0,
+    "graph_progression_density": 1.0,
+    "live_result_present": true,
+    "max_dialogue_repair_rate": 0.25,
+    "min_graph_progression_density": 0.35,
+    "min_unique_node_density": 0.35,
+    "preflight_promoted_live_run": false,
+    "preflight_result_present": true,
+    "release_candidate_ready": false,
+    "turn_action_repair_rate": 0.0,
+    "unique_node_density": 1.0
+  },
+  "ok": false,
+  "ready_for_1000_turn_preflight": false,
+  "ready_for_live_1000_turn_run": false,
+  "recommended_next_step": "fix_progression_density_and_repair_rate_before_1000_turn_preflight",
+  "source": "bundle_ai_progression_graph_runtime_edge_selection",
+  "truth_blocking_gates": [
+    "preflight_result_ok_or_not_present",
+    "preflight_promoted_before_live",
+    "live_result_ok_or_not_present",
+    "release_candidate_ready_if_live_present"
+  ]
+}

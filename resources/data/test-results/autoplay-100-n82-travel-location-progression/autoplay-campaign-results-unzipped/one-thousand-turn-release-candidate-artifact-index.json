@@ -1,0 +1,124 @@
+{
+  "advisory_failures": [
+    "runbook_summary_ready",
+    "required_archive_artifacts_present"
+  ],
+  "advisory_only": true,
+  "archive_digest_sha256": "aacf7195e895818ec1bf1446d2250efba9f08a3ca04496991a5c1a81f569ba2b",
+  "archive_index_ready": false,
+  "checks": {
+    "archive_digest_available": true,
+    "at_least_one_product_artifact_present": true,
+    "required_archive_artifacts_present": false,
+    "runbook_summary_ready": false,
+    "tracked_file_entries_present": true
+  },
+  "format_version": "bundle_y_release_candidate_artifact_index_v1",
+  "metrics": {
+    "missing_required_archive_file_count": 2,
+    "present_tracked_file_count": 10,
+    "required_archive_file_count": 4,
+    "total_present_bytes": 100267111,
+    "tracked_file_count": 13
+  },
+  "missing_required_archive_artifacts": [
+    "one-thousand-turn-release-candidate-runbook.md",
+    "one-thousand-turn-release-candidate-runbook-summary.json"
+  ],
+  "ok": false,
+  "recommended_next_step": "complete_release_candidate_archive_artifacts",
+  "source": "bundle_y_release_candidate_artifact_index",
+  "tracked_files": [
+    {
+      "file": "one-thousand-turn-readiness-aggregator-summary.json",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "ee6c67769121fc4455b5cef22232bc88443fd98ab40fac2046b526515fb92f00",
+      "size_bytes": 8070
+    },
+    {
+      "file": "one-thousand-turn-readiness-dashboard-summary.json",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "0ff64ce7a9143072a5b128ef877ef6fe666f110207330609d6f56a5b1f06a061",
+      "size_bytes": 1864
+    },
+    {
+      "file": "one-thousand-turn-preflight-profile-summary.json",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "eabb23b631310a824dfaffd481dcd694961fade03fe13e21346b0b9c31709d19",
+      "size_bytes": 7620
+    },
+    {
+      "file": "one-thousand-turn-preflight-result-summary.json",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "53025bebc9670a9697e92aaf1573814eafaf22589bce9ef95a0f8bb71a95fcc2",
+      "size_bytes": 1649
+    },
+    {
+      "file": "one-thousand-turn-live-run-profile-summary.json",
+      "present": false,
+      "required_for_archive": false,
+      "sha256": "",
+      "size_bytes": 0
+    },
+    {
+      "file": "one-thousand-turn-live-result-summary.json",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "146934b22ca41fff5df4791bc12ab6e8ba293b96d5db198af757c8cfd8f0ee45",
+      "size_bytes": 1858
+    },
+    {
+      "file": "one-thousand-turn-release-candidate-dashboard-summary.json",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "2059911389f5771df8e796d80c15a9c481ed1193fadc7bafdd4e0c7ef52c65c1",
+      "size_bytes": 1458
+    },
+    {
+      "file": "one-thousand-turn-release-candidate-handoff-manifest.json",
+      "present": true,
+      "required_for_archive": true,
+      "sha256": "6f426e3cb7831bacb6cb1c27469c5ec8f4040090dd4992ad92526f18744e4205",
+      "size_bytes": 6211
+    },
+    {
+      "file": "one-thousand-turn-release-candidate-handoff-dashboard-summary.json",
+      "present": true,
+      "required_for_archive": true,
+      "sha256": "7a95973d18022ec4b364d9d8ab9945c3a53b42da60f76a9a34e7a74c171cec09",
+      "size_bytes": 668
+    },
+    {
+      "file": "one-thousand-turn-release-candidate-runbook.md",
+      "present": false,
+      "required_for_archive": true,
+      "sha256": "",
+      "size_bytes": 0
+    },
+    {
+      "file": "one-thousand-turn-release-candidate-runbook-summary.json",
+      "present": false,
+      "required_for_archive": true,
+      "sha256": "",
+      "size_bytes": 0
+    },
+    {
+      "file": "autoplay-campaign-report.html",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "357ca1774eaca61246d4cd48f033b7fb67d1e0179bb4a4c176be3514482043b8",
+      "size_bytes": 38797277
+    },
+    {
+      "file": "autoplay-campaign-results.zip",
+      "present": true,
+      "required_for_archive": false,
+      "sha256": "ce5720d2787f958aab0ff84aa8e75c2ac2904f149b7bebe6a135d0a7e373f5a8",
+      "size_bytes": 61440436
+    }
+  ]
+}

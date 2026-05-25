@@ -1,0 +1,139 @@
+{
+  "advisory_failures": [
+    "release_candidate_dashboard_ready",
+    "live_result_release_candidate_ready",
+    "required_handoff_artifacts_present"
+  ],
+  "advisory_only": true,
+  "artifact_checklist": {
+    "missing_required": [
+      "one-thousand-turn-live-run-profile-summary.json"
+    ],
+    "optional_product": [
+      {
+        "file": "autoplay-campaign-report.html",
+        "present": true,
+        "size_bytes": 38797277
+      },
+      {
+        "file": "autoplay-campaign-results.zip",
+        "present": true,
+        "size_bytes": 61440436
+      },
+      {
+        "file": "artifact-manifest-digest.json",
+        "present": false,
+        "size_bytes": 0
+      }
+    ],
+    "present_required_file_count": 6,
+    "required": [
+      {
+        "file": "one-thousand-turn-readiness-aggregator-summary.json",
+        "present": true,
+        "size_bytes": 8070
+      },
+      {
+        "file": "one-thousand-turn-readiness-dashboard-summary.json",
+        "present": true,
+        "size_bytes": 1864
+      },
+      {
+        "file": "one-thousand-turn-preflight-profile-summary.json",
+        "present": true,
+        "size_bytes": 7620
+      },
+      {
+        "file": "one-thousand-turn-preflight-result-summary.json",
+        "present": true,
+        "size_bytes": 1649
+      },
+      {
+        "file": "one-thousand-turn-live-run-profile-summary.json",
+        "present": false,
+        "size_bytes": 0
+      },
+      {
+        "file": "one-thousand-turn-live-result-summary.json",
+        "present": true,
+        "size_bytes": 1858
+      },
+      {
+        "file": "one-thousand-turn-release-candidate-dashboard-summary.json",
+        "present": true,
+        "size_bytes": 1458
+      }
+    ],
+    "required_file_count": 7
+  },
+  "checks": {
+    "focused_test_command_present": true,
+    "live_command_present": true,
+    "live_result_release_candidate_ready": false,
+    "preflight_command_present": true,
+    "release_candidate_dashboard_ready": false,
+    "required_handoff_artifacts_present": false
+  },
+  "commands": {
+    "focused_test_suite": {
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "src/tests/rpg/test_bundle_e_product_report_rendering.py",
+        "src/tests/rpg/test_bundle_f_dry_run_300_profile.py",
+        "src/tests/rpg/test_bundle_g_content_depth_expansion.py",
+        "src/tests/rpg/test_bundle_h_memory_state_compression.py",
+        "src/tests/rpg/test_bundle_i_npc_agency_v2.py",
+        "src/tests/rpg/test_bundle_j_economy_resource_pressure_v2.py",
+        "src/tests/rpg/test_bundle_k_travel_location_graph_v2.py",
+        "src/tests/rpg/test_bundle_l_faction_reputation_v2.py",
+        "src/tests/rpg/test_bundle_m_encounter_lifecycle_v2.py",
+        "src/tests/rpg/test_bundle_n_story_arc_end_state_v2.py",
+        "src/tests/rpg/test_bundle_o_1000_turn_readiness_aggregator.py",
+        "src/tests/rpg/test_bundle_p_1000_turn_readiness_dashboard.py",
+        "src/tests/rpg/test_bundle_q_1000_turn_preflight_profile.py",
+        "src/tests/rpg/test_bundle_r_1000_turn_preflight_result_gate.py",
+        "src/tests/rpg/test_bundle_s_live_1000_run_profile.py",
+        "src/tests/rpg/test_bundle_t_live_1000_result_gate.py",
+        "src/tests/rpg/test_bundle_u_release_candidate_dashboard.py",
+        "src/tests/rpg/test_bundle_v_release_candidate_handoff_manifest.py",
+        "src/tests/rpg/test_bundle_w_release_candidate_handoff_dashboard.py",
+        "src/tests/rpg/test_bundle_x_release_candidate_runbook.py",
+        "src/tests/rpg/test_bundle_y_release_candidate_artifact_index.py",
+        "src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py",
+        "src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
+      ],
+      "text": "python -m pytest src/tests/rpg/test_bundle_e_product_report_rendering.py src/tests/rpg/test_bundle_f_dry_run_300_profile.py src/tests/rpg/test_bundle_g_content_depth_expansion.py src/tests/rpg/test_bundle_h_memory_state_compression.py src/tests/rpg/test_bundle_i_npc_agency_v2.py src/tests/rpg/test_bundle_j_economy_resource_pressure_v2.py src/tests/rpg/test_bundle_k_travel_location_graph_v2.py src/tests/rpg/test_bundle_l_faction_reputation_v2.py src/tests/rpg/test_bundle_m_encounter_lifecycle_v2.py src/tests/rpg/test_bundle_n_story_arc_end_state_v2.py src/tests/rpg/test_bundle_o_1000_turn_readiness_aggregator.py src/tests/rpg/test_bundle_p_1000_turn_readiness_dashboard.py src/tests/rpg/test_bundle_q_1000_turn_preflight_profile.py src/tests/rpg/test_bundle_r_1000_turn_preflight_result_gate.py src/tests/rpg/test_bundle_s_live_1000_run_profile.py src/tests/rpg/test_bundle_t_live_1000_result_gate.py src/tests/rpg/test_bundle_u_release_candidate_dashboard.py src/tests/rpg/test_bundle_v_release_candidate_handoff_manifest.py src/tests/rpg/test_bundle_w_release_candidate_handoff_dashboard.py src/tests/rpg/test_bundle_x_release_candidate_runbook.py src/tests/rpg/test_bundle_y_release_candidate_artifact_index.py src/tests/rpg/test_bundle_z_release_candidate_artifact_index_dashboard.py src/tests/rpg/test_bundle_ab_focused_suite_registry_dashboard.py"
+    },
+    "live_1000": {
+      "argv": [
+        "python",
+        "src/tests/rpg/autoplay_llm_campaign.py",
+        "--live-profile",
+        "live_1000"
+      ],
+      "text": "python src/tests/rpg/autoplay_llm_campaign.py --live-profile live_1000"
+    },
+    "preflight_1000": {
+      "argv": [
+        "python",
+        "src/tests/rpg/autoplay_llm_campaign.py",
+        "--preflight-profile",
+        "preflight_1000"
+      ],
+      "text": "python src/tests/rpg/autoplay_llm_campaign.py --preflight-profile preflight_1000"
+    }
+  },
+  "format_version": "bundle_v_release_candidate_handoff_manifest_v1",
+  "metrics": {
+    "command_count": 3,
+    "missing_required_file_count": 1,
+    "present_required_file_count": 6,
+    "required_file_count": 7
+  },
+  "ok": false,
+  "recommended_next_step": "complete_release_candidate_handoff_artifacts",
+  "release_candidate_handoff_ready": false,
+  "source": "bundle_v_release_candidate_handoff_manifest"
+}
