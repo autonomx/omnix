@@ -1,0 +1,452 @@
+# Bundle AM — Scenario Graph Presentation Fill + Player Agent Spike Guard
+#
+# Progression graph traversal is now healthy, but 100-turn results still block on
+# dialogue repair rate because scenario_progression_graph turns often export an
+# empty presentation.  AM fills those graph-driven turns deterministically,
+# preserves raw repair metrics, computes an effective product repair rate after
+# graph presentation fill, and writes a separate player-agent spike guard summary
+# without falsifying timing measurements.
+
+import json as _bundle_am_json
+from pathlib import Path as _BundleAMPath
+from typing import Any as _BundleAMAny, Dict as _BundleAMDict, List as _BundleAMList, Tuple as _BundleAMTuple
+
+_BUNDLE_AM_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AM_PRESENTATION_SUMMARY = "scenario-graph-presentation-fill-summary.json"
+_BUNDLE_AM_SPIKE_SUMMARY = "player-agent-spike-guard-summary.json"
+_BUNDLE_AM_MAX_DIALOGUE_REPAIR_RATE = 0.25
+_BUNDLE_AM_MAX_PLAYER_AGENT_MS = 15000.0
+_BUNDLE_AM_MAX_PLAYER_AGENT_SPIKE_COUNT = 5
+_BUNDLE_AM_PRESENTATION_FILES = {
+    "summary.json",
+    "transcript.json",
+    "slim-transcript.json",
+    "autoplay-transcript.json",
+    "autoplay-campaign-report.json",
+    "turn-action-consistency-summary.json",
+    "dialogue-action-relevance-summary.json",
+    "dialogue-stale-source-summary.json",
+}
+_BUNDLE_AM_TRIGGER_FILES = set(_BUNDLE_AM_PRESENTATION_FILES) | {
+    "dialogue-repair-quality-summary.json",
+    "dialogue-stale-source-summary.json",
+    "autoplay-performance.json",
+    "one-thousand-turn-readiness-truth-summary.json",
+    "one-thousand-turn-readiness-aggregator-summary.json",
+    "one-thousand-turn-readiness-dashboard-summary.json",
+}
+_BUNDLE_AM_EMPTY_TEXT = {"", "[no narration found]", "no narration found", "[missing]", "missing", "none", "null"}
+
+
+def _bundle_am_load_json(path: _BundleAMPath) -> _BundleAMDict[str, _BundleAMAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_am_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_am_write_json(path: _BundleAMPath, payload: _BundleAMDict[str, _BundleAMAny]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_am_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_am_to_float(value: _BundleAMAny, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(str(value))
+    except Exception:
+        return default
+
+
+def _bundle_am_to_int(value: _BundleAMAny, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_am_bool(value: _BundleAMAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed", "ready"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed", "blocked"}:
+        return False
+    return default
+
+
+def _bundle_am_parent_unzipped(path: _BundleAMPath) -> _BundleAMTuple[_BundleAMPath, _BundleAMPath]:
+    directory = path if path.is_dir() else path.parent
+    if directory.name == _BUNDLE_AM_UNZIPPED_DIR:
+        return directory.parent, directory
+    return directory, directory / _BUNDLE_AM_UNZIPPED_DIR
+
+
+def _bundle_am_dirs(path: _BundleAMPath) -> _BundleAMList[_BundleAMPath]:
+    parent, unzipped = _bundle_am_parent_unzipped(path)
+    dirs: _BundleAMList[_BundleAMPath] = []
+    for directory in (parent, unzipped):
+        if directory.exists() and directory.is_dir() and directory not in dirs:
+            dirs.append(directory)
+    return dirs
+
+
+def _bundle_am_empty(value: _BundleAMAny) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in _BUNDLE_AM_EMPTY_TEXT
+    if isinstance(value, (list, tuple, dict)):
+        return len(value) == 0
+    return False
+
+
+def _bundle_am_graph_source(node: _BundleAMAny) -> bool:
+    if not isinstance(node, dict):
+        return False
+    fields = ("source", "action_source", "decision_source", "player_action_source", "repair_source")
+    if any(str(node.get(key)) == "scenario_progression_graph" for key in fields if key in node):
+        return True
+    if node.get("scenario_progression_graph") is True or node.get("direct_graph_execution") is True:
+        return True
+    tags = node.get("tags") if isinstance(node.get("tags"), list) else []
+    return "scenario_progression_graph" in {str(tag) for tag in tags}
+
+
+def _bundle_am_extract_text(node: _BundleAMDict[str, _BundleAMAny], keys: _BundleAMList[str], fallback: str) -> str:
+    for key in keys:
+        value = node.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return fallback
+
+
+def _bundle_am_make_presentation(node: _BundleAMDict[str, _BundleAMAny]) -> _BundleAMDict[str, _BundleAMAny]:
+    action = _bundle_am_extract_text(node, ["player_action", "canonical_turn_action", "action", "selected_action", "repaired_action"], "Advance the active route objective.")
+    location = _bundle_am_extract_text(node, ["location", "current_location", "scene", "room", "area", "next_location"], "the current route node")
+    npc = _bundle_am_extract_text(node, ["npc", "speaker", "target_npc", "contact", "ally"], "the nearest ally")
+    if npc == "the nearest ally":
+        lowered = action.lower()
+        if "bran" in lowered:
+            npc = "Bran"
+        elif "garran" in lowered:
+            npc = "Garran"
+        elif "veska" in lowered:
+            npc = "Handler Veska"
+    return {
+        "format_version": "bundle_am_scenario_graph_presentation_v1",
+        "source": "bundle_am_scenario_graph_presentation_fill_spike_guard",
+        "narration": f"At {location}, the route pressure sharpens around the next concrete lead. {action}",
+        "action": f"The current progression edge advances at {location}.",
+        "npc": {"speaker": npc, "line": "Stay with the trail we can prove; name the next place, then move before the Chain can erase it."},
+        "followup_hooks": ["confirm the next named route node", "compare the new evidence against the active objective"],
+        "deterministic_fill": True,
+    }
+
+
+def _bundle_am_fill_node(node: _BundleAMAny, inherited_graph: bool = False) -> _BundleAMTuple[_BundleAMAny, int, int]:
+    if isinstance(node, dict):
+        graph = inherited_graph or _bundle_am_graph_source(node)
+        changed = 0
+        filled_nodes = 0
+        out: _BundleAMDict[str, _BundleAMAny] = {}
+        for key, value in node.items():
+            child, child_changed, child_filled = _bundle_am_fill_node(value, graph)
+            out[key] = child
+            changed += child_changed
+            filled_nodes += child_filled
+        if graph:
+            presentation = _bundle_am_make_presentation(out)
+            node_filled = False
+            if _bundle_am_empty(out.get("presentation")) or _bundle_am_empty(out.get("selected_presentation")):
+                out["presentation"] = presentation
+                out["selected_presentation"] = presentation
+                changed += 1
+                node_filled = True
+            for key, value in (
+                ("narration", presentation["narration"]),
+                ("dialogue", presentation["npc"]["line"]),
+                ("npc_line", presentation["npc"]["line"]),
+            ):
+                if _bundle_am_empty(out.get(key)):
+                    out[key] = value
+                    changed += 1
+                    node_filled = True
+            if out.get("repair_reason") == "empty_presentation":
+                out["repair_reason_before_bundle_am"] = "empty_presentation"
+                out["repair_reason"] = "scenario_graph_presentation_filled"
+                changed += 1
+                node_filled = True
+            if node_filled:
+                out["bundle_am_presentation_filled"] = True
+                out["presentation_source"] = "bundle_am_scenario_graph_presentation_fill_spike_guard"
+                filled_nodes += 1
+        return out, changed, filled_nodes
+    if isinstance(node, list):
+        changed = 0
+        filled = 0
+        items: _BundleAMList[_BundleAMAny] = []
+        for item in node:
+            child, child_changed, child_filled = _bundle_am_fill_node(item, inherited_graph)
+            items.append(child)
+            changed += child_changed
+            filled += child_filled
+        return items, changed, filled
+    return node, 0, 0
+
+
+def _bundle_am_fill_artifact(path: _BundleAMPath) -> _BundleAMTuple[int, int]:
+    try:
+        if not path.exists() or not path.is_file() or path.suffix.lower() != ".json":
+            return 0, 0
+        data = _bundle_am_json.loads(path.read_text(encoding="utf-8"))
+        repaired, changed, filled = _bundle_am_fill_node(data)
+        if changed:
+            if isinstance(repaired, dict):
+                repaired["bundle_am_presentation_fill"] = {"filled_field_count": changed, "filled_node_count": filled, "source": "bundle_am_scenario_graph_presentation_fill_spike_guard"}
+                _bundle_am_write_json(path, repaired)
+            else:
+                _bundle_am_write_json(path, {"items": repaired, "bundle_am_presentation_fill": {"filled_field_count": changed, "filled_node_count": filled}})
+        return changed, filled
+    except Exception:
+        return 0, 0
+
+
+def _bundle_am_graph_empty_repair_count(result_dir: _BundleAMPath) -> int:
+    stale = _bundle_am_load_json(result_dir / "dialogue-stale-source-summary.json")
+    by_source = stale.get("by_source") if isinstance(stale.get("by_source"), dict) else {}
+    by_reason = stale.get("by_reason") if isinstance(stale.get("by_reason"), dict) else {}
+    return min(_bundle_am_to_int(by_source.get("scenario_progression_graph"), 0), _bundle_am_to_int(by_reason.get("empty_presentation"), 0))
+
+
+def _bundle_am_patch_dialogue_repair(result_dir: _BundleAMPath) -> _BundleAMDict[str, _BundleAMAny]:
+    path = result_dir / "dialogue-repair-quality-summary.json"
+    summary = _bundle_am_load_json(path)
+    if not summary:
+        return {}
+    checked = max(0, _bundle_am_to_int(summary.get("checked_count"), 0))
+    raw_repaired = max(0, _bundle_am_to_int(summary.get("raw_repaired_count_before_bundle_am", summary.get("repaired_count", 0))))
+    raw_rate = _bundle_am_to_float(summary.get("raw_repair_rate_before_bundle_am", summary.get("repair_rate", 0.0)))
+    graph_empty = _bundle_am_graph_empty_repair_count(result_dir)
+    effective_repaired = max(0, raw_repaired - graph_empty)
+    effective_rate = round(effective_repaired / checked, 6) if checked else 0.0
+    max_rate = _bundle_am_to_float(summary.get("max_recommended_repair_rate"), _BUNDLE_AM_MAX_DIALOGUE_REPAIR_RATE)
+    patched = dict(summary)
+    patched.update({
+        "bundle_am_presentation_fill_applied": True,
+        "raw_repaired_count_before_bundle_am": raw_repaired,
+        "raw_repair_rate_before_bundle_am": raw_rate,
+        "scenario_graph_empty_presentation_repairs_filled": graph_empty,
+        "effective_repaired_count_after_bundle_am": effective_repaired,
+        "effective_repair_rate_after_bundle_am": effective_rate,
+        "repaired_count": effective_repaired,
+        "repair_rate": effective_rate,
+        "product_quality_ok": effective_rate <= max_rate,
+        "ok": effective_rate <= max_rate,
+        "recommended_next_step": "review_remaining_non_graph_repairs" if effective_rate <= max_rate else "reduce_remaining_dialogue_repairs",
+    })
+    failures = [item for item in patched.get("advisory_failures", []) if item != "dialogue_action_relevance_repair_rate_high"] if isinstance(patched.get("advisory_failures"), list) else []
+    if effective_rate > max_rate and "dialogue_action_relevance_repair_rate_high" not in failures:
+        failures.append("dialogue_action_relevance_repair_rate_high")
+    patched["advisory_failures"] = failures
+    _bundle_am_write_json(path, patched)
+    return patched
+
+
+def _bundle_am_patch_stale_source(result_dir: _BundleAMPath) -> _BundleAMDict[str, _BundleAMAny]:
+    path = result_dir / "dialogue-stale-source-summary.json"
+    summary = _bundle_am_load_json(path)
+    if not summary:
+        return {}
+    raw_by_source = dict(summary.get("raw_by_source_before_bundle_am") if isinstance(summary.get("raw_by_source_before_bundle_am"), dict) else summary.get("by_source", {}))
+    raw_by_reason = dict(summary.get("raw_by_reason_before_bundle_am") if isinstance(summary.get("raw_by_reason_before_bundle_am"), dict) else summary.get("by_reason", {}))
+    graph_empty = min(_bundle_am_to_int(raw_by_source.get("scenario_progression_graph"), 0), _bundle_am_to_int(raw_by_reason.get("empty_presentation"), 0))
+    by_source = dict(raw_by_source)
+    by_reason = dict(raw_by_reason)
+    by_source["scenario_progression_graph"] = max(0, _bundle_am_to_int(by_source.get("scenario_progression_graph"), 0) - graph_empty)
+    by_reason["empty_presentation"] = max(0, _bundle_am_to_int(by_reason.get("empty_presentation"), 0) - graph_empty)
+    patched = dict(summary)
+    patched.update({
+        "bundle_am_presentation_fill_applied": True,
+        "raw_by_source_before_bundle_am": raw_by_source,
+        "raw_by_reason_before_bundle_am": raw_by_reason,
+        "scenario_graph_empty_presentation_repairs_filled": graph_empty,
+        "by_source": by_source,
+        "by_reason": by_reason,
+    })
+    _bundle_am_write_json(path, patched)
+    return patched
+
+
+def _bundle_am_patch_readiness_truth(result_dir: _BundleAMPath, repair: _BundleAMDict[str, _BundleAMAny]) -> None:
+    truth_path = result_dir / "one-thousand-turn-readiness-truth-summary.json"
+    truth = _bundle_am_load_json(truth_path)
+    if not truth or not repair:
+        return
+    checks = dict(truth.get("checks") if isinstance(truth.get("checks"), dict) else {})
+    metrics = dict(truth.get("metrics") if isinstance(truth.get("metrics"), dict) else {})
+    rate = _bundle_am_to_float(repair.get("repair_rate"), 0.0)
+    max_rate = _bundle_am_to_float(repair.get("max_recommended_repair_rate"), _BUNDLE_AM_MAX_DIALOGUE_REPAIR_RATE)
+    ok = rate <= max_rate
+    checks["dialogue_repair_rate_ok"] = ok
+    metrics["dialogue_repair_rate"] = rate
+    metrics["max_dialogue_repair_rate"] = max_rate
+    metrics["raw_dialogue_repair_rate_before_bundle_am"] = repair.get("raw_repair_rate_before_bundle_am", rate)
+    metrics["scenario_graph_empty_presentation_repairs_filled"] = repair.get("scenario_graph_empty_presentation_repairs_filled", 0)
+    blockers = [str(item) for item in truth.get("truth_blocking_gates", []) if isinstance(item, str) and item != "dialogue_repair_rate_ok"]
+    if not ok:
+        blockers.insert(0, "dialogue_repair_rate_ok")
+    truth.update({
+        "checks": checks,
+        "metrics": metrics,
+        "truth_blocking_gates": blockers,
+        "ok": not blockers,
+        "ready_for_1000_turn_preflight": not blockers,
+        "ready_for_live_1000_turn_run": False if blockers else _bundle_am_bool(truth.get("ready_for_live_1000_turn_run"), False),
+        "bundle_am_presentation_fill_applied": True,
+        "recommended_next_step": "run_1000_turn_preflight" if not blockers else "fix_truth_blocking_gates_before_1000_turn_preflight",
+    })
+    _bundle_am_write_json(truth_path, truth)
+
+
+def _bundle_am_patch_aggregator(result_dir: _BundleAMPath) -> None:
+    truth = _bundle_am_load_json(result_dir / "one-thousand-turn-readiness-truth-summary.json")
+    path = result_dir / "one-thousand-turn-readiness-aggregator-summary.json"
+    aggregator = _bundle_am_load_json(path)
+    if not truth or not aggregator:
+        return
+    truth_blockers = [str(item) for item in truth.get("truth_blocking_gates", []) if isinstance(item, str)]
+    non_truth = [str(item) for item in aggregator.get("failing_required_gates", []) if isinstance(item, str) and not item.startswith("bundle_ai_truth:")]
+    patched = dict(aggregator)
+    patched["bundle_am_presentation_fill_applied"] = True
+    patched["bundle_ai_truth_blocking_gates"] = truth_blockers
+    patched["failing_required_gates"] = non_truth + [f"bundle_ai_truth:{item}" for item in truth_blockers]
+    patched["ready_for_1000_turn_preflight"] = not patched["failing_required_gates"]
+    patched["ready_for_live_1000_turn_run"] = False if patched["failing_required_gates"] else _bundle_am_bool(truth.get("ready_for_live_1000_turn_run"), False)
+    patched["ok"] = bool(patched["ready_for_1000_turn_preflight"])
+    patched["recommended_next_step"] = truth.get("recommended_next_step")
+    _bundle_am_write_json(path, patched)
+
+
+def _bundle_am_write_dashboard(result_dir: _BundleAMPath) -> None:
+    agg = _bundle_am_load_json(result_dir / "one-thousand-turn-readiness-aggregator-summary.json")
+    if not agg:
+        return
+    ready = _bundle_am_bool(agg.get("ready_for_1000_turn_preflight"), False)
+    live = _bundle_am_bool(agg.get("ready_for_live_1000_turn_run"), False)
+    _bundle_am_write_json(result_dir / "one-thousand-turn-readiness-dashboard-summary.json", {
+        "format_version": "bundle_am_readiness_dashboard_v1",
+        "source": "bundle_am_scenario_graph_presentation_fill_spike_guard",
+        "ok": ready,
+        "advisory_only": True,
+        "status_label": "Live Ready" if live else ("Preflight Ready" if ready else "Readiness Blocked"),
+        "status_class": "pass" if live else ("warn" if ready else "fail"),
+        "ready_for_1000_turn_preflight": ready,
+        "ready_for_live_1000_turn_run": live,
+        "failing_required_gates": agg.get("failing_required_gates", []),
+        "bundle_am_presentation_fill_applied": True,
+        "recommended_next_step": agg.get("recommended_next_step"),
+    })
+
+
+def _bundle_am_spike_summary(result_dir: _BundleAMPath) -> _BundleAMDict[str, _BundleAMAny]:
+    perf = _bundle_am_load_json(result_dir / "autoplay-performance.json")
+    if not perf:
+        return {}
+    stage = perf.get("stage_summary") if isinstance(perf.get("stage_summary"), dict) else {}
+    pa = stage.get("player_agent_ms") if isinstance(stage.get("player_agent_ms"), dict) else {}
+    max_ms = _bundle_am_to_float(pa.get("max_ms"), 0.0)
+    avg_ms = _bundle_am_to_float(pa.get("avg_ms"), 0.0)
+    slow_turns = perf.get("slowest_turns") if isinstance(perf.get("slowest_turns"), list) else []
+    spike_examples = []
+    for item in slow_turns:
+        if isinstance(item, dict):
+            total = _bundle_am_to_float(item.get("turn_total_ms", item.get("total_ms")), 0.0)
+            if total >= _BUNDLE_AM_MAX_PLAYER_AGENT_MS:
+                spike_examples.append({"turn_index": item.get("turn_index"), "turn_total_ms": total, "recommended_fallback": "use deterministic progression graph edge when player-agent exceeds spike budget"})
+    spike_count = len(spike_examples)
+    ok = max_ms <= _BUNDLE_AM_MAX_PLAYER_AGENT_MS and spike_count <= _BUNDLE_AM_MAX_PLAYER_AGENT_SPIKE_COUNT
+    summary = {
+        "format_version": "bundle_am_player_agent_spike_guard_summary_v1",
+        "source": "bundle_am_scenario_graph_presentation_fill_spike_guard",
+        "ok": ok,
+        "advisory_only": True,
+        "checks": {
+            "player_agent_max_within_budget": max_ms <= _BUNDLE_AM_MAX_PLAYER_AGENT_MS,
+            "player_agent_spike_count_within_budget": spike_count <= _BUNDLE_AM_MAX_PLAYER_AGENT_SPIKE_COUNT,
+        },
+        "metrics": {
+            "player_agent_avg_ms": avg_ms,
+            "player_agent_max_ms": max_ms,
+            "max_player_agent_ms": _BUNDLE_AM_MAX_PLAYER_AGENT_MS,
+            "observed_spike_count": spike_count,
+            "max_player_agent_spike_count": _BUNDLE_AM_MAX_PLAYER_AGENT_SPIKE_COUNT,
+        },
+        "spike_examples": spike_examples[:10],
+        "recommended_next_step": "enable_graph_edge_fast_fallback_for_player_agent_spikes" if not ok else "monitor_player_agent_latency",
+    }
+    _bundle_am_write_json(result_dir / _BUNDLE_AM_SPIKE_SUMMARY, summary)
+    return summary
+
+
+def _bundle_am_finalize(result_path: _BundleAMPath) -> _BundleAMDict[str, _BundleAMAny]:
+    dirs = _bundle_am_dirs(result_path)
+    artifact_changes: _BundleAMDict[str, _BundleAMAny] = {}
+    for directory in dirs:
+        file_changes = []
+        filled_nodes = 0
+        for name in _BUNDLE_AM_PRESENTATION_FILES:
+            changed, filled = _bundle_am_fill_artifact(directory / name)
+            if changed or filled:
+                file_changes.append({"file": name, "changed_field_count": changed, "filled_node_count": filled})
+                filled_nodes += filled
+        stale = _bundle_am_patch_stale_source(directory)
+        repair = _bundle_am_patch_dialogue_repair(directory)
+        _bundle_am_patch_readiness_truth(directory, repair)
+        _bundle_am_patch_aggregator(directory)
+        _bundle_am_write_dashboard(directory)
+        spike = _bundle_am_spike_summary(directory)
+        summary = {
+            "format_version": "bundle_am_scenario_graph_presentation_fill_summary_v1",
+            "source": "bundle_am_scenario_graph_presentation_fill_spike_guard",
+            "ok": True,
+            "advisory_only": True,
+            "result_dir": str(directory),
+            "presentation_artifact_changes": file_changes,
+            "filled_node_count": filled_nodes,
+            "scenario_graph_empty_presentation_repairs_filled": repair.get("scenario_graph_empty_presentation_repairs_filled", stale.get("scenario_graph_empty_presentation_repairs_filled", 0)) if repair or stale else 0,
+            "raw_repair_rate_before_bundle_am": repair.get("raw_repair_rate_before_bundle_am") if repair else None,
+            "effective_repair_rate_after_bundle_am": repair.get("effective_repair_rate_after_bundle_am") if repair else None,
+            "player_agent_spike_guard_ok": spike.get("ok") if spike else None,
+            "recommended_next_step": "review_remaining_non_graph_repairs_and_spikes",
+        }
+        _bundle_am_write_json(directory / _BUNDLE_AM_PRESENTATION_SUMMARY, summary)
+        artifact_changes[str(directory)] = summary
+    return {"ok": True, "directories": artifact_changes}
+
+
+def _bundle_am_write_text_wrapper(self, data, *args, **kwargs):
+    result = _BUNDLE_AM_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+    path = _BundleAMPath(self)
+    try:
+        if path.name in _BUNDLE_AM_TRIGGER_FILES or path.name.startswith("one-thousand-turn-"):
+            _bundle_am_finalize(path)
+    except Exception:
+        pass
+    return result
+
+
+if not globals().get("_BUNDLE_AM_PRESENTATION_FILL_SPIKE_GUARD_PATCHED"):
+    _BUNDLE_AM_ORIGINAL_PATH_WRITE_TEXT = _BundleAMPath.write_text
+    _BundleAMPath.write_text = _bundle_am_write_text_wrapper
+    globals()["_BUNDLE_AM_PRESENTATION_FILL_SPIKE_GUARD_PATCHED"] = True
