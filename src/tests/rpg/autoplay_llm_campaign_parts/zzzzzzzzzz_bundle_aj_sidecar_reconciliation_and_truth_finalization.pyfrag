@@ -140,8 +140,14 @@ def _bundle_aj_existing_candidate_dirs(path: _BundleAJPath) -> _BundleAJList[_Bu
 
 
 def _bundle_aj_write_json(path: _BundleAJPath, payload: _BundleAJDict[str, _BundleAJAny]) -> None:
-    writer = globals().get("_BUNDLE_AJ_ORIGINAL_PATH_WRITE_TEXT") or _BundleAJPath.write_text
-    writer(path, _bundle_aj_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    # Reconciliation output must not flow through Path.write_text wrappers from
+    # Bundle AK or earlier overlays.  Those wrappers are useful for normal
+    # artifact writes, but can re-enter mirror reconciliation while AJ is choosing
+    # the best sidecar and resurrect stale parent copies during tests/finalize.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = _bundle_aj_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(text)
 
 
 def _bundle_aj_best_payload(dirs: _BundleAJList[_BundleAJPath], file_name: str) -> _BundleAJDict[str, _BundleAJAny]:
