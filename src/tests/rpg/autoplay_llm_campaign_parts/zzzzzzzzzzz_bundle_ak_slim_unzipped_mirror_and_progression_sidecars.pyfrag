@@ -1,0 +1,195 @@
+# Bundle AK — Slim Unzipped Mirror + Progression Sidecar Inclusion
+#
+# Keep autoplay-campaign-results-unzipped lightweight for upload/review.  The
+# deep review-artifacts tree is intentionally omitted from that mirror, while
+# one-thousand-turn-* sidecars are copied into it so users do not need to upload
+# a separate progression sidecar ZIP.
+
+import json as _bundle_ak_json
+import shutil as _bundle_ak_shutil
+from pathlib import Path as _BundleAKPath
+from typing import Any as _BundleAKAny, Dict as _BundleAKDict, List as _BundleAKList, Tuple as _BundleAKTuple
+
+_BUNDLE_AK_UNZIPPED_DIR_NAME = "autoplay-campaign-results-unzipped"
+_BUNDLE_AK_REVIEW_DIR_NAME = "review-artifacts"
+_BUNDLE_AK_SUMMARY_FILE = "one-thousand-turn-slim-unzipped-mirror-summary.json"
+_BUNDLE_AK_SIDECAR_PREFIX = "one-thousand-turn-"
+_BUNDLE_AK_ALLOWED_SUFFIXES = {".json", ".md", ".txt", ".html"}
+_BUNDLE_AK_TRIGGER_NAMES = {
+    "artifact-manifest.json",
+    "artifact-manifest-digest.json",
+    "autoplay-health.json",
+    "quality-gate-summary.json",
+    "one-thousand-turn-sidecar-reconciliation-summary.json",
+    "one-thousand-turn-readiness-truth-summary.json",
+    "one-thousand-turn-progression-graph.json",
+    "one-thousand-turn-progression-graph-summary.json",
+}
+
+
+def _bundle_ak_under_review_dir(path: _BundleAKPath) -> bool:
+    return _BUNDLE_AK_REVIEW_DIR_NAME in {str(part).lower() for part in path.parts}
+
+
+def _bundle_ak_parent_and_unzipped(path: _BundleAKPath) -> _BundleAKTuple[_BundleAKPath, _BundleAKPath]:
+    directory = path if path.is_dir() else path.parent
+    if directory.name == _BUNDLE_AK_UNZIPPED_DIR_NAME:
+        return directory.parent, directory
+    return directory, directory / _BUNDLE_AK_UNZIPPED_DIR_NAME
+
+
+def _bundle_ak_is_sidecar(path: _BundleAKPath) -> bool:
+    return path.is_file() and path.name.startswith(_BUNDLE_AK_SIDECAR_PREFIX) and path.suffix.lower() in _BUNDLE_AK_ALLOWED_SUFFIXES
+
+
+def _bundle_ak_copy_sidecars(parent: _BundleAKPath, unzipped: _BundleAKPath) -> _BundleAKList[str]:
+    copied: _BundleAKList[str] = []
+    try:
+        if not parent.exists() or not parent.is_dir():
+            return copied
+        unzipped.mkdir(parents=True, exist_ok=True)
+        for source in parent.iterdir():
+            if not _bundle_ak_is_sidecar(source):
+                continue
+            target = unzipped / source.name
+            should_copy = not target.exists()
+            if not should_copy:
+                try:
+                    should_copy = source.stat().st_size != target.stat().st_size or source.stat().st_mtime > target.stat().st_mtime + 0.001
+                except Exception:
+                    should_copy = True
+            if should_copy:
+                _bundle_ak_shutil.copy2(source, target)
+                copied.append(str(target))
+    except Exception:
+        pass
+    return copied
+
+
+def _bundle_ak_omit_review_tree(unzipped: _BundleAKPath) -> _BundleAKDict[str, _BundleAKAny]:
+    review_dir = unzipped / _BUNDLE_AK_REVIEW_DIR_NAME
+    result: _BundleAKDict[str, _BundleAKAny] = {
+        "review_artifacts_path": str(review_dir),
+        "review_artifacts_present_before": False,
+        "review_artifacts_omitted": False,
+        "omitted_file_count_estimate": 0,
+        "omitted_byte_count_estimate": 0,
+    }
+    try:
+        if not (unzipped.exists() and unzipped.is_dir() and review_dir.exists() and review_dir.is_dir()):
+            result["review_artifacts_omitted"] = not review_dir.exists()
+            return result
+        # Scope guard: only operate on <parent>/autoplay-campaign-results-unzipped/review-artifacts.
+        if review_dir.name != _BUNDLE_AK_REVIEW_DIR_NAME or review_dir.parent.name != _BUNDLE_AK_UNZIPPED_DIR_NAME:
+            result["scope_guard_refused"] = True
+            return result
+        result["review_artifacts_present_before"] = True
+        files = [item for item in review_dir.rglob("*") if item.is_file()]
+        result["omitted_file_count_estimate"] = len(files)
+        total_bytes = 0
+        for item in files:
+            try:
+                total_bytes += item.stat().st_size
+            except Exception:
+                pass
+        result["omitted_byte_count_estimate"] = total_bytes
+        for item in sorted(review_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+            try:
+                if item.is_file() or item.is_symlink():
+                    item.unlink()
+                elif item.is_dir():
+                    item.rmdir()
+            except Exception:
+                pass
+        try:
+            review_dir.rmdir()
+        except Exception:
+            pass
+        result["review_artifacts_omitted"] = not review_dir.exists()
+    except Exception as exc:
+        result["omit_error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
+def _bundle_ak_write_json(path: _BundleAKPath, payload: _BundleAKDict[str, _BundleAKAny]) -> None:
+    writer = globals().get("_BUNDLE_AK_ORIGINAL_PATH_WRITE_TEXT") or _BundleAKPath.write_text
+    writer(path, _bundle_ak_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+
+def _bundle_ak_finalize_unzipped_mirror(path: _BundleAKPath) -> _BundleAKDict[str, _BundleAKAny]:
+    parent, unzipped = _bundle_ak_parent_and_unzipped(path)
+    copied = _bundle_ak_copy_sidecars(parent, unzipped)
+    omitted = _bundle_ak_omit_review_tree(unzipped)
+    sidecars: _BundleAKList[str] = []
+    try:
+        if unzipped.exists() and unzipped.is_dir():
+            sidecars = sorted(item.name for item in unzipped.iterdir() if _bundle_ak_is_sidecar(item))
+    except Exception:
+        pass
+    summary = {
+        "format_version": "bundle_ak_slim_unzipped_mirror_summary_v1",
+        "source": "bundle_ak_slim_unzipped_mirror_and_progression_sidecars",
+        "ok": True,
+        "advisory_only": True,
+        "parent_dir": str(parent),
+        "unzipped_dir": str(unzipped),
+        "review_artifacts_present_after": bool((unzipped / _BUNDLE_AK_REVIEW_DIR_NAME).exists()),
+        "review_artifacts_omitted": bool(omitted.get("review_artifacts_omitted")),
+        "omitted_file_count_estimate": omitted.get("omitted_file_count_estimate", 0),
+        "omitted_byte_count_estimate": omitted.get("omitted_byte_count_estimate", 0),
+        "copied_sidecars": copied,
+        "copied_sidecar_count": len(copied),
+        "present_one_thousand_turn_sidecars": sidecars,
+        "present_one_thousand_turn_sidecar_count": len(sidecars),
+        "progression_graph_present": "one-thousand-turn-progression-graph.json" in sidecars,
+        "progression_graph_summary_present": "one-thousand-turn-progression-graph-summary.json" in sidecars,
+        "recommended_next_step": "review_slim_unzipped_mirror",
+    }
+    try:
+        if unzipped.exists() and unzipped.is_dir():
+            _bundle_ak_write_json(unzipped / _BUNDLE_AK_SUMMARY_FILE, summary)
+        if parent.exists() and parent.is_dir():
+            _bundle_ak_write_json(parent / _BUNDLE_AK_SUMMARY_FILE, summary)
+    except Exception:
+        pass
+    return summary
+
+
+def _bundle_ak_wrap_manifest_finalizer() -> None:
+    finalizer = globals().get("_manifest_hard_finalize_latest")
+    if not callable(finalizer) or getattr(finalizer, "_bundle_ak_wrapped", False):
+        return
+
+    def _bundle_ak_manifest_hard_finalize_latest():
+        result = finalizer()
+        for value in list(globals().values()):
+            try:
+                if isinstance(value, (str, _BundleAKPath)):
+                    candidate = _BundleAKPath(value)
+                    if candidate.exists() and (candidate.name == _BUNDLE_AK_UNZIPPED_DIR_NAME or (candidate / _BUNDLE_AK_UNZIPPED_DIR_NAME).exists()):
+                        _bundle_ak_finalize_unzipped_mirror(candidate)
+            except Exception:
+                pass
+        return result
+
+    _bundle_ak_manifest_hard_finalize_latest._bundle_ak_wrapped = True
+    globals()["_BUNDLE_AK_ORIGINAL_MANIFEST_HARD_FINALIZE_LATEST"] = finalizer
+    globals()["_manifest_hard_finalize_latest"] = _bundle_ak_manifest_hard_finalize_latest
+
+
+def _bundle_ak_write_text_wrapper(self, data, *args, **kwargs):
+    result = _BUNDLE_AK_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+    path = _BundleAKPath(self)
+    try:
+        if not _bundle_ak_under_review_dir(path) and (path.name in _BUNDLE_AK_TRIGGER_NAMES or path.name.startswith(_BUNDLE_AK_SIDECAR_PREFIX)):
+            _bundle_ak_finalize_unzipped_mirror(path)
+    except Exception:
+        pass
+    return result
+
+
+if not globals().get("_BUNDLE_AK_SLIM_UNZIPPED_MIRROR_PATCHED"):
+    _BUNDLE_AK_ORIGINAL_PATH_WRITE_TEXT = _BundleAKPath.write_text
+    _BundleAKPath.write_text = _bundle_ak_write_text_wrapper
+    _bundle_ak_wrap_manifest_finalizer()
+    globals()["_BUNDLE_AK_SLIM_UNZIPPED_MIRROR_PATCHED"] = True
