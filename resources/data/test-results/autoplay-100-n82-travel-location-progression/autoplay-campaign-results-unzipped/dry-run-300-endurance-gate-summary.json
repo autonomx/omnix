@@ -1,0 +1,38 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "artifact_manifest_digest_ok": true,
+    "content_exhaustion_supports_300": true,
+    "no_runtime_errors": true,
+    "no_unresolved_final_background_jobs": true,
+    "state_size_bounded": true,
+    "transcript_payload_bounded": true
+  },
+  "format_version": "bundle_f_dry_run_300_endurance_gate_v1",
+  "metrics": {
+    "content_exhaustion_estimate": 336,
+    "manifest_digest_ok": true,
+    "manifest_digest_present": true,
+    "max_projected_state_bytes": 16777216,
+    "max_projected_transcript_bytes": 67108864,
+    "projected_state_bytes": 0,
+    "projected_transcript_bytes": 0,
+    "runtime_error_count": 0,
+    "unresolved_final_background_jobs": 0
+  },
+  "ok": true,
+  "profile": "dry_run_300",
+  "profile_defaults": {
+    "artifact_detail": "full",
+    "background_llm_mode": "combined",
+    "checkpoint_interval": 25,
+    "compact_transcript_mode": true,
+    "final_background_drain_required": true,
+    "narration_mode": "deferred",
+    "turns": 300
+  },
+  "recommended_next_run": "dry_run_300",
+  "source": "bundle_f_dry_run_300_profile",
+  "target_turns": 300
+}

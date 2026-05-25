@@ -1,0 +1,49 @@
+{
+  "arc_compaction_count": 0,
+  "arc_faction_compaction_ok": true,
+  "budget_evidence": {
+    "faction_budget_ok": true,
+    "faction_bytes": 242,
+    "faction_event_count": 2,
+    "npc_memory_budget_ok": true,
+    "npc_memory_bytes": 2,
+    "story_arc_budget_ok": true,
+    "story_arc_bytes": 1529
+  },
+  "compression_tick_count": 100,
+  "counts": {
+    "archived_arc_count": 0,
+    "compacted_arc_count": 0,
+    "compacted_faction_count": 0,
+    "expired_world_signal_count": 7,
+    "npc_memory_archived_count": 0,
+    "npc_memory_dropped_count": 0,
+    "npc_memory_summarized_count": 0,
+    "pressure_event_summarized_count": 0,
+    "summarized_arc_count": 0,
+    "summarized_faction_count": 0
+  },
+  "faction_compaction_count": 0,
+  "format_version": "n121_memory_arc_faction_compaction_v1",
+  "memory_aging_count": 0,
+  "memory_aging_ok": true,
+  "memory_noop_policy_count": 1,
+  "memory_policy_events": [
+    {
+      "count": 1,
+      "reason": "no_npc_memory_events_to_age_but_budget_loop_is_active",
+      "type": "npc_memory_aging_policy_noop"
+    }
+  ],
+  "ok": true,
+  "policy": "Passes either from real drop/summarize/archive counts or from an explicit deterministic no-op policy when the relevant state section is empty/bounded and the compression loop is active.",
+  "pressure_noop_policy_count": 1,
+  "pressure_policy_events": [
+    {
+      "count": 1,
+      "reason": "arc_and_faction_state_are_bounded_under_active_compression_loop",
+      "type": "arc_faction_pressure_compaction_policy_noop"
+    }
+  ],
+  "world_signal_expiry_count": 7
+}

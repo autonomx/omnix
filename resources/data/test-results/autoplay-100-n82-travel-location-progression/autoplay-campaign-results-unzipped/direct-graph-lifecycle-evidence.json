@@ -1,0 +1,500 @@
+{
+  "format_version": "direct_graph_lifecycle_evidence_v1",
+  "ok": true,
+  "completed_action_count": 100,
+  "mechanics_counts": {
+    "service_or_lodging": 1,
+    "currency_change": 2,
+    "ask": 8,
+    "inspect": 3,
+    "npc_reaction": 1,
+    "faction_consequence": 1,
+    "report": 1,
+    "party_setup": 89,
+    "party_recruitment": 89,
+    "travel": 2,
+    "warn": 1,
+    "inventory_change": 1,
+    "buy": 1,
+    "buying": 1,
+    "prepare": 83,
+    "tell": 1,
+    "combat_started": 82,
+    "combat_resolved": 82,
+    "xp_gain": 82
+  },
+  "changed_part_counts": {
+    "ask": 24,
+    "currency_change": 6,
+    "mechanic_completed": 282,
+    "service_or_lodging": 3,
+    "inspect": 9,
+    "faction_consequence": 3,
+    "npc_memory": 3,
+    "npc_reaction": 3,
+    "report": 3,
+    "world_signal": 3,
+    "companion_added": 267,
+    "party_recruitment": 267,
+    "party_setup": 267,
+    "travel": 6,
+    "warn": 3,
+    "buy": 3,
+    "inventory_change": 3,
+    "prepare": 249,
+    "tell": 3,
+    "combat_resolved": 246,
+    "combat_started": 246,
+    "xp_gain": 246
+  },
+  "action_counts": {
+    "ask_bran_about_tension": 1,
+    "ask_bran_who_left_side_door": 1,
+    "ask_bran_direction": 1,
+    "ask_mira_side_door": 1,
+    "inspect_side_door": 1,
+    "ask_bran_bridge": 1,
+    "ask_patron_bridge": 1,
+    "report_findings_to_bran": 1,
+    "ask_bran_garran": 1,
+    "travel_to_wagon_yard": 1,
+    "warn_garran": 1,
+    "ask_alternate_route": 1,
+    "buy_rations_from_bran": 1,
+    "prepare_quarry_road": 1,
+    "leave_by_quarry_road": 1,
+    "scout_quarry_road": 1,
+    "spot_bridge_watchers": 1,
+    "choose_ambush_response": 1,
+    "protect_wagon_or_lure_bandits": 82
+  },
+  "faction_like_count": 7,
+  "npc_like_count": 7,
+  "combat_like_count": 656,
+  "pressure_like_count": 663,
+  "aftermath_like_count": 670,
+  "escalation_like_count": 991,
+  "examples": [
+    {
+      "turn_index": 1,
+      "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+      "action_id": "ask_bran_about_tension",
+      "mechanics": [
+        "ask",
+        "currency_change",
+        "service_or_lodging"
+      ],
+      "changed_parts": [
+        "ask",
+        "currency_change",
+        "mechanic_completed",
+        "service_or_lodging"
+      ]
+    },
+    {
+      "turn_index": 2,
+      "player_action": "I ask Bran who left through the side door and why they were afraid.",
+      "action_id": "ask_bran_who_left_side_door",
+      "mechanics": [
+        "ask"
+      ],
+      "changed_parts": [
+        "ask"
+      ]
+    },
+    {
+      "turn_index": 3,
+      "player_action": "I ask Bran what direction the cloaked traveler went after leaving.",
+      "action_id": "ask_bran_direction",
+      "mechanics": [
+        "ask"
+      ],
+      "changed_parts": [
+        "ask"
+      ]
+    },
+    {
+      "turn_index": 4,
+      "player_action": "I turn to Mira and ask what she saw near the side door.",
+      "action_id": "ask_mira_side_door",
+      "mechanics": [
+        "ask"
+      ],
+      "changed_parts": [
+        "ask"
+      ]
+    },
+    {
+      "turn_index": 5,
+      "player_action": "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+      "action_id": "inspect_side_door",
+      "mechanics": [
+        "inspect"
+      ],
+      "changed_parts": [
+        "inspect"
+      ]
+    },
+    {
+      "turn_index": 6,
+      "player_action": "I ask Bran if the old east road leads to a bridge.",
+      "action_id": "ask_bran_bridge",
+      "mechanics": [
+        "ask"
+      ],
+      "changed_parts": [
+        "ask"
+      ]
+    },
+    {
+      "turn_index": 7,
+      "player_action": "I approach the local patron and quietly ask what he knows about the mill bridge.",
+      "action_id": "ask_patron_bridge",
+      "mechanics": [
+        "ask"
+      ],
+      "changed_parts": [
+        "ask"
+      ]
+    },
+    {
+      "turn_index": 8,
+      "player_action": "I report the ambush evidence to Bran.",
+      "action_id": "report_findings_to_bran",
+      "mechanics": [
+        "faction_consequence",
+        "npc_reaction",
+        "report"
+      ],
+      "changed_parts": [
+        "faction_consequence",
+        "mechanic_completed",
+        "npc_memory",
+        "npc_reaction",
+        "report",
+        "world_signal"
+      ]
+    },
+    {
+      "turn_index": 9,
+      "player_action": "I ask Bran who is most likely to travel the road before dawn.",
+      "action_id": "ask_bran_garran",
+      "mechanics": [
+        "ask",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "changed_parts": [
+        "ask",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup"
+      ]
+    },
+    {
+      "turn_index": 10,
+      "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+      "action_id": "travel_to_wagon_yard",
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ],
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ]
+    },
+    {
+      "turn_index": 11,
+      "player_action": "I warn Garran about the ambush signs on the road.",
+      "action_id": "warn_garran",
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "warn"
+      ],
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "warn"
+      ]
+    },
+    {
+      "turn_index": 12,
+      "player_action": "I ask Garran if there is another route around the bridge.",
+      "action_id": "ask_alternate_route",
+      "mechanics": [
+        "ask",
+        "party_recruitment",
+        "party_setup"
+      ],
+      "changed_parts": [
+        "ask",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup"
+      ]
+    },
+    {
+      "turn_index": 13,
+      "player_action": "I buy two rations from Bran.",
+      "action_id": "buy_rations_from_bran",
+      "mechanics": [
+        "buy",
+        "buying",
+        "currency_change",
+        "inventory_change"
+      ],
+      "changed_parts": [
+        "buy",
+        "currency_change",
+        "inventory_change",
+        "mechanic_completed"
+      ]
+    },
+    {
+      "turn_index": 14,
+      "player_action": "I help Garran prepare the wagon for the safer route and get ready to leave.",
+      "action_id": "prepare_quarry_road",
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "prepare"
+      ],
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare"
+      ]
+    },
+    {
+      "turn_index": 15,
+      "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
+      "action_id": "leave_by_quarry_road",
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ],
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "travel"
+      ]
+    },
+    {
+      "turn_index": 16,
+      "player_action": "I scout the quarry road for ambush signs.",
+      "action_id": "scout_quarry_road",
+      "mechanics": [
+        "inspect"
+      ],
+      "changed_parts": [
+        "inspect",
+        "mechanic_completed"
+      ]
+    },
+    {
+      "turn_index": 17,
+      "player_action": "I watch the bridge for hidden watchers.",
+      "action_id": "spot_bridge_watchers",
+      "mechanics": [
+        "inspect"
+      ],
+      "changed_parts": [
+        "inspect",
+        "mechanic_completed"
+      ]
+    },
+    {
+      "turn_index": 18,
+      "player_action": "I choose how to respond to the ambush signs.",
+      "action_id": "choose_ambush_response",
+      "mechanics": [
+        "party_recruitment",
+        "party_setup",
+        "tell"
+      ],
+      "changed_parts": [
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "tell"
+      ]
+    },
+    {
+      "turn_index": 19,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "action_id": "protect_wagon_or_lure_bandits",
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ]
+    },
+    {
+      "turn_index": 20,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "action_id": "protect_wagon_or_lure_bandits",
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ]
+    },
+    {
+      "turn_index": 21,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "action_id": "protect_wagon_or_lure_bandits",
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ]
+    },
+    {
+      "turn_index": 22,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "action_id": "protect_wagon_or_lure_bandits",
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ]
+    },
+    {
+      "turn_index": 23,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "action_id": "protect_wagon_or_lure_bandits",
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ]
+    },
+    {
+      "turn_index": 24,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "action_id": "protect_wagon_or_lure_bandits",
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ]
+    },
+    {
+      "turn_index": 25,
+      "player_action": "I protect the wagon and fight the bandits.",
+      "action_id": "protect_wagon_or_lure_bandits",
+      "mechanics": [
+        "combat_resolved",
+        "combat_started",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ],
+      "changed_parts": [
+        "combat_resolved",
+        "combat_started",
+        "companion_added",
+        "mechanic_completed",
+        "party_recruitment",
+        "party_setup",
+        "prepare",
+        "xp_gain"
+      ]
+    }
+  ]
+}

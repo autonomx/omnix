@@ -6,23 +6,10 @@
   "mechanics": {
     "travel": {
       "required": true,
-      "count": 15,
+      "count": 2,
       "turns": [
         10,
-        15,
-        22,
-        24,
-        28,
-        29,
-        34,
-        38,
-        41,
-        55,
-        67,
-        82,
-        89,
-        91,
-        94
+        15
       ],
       "examples": [
         {
@@ -38,40 +25,18 @@
           "evidence_source": "explicit_payload",
           "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
           "mechanic": null
-        },
-        {
-          "turn": 22,
-          "reason": "location_changed",
-          "evidence_source": "explicit_payload",
-          "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
-          "mechanic": null
-        },
-        {
-          "turn": 24,
-          "reason": "location_changed",
-          "evidence_source": "explicit_payload",
-          "player_action": "I travel to the old mill ruins to follow the marked coin lead.",
-          "mechanic": null
-        },
-        {
-          "turn": 28,
-          "reason": "location_changed",
-          "evidence_source": "explicit_payload",
-          "player_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
-          "mechanic": null
         }
       ],
       "evidence_source_counts": {
         "mechanic_opportunity_resolver": 1,
-        "explicit_payload": 12,
-        "direct_graph": 2
+        "explicit_payload": 1
       },
-      "real_count": 15,
+      "real_count": 2,
       "injected_count": 0
     },
     "npc_interaction": {
       "required": true,
-      "count": 22,
+      "count": 11,
       "turns": [
         1,
         2,
@@ -83,18 +48,7 @@
         9,
         11,
         12,
-        18,
-        23,
-        37,
-        40,
-        43,
-        48,
-        50,
-        53,
-        61,
-        74,
-        83,
-        96
+        18
       ],
       "examples": [
         {
@@ -134,14 +88,14 @@
         }
       ],
       "evidence_source_counts": {
-        "scenario_graph": 22
+        "scenario_graph": 11
       },
-      "real_count": 22,
+      "real_count": 11,
       "injected_count": 0
     },
     "quest_progress": {
       "required": true,
-      "count": 100,
+      "count": 18,
       "turns": [
         1,
         2,
@@ -160,6 +114,169 @@
         15,
         16,
         17,
+        18
+      ],
+      "examples": [
+        {
+          "turn": 1,
+          "reason": "scenario_progression_changed",
+          "evidence_source": "scenario_graph",
+          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+          "mechanic": null
+        },
+        {
+          "turn": 2,
+          "reason": "scenario_progression_changed",
+          "evidence_source": "scenario_graph",
+          "player_action": "I ask Bran who left through the side door and why they were afraid.",
+          "mechanic": null
+        },
+        {
+          "turn": 3,
+          "reason": "scenario_progression_changed",
+          "evidence_source": "scenario_graph",
+          "player_action": "I ask Bran what direction the cloaked traveler went after leaving.",
+          "mechanic": null
+        },
+        {
+          "turn": 4,
+          "reason": "scenario_progression_changed",
+          "evidence_source": "scenario_graph",
+          "player_action": "I turn to Mira and ask what she saw near the side door.",
+          "mechanic": null
+        },
+        {
+          "turn": 5,
+          "reason": "scenario_progression_changed",
+          "evidence_source": "scenario_graph",
+          "player_action": "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
+          "mechanic": null
+        }
+      ],
+      "evidence_source_counts": {
+        "scenario_graph": 18
+      },
+      "real_count": 18,
+      "injected_count": 0
+    },
+    "service_or_lodging": {
+      "required": true,
+      "count": 2,
+      "turns": [
+        1,
+        13
+      ],
+      "examples": [
+        {
+          "turn": 1,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+          "mechanic": null
+        },
+        {
+          "turn": 13,
+          "reason": "service_purchase_result",
+          "evidence_source": "explicit_payload",
+          "player_action": "I buy two rations from Bran.",
+          "mechanic": "buying"
+        }
+      ],
+      "evidence_source_counts": {
+        "direct_graph": 1,
+        "explicit_payload": 1
+      },
+      "real_count": 2,
+      "injected_count": 0
+    },
+    "buying": {
+      "required": true,
+      "count": 1,
+      "turns": [
+        13
+      ],
+      "examples": [
+        {
+          "turn": 13,
+          "reason": "resolved_mechanic",
+          "evidence_source": "explicit_payload",
+          "player_action": "I buy two rations from Bran.",
+          "mechanic": "buying"
+        }
+      ],
+      "evidence_source_counts": {
+        "explicit_payload": 1
+      },
+      "real_count": 1,
+      "injected_count": 0
+    },
+    "selling": {
+      "required": false,
+      "count": 0,
+      "turns": [],
+      "examples": []
+    },
+    "currency_change": {
+      "required": true,
+      "count": 2,
+      "turns": [
+        1,
+        13
+      ],
+      "examples": [
+        {
+          "turn": 1,
+          "reason": "mechanics_covered_this_turn",
+          "evidence_source": "direct_graph",
+          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+          "mechanic": null
+        },
+        {
+          "turn": 13,
+          "reason": "currency_delta",
+          "evidence_source": "explicit_payload",
+          "player_action": "I buy two rations from Bran.",
+          "mechanic": "buying"
+        }
+      ],
+      "evidence_source_counts": {
+        "direct_graph": 1,
+        "explicit_payload": 1
+      },
+      "real_count": 2,
+      "injected_count": 0
+    },
+    "inventory_change": {
+      "required": true,
+      "count": 1,
+      "turns": [
+        13
+      ],
+      "examples": [
+        {
+          "turn": 13,
+          "reason": "inventory_delta",
+          "evidence_source": "explicit_payload",
+          "player_action": "I buy two rations from Bran.",
+          "mechanic": "buying"
+        }
+      ],
+      "evidence_source_counts": {
+        "explicit_payload": 1
+      },
+      "real_count": 1,
+      "injected_count": 0
+    },
+    "party_recruitment": {
+      "required": true,
+      "count": 89,
+      "turns": [
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
         18,
         19,
         20,
@@ -246,206 +363,6 @@
       ],
       "examples": [
         {
-          "turn": 1,
-          "reason": "scenario_progression_changed",
-          "evidence_source": "scenario_graph",
-          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
-          "mechanic": null
-        },
-        {
-          "turn": 2,
-          "reason": "scenario_progression_changed",
-          "evidence_source": "scenario_graph",
-          "player_action": "I ask Bran who left through the side door and why they were afraid.",
-          "mechanic": null
-        },
-        {
-          "turn": 3,
-          "reason": "scenario_progression_changed",
-          "evidence_source": "scenario_graph",
-          "player_action": "I ask Bran what direction the cloaked traveler went after leaving.",
-          "mechanic": null
-        },
-        {
-          "turn": 4,
-          "reason": "scenario_progression_changed",
-          "evidence_source": "scenario_graph",
-          "player_action": "I turn to Mira and ask what she saw near the side door.",
-          "mechanic": null
-        },
-        {
-          "turn": 5,
-          "reason": "scenario_progression_changed",
-          "evidence_source": "scenario_graph",
-          "player_action": "I inspect the side door, latch, and threshold for blood, tracks, or torn cloth.",
-          "mechanic": null
-        }
-      ],
-      "evidence_source_counts": {
-        "scenario_graph": 100
-      },
-      "real_count": 100,
-      "injected_count": 0
-    },
-    "service_or_lodging": {
-      "required": true,
-      "count": 3,
-      "turns": [
-        1,
-        13,
-        48
-      ],
-      "examples": [
-        {
-          "turn": 1,
-          "reason": "mechanics_covered_this_turn",
-          "evidence_source": "direct_graph",
-          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
-          "mechanic": null
-        },
-        {
-          "turn": 13,
-          "reason": "service_purchase_result",
-          "evidence_source": "explicit_payload",
-          "player_action": "I buy two rations from Bran.",
-          "mechanic": "buying"
-        },
-        {
-          "turn": 48,
-          "reason": "mechanics_covered_this_turn",
-          "evidence_source": "direct_graph",
-          "player_action": "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction.",
-          "mechanic": null
-        }
-      ],
-      "evidence_source_counts": {
-        "direct_graph": 2,
-        "explicit_payload": 1
-      },
-      "real_count": 3,
-      "injected_count": 0
-    },
-    "buying": {
-      "required": true,
-      "count": 1,
-      "turns": [
-        13
-      ],
-      "examples": [
-        {
-          "turn": 13,
-          "reason": "resolved_mechanic",
-          "evidence_source": "explicit_payload",
-          "player_action": "I buy two rations from Bran.",
-          "mechanic": "buying"
-        }
-      ],
-      "evidence_source_counts": {
-        "explicit_payload": 1
-      },
-      "real_count": 1,
-      "injected_count": 0
-    },
-    "selling": {
-      "required": false,
-      "count": 0,
-      "turns": [],
-      "examples": []
-    },
-    "currency_change": {
-      "required": true,
-      "count": 3,
-      "turns": [
-        1,
-        13,
-        48
-      ],
-      "examples": [
-        {
-          "turn": 1,
-          "reason": "mechanics_covered_this_turn",
-          "evidence_source": "direct_graph",
-          "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
-          "mechanic": null
-        },
-        {
-          "turn": 13,
-          "reason": "currency_delta",
-          "evidence_source": "explicit_payload",
-          "player_action": "I buy two rations from Bran.",
-          "mechanic": "buying"
-        },
-        {
-          "turn": 48,
-          "reason": "mechanics_covered_this_turn",
-          "evidence_source": "direct_graph",
-          "player_action": "I ask the magistrate to arrest Captain Voss and open a wider investigation into his faction.",
-          "mechanic": null
-        }
-      ],
-      "evidence_source_counts": {
-        "direct_graph": 2,
-        "explicit_payload": 1
-      },
-      "real_count": 3,
-      "injected_count": 0
-    },
-    "inventory_change": {
-      "required": true,
-      "count": 1,
-      "turns": [
-        13
-      ],
-      "examples": [
-        {
-          "turn": 13,
-          "reason": "inventory_delta",
-          "evidence_source": "explicit_payload",
-          "player_action": "I buy two rations from Bran.",
-          "mechanic": "buying"
-        }
-      ],
-      "evidence_source_counts": {
-        "explicit_payload": 1
-      },
-      "real_count": 1,
-      "injected_count": 0
-    },
-    "party_recruitment": {
-      "required": true,
-      "count": 28,
-      "turns": [
-        9,
-        10,
-        11,
-        12,
-        14,
-        15,
-        18,
-        19,
-        20,
-        38,
-        39,
-        40,
-        43,
-        44,
-        45,
-        49,
-        50,
-        51,
-        62,
-        63,
-        70,
-        71,
-        74,
-        75,
-        86,
-        87,
-        98,
-        99
-      ],
-      "examples": [
-        {
           "turn": 9,
           "reason": "mechanics_covered_this_turn",
           "evidence_source": "direct_graph",
@@ -482,72 +399,399 @@
         }
       ],
       "evidence_source_counts": {
-        "direct_graph": 28
+        "direct_graph": 89
       },
-      "real_count": 28,
+      "real_count": 89,
       "injected_count": 0
     },
     "combat_started": {
       "required": true,
-      "count": 1,
+      "count": 82,
       "turns": [
-        19
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100
       ],
       "examples": [
         {
           "turn": 19,
           "reason": "combat_result",
           "evidence_source": "explicit_payload",
-          "player_action": "I check in with Garran and focus on the active wagon-road objective.",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 20,
+          "reason": "combat_result",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 21,
+          "reason": "combat_result",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 22,
+          "reason": "combat_result",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 23,
+          "reason": "combat_result",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
           "mechanic": "combat_resolved"
         }
       ],
       "evidence_source_counts": {
-        "explicit_payload": 1
+        "explicit_payload": 82
       },
-      "real_count": 1,
+      "real_count": 82,
       "injected_count": 0
     },
     "combat_resolved": {
       "required": true,
-      "count": 1,
+      "count": 82,
       "turns": [
-        19
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100
       ],
       "examples": [
         {
           "turn": 19,
           "reason": "resolved_mechanic",
           "evidence_source": "explicit_payload",
-          "player_action": "I check in with Garran and focus on the active wagon-road objective.",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 20,
+          "reason": "resolved_mechanic",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 21,
+          "reason": "resolved_mechanic",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 22,
+          "reason": "resolved_mechanic",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 23,
+          "reason": "resolved_mechanic",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
           "mechanic": "combat_resolved"
         }
       ],
       "evidence_source_counts": {
-        "explicit_payload": 1
+        "explicit_payload": 82
       },
-      "real_count": 1,
+      "real_count": 82,
       "injected_count": 0
     },
     "xp_gain": {
       "required": true,
-      "count": 1,
+      "count": 82,
       "turns": [
-        19
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100
       ],
       "examples": [
         {
           "turn": 19,
           "reason": "xp_delta",
           "evidence_source": "explicit_payload",
-          "player_action": "I check in with Garran and focus on the active wagon-road objective.",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 20,
+          "reason": "xp_delta",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 21,
+          "reason": "xp_delta",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 22,
+          "reason": "xp_delta",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+          "mechanic": "combat_resolved"
+        },
+        {
+          "turn": 23,
+          "reason": "xp_delta",
+          "evidence_source": "explicit_payload",
+          "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
           "mechanic": "combat_resolved"
         }
       ],
       "evidence_source_counts": {
-        "explicit_payload": 1
+        "explicit_payload": 82
       },
-      "real_count": 1,
+      "real_count": 82,
       "injected_count": 0
     },
     "level_up": {
@@ -585,7 +829,7 @@
   "real_coverage_rate": 1.0,
   "available_mechanic_counts": {
     "buying": 20,
-    "combat_started": 81,
+    "combat_started": 90,
     "party_recruitment": 10,
     "service_or_lodging": 20,
     "travel": 10
@@ -820,14 +1064,14 @@
     },
     {
       "turn_index": 28,
-      "mechanic": null,
-      "candidate_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
       "turn_index": 29,
-      "mechanic": null,
-      "candidate_action": "I travel to the north road shrine to follow the Black Briar contact lead.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -898,8 +1142,8 @@
     },
     {
       "turn_index": 41,
-      "mechanic": null,
-      "candidate_action": "I go to the magistrate hall and request a public hearing against Captain Voss.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -982,8 +1226,8 @@
     },
     {
       "turn_index": 55,
-      "mechanic": null,
-      "candidate_action": "I travel to the abandoned cooperage to search for the Silver Crow cache.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1054,8 +1298,8 @@
     },
     {
       "turn_index": 67,
-      "mechanic": null,
-      "candidate_action": "I follow the watchers to the River Gate warehouses.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1144,8 +1388,8 @@
     },
     {
       "turn_index": 82,
-      "mechanic": null,
-      "candidate_action": "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1186,8 +1430,8 @@
     },
     {
       "turn_index": 89,
-      "mechanic": null,
-      "candidate_action": "I travel to the old north watchpost to follow Veska's courier trail.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1198,8 +1442,8 @@
     },
     {
       "turn_index": 91,
-      "mechanic": null,
-      "candidate_action": "I intercept Veska's courier before the message can leave the old north watchpost.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {
@@ -1216,8 +1460,8 @@
     },
     {
       "turn_index": 94,
-      "mechanic": null,
-      "candidate_action": "I travel to the ridge hideout before Veska's leadership cell can relocate.",
+      "mechanic": "combat_started",
+      "candidate_action": "I confront the bandit scouts blocking the mill road.",
       "reason": "mechanics coverage must be achieved through story graph objectives, not command override"
     },
     {

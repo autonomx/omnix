@@ -1,0 +1,397 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "allowed_action_types": [
+    "move_location",
+    "generate_rumor",
+    "open_service_availability",
+    "close_service_availability",
+    "request_help",
+    "react_to_unpaid_debt",
+    "react_to_threat",
+    "react_to_completed_quest"
+  ],
+  "checks": {
+    "bounded_action_catalog_present": true,
+    "goal_state_present": true,
+    "inspector_projection_available": true,
+    "meaningful_agency_events_available": true,
+    "no_environment_memory_pollution_contract": true,
+    "only_allowed_bounded_actions": true,
+    "schedule_model_present": true
+  },
+  "format_version": "bundle_i_npc_agency_v2_summary_v1",
+  "metrics": {
+    "allowed_action_type_count": 8,
+    "bounded_action_count": 12,
+    "existing_agency_event_count": 16,
+    "goal_state_count": 4,
+    "meaningful_agency_event_count": 16,
+    "npc_count": 4,
+    "projected_agency_event_count": 16,
+    "schedule_entry_count": 16,
+    "unsupported_action_type_count": 0
+  },
+  "npc_agency_model": {
+    "format_version": "bundle_i_npc_agency_v2_model_v1",
+    "npcs": {
+      "npc:bran": {
+        "bounded_actions": [
+          {
+            "effect": "lodging unavailable until tension drops",
+            "trigger": "threatened_or_attacked",
+            "type": "close_service_availability"
+          },
+          {
+            "effect": "asks player to protect staff or investigate ledger",
+            "trigger": "sable_chain_pressure_visible",
+            "type": "request_help"
+          },
+          {
+            "effect": "shares rumor about suspicious chits",
+            "trigger": "verified_ledger_clue",
+            "type": "generate_rumor"
+          }
+        ],
+        "display_name": "Bran",
+        "faction_alignment": "tavern_neutral",
+        "goal_state": {
+          "current_concern": "suspicious Red Lantern payments",
+          "pressure": "debt and Sable Chain intimidation",
+          "relationship_impact": "trust rises when player protects staff or pays fairly",
+          "short_term_goal": "keep the tavern open and staff safe"
+        },
+        "interruption_rules": [
+          "can be interrupted by unpaid debt escalation",
+          "can close services when threat level rises",
+          "can request help if tavern safety drops"
+        ],
+        "schedule": [
+          {
+            "activity": "prepare service floor",
+            "availability": "service",
+            "day_part": "morning",
+            "location": "tavern_common_room"
+          },
+          {
+            "activity": "serve guests and collect rumors",
+            "availability": "service",
+            "day_part": "midday",
+            "location": "tavern_bar"
+          },
+          {
+            "activity": "listen for debt and threat signals",
+            "availability": "conversation",
+            "day_part": "evening",
+            "location": "tavern_hearth"
+          },
+          {
+            "activity": "secure ledger and staff",
+            "availability": "limited",
+            "day_part": "night",
+            "location": "tavern_private_room"
+          }
+        ]
+      },
+      "npc:captain_voss": {
+        "bounded_actions": [
+          {
+            "effect": "moves to evidence room or watch yard",
+            "trigger": "raid_preparation",
+            "type": "move_location"
+          },
+          {
+            "effect": "opens evidence review follow-up",
+            "trigger": "ledger_copy_delivered",
+            "type": "react_to_completed_quest"
+          },
+          {
+            "effect": "asks for corroborating witness or ledger mark",
+            "trigger": "proof_incomplete",
+            "type": "request_help"
+          }
+        ],
+        "display_name": "Captain Voss",
+        "faction_alignment": "town_watch",
+        "goal_state": {
+          "current_concern": "safehouse evidence chain",
+          "pressure": "public safety without false arrests",
+          "relationship_impact": "trust rises with documented evidence",
+          "short_term_goal": "build a lawful case against Sable Chain handlers"
+        },
+        "interruption_rules": [
+          "requires specific proof before raid action",
+          "can escalate patrols after confirmed threat"
+        ],
+        "schedule": [
+          {
+            "activity": "review cases",
+            "availability": "limited",
+            "day_part": "morning",
+            "location": "watch_captain_office"
+          },
+          {
+            "activity": "inspect patrols",
+            "availability": "conversation",
+            "day_part": "midday",
+            "location": "watch_yard"
+          },
+          {
+            "activity": "secure evidence",
+            "availability": "limited",
+            "day_part": "evening",
+            "location": "evidence_room"
+          },
+          {
+            "activity": "off duty unless emergency",
+            "availability": "unavailable",
+            "day_part": "night",
+            "location": "watch_captain_office"
+          }
+        ]
+      },
+      "npc:guide_tomas": {
+        "bounded_actions": [
+          {
+            "effect": "guide service available",
+            "trigger": "safe_route_known",
+            "type": "open_service_availability"
+          },
+          {
+            "effect": "guide service blocked until prepared",
+            "trigger": "supplies_missing_or_route_unsafe",
+            "type": "close_service_availability"
+          },
+          {
+            "effect": "shares route complication lead",
+            "trigger": "road_sign_evidence",
+            "type": "generate_rumor"
+          }
+        ],
+        "display_name": "Guide Tomas",
+        "faction_alignment": "road_guides",
+        "goal_state": {
+          "current_concern": "false road signs near the old bridge",
+          "pressure": "scarce supplies and unsafe signs",
+          "relationship_impact": "trust rises when player respects route risk",
+          "short_term_goal": "keep travelers alive on risky roads"
+        },
+        "interruption_rules": [
+          "can refuse unsafe travel without supplies",
+          "can reroute after bridge or bandit evidence"
+        ],
+        "schedule": [
+          {
+            "activity": "inspect road conditions",
+            "availability": "service",
+            "day_part": "morning",
+            "location": "north_road_fork"
+          },
+          {
+            "activity": "sell route advice",
+            "availability": "service",
+            "day_part": "midday",
+            "location": "market_stables"
+          },
+          {
+            "activity": "trade road rumors",
+            "availability": "conversation",
+            "day_part": "evening",
+            "location": "tavern_common_room"
+          },
+          {
+            "activity": "rest and repair gear",
+            "availability": "unavailable",
+            "day_part": "night",
+            "location": "guide_camp"
+          }
+        ]
+      },
+      "npc:sera": {
+        "bounded_actions": [
+          {
+            "effect": "moves between market gate and watch post",
+            "trigger": "watch_shift_change",
+            "type": "move_location"
+          },
+          {
+            "effect": "asks player to observe safehouse route",
+            "trigger": "verified_lookout_pattern",
+            "type": "request_help"
+          },
+          {
+            "effect": "shares watch-backed rumor",
+            "trigger": "confirmed_watch_report",
+            "type": "generate_rumor"
+          }
+        ],
+        "display_name": "Sera",
+        "faction_alignment": "local_watch_contact",
+        "goal_state": {
+          "current_concern": "lookout post swaps at bell time",
+          "pressure": "limited proof and watch bureaucracy",
+          "relationship_impact": "respect rises when player separates rumor from evidence",
+          "short_term_goal": "confirm Sable Chain lookout routes"
+        },
+        "interruption_rules": [
+          "can be interrupted by verified threat evidence",
+          "will not accept unbacked faction accusations"
+        ],
+        "schedule": [
+          {
+            "activity": "watch road arrivals",
+            "availability": "conversation",
+            "day_part": "morning",
+            "location": "market_gate"
+          },
+          {
+            "activity": "compare reports",
+            "availability": "limited",
+            "day_part": "midday",
+            "location": "watch_yard"
+          },
+          {
+            "activity": "listen for Sable Chain movement",
+            "availability": "conversation",
+            "day_part": "evening",
+            "location": "tavern_common_room"
+          },
+          {
+            "activity": "patrol",
+            "availability": "unavailable",
+            "day_part": "night",
+            "location": "watch_post"
+          }
+        ]
+      }
+    },
+    "schedule_clock": "daily_weekly_bounded",
+    "source": "bundle_i_npc_agency_v2"
+  },
+  "ok": true,
+  "projected_agency_events": [
+    {
+      "activity": "prepare service floor",
+      "bounded": true,
+      "location": "tavern_common_room",
+      "npc_id": "npc:bran",
+      "trigger": "daily_schedule_start",
+      "type": "move_location"
+    },
+    {
+      "activity": "secure ledger and staff",
+      "bounded": true,
+      "location": "tavern_private_room",
+      "npc_id": "npc:bran",
+      "trigger": "daily_schedule_end",
+      "type": "move_location"
+    },
+    {
+      "bounded": true,
+      "effect": "lodging unavailable until tension drops",
+      "npc_id": "npc:bran",
+      "trigger": "threatened_or_attacked",
+      "type": "close_service_availability"
+    },
+    {
+      "bounded": true,
+      "effect": "asks player to protect staff or investigate ledger",
+      "npc_id": "npc:bran",
+      "trigger": "sable_chain_pressure_visible",
+      "type": "request_help"
+    },
+    {
+      "activity": "watch road arrivals",
+      "bounded": true,
+      "location": "market_gate",
+      "npc_id": "npc:sera",
+      "trigger": "daily_schedule_start",
+      "type": "move_location"
+    },
+    {
+      "activity": "patrol",
+      "bounded": true,
+      "location": "watch_post",
+      "npc_id": "npc:sera",
+      "trigger": "daily_schedule_end",
+      "type": "move_location"
+    },
+    {
+      "bounded": true,
+      "effect": "moves between market gate and watch post",
+      "npc_id": "npc:sera",
+      "trigger": "watch_shift_change",
+      "type": "move_location"
+    },
+    {
+      "bounded": true,
+      "effect": "asks player to observe safehouse route",
+      "npc_id": "npc:sera",
+      "trigger": "verified_lookout_pattern",
+      "type": "request_help"
+    },
+    {
+      "activity": "review cases",
+      "bounded": true,
+      "location": "watch_captain_office",
+      "npc_id": "npc:captain_voss",
+      "trigger": "daily_schedule_start",
+      "type": "move_location"
+    },
+    {
+      "activity": "off duty unless emergency",
+      "bounded": true,
+      "location": "watch_captain_office",
+      "npc_id": "npc:captain_voss",
+      "trigger": "daily_schedule_end",
+      "type": "move_location"
+    },
+    {
+      "bounded": true,
+      "effect": "moves to evidence room or watch yard",
+      "npc_id": "npc:captain_voss",
+      "trigger": "raid_preparation",
+      "type": "move_location"
+    },
+    {
+      "bounded": true,
+      "effect": "opens evidence review follow-up",
+      "npc_id": "npc:captain_voss",
+      "trigger": "ledger_copy_delivered",
+      "type": "react_to_completed_quest"
+    },
+    {
+      "activity": "inspect road conditions",
+      "bounded": true,
+      "location": "north_road_fork",
+      "npc_id": "npc:guide_tomas",
+      "trigger": "daily_schedule_start",
+      "type": "move_location"
+    },
+    {
+      "activity": "rest and repair gear",
+      "bounded": true,
+      "location": "guide_camp",
+      "npc_id": "npc:guide_tomas",
+      "trigger": "daily_schedule_end",
+      "type": "move_location"
+    },
+    {
+      "bounded": true,
+      "effect": "guide service available",
+      "npc_id": "npc:guide_tomas",
+      "trigger": "safe_route_known",
+      "type": "open_service_availability"
+    },
+    {
+      "bounded": true,
+      "effect": "guide service blocked until prepared",
+      "npc_id": "npc:guide_tomas",
+      "trigger": "supplies_missing_or_route_unsafe",
+      "type": "close_service_availability"
+    }
+  ],
+  "recommended_next_step": "wire_npc_agency_v2_into_runtime",
+  "source": "bundle_i_npc_agency_v2",
+  "unsupported_action_types": []
+}

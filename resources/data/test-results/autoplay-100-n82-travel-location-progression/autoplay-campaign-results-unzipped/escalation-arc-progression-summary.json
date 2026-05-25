@@ -9,7 +9,7 @@
   "pressure_event_count": 0,
   "pressure_events": [],
   "escalation_arcs": [],
-  "direct_graph_escalation_count": 194,
-  "progression_event_count": 194,
+  "direct_graph_escalation_count": 991,
+  "progression_event_count": 991,
   "active_escalation_arc_count": 1
 }

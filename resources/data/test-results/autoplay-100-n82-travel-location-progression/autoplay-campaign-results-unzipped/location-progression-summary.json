@@ -1,21 +1,13 @@
 {
-  "visited_location_count": 11,
+  "visited_location_count": 3,
   "visited_locations": [
     "scene:rusty_flagon",
     "location:wagon_yard",
-    "location:old_mill",
-    "location:north_road_shrine",
-    "location:magistrate_hall",
-    "location:abandoned_cooperage",
-    "location:river_gate",
-    "location:black_ford",
-    "location:old_north_watchpost",
-    "location:ridge_hideout",
     "location:mill_bridge_road"
   ],
-  "travel_turn_count": 14,
+  "travel_turn_count": 3,
   "blocked_travel_turn_count": 0,
-  "travel_intent_turn_count": 17,
+  "travel_intent_turn_count": 1,
   "travel_turns": [
     {
       "turn": 10,
@@ -34,94 +26,6 @@
       "summary": ""
     },
     {
-      "turn": 22,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:old_mill",
-      "to_location_name": "Old Mill",
-      "summary": ""
-    },
-    {
-      "turn": 24,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:old_mill",
-      "to_location_name": "Old Mill",
-      "summary": ""
-    },
-    {
-      "turn": 28,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:north_road_shrine",
-      "to_location_name": "North Road Shrine",
-      "summary": ""
-    },
-    {
-      "turn": 29,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:north_road_shrine",
-      "to_location_name": "North Road Shrine",
-      "summary": ""
-    },
-    {
-      "turn": 41,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:magistrate_hall",
-      "to_location_name": "Magistrate Hall",
-      "summary": ""
-    },
-    {
-      "turn": 55,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:abandoned_cooperage",
-      "to_location_name": "Abandoned Cooperage",
-      "summary": ""
-    },
-    {
-      "turn": 67,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:river_gate",
-      "to_location_name": "River Gate",
-      "summary": ""
-    },
-    {
-      "turn": 82,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:black_ford",
-      "to_location_name": "Black Ford",
-      "summary": ""
-    },
-    {
-      "turn": 89,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:old_north_watchpost",
-      "to_location_name": "Old North Watchpost",
-      "summary": ""
-    },
-    {
-      "turn": 91,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:old_north_watchpost",
-      "to_location_name": "Old North Watchpost",
-      "summary": ""
-    },
-    {
-      "turn": 94,
-      "source": "travel_result",
-      "from_location": "",
-      "to_location": "location:ridge_hideout",
-      "to_location_name": "Ridge Hideout",
-      "summary": ""
-    },
-    {
       "turn": 6,
       "source": "progress_timeline.location_changed",
       "from_location": "scene:rusty_flagon",
@@ -134,86 +38,6 @@
     {
       "turn": 10,
       "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 22,
-      "player_action": "I return to the Rusty Flagon and bring Bran the proof linking the ambush to the old mill.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 24,
-      "player_action": "I travel to the old mill ruins to follow the marked coin lead.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 28,
-      "player_action": "I decide to follow the north road shrine lead before the Black Briar contact disappears.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 29,
-      "player_action": "I travel to the north road shrine to follow the Black Briar contact lead.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 34,
-      "player_action": "I follow the Black Briar contact to the ruined tollhouse.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 38,
-      "player_action": "I return to Bran and Garran with the manifest proving Captain Voss is behind the attacks.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 41,
-      "player_action": "I go to the magistrate hall and request a public hearing against Captain Voss.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 55,
-      "player_action": "I travel to the abandoned cooperage to search for the Silver Crow cache.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 60,
-      "player_action": "I follow the ledger trail to locate Agent Marlowe before the Sable Chain can erase the evidence.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 62,
-      "player_action": "I return to Bran and Garran with proof that the Sable Chain backed Captain Voss through the Silver Crow.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 67,
-      "player_action": "I follow the watchers to the River Gate warehouses.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 82,
-      "player_action": "I travel to Black Ford before the Sable Chain handler's people can seize the crossing.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 86,
-      "player_action": "I return to Bran and Garran with the name of the Sable Chain handler: Veska.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 89,
-      "player_action": "I travel to the old north watchpost to follow Veska's courier trail.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 94,
-      "player_action": "I travel to the ridge hideout before Veska's leadership cell can relocate.",
-      "source": "player_action_text"
-    },
-    {
-      "turn": 98,
-      "player_action": "I return to Bran and Garran with Veska's leadership ledgers and proof of the Sable Chain command structure.",
       "source": "player_action_text"
     }
   ],

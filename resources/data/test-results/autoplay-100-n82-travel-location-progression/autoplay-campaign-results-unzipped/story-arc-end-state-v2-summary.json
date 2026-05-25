@@ -1,0 +1,175 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "active_arc_count_bounded": true,
+    "arc_ids_unique": true,
+    "arc_state_machine_present": true,
+    "determinism_contract_present": true,
+    "end_state_flags_present": true,
+    "end_state_rules_present": true,
+    "pacing_rules_present": true,
+    "required_signals_present": true,
+    "resolution_conditions_present": true,
+    "story_arc_catalog_present": true,
+    "unresolved_blocker_count_bounded": true
+  },
+  "format_version": "bundle_n_story_arc_end_state_v2_summary_v1",
+  "metrics": {
+    "active_arc_count": 0,
+    "arc_state_count": 6,
+    "campaign_state_count": 6,
+    "end_state_flag_count": 8,
+    "end_state_rule_count": 5,
+    "pacing_rule_count": 4,
+    "required_signal_count": 12,
+    "resolution_condition_count": 8,
+    "resolved_arc_count": 0,
+    "story_arc_count": 4,
+    "unresolved_blocker_count": 0
+  },
+  "ok": true,
+  "recommended_next_step": "wire_story_arc_end_state_v2_into_runtime",
+  "source": "bundle_n_story_arc_end_state_v2",
+  "story_arc_end_state_model": {
+    "arc_states": [
+      "locked",
+      "available",
+      "active",
+      "advanced",
+      "resolved",
+      "archived"
+    ],
+    "campaign_states": [
+      "opening",
+      "investigating",
+      "committing",
+      "resolving",
+      "epilogue",
+      "complete"
+    ],
+    "determinism_contract": {
+      "arc_progress_requires_authoritative_signal": true,
+      "end_state_uses_structured_flags_only": true,
+      "llm_may_summarize_but_not_resolve_arcs": true,
+      "pacing_rules_are_advisory": true,
+      "resolved_arc_becomes_archivable": true
+    },
+    "end_state_rules": [
+      {
+        "id": "at_least_one_primary_arc_resolved",
+        "requires": "resolved_arc_count>=1"
+      },
+      {
+        "id": "active_arc_count_bounded",
+        "requires": "active_arc_count<=4"
+      },
+      {
+        "id": "unresolved_blocker_count_bounded",
+        "requires": "unresolved_blocker_count<=3"
+      },
+      {
+        "id": "epilogue_summary_available",
+        "requires": "campaign_summary_present"
+      },
+      {
+        "id": "no_open_system_tasks",
+        "requires": "open_system_task_count==0"
+      }
+    ],
+    "format_version": "bundle_n_story_arc_end_state_v2_model_v1",
+    "pacing_rules": [
+      {
+        "id": "no_same_arc_three_times",
+        "max_repeats": 2,
+        "window": 6
+      },
+      {
+        "id": "advance_or_branch_by_window",
+        "required_progress": 1,
+        "window": 12
+      },
+      {
+        "id": "recap_before_epilogue",
+        "required_summary": true,
+        "window": 20
+      },
+      {
+        "id": "resolved_arcs_leave_followup",
+        "required_followup": true,
+        "window": 10
+      }
+    ],
+    "source": "bundle_n_story_arc_end_state_v2",
+    "story_arcs": [
+      {
+        "end_state_flags": [
+          "inn_staff_status_known",
+          "lodging_access_settled"
+        ],
+        "id": "inn_trust_arc",
+        "required_signals": [
+          "fair_payment",
+          "staff_help",
+          "ledger_hint"
+        ],
+        "resolution_conditions": [
+          "trust_threshold_met",
+          "ledger_thread_closed"
+        ],
+        "title": "Inn Trust Arc"
+      },
+      {
+        "end_state_flags": [
+          "route_plan_committed",
+          "travel_pressure_accounted"
+        ],
+        "id": "road_readiness_arc",
+        "required_signals": [
+          "travel_supply_ready",
+          "guide_contact",
+          "route_checked"
+        ],
+        "resolution_conditions": [
+          "safe_route_selected",
+          "route_cost_paid_or_waived"
+        ],
+        "title": "Road Readiness Arc"
+      },
+      {
+        "end_state_flags": [
+          "council_standing_updated",
+          "case_summary_available"
+        ],
+        "id": "town_record_arc",
+        "required_signals": [
+          "clear_evidence",
+          "council_review",
+          "public_order_choice"
+        ],
+        "resolution_conditions": [
+          "record_delivered",
+          "claim_status_resolved"
+        ],
+        "title": "Town Record Arc"
+      },
+      {
+        "end_state_flags": [
+          "location_graph_summary_ready",
+          "guide_reputation_updated"
+        ],
+        "id": "local_knowledge_arc",
+        "required_signals": [
+          "new_location_reported",
+          "route_note_added",
+          "guide_feedback"
+        ],
+        "resolution_conditions": [
+          "map_summary_updated",
+          "local_knowledge_rewarded"
+        ],
+        "title": "Local Knowledge Arc"
+      }
+    ]
+  }
+}

@@ -1,0 +1,268 @@
+{
+  "advisory_only": true,
+  "category_rollup": {
+    "artifacts": {
+      "fail_count": 0,
+      "gate_count": 1,
+      "pass_count": 1
+    },
+    "bounded_state": {
+      "fail_count": 0,
+      "gate_count": 1,
+      "pass_count": 1
+    },
+    "campaign": {
+      "fail_count": 0,
+      "gate_count": 1,
+      "pass_count": 1
+    },
+    "consequences": {
+      "fail_count": 0,
+      "gate_count": 1,
+      "pass_count": 1
+    },
+    "content": {
+      "fail_count": 0,
+      "gate_count": 1,
+      "pass_count": 1
+    },
+    "endurance": {
+      "fail_count": 0,
+      "gate_count": 1,
+      "pass_count": 1
+    },
+    "living_world": {
+      "fail_count": 0,
+      "gate_count": 1,
+      "pass_count": 1
+    },
+    "run_summary": {
+      "fail_count": 1,
+      "gate_count": 1,
+      "pass_count": 0
+    },
+    "systems": {
+      "fail_count": 0,
+      "gate_count": 3,
+      "pass_count": 3
+    }
+  },
+  "failing_required_gates": [],
+  "format_version": "bundle_o_1000_turn_readiness_aggregator_summary_v1",
+  "gate_statuses": [
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "content",
+      "check_count": 0,
+      "failed_check_count": 0,
+      "metrics": {},
+      "name": "content_depth",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "endurance",
+      "check_count": 6,
+      "failed_check_count": 0,
+      "metrics": {
+        "content_exhaustion_estimate": 336,
+        "manifest_digest_ok": true,
+        "manifest_digest_present": true,
+        "max_projected_state_bytes": 16777216,
+        "max_projected_transcript_bytes": 67108864,
+        "projected_state_bytes": 0,
+        "projected_transcript_bytes": 0,
+        "runtime_error_count": 0,
+        "unresolved_final_background_jobs": 0
+      },
+      "name": "dry_run_300_endurance",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "systems",
+      "check_count": 10,
+      "failed_check_count": 0,
+      "metrics": {
+        "blocked_relief_count": 0,
+        "currency_delta": 0.0,
+        "merchant_location_count": 4,
+        "merchant_stock_item_count": 12,
+        "pressure_rule_count": 5,
+        "price_modifier_count": 5,
+        "repetitive_pressure_event_count": 0,
+        "service_category_count": 7,
+        "service_count": 13,
+        "survival_intervention_count": 0,
+        "total_earned": 0.0,
+        "total_spent": 0.0,
+        "transaction_count": 0,
+        "unpaid_count": 0
+      },
+      "name": "economy_resource_pressure_v2",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "systems",
+      "check_count": 10,
+      "failed_check_count": 0,
+      "metrics": {
+        "action_count": 8,
+        "existing_encounter_count": 315,
+        "outcome_state_count": 6,
+        "participant_role_count": 5,
+        "recovery_hook_count": 5,
+        "resolution_rule_count": 5,
+        "round_phase_count": 7
+      },
+      "name": "encounter_lifecycle_v2",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "consequences",
+      "check_count": 8,
+      "failed_check_count": 0,
+      "metrics": {
+        "access_block_count": 8,
+        "access_unlock_count": 12,
+        "consequence_rule_count": 8,
+        "existing_consequence_count": 315,
+        "faction_count": 4,
+        "standing_axis_count": 5
+      },
+      "name": "faction_reputation_v2",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "bounded_state",
+      "check_count": 7,
+      "failed_check_count": 0,
+      "metrics": {
+        "journal_raw_rows": 4,
+        "max_journal_raw_rows": 120,
+        "max_npc_memory_rows_per_npc": 8,
+        "max_npc_memory_rows_per_npc_allowed": 64,
+        "max_projected_state_bytes": 50331648,
+        "max_state_bytes": 16777216,
+        "max_world_event_retained_rows": 250,
+        "projected_1000_turn_state_bytes": 34261380,
+        "state_bytes": 3426138,
+        "turn_count": 100,
+        "world_event_retained_rows": 1
+      },
+      "name": "memory_state_compression",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "living_world",
+      "check_count": 7,
+      "failed_check_count": 0,
+      "metrics": {
+        "allowed_action_type_count": 8,
+        "bounded_action_count": 12,
+        "existing_agency_event_count": 16,
+        "goal_state_count": 4,
+        "meaningful_agency_event_count": 16,
+        "npc_count": 4,
+        "projected_agency_event_count": 16,
+        "schedule_entry_count": 16,
+        "unsupported_action_type_count": 0
+      },
+      "name": "npc_agency_v2",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "campaign",
+      "check_count": 11,
+      "failed_check_count": 0,
+      "metrics": {
+        "active_arc_count": 0,
+        "arc_state_count": 6,
+        "campaign_state_count": 6,
+        "end_state_flag_count": 8,
+        "end_state_rule_count": 5,
+        "pacing_rule_count": 4,
+        "required_signal_count": 12,
+        "resolution_condition_count": 8,
+        "resolved_arc_count": 0,
+        "story_arc_count": 4,
+        "unresolved_blocker_count": 0
+      },
+      "name": "story_arc_end_state_v2",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "systems",
+      "check_count": 7,
+      "failed_check_count": 0,
+      "metrics": {
+        "location_count": 14,
+        "locked_route_count": 9,
+        "max_route_repeat_window": 4,
+        "route_count": 14,
+        "travel_event_count": 5
+      },
+      "name": "travel_location_graph_v2",
+      "ok": true,
+      "present": true
+    }
+  ],
+  "missing_required_gates": [],
+  "ok": true,
+  "optional_gate_statuses": [
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "artifacts",
+      "check_count": 0,
+      "failed_check_count": 0,
+      "metrics": {},
+      "name": "artifact_manifest_digest",
+      "ok": true,
+      "present": true
+    },
+    {
+      "advisory_failure_count": 0,
+      "advisory_failures": [],
+      "category": "run_summary",
+      "check_count": 0,
+      "failed_check_count": 0,
+      "metrics": {},
+      "name": "autoplay_summary",
+      "ok": false,
+      "present": true
+    }
+  ],
+  "passing_required_gate_count": 9,
+  "present_required_gate_count": 9,
+  "ready_for_1000_turn_preflight": true,
+  "ready_for_live_1000_turn_run": true,
+  "recommended_next_step": "run_1000_turn_preflight",
+  "required_gate_count": 9,
+  "source": "bundle_o_1000_turn_readiness_aggregator",
+  "total_advisory_failure_count": 0,
+  "total_failed_check_count": 0
+}

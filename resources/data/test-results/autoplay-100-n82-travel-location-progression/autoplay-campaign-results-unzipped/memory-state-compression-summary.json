@@ -1,0 +1,58 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "journal_raw_rows_bounded": true,
+    "memory_aging_policy_present": true,
+    "npc_memory_rows_per_npc_bounded": true,
+    "projected_1000_state_bytes_bounded": true,
+    "state_bytes_bounded": true,
+    "world_event_rows_bounded": true,
+    "world_state_compression_policy_present": true
+  },
+  "format_version": "bundle_h_memory_state_compression_summary_v1",
+  "metrics": {
+    "journal_raw_rows": 4,
+    "max_journal_raw_rows": 120,
+    "max_npc_memory_rows_per_npc": 8,
+    "max_npc_memory_rows_per_npc_allowed": 64,
+    "max_projected_state_bytes": 50331648,
+    "max_state_bytes": 16777216,
+    "max_world_event_retained_rows": 250,
+    "projected_1000_turn_state_bytes": 34261380,
+    "state_bytes": 3426138,
+    "turn_count": 100,
+    "world_event_retained_rows": 1
+  },
+  "ok": true,
+  "policy": {
+    "format_version": "bundle_h_memory_state_compression_policy_v1",
+    "hard_gates": {
+      "max_journal_raw_rows": 120,
+      "max_npc_memory_rows_per_npc": 64,
+      "max_projected_state_bytes": 50331648,
+      "max_state_bytes": 16777216,
+      "max_world_event_retained_rows": 250
+    },
+    "high_importance_persist_threshold": 0.75,
+    "low_importance_decay_after_turns": 150,
+    "memory_aging_policy": {
+      "high_importance_memories": "persist as compact causal summary when importance >= high_importance_persist_threshold",
+      "low_importance_memories": "decay after low_importance_decay_after_turns unless referenced by active quest/social consequence",
+      "older_memories": "summarize after summarize_after_turns",
+      "recent_memories": "keep detailed while inside recent_detail_turn_window"
+    },
+    "recent_detail_turn_window": 25,
+    "source": "bundle_h_memory_state_compression",
+    "summarize_after_turns": 75,
+    "world_state_compression": {
+      "journal": "bounded recap plus recent raw rows only",
+      "locations": "compact location summaries with recent events and unresolved hooks",
+      "npc_relationships": "compact relationship summaries with trust/fear/debt/obligation deltas",
+      "quest_history": "compact resolved/unresolved objective timeline"
+    }
+  },
+  "recommended_next_step": "ready_for_1000_turn_preflight",
+  "source": "bundle_h_memory_state_compression",
+  "target_turns": 1000
+}

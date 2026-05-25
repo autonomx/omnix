@@ -1,0 +1,195 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "access_unlocks_and_blocks_present": true,
+    "consequence_rules_present": true,
+    "cooldown_contract_present": true,
+    "determinism_contract_present": true,
+    "faction_catalog_present": true,
+    "rule_ids_unique": true,
+    "rules_reference_known_factions_and_axes": true,
+    "standing_axes_present": true
+  },
+  "faction_reputation_model": {
+    "consequence_rules": [
+      {
+        "axis": "fair_trade",
+        "cooldown_turns": 4,
+        "delta": 1,
+        "faction": "merchant_circle",
+        "id": "pay_fairly",
+        "trigger": "authoritative_payment"
+      },
+      {
+        "axis": "trust",
+        "cooldown_turns": 4,
+        "delta": 1,
+        "faction": "inn_staff",
+        "id": "settle_lodging",
+        "trigger": "lodging_paid"
+      },
+      {
+        "axis": "trust",
+        "cooldown_turns": 6,
+        "delta": -1,
+        "faction": "inn_staff",
+        "id": "ignore_invoice",
+        "trigger": "unpaid_service_record"
+      },
+      {
+        "axis": "reliability",
+        "cooldown_turns": 6,
+        "delta": 1,
+        "faction": "town_council",
+        "id": "bring_clear_evidence",
+        "trigger": "verified_clue_delivered"
+      },
+      {
+        "axis": "public_order",
+        "cooldown_turns": 8,
+        "delta": 1,
+        "faction": "town_council",
+        "id": "separate_rumor_from_fact",
+        "trigger": "unverified_claim_rejected"
+      },
+      {
+        "axis": "reliability",
+        "cooldown_turns": 6,
+        "delta": 1,
+        "faction": "road_guides",
+        "id": "respect_route_limits",
+        "trigger": "prepared_before_travel"
+      },
+      {
+        "axis": "reliability",
+        "cooldown_turns": 8,
+        "delta": -1,
+        "faction": "road_guides",
+        "id": "travel_unprepared",
+        "trigger": "resource_pressure_on_route"
+      },
+      {
+        "axis": "local_knowledge",
+        "cooldown_turns": 8,
+        "delta": 1,
+        "faction": "road_guides",
+        "id": "share_local_discovery",
+        "trigger": "new_location_reported"
+      }
+    ],
+    "determinism_contract": {
+      "clamps_standing_to_bounds": true,
+      "cooldown_prevents_reputation_spam": true,
+      "llm_may_describe_but_not_change_standing": true,
+      "requires_authoritative_trigger": true
+    },
+    "factions": {
+      "inn_staff": {
+        "access_blocks": [
+          "service_delay",
+          "lodging_surcharge"
+        ],
+        "access_unlocks": [
+          "private_room_discount",
+          "ledger_room_hint",
+          "staff_schedule_hint"
+        ],
+        "display_name": "Inn Staff",
+        "standing_bounds": {
+          "max": 5,
+          "min": -5
+        },
+        "starting_standing": {
+          "fair_trade": 0,
+          "reliability": 0,
+          "trust": 0
+        }
+      },
+      "merchant_circle": {
+        "access_blocks": [
+          "scarcity_surcharge",
+          "stock_tip_denied"
+        ],
+        "access_unlocks": [
+          "bulk_supply_discount",
+          "stock_tip",
+          "repair_priority"
+        ],
+        "display_name": "Merchant Circle",
+        "standing_bounds": {
+          "max": 5,
+          "min": -5
+        },
+        "starting_standing": {
+          "fair_trade": 0,
+          "local_knowledge": 0,
+          "reliability": 0
+        }
+      },
+      "road_guides": {
+        "access_blocks": [
+          "guide_unavailable",
+          "route_warning_withheld"
+        ],
+        "access_unlocks": [
+          "safe_route_option",
+          "guide_discount",
+          "weather_warning"
+        ],
+        "display_name": "Road Guides",
+        "standing_bounds": {
+          "max": 5,
+          "min": -5
+        },
+        "starting_standing": {
+          "local_knowledge": 0,
+          "reliability": 0,
+          "trust": 0
+        }
+      },
+      "town_council": {
+        "access_blocks": [
+          "case_review_delay",
+          "reference_denied"
+        ],
+        "access_unlocks": [
+          "case_review",
+          "archive_pass",
+          "council_reference"
+        ],
+        "display_name": "Town Council",
+        "standing_bounds": {
+          "max": 5,
+          "min": -5
+        },
+        "starting_standing": {
+          "local_knowledge": 0,
+          "public_order": 0,
+          "reliability": 0
+        }
+      }
+    },
+    "format_version": "bundle_l_faction_reputation_v2_model_v1",
+    "source": "bundle_l_faction_reputation_v2",
+    "standing_axes": [
+      "trust",
+      "reliability",
+      "fair_trade",
+      "public_order",
+      "local_knowledge"
+    ]
+  },
+  "format_version": "bundle_l_faction_reputation_v2_summary_v1",
+  "metrics": {
+    "access_block_count": 8,
+    "access_unlock_count": 12,
+    "consequence_rule_count": 8,
+    "existing_consequence_count": 315,
+    "faction_count": 4,
+    "standing_axis_count": 5
+  },
+  "ok": true,
+  "recommended_next_step": "wire_faction_reputation_v2_into_runtime",
+  "source": "bundle_l_faction_reputation_v2"
+}

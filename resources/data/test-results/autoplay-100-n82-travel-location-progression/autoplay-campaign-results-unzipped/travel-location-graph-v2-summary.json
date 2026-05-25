@@ -1,0 +1,254 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "location_graph_expanded": true,
+    "locked_routes_present": true,
+    "route_costs_present": true,
+    "route_endpoints_valid": true,
+    "route_graph_expanded": true,
+    "travel_event_catalog_present": true,
+    "travel_loop_guards_present": true
+  },
+  "format_version": "bundle_k_travel_location_graph_v2_summary_v1",
+  "location_graph": {
+    "format_version": "bundle_k_travel_location_graph_v2_model_v1",
+    "locations": {
+      "loc_0": {
+        "difficulty": 1,
+        "type": "travel"
+      },
+      "loc_1": {
+        "difficulty": 2,
+        "type": "travel"
+      },
+      "loc_10": {
+        "difficulty": 3,
+        "type": "travel"
+      },
+      "loc_11": {
+        "difficulty": 4,
+        "type": "travel"
+      },
+      "loc_12": {
+        "difficulty": 1,
+        "type": "travel"
+      },
+      "loc_13": {
+        "difficulty": 2,
+        "type": "travel"
+      },
+      "loc_2": {
+        "difficulty": 3,
+        "type": "travel"
+      },
+      "loc_3": {
+        "difficulty": 4,
+        "type": "travel"
+      },
+      "loc_4": {
+        "difficulty": 1,
+        "type": "travel"
+      },
+      "loc_5": {
+        "difficulty": 2,
+        "type": "travel"
+      },
+      "loc_6": {
+        "difficulty": 3,
+        "type": "travel"
+      },
+      "loc_7": {
+        "difficulty": 4,
+        "type": "travel"
+      },
+      "loc_8": {
+        "difficulty": 1,
+        "type": "travel"
+      },
+      "loc_9": {
+        "difficulty": 2,
+        "type": "travel"
+      }
+    },
+    "loop_guards": {
+      "avoid_immediate_backtrack_without_new_evidence": true,
+      "max_route_repeat_window": 4,
+      "prefer_unvisited_connected_location": true
+    },
+    "routes": [
+      {
+        "cost": {
+          "time": 1
+        },
+        "difficulty": 1,
+        "from": "loc_0",
+        "id": "route_0",
+        "locked_by": "always",
+        "to": "loc_1"
+      },
+      {
+        "cost": {
+          "time": 2
+        },
+        "difficulty": 2,
+        "from": "loc_1",
+        "id": "route_1",
+        "locked_by": "always",
+        "to": "loc_2"
+      },
+      {
+        "cost": {
+          "time": 1
+        },
+        "difficulty": 3,
+        "from": "loc_2",
+        "id": "route_2",
+        "locked_by": "always",
+        "to": "loc_3"
+      },
+      {
+        "cost": {
+          "time": 2
+        },
+        "difficulty": 4,
+        "from": "loc_3",
+        "id": "route_3",
+        "locked_by": "always",
+        "to": "loc_4"
+      },
+      {
+        "cost": {
+          "time": 1
+        },
+        "difficulty": 1,
+        "from": "loc_4",
+        "id": "route_4",
+        "locked_by": "always",
+        "to": "loc_5"
+      },
+      {
+        "cost": {
+          "time": 2
+        },
+        "difficulty": 2,
+        "from": "loc_5",
+        "id": "route_5",
+        "locked_by": "route_hint",
+        "to": "loc_6"
+      },
+      {
+        "cost": {
+          "time": 1
+        },
+        "difficulty": 3,
+        "from": "loc_6",
+        "id": "route_6",
+        "locked_by": "route_hint",
+        "to": "loc_7"
+      },
+      {
+        "cost": {
+          "time": 2
+        },
+        "difficulty": 4,
+        "from": "loc_7",
+        "id": "route_7",
+        "locked_by": "route_hint",
+        "to": "loc_8"
+      },
+      {
+        "cost": {
+          "time": 1
+        },
+        "difficulty": 1,
+        "from": "loc_8",
+        "id": "route_8",
+        "locked_by": "route_hint",
+        "to": "loc_9"
+      },
+      {
+        "cost": {
+          "time": 2
+        },
+        "difficulty": 2,
+        "from": "loc_9",
+        "id": "route_9",
+        "locked_by": "route_hint",
+        "to": "loc_10"
+      },
+      {
+        "cost": {
+          "time": 1
+        },
+        "difficulty": 3,
+        "from": "loc_10",
+        "id": "route_10",
+        "locked_by": "route_hint",
+        "to": "loc_11"
+      },
+      {
+        "cost": {
+          "time": 2
+        },
+        "difficulty": 4,
+        "from": "loc_11",
+        "id": "route_11",
+        "locked_by": "route_hint",
+        "to": "loc_12"
+      },
+      {
+        "cost": {
+          "time": 1
+        },
+        "difficulty": 1,
+        "from": "loc_12",
+        "id": "route_12",
+        "locked_by": "route_hint",
+        "to": "loc_13"
+      },
+      {
+        "cost": {
+          "time": 2
+        },
+        "difficulty": 2,
+        "from": "loc_13",
+        "id": "route_13",
+        "locked_by": "route_hint",
+        "to": "loc_0"
+      }
+    ],
+    "source": "bundle_k_travel_location_graph_v2",
+    "travel_events": [
+      {
+        "bounded": true,
+        "id": "event_0"
+      },
+      {
+        "bounded": true,
+        "id": "event_1"
+      },
+      {
+        "bounded": true,
+        "id": "event_2"
+      },
+      {
+        "bounded": true,
+        "id": "event_3"
+      },
+      {
+        "bounded": true,
+        "id": "event_4"
+      }
+    ]
+  },
+  "metrics": {
+    "location_count": 14,
+    "locked_route_count": 9,
+    "max_route_repeat_window": 4,
+    "route_count": 14,
+    "travel_event_count": 5
+  },
+  "ok": true,
+  "source": "bundle_k_travel_location_graph_v2"
+}

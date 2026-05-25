@@ -1,0 +1,135 @@
+{
+  "content_exhaustion_estimate": 336,
+  "expansion_supported_turns": 336,
+  "format_version": "bundle_g_content_depth_expansion_summary_v1",
+  "min_unique_leads_for_300": 24,
+  "no_content_exhaustion_warning_for_100_turn": true,
+  "ok": true,
+  "pack_name": "second_act_red_lantern_sable_chain_v1",
+  "prior_content_exhaustion_estimate": 336,
+  "quest_thread_count": 4,
+  "quest_threads": [
+    {
+      "id": "red_lantern_payment_trace",
+      "location_unlocks": [
+        "red-lantern-backroom",
+        "night-market-ledger-stall",
+        "old-tollhouse-archive"
+      ],
+      "npc_followup_hooks": [
+        "bran-remembers-who-settled-a-suspicious-tab",
+        "mira-can-identify-forged-ledger-ink",
+        "old-tollkeeper-wants-safe-escort-before-talking"
+      ],
+      "objectives": [
+        "inspect-red-lantern-chit",
+        "ask-bran-about-old-ledger-signature",
+        "trace-payment-token-to-market-stall",
+        "compare-ledger-mark-with-road-toll-record",
+        "confront-ledger-runner-only-if-present"
+      ],
+      "rumor_leads": [
+        "red-lantern-chits-pass-through-night-market",
+        "ledger-runner-avoids-main-road-after-dusk",
+        "toll-keeper-recognizes-a-sable-chain-mark"
+      ],
+      "summary": "Follow coin marks from tavern debts into a broker ledger without assuming the payer is guilty until evidence is found.",
+      "title": "Red Lantern Payment Trace"
+    },
+    {
+      "id": "sable_chain_pressure_continuation",
+      "location_unlocks": [
+        "rain-barrel-drop-alley",
+        "sable-chain-safehouse-cellar",
+        "watch-captain-evidence-room"
+      ],
+      "npc_followup_hooks": [
+        "bran-hides-staff-if-threat-level-rises",
+        "sera-offers-watch-schedule-after-trust-gain",
+        "captain-voss-demands-proof-before-raid"
+      ],
+      "objectives": [
+        "identify-sable-chain-lookout-pattern",
+        "warn-targeted-inn-workers",
+        "locate-safehouse-drop-route",
+        "choose-countermove-for-safehouse-pressure",
+        "document-handler-veska-command-chain"
+      ],
+      "rumor_leads": [
+        "black-sash-lookout-swaps-posts-at-bell-time",
+        "safehouse-supplies-move-through-rain-barrels",
+        "handler-veska-pays-for-silence-with-stamped-crowns"
+      ],
+      "summary": "Escalate faction pressure through bounded warnings, surveillance, and safehouse counterplay rather than repeated generic threats.",
+      "title": "Sable Chain Pressure Continuation"
+    },
+    {
+      "id": "road_travel_complications",
+      "location_unlocks": [
+        "north-road-fork",
+        "broken-bridge-camp",
+        "abandoned-mill-overlook"
+      ],
+      "npc_followup_hooks": [
+        "guide-tomas-offers-a-longer-but-safer-path",
+        "merchant-elaine-raises-prices-after-road-risk",
+        "wounded-scout-trades-route-intel-for-medicine"
+      ],
+      "objectives": [
+        "choose-safe-road-or-shortcut",
+        "repair-wagon-rut-before-nightfall",
+        "investigate-false-road-sign",
+        "secure-food-before-extended-route",
+        "mark-bandit-ambush-site-for-watch"
+      ],
+      "rumor_leads": [
+        "north-road-sign-was-turned-by-someone-local",
+        "bridge-guard-saw-sable-chain-riders",
+        "abandoned-mill-smoke-returns-on-windless-nights"
+      ],
+      "summary": "Add travel friction and route choices with deterministic evidence, supply pressure, and scene variety.",
+      "title": "Road / Travel Complications"
+    },
+    {
+      "id": "faction_rumor_web",
+      "location_unlocks": [
+        "merchant-guild-annex",
+        "watch-scribe-desk",
+        "tavern-cellar-hidden-cache"
+      ],
+      "npc_followup_hooks": [
+        "guild-factor-offers-discount-for-quiet-resolution",
+        "watch-scribe-fears-being-framed",
+        "bran-reacts-differently-if-tavern-future-is-threatened"
+      ],
+      "objectives": [
+        "separate-watch-rumor-from-confirmed-report",
+        "verify-merchant-guild-pressure-source",
+        "map-who-benefits-from-tavern-debt",
+        "earn-faction-contact-with-specific-proof",
+        "decide-which-faction-receives-ledger-copy"
+      ],
+      "rumor_leads": [
+        "merchant-guild-denies-owning-the-red-ledger",
+        "watch-scribe-lost-a-page-from-the-casebook",
+        "sable-chain-wants-the-tavern-empty-not-destroyed"
+      ],
+      "summary": "Seed faction leads that require backing from observed world state before NPCs treat them as true.",
+      "title": "Faction Rumor Web"
+    }
+  ],
+  "remaining_content_exhaustion_warning_count": 0,
+  "repeat_guard_count": 3,
+  "repeat_guards": [
+    "no_repeated_observe_talk_loops",
+    "no_repeated_payment_trace_if_resolved",
+    "no_stale_objective_target_loops"
+  ],
+  "source": "bundle_g_content_depth_expansion_pack",
+  "target_turns": 300,
+  "unique_available_lead_count": 56,
+  "unique_location_unlock_count": 12,
+  "unique_npc_followup_hook_count": 12,
+  "unique_objective_count": 20,
+  "unique_rumor_lead_count": 12
+}

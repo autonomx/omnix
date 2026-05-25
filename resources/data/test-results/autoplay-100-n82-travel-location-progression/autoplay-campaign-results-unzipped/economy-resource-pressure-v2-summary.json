@@ -1,0 +1,272 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "anti_spam_policy_present": true,
+    "lodging_meal_travel_repair_guide_services_present": true,
+    "merchant_refresh_rules_present": true,
+    "price_variance_rules_present": true,
+    "repetitive_pressure_spam_bounded": true,
+    "resource_pressure_rules_present": true,
+    "reward_payment_grounding_contract_present": true,
+    "service_catalog_expanded": true,
+    "survival_intervention_bounded": true,
+    "unpaid_debt_bounded": true
+  },
+  "format_version": "bundle_j_economy_resource_pressure_v2_summary_v1",
+  "merchant_refresh": {
+    "determinism": "stock refresh is keyed by location, refresh interval, campaign seed, and faction pressure state",
+    "format_version": "bundle_j_merchant_refresh_v1",
+    "price_modifiers": {
+      "faction_pressure_surcharge": 0.25,
+      "high_trust_discount": -0.15,
+      "low_trust_surcharge": 0.2,
+      "safe_route_discount": -0.1,
+      "scarcity_surcharge": 0.35
+    },
+    "refresh_interval_turns": 24,
+    "source": "bundle_j_economy_resource_pressure_v2",
+    "stock_by_location": {
+      "market_stables": [
+        "supply_road_rations",
+        "supply_waterskin_fill",
+        "guide_safe_route",
+        "repair_light_gear",
+        "meal_travel_ration"
+      ],
+      "north_road_fork": [
+        "guide_safe_route",
+        "supply_road_rations",
+        "supply_waterskin_fill"
+      ],
+      "tavern_common_room": [
+        "meal_simple_stew",
+        "drink_clean_water",
+        "drink_tavern_ale",
+        "lodging_common_bed",
+        "lodging_private_room"
+      ],
+      "watch_yard": [
+        "repair_light_gear",
+        "repair_armor_patch",
+        "rumor_verified_lead"
+      ]
+    }
+  },
+  "metrics": {
+    "blocked_relief_count": 0,
+    "currency_delta": 0.0,
+    "merchant_location_count": 4,
+    "merchant_stock_item_count": 12,
+    "pressure_rule_count": 5,
+    "price_modifier_count": 5,
+    "repetitive_pressure_event_count": 0,
+    "service_category_count": 7,
+    "service_count": 13,
+    "survival_intervention_count": 0,
+    "total_earned": 0.0,
+    "total_spent": 0.0,
+    "transaction_count": 0,
+    "unpaid_count": 0
+  },
+  "ok": true,
+  "recommended_next_step": "wire_economy_resource_pressure_v2_into_runtime",
+  "resource_pressure_rules": {
+    "anti_spam_policy": {
+      "cooldown_required": true,
+      "max_repetitive_pressure_events": 5,
+      "merge_similar_pressure_events": true
+    },
+    "format_version": "bundle_j_resource_pressure_rules_v1",
+    "grounding_contract": {
+      "debt_consequences_require_unpaid_service_record": true,
+      "no_reward_payment_hallucination": true,
+      "payments_require_authoritative_transaction": true,
+      "survival_relief_does_not_grant_free_rewards": true
+    },
+    "pressure_rules": [
+      {
+        "cooldown_turns": 8,
+        "id": "food_low_warning",
+        "resource": "food",
+        "severity": "warning",
+        "threshold": 1
+      },
+      {
+        "cooldown_turns": 8,
+        "id": "water_low_warning",
+        "resource": "water",
+        "severity": "warning",
+        "threshold": 1
+      },
+      {
+        "cooldown_turns": 10,
+        "id": "fatigue_rest_needed",
+        "resource": "fatigue",
+        "severity": "warning",
+        "threshold": 3
+      },
+      {
+        "cooldown_turns": 12,
+        "id": "travel_cost_due",
+        "resource": "travel_cost",
+        "severity": "advisory",
+        "threshold": 1
+      },
+      {
+        "cooldown_turns": 12,
+        "id": "unpaid_service_debt",
+        "resource": "debt",
+        "severity": "consequence",
+        "threshold": 1
+      }
+    ],
+    "resources": [
+      "food",
+      "water",
+      "rest",
+      "fatigue",
+      "travel_cost",
+      "debt"
+    ],
+    "source": "bundle_j_economy_resource_pressure_v2"
+  },
+  "service_catalog": {
+    "format_version": "bundle_j_service_catalog_v1",
+    "services": [
+      {
+        "base_price": 3,
+        "category": "lodging",
+        "effects": {
+          "rest": 1,
+          "safety": 0
+        },
+        "id": "lodging_common_bed",
+        "tier": "common"
+      },
+      {
+        "base_price": 8,
+        "category": "lodging",
+        "effects": {
+          "rest": 2,
+          "safety": 1
+        },
+        "id": "lodging_private_room",
+        "tier": "private"
+      },
+      {
+        "base_price": 14,
+        "category": "lodging",
+        "effects": {
+          "rest": 3,
+          "safety": 2
+        },
+        "id": "lodging_secure_room",
+        "tier": "secure"
+      },
+      {
+        "base_price": 1,
+        "category": "meal",
+        "effects": {
+          "food": 1
+        },
+        "id": "meal_simple_stew",
+        "tier": "basic"
+      },
+      {
+        "base_price": 2,
+        "category": "meal",
+        "effects": {
+          "food": 2
+        },
+        "id": "meal_travel_ration",
+        "tier": "travel"
+      },
+      {
+        "base_price": 1,
+        "category": "drink",
+        "effects": {
+          "water": 2
+        },
+        "id": "drink_clean_water",
+        "tier": "basic"
+      },
+      {
+        "base_price": 1,
+        "category": "drink",
+        "effects": {
+          "morale": 1
+        },
+        "id": "drink_tavern_ale",
+        "tier": "comfort"
+      },
+      {
+        "base_price": 5,
+        "category": "travel_supply",
+        "effects": {
+          "food": 4,
+          "travel_ready": 1
+        },
+        "id": "supply_road_rations",
+        "tier": "standard"
+      },
+      {
+        "base_price": 2,
+        "category": "travel_supply",
+        "effects": {
+          "travel_ready": 1,
+          "water": 4
+        },
+        "id": "supply_waterskin_fill",
+        "tier": "standard"
+      },
+      {
+        "base_price": 4,
+        "category": "repair",
+        "effects": {
+          "durability": 1
+        },
+        "id": "repair_light_gear",
+        "tier": "light"
+      },
+      {
+        "base_price": 9,
+        "category": "repair",
+        "effects": {
+          "durability": 2
+        },
+        "id": "repair_armor_patch",
+        "tier": "armor"
+      },
+      {
+        "base_price": 7,
+        "category": "guide",
+        "effects": {
+          "route_safety": 2
+        },
+        "id": "guide_safe_route",
+        "tier": "route"
+      },
+      {
+        "base_price": 3,
+        "category": "rumor_service",
+        "effects": {
+          "lead_quality": 1
+        },
+        "id": "rumor_verified_lead",
+        "tier": "verified"
+      }
+    ],
+    "source": "bundle_j_economy_resource_pressure_v2"
+  },
+  "service_categories": [
+    "drink",
+    "guide",
+    "lodging",
+    "meal",
+    "repair",
+    "rumor_service",
+    "travel_supply"
+  ],
+  "source": "bundle_j_economy_resource_pressure_v2"
+}

@@ -1,0 +1,171 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "action_catalog_present": true,
+    "action_ids_unique": true,
+    "determinism_contract_present": true,
+    "outcome_states_present": true,
+    "participant_roles_present": true,
+    "recovery_hooks_present": true,
+    "resolution_rule_ids_unique": true,
+    "resolution_rules_present": true,
+    "round_phases_present": true,
+    "single_resolution_contract_present": true
+  },
+  "encounter_lifecycle_model": {
+    "action_catalog": [
+      {
+        "bounded": true,
+        "id": "hold_position",
+        "phase": "choose",
+        "requires_target": false,
+        "resource": "focus"
+      },
+      {
+        "bounded": true,
+        "id": "press_advantage",
+        "phase": "choose",
+        "requires_target": true,
+        "resource": "stamina"
+      },
+      {
+        "bounded": true,
+        "id": "guard_ally",
+        "phase": "choose",
+        "requires_target": true,
+        "resource": "stamina"
+      },
+      {
+        "bounded": true,
+        "id": "withdraw_safely",
+        "phase": "choose",
+        "requires_target": false,
+        "resource": "focus"
+      },
+      {
+        "bounded": true,
+        "id": "use_item",
+        "phase": "choose",
+        "requires_target": false,
+        "resource": "item"
+      },
+      {
+        "bounded": true,
+        "id": "call_for_help",
+        "phase": "choose",
+        "requires_target": false,
+        "resource": "relationship"
+      },
+      {
+        "bounded": true,
+        "id": "deescalate",
+        "phase": "choose",
+        "requires_target": true,
+        "resource": "social_state"
+      },
+      {
+        "bounded": true,
+        "id": "take_cover",
+        "phase": "choose",
+        "requires_target": false,
+        "resource": "position"
+      }
+    ],
+    "determinism_contract": {
+      "authoritative_state_required": true,
+      "bounded_recovery_hooks": true,
+      "llm_may_describe_but_not_change_outcome": true,
+      "single_resolution_per_round": true,
+      "stable_participant_order": true
+    },
+    "format_version": "bundle_m_encounter_lifecycle_v2_model_v1",
+    "outcome_states": [
+      "ongoing",
+      "resolved",
+      "withdrawn",
+      "deescalated",
+      "blocked",
+      "needs_followup"
+    ],
+    "participant_roles": [
+      "leader",
+      "support",
+      "opponent",
+      "bystander",
+      "neutral"
+    ],
+    "recovery_hooks": [
+      {
+        "bounded": true,
+        "id": "fatigue_update",
+        "source": "resource_delta"
+      },
+      {
+        "bounded": true,
+        "id": "item_use_update",
+        "source": "inventory_delta"
+      },
+      {
+        "bounded": true,
+        "id": "relationship_consequence",
+        "source": "faction_reputation_v2"
+      },
+      {
+        "bounded": true,
+        "id": "journal_summary",
+        "source": "encounter_result"
+      },
+      {
+        "bounded": true,
+        "id": "location_risk_update",
+        "source": "travel_location_graph_v2"
+      }
+    ],
+    "resolution_rules": [
+      {
+        "id": "initiative_order_stable",
+        "rule": "sort by deterministic score then participant id"
+      },
+      {
+        "id": "one_declared_action_per_round",
+        "rule": "ignore duplicate action declarations for same actor and round"
+      },
+      {
+        "id": "resource_cost_applied_once",
+        "rule": "cost is applied only after valid resolution"
+      },
+      {
+        "id": "outcome_from_state_only",
+        "rule": "narration cannot create new outcome fields"
+      },
+      {
+        "id": "recovery_after_exit",
+        "rule": "recovery hooks run only after lifecycle exit"
+      }
+    ],
+    "round_phases": [
+      "enter",
+      "assess",
+      "choose",
+      "resolve",
+      "consequence",
+      "recover",
+      "exit"
+    ],
+    "source": "bundle_m_encounter_lifecycle_v2"
+  },
+  "format_version": "bundle_m_encounter_lifecycle_v2_summary_v1",
+  "metrics": {
+    "action_count": 8,
+    "existing_encounter_count": 315,
+    "outcome_state_count": 6,
+    "participant_role_count": 5,
+    "recovery_hook_count": 5,
+    "resolution_rule_count": 5,
+    "round_phase_count": 7
+  },
+  "ok": true,
+  "recommended_next_step": "wire_encounter_lifecycle_v2_into_runtime",
+  "source": "bundle_m_encounter_lifecycle_v2"
+}

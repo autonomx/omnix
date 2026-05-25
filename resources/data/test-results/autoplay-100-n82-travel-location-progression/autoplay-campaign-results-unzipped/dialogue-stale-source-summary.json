@@ -1,0 +1,183 @@
+{
+  "format_version": "dialogue_stale_source_summary_v1",
+  "ok": true,
+  "checked_count": 100,
+  "repaired_count": 91,
+  "repair_rate": 0.91,
+  "by_source": {
+    "scenario_progression_graph": 13,
+    "llm_player_agent": 78
+  },
+  "by_reason": {
+    "empty_presentation": 91
+  },
+  "by_action_category": {
+    "mixed": 90,
+    "travel": 1
+  },
+  "by_presentation_category": {
+    "general": 91
+  },
+  "examples": [
+    {
+      "turn_index": 1,
+      "player_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+      "canonical_turn_action": "I ask Bran for a room, but I also ask why the tavern feels so tense tonight.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 3,
+      "player_action": "I ask Bran what direction the cloaked traveler went after leaving.",
+      "canonical_turn_action": "I ask Bran what direction the cloaked traveler went after leaving.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 6,
+      "player_action": "I ask Bran if the old east road leads to a bridge.",
+      "canonical_turn_action": "I ask Bran if the old east road leads to a bridge.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 7,
+      "player_action": "I approach the local patron and quietly ask what he knows about the mill bridge.",
+      "canonical_turn_action": "I approach the local patron and quietly ask what he knows about the mill bridge.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 8,
+      "player_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+      "canonical_turn_action": "I report to Bran that the traveler's trail, the blood, and the bridge story point to an ambush.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 9,
+      "player_action": "I ask Bran who is most likely to travel the road before dawn.",
+      "canonical_turn_action": "I ask Bran who is most likely to travel the road before dawn.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 10,
+      "player_action": "I leave the tavern and travel toward Garran's wagon yard.",
+      "canonical_turn_action": "I leave the tavern and travel toward Garran's wagon yard.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 11,
+      "player_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+      "canonical_turn_action": "I tell Garran the mill bridge may be an ambush and show him the evidence.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 12,
+      "player_action": "I ask Garran if there is another route around the bridge.",
+      "canonical_turn_action": "I ask Garran if there is another route around the bridge.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 14,
+      "player_action": "I help Garran prepare the wagon for the safer route and get ready to leave.",
+      "canonical_turn_action": "I help Garran prepare the wagon for the safer route and get ready to leave.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 15,
+      "player_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
+      "canonical_turn_action": "I leave Garran's wagon yard with the wagon and take the quarry road.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 16,
+      "player_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+      "canonical_turn_action": "I scout ahead on the quarry road for tracks, hiding places, and ambush signs.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 18,
+      "player_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+      "canonical_turn_action": "I tell Garran we should slow the wagon and lure the watchers into revealing the ambush.",
+      "source": "scenario_progression_graph",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 19,
+      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "source": "llm_player_agent",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 20,
+      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "source": "llm_player_agent",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 21,
+      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "source": "llm_player_agent",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 22,
+      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "source": "llm_player_agent",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 23,
+      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "source": "llm_player_agent",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 24,
+      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "source": "llm_player_agent",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    },
+    {
+      "turn_index": 25,
+      "player_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "canonical_turn_action": "Ask Garran which exact wagon-road clue is unresolved, what changed since the last attempt, and which named route node to visit next.",
+      "source": "llm_player_agent",
+      "reason": "empty_presentation",
+      "selected_narration_preview": ""
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "advisory_failures": [
+    "live_profile_ready",
+    "preflight_promoted_live_run",
+    "blocking_turn_p95_within_live_budget",
+    "zipped_results_artifact_present"
+  ],
+  "advisory_only": true,
+  "checks": {
+    "artifact_manifest_ok": true,
+    "background_drain_within_live_budget": true,
+    "blocking_turn_p95_within_live_budget": false,
+    "campaign_report_artifact_present": true,
+    "completed_target_turns": true,
+    "live_profile_ready": false,
+    "meaningful_progress_rate_within_budget": true,
+    "no_report_regression_warnings": true,
+    "no_required_gate_failures": true,
+    "no_runtime_errors": true,
+    "no_unresolved_background_jobs": true,
+    "player_agent_fallback_rate_within_budget": true,
+    "preflight_promoted_live_run": false,
+    "transcript_budget_ok": true,
+    "zipped_results_artifact_present": false
+  },
+  "format_version": "bundle_t_live_1000_result_summary_v1",
+  "metrics": {
+    "background_drain_seconds": 0.0,
+    "blocking_turn_p95_seconds": 13.43517,
+    "campaign_report_size_bytes": 35405825,
+    "completed_turns": 100,
+    "dashboard_failure_count": 0,
+    "live_profile_failure_count": 0,
+    "max_background_drain_seconds": 180.0,
+    "max_blocking_turn_p95_seconds": 10.0,
+    "max_player_agent_fallback_rate": 0.25,
+    "meaningful_progress_rate": 0.18,
+    "min_meaningful_progress_rate": 0.1,
+    "player_agent_fallback_rate": 0.0,
+    "preflight_failure_count": 4,
+    "report_regression_warning_count": 0,
+    "requested_turns": 1000,
+    "required_gate_failure_count": 0,
+    "runtime_error_count": 0,
+    "target_turns": 1000,
+    "unresolved_background_jobs": 0,
+    "zipped_results_size_bytes": 0
+  },
+  "ok": false,
+  "recommended_next_step": "fix_live_1000_result_failures_before_release_candidate",
+  "release_candidate_ready": false,
+  "source": "bundle_t_live_1000_result_gate"
+}

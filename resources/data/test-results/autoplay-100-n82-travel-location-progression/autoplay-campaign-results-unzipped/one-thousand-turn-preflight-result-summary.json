@@ -1,0 +1,47 @@
+{
+  "advisory_failures": [
+    "preflight_profile_ready",
+    "readiness_dashboard_ready",
+    "completed_target_turns",
+    "blocking_turn_p95_within_budget"
+  ],
+  "advisory_only": true,
+  "checks": {
+    "artifact_manifest_ok": true,
+    "background_drain_within_budget": true,
+    "blocking_turn_p95_within_budget": false,
+    "completed_target_turns": false,
+    "meaningful_progress_rate_within_budget": true,
+    "no_required_gate_failures": true,
+    "no_runtime_errors": true,
+    "no_unresolved_background_jobs": true,
+    "player_agent_fallback_rate_within_budget": true,
+    "preflight_profile_ready": false,
+    "readiness_aggregator_ready": true,
+    "readiness_dashboard_ready": false
+  },
+  "format_version": "bundle_r_1000_turn_preflight_result_summary_v1",
+  "metrics": {
+    "aggregator_failure_count": 0,
+    "background_drain_seconds": 0.0,
+    "blocking_turn_p95_seconds": 13.43517,
+    "completed_turns": 100,
+    "dashboard_failure_count": 0,
+    "max_background_drain_seconds": 120.0,
+    "max_blocking_turn_p95_seconds": 8.0,
+    "max_player_agent_fallback_rate": 0.25,
+    "meaningful_progress_rate": 0.18,
+    "min_meaningful_progress_rate": 0.1,
+    "player_agent_fallback_rate": 0.0,
+    "profile_failure_count": 0,
+    "requested_turns": 100,
+    "required_gate_failure_count": 0,
+    "runtime_error_count": 0,
+    "target_turns": 1000,
+    "unresolved_background_jobs": 0
+  },
+  "ok": false,
+  "promote_to_live_1000_turn_run": false,
+  "recommended_next_step": "fix_preflight_result_failures_before_live_1000_turn_run",
+  "source": "bundle_r_1000_turn_preflight_result_gate"
+}
