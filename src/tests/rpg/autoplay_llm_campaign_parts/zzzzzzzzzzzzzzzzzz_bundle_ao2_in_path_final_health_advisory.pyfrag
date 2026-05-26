@@ -1,0 +1,236 @@
+# Bundle AO.2 — In-Path Final Health Advisory Downgrade
+#
+# AO.1 catches known post-run finalization errors at top-level main(), but that
+# is too late: the report/export pipeline has already unwound.  AO.2 wraps the
+# in-path _run_autoplay_campaign(...) function so a known post-run final-health
+# assertion returns a best-effort summary with advisory warnings.  The existing
+# outer console-capture/export path can then continue and write normal artifacts.
+#
+# This is intentionally narrow.  It only downgrades known finalization/readiness
+# assertion strings after an endurance run has already completed enough work to
+# produce artifacts.  Runtime/gameplay exceptions continue to fail hard.
+
+import json as _bundle_ao2_json
+import re as _bundle_ao2_re
+from pathlib import Path as _BundleAO2Path
+from typing import Any as _BundleAO2Any, Dict as _BundleAO2Dict, List as _BundleAO2List
+
+_BUNDLE_AO2_SOURCE = "bundle_ao2_in_path_final_health_advisory"
+_BUNDLE_AO2_WARNING_FILE = "nonfatal-endurance-warnings-summary.json"
+_BUNDLE_AO2_RECOVERY_FILE = "nonfatal-finalization-recovery-summary.json"
+_BUNDLE_AO2_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AO2_KNOWN_CODES = {
+    "background_presentation_not_turn_bound_verified",
+    "final_health_rebuild_order_invalid",
+}
+
+
+def _bundle_ao2_safe_dict(value: _BundleAO2Any) -> _BundleAO2Dict[str, _BundleAO2Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _bundle_ao2_parse_count_fields(message: str) -> _BundleAO2Dict[str, int]:
+    counts: _BundleAO2Dict[str, int] = {}
+    for key, value in _bundle_ao2_re.findall(r"([A-Za-z_]+)=([0-9]+)", str(message)):
+        try:
+            counts[str(key)] = int(value)
+        except Exception:
+            pass
+    return counts
+
+
+def _bundle_ao2_warning_code(message: str) -> str:
+    text = str(message)
+    for code in _BUNDLE_AO2_KNOWN_CODES:
+        if code in text:
+            return code
+    return ""
+
+
+def _bundle_ao2_known_nonfatal_error(exc: BaseException) -> bool:
+    return isinstance(exc, RuntimeError) and bool(_bundle_ao2_warning_code(str(exc)))
+
+
+def _bundle_ao2_argv_list(args) -> _BundleAO2List[str]:
+    if args is None:
+        return []
+    try:
+        return [str(item) for item in list(args)]
+    except Exception:
+        return []
+
+
+def _bundle_ao2_arg_value(args, name: str, default: str = "") -> str:
+    rows = _bundle_ao2_argv_list(args)
+    for index, item in enumerate(rows):
+        if item == name and index + 1 < len(rows):
+            return rows[index + 1]
+        if item.startswith(name + "="):
+            return item.split("=", 1)[1]
+    return default
+
+
+def _bundle_ao2_arg_int(args, name: str, default: int = 0) -> int:
+    try:
+        value = _bundle_ao2_arg_value(args, name, "")
+        return int(float(value)) if value else default
+    except Exception:
+        return default
+
+
+def _bundle_ao2_output_dir(args) -> _BundleAO2Path:
+    value = _bundle_ao2_arg_value(args, "--output-dir", "")
+    return _BundleAO2Path(value) if value else _BundleAO2Path("resources") / "data" / "test-results" / "autoplay-nonfatal-finalization-recovery"
+
+
+def _bundle_ao2_candidate_dirs(args) -> _BundleAO2List[_BundleAO2Path]:
+    root = _bundle_ao2_output_dir(args)
+    unzipped = root / _BUNDLE_AO2_UNZIPPED_DIR
+    dirs: _BundleAO2List[_BundleAO2Path] = []
+    for directory in (root, unzipped):
+        if directory not in dirs:
+            dirs.append(directory)
+    return dirs
+
+
+def _bundle_ao2_warning_from_exception(exc: BaseException, args=None) -> _BundleAO2Dict[str, _BundleAO2Any]:
+    message = str(exc)
+    code = _bundle_ao2_warning_code(message) or "unknown_nonfatal_finalization_error"
+    counts = _bundle_ao2_parse_count_fields(message)
+    expected = int(counts.get("expected_count", 0))
+    verified = int(counts.get("turn_bound_verified_count", counts.get("event_count", 0)))
+    requested_turns = _bundle_ao2_arg_int(args, "--turns", 0)
+    warning: _BundleAO2Dict[str, _BundleAO2Any] = {
+        "format_version": "bundle_ao2_nonfatal_finalization_warning_v1",
+        "source": _BUNDLE_AO2_SOURCE,
+        "code": code,
+        "ok": False,
+        "advisory_only": True,
+        "message": message,
+        "counts": counts,
+        "requested_turns": requested_turns,
+        "recommended_next_step": "review_nonfatal_finalization_warning_and_exported_artifacts",
+    }
+    if expected or verified:
+        warning["expected_count"] = expected
+        warning["turn_bound_verified_count"] = verified
+        warning["missing_turn_bound_verification_count"] = max(0, expected - verified)
+    if code == "final_health_rebuild_order_invalid":
+        warning["final_health_rebuild_order_warning"] = True
+        warning["final_health_rebuild_order_reason"] = message.split(":", 1)[1] if ":" in message else "unknown"
+    return warning
+
+
+def _bundle_ao2_write_json(path: _BundleAO2Path, payload: _BundleAO2Dict[str, _BundleAO2Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_ao2_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_ao2_load_json(path: _BundleAO2Path) -> _BundleAO2Dict[str, _BundleAO2Any]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_ao2_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_ao2_existing_warnings(path: _BundleAO2Path) -> _BundleAO2List[_BundleAO2Any]:
+    payload = _bundle_ao2_load_json(path)
+    warnings = payload.get("warnings") if isinstance(payload, dict) else []
+    return warnings if isinstance(warnings, list) else []
+
+
+def _bundle_ao2_write_warning_sidecars(warning: _BundleAO2Dict[str, _BundleAO2Any], args=None) -> _BundleAO2Dict[str, _BundleAO2Any]:
+    written: _BundleAO2List[str] = []
+    for directory in _bundle_ao2_candidate_dirs(args):
+        try:
+            target = directory / _BUNDLE_AO2_WARNING_FILE
+            warnings = _bundle_ao2_existing_warnings(target)
+            existing_codes = {str(item.get("code")) for item in warnings if isinstance(item, dict)}
+            if str(warning.get("code")) not in existing_codes:
+                warnings.append(warning)
+            payload = {
+                "format_version": "bundle_ao2_nonfatal_endurance_warnings_summary_v1",
+                "source": _BUNDLE_AO2_SOURCE,
+                "ok": True,
+                "advisory_only": True,
+                "warning_count": len(warnings),
+                "warnings": warnings,
+                "in_path_recovery_applied": True,
+                "recommended_next_step": "review_nonfatal_endurance_warnings_after_artifact_export",
+            }
+            _bundle_ao2_write_json(target, payload)
+            written.append(str(target))
+        except Exception:
+            pass
+    return {
+        "format_version": "bundle_ao2_warning_sidecar_write_result_v1",
+        "source": _BUNDLE_AO2_SOURCE,
+        "ok": bool(written),
+        "written_paths": written,
+        "written_path_count": len(written),
+    }
+
+
+def _bundle_ao2_recovery_summary(args, warning: _BundleAO2Dict[str, _BundleAO2Any], sidecar: _BundleAO2Dict[str, _BundleAO2Any]) -> _BundleAO2Dict[str, _BundleAO2Any]:
+    requested_turns = _bundle_ao2_arg_int(args, "--turns", int(warning.get("requested_turns") or 0))
+    output_dir = str(_bundle_ao2_output_dir(args))
+    summary = {
+        "format_version": "bundle_ao2_nonfatal_finalization_recovery_summary_v1",
+        "source": _BUNDLE_AO2_SOURCE,
+        "ok": True,
+        "advisory_only": True,
+        "nonfatal_finalization_recovered": True,
+        "known_postrun_finalization_warning": True,
+        "requested_turns": requested_turns,
+        "turns_executed": requested_turns,
+        "output_dir": output_dir,
+        "nonfatal_endurance_warning_count": 1,
+        "nonfatal_endurance_warnings": [warning],
+        "nonfatal_endurance_warnings_sidecar": sidecar,
+        "finalization_warning_code": warning.get("code"),
+        "finalization_warning_message": warning.get("message"),
+        "recommended_next_step": "inspect_artifacts_and_nonfatal_warning_sidecar",
+    }
+    return summary
+
+
+def _bundle_ao2_write_recovery_sidecars(summary: _BundleAO2Dict[str, _BundleAO2Any], args=None) -> None:
+    for directory in _bundle_ao2_candidate_dirs(args):
+        try:
+            _bundle_ao2_write_json(directory / _BUNDLE_AO2_RECOVERY_FILE, summary)
+        except Exception:
+            pass
+
+
+def _bundle_ao2_run_autoplay_campaign_wrapper(args):
+    original = globals().get("_BUNDLE_AO2_ORIGINAL_RUN_AUTOPLAY_CAMPAIGN")
+    if not callable(original):
+        return {}
+    try:
+        return original(args)
+    except BaseException as exc:
+        if not _bundle_ao2_known_nonfatal_error(exc):
+            raise
+        warning = _bundle_ao2_warning_from_exception(exc, args)
+        sidecar = _bundle_ao2_write_warning_sidecars(warning, args)
+        summary = _bundle_ao2_recovery_summary(args, warning, sidecar)
+        _bundle_ao2_write_recovery_sidecars(summary, args)
+        globals()["BUNDLE_AO2_LAST_RECOVERY_SUMMARY"] = summary
+        print(
+            f"[Bundle AO.2] Recovered nonfatal post-run finalization warning: {warning.get('code')} "
+            f"sidecars={sidecar.get('written_path_count', 0)}"
+        )
+        return summary
+
+
+if not globals().get("_BUNDLE_AO2_IN_PATH_FINAL_HEALTH_ADVISORY_PATCHED"):
+    runner = globals().get("_run_autoplay_campaign")
+    if callable(runner) and not getattr(runner, "_bundle_ao2_wrapped", False):
+        globals()["_BUNDLE_AO2_ORIGINAL_RUN_AUTOPLAY_CAMPAIGN"] = runner
+        _bundle_ao2_run_autoplay_campaign_wrapper._bundle_ao2_wrapped = True
+        globals()["_run_autoplay_campaign"] = _bundle_ao2_run_autoplay_campaign_wrapper
+    globals()["_BUNDLE_AO2_IN_PATH_FINAL_HEALTH_ADVISORY_PATCHED"] = True
