@@ -1,0 +1,213 @@
+# Bundle AM.1 — Finalizer-Hooked Presentation Fill Export
+#
+# AM can generate scenario-graph-presentation-fill-summary.json, but a 100-turn
+# run showed the summary could remain in the parent output directory and never
+# appear in autoplay-campaign-results-unzipped.  AM.1 runs AM from the hard
+# manifest finalizer before manifest/ZIP finalization, then mirrors the AM
+# summaries into the unzipped artifact directory so reviewers only need to upload
+# autoplay-campaign-results-unzipped.
+
+import json as _bundle_am1_json
+from pathlib import Path as _BundleAM1Path
+from typing import Any as _BundleAM1Any, Dict as _BundleAM1Dict, List as _BundleAM1List, Tuple as _BundleAM1Tuple
+
+_BUNDLE_AM1_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AM1_PRESENTATION_SUMMARY = "scenario-graph-presentation-fill-summary.json"
+_BUNDLE_AM1_SPIKE_SUMMARY = "player-agent-spike-guard-summary.json"
+_BUNDLE_AM1_EXPORT_SUMMARY = "scenario-graph-presentation-fill-export-summary.json"
+_BUNDLE_AM1_TRIGGER_FILES = {
+    _BUNDLE_AM1_PRESENTATION_SUMMARY,
+    _BUNDLE_AM1_SPIKE_SUMMARY,
+    "artifact-manifest.json",
+    "artifact-manifest-digest.json",
+    "quality-gate-summary.json",
+    "dialogue-repair-quality-summary.json",
+    "dialogue-stale-source-summary.json",
+    "autoplay-performance.json",
+}
+
+
+def _bundle_am1_write_json(path: _BundleAM1Path, payload: _BundleAM1Dict[str, _BundleAM1Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_am1_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_am1_load_json(path: _BundleAM1Path) -> _BundleAM1Dict[str, _BundleAM1Any]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_am1_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_am1_parent_unzipped(path: _BundleAM1Path) -> _BundleAM1Tuple[_BundleAM1Path, _BundleAM1Path]:
+    directory = path if path.is_dir() else path.parent
+    if directory.name == _BUNDLE_AM1_UNZIPPED_DIR:
+        return directory.parent, directory
+    return directory, directory / _BUNDLE_AM1_UNZIPPED_DIR
+
+
+def _bundle_am1_candidate_dirs_from_path(path: _BundleAM1Path) -> _BundleAM1List[_BundleAM1Path]:
+    parent, unzipped = _bundle_am1_parent_unzipped(path)
+    dirs: _BundleAM1List[_BundleAM1Path] = []
+    for candidate in (parent, unzipped):
+        if candidate.exists() and candidate.is_dir() and candidate not in dirs:
+            dirs.append(candidate)
+    return dirs
+
+
+def _bundle_am1_discover_result_roots() -> _BundleAM1List[_BundleAM1Path]:
+    roots: _BundleAM1List[_BundleAM1Path] = []
+    for value in list(globals().values()):
+        try:
+            if isinstance(value, (str, _BundleAM1Path)):
+                candidate = _BundleAM1Path(value)
+                if candidate.exists() and candidate.is_dir():
+                    if candidate.name == _BUNDLE_AM1_UNZIPPED_DIR:
+                        root = candidate.parent
+                    elif (candidate / _BUNDLE_AM1_UNZIPPED_DIR).exists():
+                        root = candidate
+                    else:
+                        continue
+                    if root not in roots:
+                        roots.append(root)
+        except Exception:
+            pass
+    try:
+        base = _BundleAM1Path("resources") / "data" / "test-results"
+        if base.exists() and base.is_dir():
+            for unzipped in base.glob(f"*/{_BUNDLE_AM1_UNZIPPED_DIR}"):
+                root = unzipped.parent
+                if root.exists() and root not in roots:
+                    roots.append(root)
+    except Exception:
+        pass
+    return roots
+
+
+def _bundle_am1_raw_copy_json(source: _BundleAM1Path, target: _BundleAM1Path) -> bool:
+    try:
+        if not source.exists() or not source.is_file():
+            return False
+        payload = _bundle_am1_load_json(source)
+        if payload:
+            _bundle_am1_write_json(target, payload)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source.open("r", encoding="utf-8") as handle_in, target.open("w", encoding="utf-8") as handle_out:
+                handle_out.write(handle_in.read())
+        return True
+    except Exception:
+        return False
+
+
+def _bundle_am1_run_am_finalize(root: _BundleAM1Path) -> _BundleAM1Dict[str, _BundleAM1Any]:
+    finalizer = globals().get("_bundle_am_finalize")
+    if callable(finalizer):
+        try:
+            result = finalizer(root)
+            return result if isinstance(result, dict) else {"ok": True, "result": str(result)}
+        except Exception as exc:
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": False, "error": "_bundle_am_finalize_missing"}
+
+
+def _bundle_am1_mirror_am_outputs(root: _BundleAM1Path) -> _BundleAM1Dict[str, _BundleAM1Any]:
+    parent = root if root.name != _BUNDLE_AM1_UNZIPPED_DIR else root.parent
+    unzipped = parent / _BUNDLE_AM1_UNZIPPED_DIR
+    unzipped.mkdir(parents=True, exist_ok=True)
+    copied: _BundleAM1List[str] = []
+    for file_name in (_BUNDLE_AM1_PRESENTATION_SUMMARY, _BUNDLE_AM1_SPIKE_SUMMARY):
+        source = parent / file_name
+        target = unzipped / file_name
+        if not source.exists() and target.exists():
+            source = target
+        if source.exists() and _bundle_am1_raw_copy_json(source, target):
+            copied.append(str(target))
+    export_summary = {
+        "format_version": "bundle_am1_presentation_fill_export_summary_v1",
+        "source": "bundle_am1_finalizer_presentation_fill_export",
+        "ok": bool((unzipped / _BUNDLE_AM1_PRESENTATION_SUMMARY).exists()),
+        "advisory_only": True,
+        "parent_dir": str(parent),
+        "unzipped_dir": str(unzipped),
+        "presentation_summary_present": bool((unzipped / _BUNDLE_AM1_PRESENTATION_SUMMARY).exists()),
+        "spike_summary_present": bool((unzipped / _BUNDLE_AM1_SPIKE_SUMMARY).exists()),
+        "copied_files": copied,
+        "copied_file_count": len(copied),
+        "recommended_next_step": "review_unzipped_am_summaries" if copied else "ensure_bundle_am_finalize_runs_before_manifest",
+    }
+    _bundle_am1_write_json(parent / _BUNDLE_AM1_EXPORT_SUMMARY, export_summary)
+    _bundle_am1_write_json(unzipped / _BUNDLE_AM1_EXPORT_SUMMARY, export_summary)
+    return export_summary
+
+
+def _bundle_am1_finalize_root(root: _BundleAM1Path) -> _BundleAM1Dict[str, _BundleAM1Any]:
+    am_result = _bundle_am1_run_am_finalize(root)
+    mirror_result = _bundle_am1_mirror_am_outputs(root)
+    return {
+        "format_version": "bundle_am1_finalize_root_result_v1",
+        "source": "bundle_am1_finalizer_presentation_fill_export",
+        "ok": bool(mirror_result.get("presentation_summary_present")),
+        "am_finalize_result": am_result,
+        "mirror_result": mirror_result,
+    }
+
+
+def _bundle_am1_finalize_all_known_roots() -> _BundleAM1Dict[str, _BundleAM1Any]:
+    roots = _bundle_am1_discover_result_roots()
+    results: _BundleAM1Dict[str, _BundleAM1Any] = {}
+    for root in roots:
+        try:
+            results[str(root)] = _bundle_am1_finalize_root(root)
+        except Exception as exc:
+            results[str(root)] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {
+        "format_version": "bundle_am1_finalize_all_known_roots_v1",
+        "source": "bundle_am1_finalizer_presentation_fill_export",
+        "ok": all(bool(result.get("ok")) for result in results.values()) if results else False,
+        "root_count": len(roots),
+        "results": results,
+    }
+
+
+def _bundle_am1_wrap_manifest_finalizer() -> None:
+    finalizer = globals().get("_manifest_hard_finalize_latest")
+    if not callable(finalizer) or getattr(finalizer, "_bundle_am1_wrapped", False):
+        return
+
+    def _bundle_am1_manifest_hard_finalize_latest():
+        # Pre-finalize so AM summaries are present before the hard manifest/ZIP
+        # snapshots are created.
+        globals()["BUNDLE_AM1_PREFINALIZE_RESULT"] = _bundle_am1_finalize_all_known_roots()
+        result = finalizer()
+        # Post-finalize for parent/unzipped consistency when late sidecars are
+        # written by the finalizer itself.
+        globals()["BUNDLE_AM1_POSTFINALIZE_RESULT"] = _bundle_am1_finalize_all_known_roots()
+        return result
+
+    _bundle_am1_manifest_hard_finalize_latest._bundle_am1_wrapped = True
+    globals()["_BUNDLE_AM1_ORIGINAL_MANIFEST_HARD_FINALIZE_LATEST"] = finalizer
+    globals()["_manifest_hard_finalize_latest"] = _bundle_am1_manifest_hard_finalize_latest
+
+
+def _bundle_am1_write_text_wrapper(self, data, *args, **kwargs):
+    result = _BUNDLE_AM1_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+    path = _BundleAM1Path(self)
+    try:
+        if path.name in _BUNDLE_AM1_TRIGGER_FILES:
+            for root in _bundle_am1_candidate_dirs_from_path(path)[:1]:
+                _bundle_am1_mirror_am_outputs(root if root.name != _BUNDLE_AM1_UNZIPPED_DIR else root.parent)
+    except Exception:
+        pass
+    return result
+
+
+if not globals().get("_BUNDLE_AM1_FINALIZER_EXPORT_PATCHED"):
+    _BUNDLE_AM1_ORIGINAL_PATH_WRITE_TEXT = _BundleAM1Path.write_text
+    _BundleAM1Path.write_text = _bundle_am1_write_text_wrapper
+    _bundle_am1_wrap_manifest_finalizer()
+    globals()["_BUNDLE_AM1_FINALIZER_EXPORT_PATCHED"] = True
