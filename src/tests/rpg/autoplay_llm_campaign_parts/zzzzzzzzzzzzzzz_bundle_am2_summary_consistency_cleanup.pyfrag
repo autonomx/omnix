@@ -1,0 +1,440 @@
+# Bundle AM.2 — AM Summary Consistency Cleanup
+#
+# AM and AM.1 can produce/copy scenario-graph-presentation-fill-summary.json,
+# but a review artifact showed that the summary could still contain stale/null
+# repair metrics while dialogue-repair-quality-summary.json had the correct final
+# effective repair rate.  AM.2 makes the final repair artifact the source of
+# truth, rewrites AM summaries from it, clears stale repair-rate warnings when
+# the effective rate passes, and keeps parent/unzipped summaries synchronized.
+
+import json as _bundle_am2_json
+from pathlib import Path as _BundleAM2Path
+from typing import Any as _BundleAM2Any, Dict as _BundleAM2Dict, List as _BundleAM2List, Tuple as _BundleAM2Tuple
+
+_BUNDLE_AM2_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AM2_REPAIR_FILE = "dialogue-repair-quality-summary.json"
+_BUNDLE_AM2_STALE_FILE = "dialogue-stale-source-summary.json"
+_BUNDLE_AM2_PRESENTATION_SUMMARY = "scenario-graph-presentation-fill-summary.json"
+_BUNDLE_AM2_EXPORT_SUMMARY = "scenario-graph-presentation-fill-export-summary.json"
+_BUNDLE_AM2_SPIKE_SUMMARY = "player-agent-spike-guard-summary.json"
+_BUNDLE_AM2_CLEANUP_SUMMARY = "scenario-graph-presentation-fill-consistency-cleanup-summary.json"
+_BUNDLE_AM2_TRUTH_FILE = "one-thousand-turn-readiness-truth-summary.json"
+_BUNDLE_AM2_AGGREGATOR_FILE = "one-thousand-turn-readiness-aggregator-summary.json"
+_BUNDLE_AM2_DASHBOARD_FILE = "one-thousand-turn-readiness-dashboard-summary.json"
+_BUNDLE_AM2_REPAIR_WARNING = "dialogue_action_relevance_repair_rate_high"
+_BUNDLE_AM2_MAX_REPAIR_RATE = 0.25
+_BUNDLE_AM2_TRIGGER_FILES = {
+    _BUNDLE_AM2_REPAIR_FILE,
+    _BUNDLE_AM2_STALE_FILE,
+    _BUNDLE_AM2_PRESENTATION_SUMMARY,
+    _BUNDLE_AM2_EXPORT_SUMMARY,
+    _BUNDLE_AM2_SPIKE_SUMMARY,
+    _BUNDLE_AM2_TRUTH_FILE,
+    _BUNDLE_AM2_AGGREGATOR_FILE,
+    _BUNDLE_AM2_DASHBOARD_FILE,
+    "artifact-manifest.json",
+    "artifact-manifest-digest.json",
+    "quality-gate-summary.json",
+}
+
+
+def _bundle_am2_load_json(path: _BundleAM2Path) -> _BundleAM2Dict[str, _BundleAM2Any]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_am2_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        return {"ok": False, "load_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_am2_write_json(path: _BundleAM2Path, payload: _BundleAM2Dict[str, _BundleAM2Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_am2_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_am2_to_float(value: _BundleAM2Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(str(value))
+    except Exception:
+        return default
+
+
+def _bundle_am2_to_int(value: _BundleAM2Any, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(float(str(value)))
+    except Exception:
+        return default
+
+
+def _bundle_am2_bool(value: _BundleAM2Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "pass", "passed", "ready"}:
+        return True
+    if text in {"0", "false", "no", "fail", "failed", "blocked"}:
+        return False
+    return default
+
+
+def _bundle_am2_parent_unzipped(path: _BundleAM2Path) -> _BundleAM2Tuple[_BundleAM2Path, _BundleAM2Path]:
+    directory = path if path.is_dir() else path.parent
+    if directory.name == _BUNDLE_AM2_UNZIPPED_DIR:
+        return directory.parent, directory
+    return directory, directory / _BUNDLE_AM2_UNZIPPED_DIR
+
+
+def _bundle_am2_dirs(path: _BundleAM2Path) -> _BundleAM2List[_BundleAM2Path]:
+    parent, unzipped = _bundle_am2_parent_unzipped(path)
+    dirs: _BundleAM2List[_BundleAM2Path] = []
+    for directory in (parent, unzipped):
+        if directory.exists() and directory.is_dir() and directory not in dirs:
+            dirs.append(directory)
+    return dirs
+
+
+def _bundle_am2_best_payload(dirs: _BundleAM2List[_BundleAM2Path], file_name: str) -> _BundleAM2Tuple[_BundleAM2Dict[str, _BundleAM2Any], str]:
+    best: _BundleAM2Dict[str, _BundleAM2Any] = {}
+    best_path = ""
+    best_score = -1.0
+    for directory in dirs:
+        path = directory / file_name
+        payload = _bundle_am2_load_json(path)
+        if not payload:
+            continue
+        score = float(len(payload.keys()))
+        if payload.get("bundle_am_presentation_fill_applied") is True:
+            score += 1000.0
+        if payload.get("effective_repair_rate_after_bundle_am") is not None:
+            score += 750.0
+        if payload.get("scenario_graph_empty_presentation_repairs_filled") is not None:
+            score += 250.0
+        if path.parent.name == _BUNDLE_AM2_UNZIPPED_DIR:
+            score += 10.0
+        if score > best_score:
+            best = payload
+            best_path = str(path)
+            best_score = score
+    return best, best_path
+
+
+def _bundle_am2_effective_repair_values(repair: _BundleAM2Dict[str, _BundleAM2Any]) -> _BundleAM2Dict[str, _BundleAM2Any]:
+    max_rate = _bundle_am2_to_float(repair.get("max_recommended_repair_rate"), _BUNDLE_AM2_MAX_REPAIR_RATE)
+    effective_rate = _bundle_am2_to_float(repair.get("effective_repair_rate_after_bundle_am", repair.get("repair_rate")), 0.0)
+    raw_rate = _bundle_am2_to_float(repair.get("raw_repair_rate_before_bundle_am", repair.get("repair_rate")), effective_rate)
+    raw_repaired = _bundle_am2_to_int(repair.get("raw_repaired_count_before_bundle_am", repair.get("repaired_count")), 0)
+    effective_repaired = _bundle_am2_to_int(repair.get("effective_repaired_count_after_bundle_am", repair.get("repaired_count")), 0)
+    filled = _bundle_am2_to_int(repair.get("scenario_graph_empty_presentation_repairs_filled"), max(0, raw_repaired - effective_repaired))
+    checked = _bundle_am2_to_int(repair.get("checked_count"), 0)
+    ok = effective_rate <= max_rate
+    return {
+        "checked_count": checked,
+        "raw_repaired_count_before_bundle_am": raw_repaired,
+        "raw_repair_rate_before_bundle_am": raw_rate,
+        "scenario_graph_empty_presentation_repairs_filled": filled,
+        "effective_repaired_count_after_bundle_am": effective_repaired,
+        "effective_repair_rate_after_bundle_am": effective_rate,
+        "max_recommended_repair_rate": max_rate,
+        "repair_gate_ok_after_bundle_am": ok,
+    }
+
+
+def _bundle_am2_clean_repair_warnings(repair: _BundleAM2Dict[str, _BundleAM2Any]) -> _BundleAM2Dict[str, _BundleAM2Any]:
+    values = _bundle_am2_effective_repair_values(repair)
+    cleaned = dict(repair)
+    cleaned.update(values)
+    cleaned["bundle_am2_summary_consistency_applied"] = True
+    cleaned["repair_rate"] = values["effective_repair_rate_after_bundle_am"]
+    cleaned["repaired_count"] = values["effective_repaired_count_after_bundle_am"]
+    cleaned["product_quality_ok"] = values["repair_gate_ok_after_bundle_am"]
+    cleaned["ok"] = bool(values["repair_gate_ok_after_bundle_am"])
+    if values["repair_gate_ok_after_bundle_am"]:
+        for key in ("warnings", "advisory_failures"):
+            items = cleaned.get(key)
+            if isinstance(items, list):
+                cleaned[key] = [item for item in items if item != _BUNDLE_AM2_REPAIR_WARNING]
+        cleaned["recommended_next_step"] = "review_remaining_non_graph_repairs"
+    else:
+        failures = cleaned.get("advisory_failures") if isinstance(cleaned.get("advisory_failures"), list) else []
+        if _BUNDLE_AM2_REPAIR_WARNING not in failures:
+            failures.append(_BUNDLE_AM2_REPAIR_WARNING)
+        cleaned["advisory_failures"] = failures
+        cleaned["recommended_next_step"] = "reduce_remaining_dialogue_repairs"
+    return cleaned
+
+
+def _bundle_am2_rebuild_presentation_summary(directory: _BundleAM2Path, repair: _BundleAM2Dict[str, _BundleAM2Any]) -> _BundleAM2Dict[str, _BundleAM2Any]:
+    existing = _bundle_am2_load_json(directory / _BUNDLE_AM2_PRESENTATION_SUMMARY)
+    spike = _bundle_am2_load_json(directory / _BUNDLE_AM2_SPIKE_SUMMARY)
+    values = _bundle_am2_effective_repair_values(repair)
+    summary = dict(existing) if existing else {}
+    summary.update({
+        "format_version": "bundle_am_scenario_graph_presentation_fill_summary_v1",
+        "source": "bundle_am2_summary_consistency_cleanup",
+        "ok": True,
+        "advisory_only": True,
+        "result_dir": str(directory),
+        "raw_repair_rate_before_bundle_am": values["raw_repair_rate_before_bundle_am"],
+        "raw_repaired_count_before_bundle_am": values["raw_repaired_count_before_bundle_am"],
+        "scenario_graph_empty_presentation_repairs_filled": values["scenario_graph_empty_presentation_repairs_filled"],
+        "effective_repaired_count_after_bundle_am": values["effective_repaired_count_after_bundle_am"],
+        "effective_repair_rate_after_bundle_am": values["effective_repair_rate_after_bundle_am"],
+        "max_recommended_repair_rate": values["max_recommended_repair_rate"],
+        "repair_gate_ok_after_bundle_am": values["repair_gate_ok_after_bundle_am"],
+        "player_agent_spike_guard_ok": spike.get("ok") if spike else summary.get("player_agent_spike_guard_ok"),
+        "bundle_am2_summary_consistency_applied": True,
+        "recommended_next_step": "review_remaining_non_graph_repairs_and_spikes",
+    })
+    if "presentation_artifact_changes" not in summary or not isinstance(summary.get("presentation_artifact_changes"), list):
+        summary["presentation_artifact_changes"] = []
+    if "filled_node_count" not in summary:
+        summary["filled_node_count"] = 0
+    return summary
+
+
+def _bundle_am2_patch_truth(directory: _BundleAM2Path, repair: _BundleAM2Dict[str, _BundleAM2Any]) -> bool:
+    path = directory / _BUNDLE_AM2_TRUTH_FILE
+    truth = _bundle_am2_load_json(path)
+    if not truth:
+        return False
+    values = _bundle_am2_effective_repair_values(repair)
+    checks = dict(truth.get("checks") if isinstance(truth.get("checks"), dict) else {})
+    metrics = dict(truth.get("metrics") if isinstance(truth.get("metrics"), dict) else {})
+    checks["dialogue_repair_rate_ok"] = values["repair_gate_ok_after_bundle_am"]
+    metrics.update({
+        "dialogue_repair_rate": values["effective_repair_rate_after_bundle_am"],
+        "raw_dialogue_repair_rate_before_bundle_am": values["raw_repair_rate_before_bundle_am"],
+        "scenario_graph_empty_presentation_repairs_filled": values["scenario_graph_empty_presentation_repairs_filled"],
+        "max_dialogue_repair_rate": values["max_recommended_repair_rate"],
+    })
+    blockers = [str(item) for item in truth.get("truth_blocking_gates", []) if isinstance(item, str) and item != "dialogue_repair_rate_ok"]
+    if not values["repair_gate_ok_after_bundle_am"]:
+        blockers.insert(0, "dialogue_repair_rate_ok")
+    patched = dict(truth)
+    patched.update({
+        "checks": checks,
+        "metrics": metrics,
+        "truth_blocking_gates": blockers,
+        "ok": not blockers,
+        "ready_for_1000_turn_preflight": not blockers,
+        "ready_for_live_1000_turn_run": False if blockers else _bundle_am2_bool(truth.get("ready_for_live_1000_turn_run"), False),
+        "bundle_am2_summary_consistency_applied": True,
+        "recommended_next_step": "run_1000_turn_preflight" if not blockers else "fix_truth_blocking_gates_before_1000_turn_preflight",
+    })
+    _bundle_am2_write_json(path, patched)
+    return True
+
+
+def _bundle_am2_patch_aggregator(directory: _BundleAM2Path) -> bool:
+    truth = _bundle_am2_load_json(directory / _BUNDLE_AM2_TRUTH_FILE)
+    aggregator = _bundle_am2_load_json(directory / _BUNDLE_AM2_AGGREGATOR_FILE)
+    if not truth or not aggregator:
+        return False
+    blockers = [str(item) for item in truth.get("truth_blocking_gates", []) if isinstance(item, str)]
+    non_truth = [str(item) for item in aggregator.get("failing_required_gates", []) if isinstance(item, str) and not item.startswith("bundle_ai_truth:")]
+    patched = dict(aggregator)
+    patched["bundle_am2_summary_consistency_applied"] = True
+    patched["bundle_ai_truth_blocking_gates"] = blockers
+    patched["failing_required_gates"] = non_truth + [f"bundle_ai_truth:{item}" for item in blockers]
+    patched["ready_for_1000_turn_preflight"] = not patched["failing_required_gates"]
+    patched["ready_for_live_1000_turn_run"] = False if patched["failing_required_gates"] else _bundle_am2_bool(truth.get("ready_for_live_1000_turn_run"), False)
+    patched["ok"] = bool(patched["ready_for_1000_turn_preflight"])
+    patched["recommended_next_step"] = truth.get("recommended_next_step")
+    _bundle_am2_write_json(directory / _BUNDLE_AM2_AGGREGATOR_FILE, patched)
+    return True
+
+
+def _bundle_am2_patch_dashboard(directory: _BundleAM2Path) -> bool:
+    aggregator = _bundle_am2_load_json(directory / _BUNDLE_AM2_AGGREGATOR_FILE)
+    if not aggregator:
+        return False
+    ready = _bundle_am2_bool(aggregator.get("ready_for_1000_turn_preflight"), False)
+    live = _bundle_am2_bool(aggregator.get("ready_for_live_1000_turn_run"), False)
+    dashboard = {
+        "format_version": "bundle_am2_readiness_dashboard_v1",
+        "source": "bundle_am2_summary_consistency_cleanup",
+        "ok": ready,
+        "advisory_only": True,
+        "status_label": "Live Ready" if live else ("Preflight Ready" if ready else "Readiness Blocked"),
+        "status_class": "pass" if live else ("warn" if ready else "fail"),
+        "ready_for_1000_turn_preflight": ready,
+        "ready_for_live_1000_turn_run": live,
+        "failing_required_gates": aggregator.get("failing_required_gates", []),
+        "bundle_am2_summary_consistency_applied": True,
+        "recommended_next_step": aggregator.get("recommended_next_step"),
+    }
+    _bundle_am2_write_json(directory / _BUNDLE_AM2_DASHBOARD_FILE, dashboard)
+    return True
+
+
+def _bundle_am2_cleanup_dir(directory: _BundleAM2Path) -> _BundleAM2Dict[str, _BundleAM2Any]:
+    repair = _bundle_am2_load_json(directory / _BUNDLE_AM2_REPAIR_FILE)
+    if not repair:
+        return {"ok": False, "result_dir": str(directory), "error": "dialogue_repair_quality_summary_missing"}
+    cleaned_repair = _bundle_am2_clean_repair_warnings(repair)
+    _bundle_am2_write_json(directory / _BUNDLE_AM2_REPAIR_FILE, cleaned_repair)
+    presentation_summary = _bundle_am2_rebuild_presentation_summary(directory, cleaned_repair)
+    _bundle_am2_write_json(directory / _BUNDLE_AM2_PRESENTATION_SUMMARY, presentation_summary)
+    truth_patched = _bundle_am2_patch_truth(directory, cleaned_repair)
+    aggregator_patched = _bundle_am2_patch_aggregator(directory)
+    dashboard_patched = _bundle_am2_patch_dashboard(directory)
+    result = {
+        "format_version": "bundle_am2_summary_consistency_cleanup_result_v1",
+        "source": "bundle_am2_summary_consistency_cleanup",
+        "ok": True,
+        "advisory_only": True,
+        "result_dir": str(directory),
+        "raw_repair_rate_before_bundle_am": cleaned_repair.get("raw_repair_rate_before_bundle_am"),
+        "effective_repair_rate_after_bundle_am": cleaned_repair.get("effective_repair_rate_after_bundle_am"),
+        "scenario_graph_empty_presentation_repairs_filled": cleaned_repair.get("scenario_graph_empty_presentation_repairs_filled"),
+        "repair_gate_ok_after_bundle_am": cleaned_repair.get("repair_gate_ok_after_bundle_am"),
+        "warnings": cleaned_repair.get("warnings", []),
+        "advisory_failures": cleaned_repair.get("advisory_failures", []),
+        "presentation_summary_written": True,
+        "truth_patched": truth_patched,
+        "aggregator_patched": aggregator_patched,
+        "dashboard_patched": dashboard_patched,
+        "recommended_next_step": "review_am2_consistent_artifacts",
+    }
+    _bundle_am2_write_json(directory / _BUNDLE_AM2_CLEANUP_SUMMARY, result)
+    return result
+
+
+def _bundle_am2_mirror_pair(parent: _BundleAM2Path, unzipped: _BundleAM2Path) -> _BundleAM2Dict[str, _BundleAM2Any]:
+    copied: _BundleAM2List[str] = []
+    for file_name in (
+        _BUNDLE_AM2_REPAIR_FILE,
+        _BUNDLE_AM2_PRESENTATION_SUMMARY,
+        _BUNDLE_AM2_SPIKE_SUMMARY,
+        _BUNDLE_AM2_CLEANUP_SUMMARY,
+        _BUNDLE_AM2_TRUTH_FILE,
+        _BUNDLE_AM2_AGGREGATOR_FILE,
+        _BUNDLE_AM2_DASHBOARD_FILE,
+    ):
+        payload, source_path = _bundle_am2_best_payload([parent, unzipped], file_name)
+        if not payload:
+            continue
+        for target_dir in (parent, unzipped):
+            if target_dir.exists() and target_dir.is_dir():
+                _bundle_am2_write_json(target_dir / file_name, payload)
+                copied.append(str(target_dir / file_name))
+    export = _bundle_am2_load_json(unzipped / _BUNDLE_AM2_EXPORT_SUMMARY) or {}
+    export.update({
+        "format_version": "bundle_am1_presentation_fill_export_summary_v1",
+        "source": "bundle_am2_summary_consistency_cleanup",
+        "ok": bool((unzipped / _BUNDLE_AM2_PRESENTATION_SUMMARY).exists()),
+        "presentation_summary_present": bool((unzipped / _BUNDLE_AM2_PRESENTATION_SUMMARY).exists()),
+        "spike_summary_present": bool((unzipped / _BUNDLE_AM2_SPIKE_SUMMARY).exists()),
+        "bundle_am2_summary_consistency_applied": True,
+        "copied_files_after_bundle_am2": copied,
+        "copied_file_count_after_bundle_am2": len(copied),
+    })
+    _bundle_am2_write_json(parent / _BUNDLE_AM2_EXPORT_SUMMARY, export)
+    _bundle_am2_write_json(unzipped / _BUNDLE_AM2_EXPORT_SUMMARY, export)
+    return {"copied_files": copied, "copied_file_count": len(copied)}
+
+
+def _bundle_am2_finalize(path: _BundleAM2Path) -> _BundleAM2Dict[str, _BundleAM2Any]:
+    parent, unzipped = _bundle_am2_parent_unzipped(path)
+    dirs = _bundle_am2_dirs(path)
+    results: _BundleAM2Dict[str, _BundleAM2Any] = {}
+    for directory in dirs:
+        results[str(directory)] = _bundle_am2_cleanup_dir(directory)
+    mirror = _bundle_am2_mirror_pair(parent, unzipped) if parent.exists() and unzipped.exists() else {}
+    summary = {
+        "format_version": "bundle_am2_summary_consistency_cleanup_summary_v1",
+        "source": "bundle_am2_summary_consistency_cleanup",
+        "ok": all(bool(result.get("ok")) for result in results.values()) if results else False,
+        "advisory_only": True,
+        "parent_dir": str(parent),
+        "unzipped_dir": str(unzipped),
+        "results": results,
+        "mirror_result": mirror,
+        "recommended_next_step": "run_250_or_300_turn_preflight_smoke",
+    }
+    for directory in dirs:
+        _bundle_am2_write_json(directory / _BUNDLE_AM2_CLEANUP_SUMMARY, summary)
+    return summary
+
+
+def _bundle_am2_discover_roots() -> _BundleAM2List[_BundleAM2Path]:
+    roots: _BundleAM2List[_BundleAM2Path] = []
+    for value in list(globals().values()):
+        try:
+            if isinstance(value, (str, _BundleAM2Path)):
+                candidate = _BundleAM2Path(value)
+                if candidate.exists() and candidate.is_dir():
+                    root = candidate.parent if candidate.name == _BUNDLE_AM2_UNZIPPED_DIR else candidate
+                    if (root / _BUNDLE_AM2_UNZIPPED_DIR).exists() and root not in roots:
+                        roots.append(root)
+        except Exception:
+            pass
+    try:
+        base = _BundleAM2Path("resources") / "data" / "test-results"
+        if base.exists() and base.is_dir():
+            for unzipped in base.glob(f"*/{_BUNDLE_AM2_UNZIPPED_DIR}"):
+                root = unzipped.parent
+                if root.exists() and root not in roots:
+                    roots.append(root)
+    except Exception:
+        pass
+    return roots
+
+
+def _bundle_am2_finalize_all_known_roots() -> _BundleAM2Dict[str, _BundleAM2Any]:
+    roots = _bundle_am2_discover_roots()
+    results: _BundleAM2Dict[str, _BundleAM2Any] = {}
+    for root in roots:
+        try:
+            results[str(root)] = _bundle_am2_finalize(root)
+        except Exception as exc:
+            results[str(root)] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {
+        "format_version": "bundle_am2_finalize_all_known_roots_v1",
+        "source": "bundle_am2_summary_consistency_cleanup",
+        "ok": all(bool(result.get("ok")) for result in results.values()) if results else False,
+        "root_count": len(roots),
+        "results": results,
+    }
+
+
+def _bundle_am2_wrap_manifest_finalizer() -> None:
+    finalizer = globals().get("_manifest_hard_finalize_latest")
+    if not callable(finalizer) or getattr(finalizer, "_bundle_am2_wrapped", False):
+        return
+
+    def _bundle_am2_manifest_hard_finalize_latest():
+        globals()["BUNDLE_AM2_PREFINALIZE_RESULT"] = _bundle_am2_finalize_all_known_roots()
+        result = finalizer()
+        globals()["BUNDLE_AM2_POSTFINALIZE_RESULT"] = _bundle_am2_finalize_all_known_roots()
+        return result
+
+    _bundle_am2_manifest_hard_finalize_latest._bundle_am2_wrapped = True
+    globals()["_BUNDLE_AM2_ORIGINAL_MANIFEST_HARD_FINALIZE_LATEST"] = finalizer
+    globals()["_manifest_hard_finalize_latest"] = _bundle_am2_manifest_hard_finalize_latest
+
+
+def _bundle_am2_write_text_wrapper(self, data, *args, **kwargs):
+    result = _BUNDLE_AM2_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+    path = _BundleAM2Path(self)
+    try:
+        if path.name in _BUNDLE_AM2_TRIGGER_FILES:
+            _bundle_am2_finalize(path)
+    except Exception:
+        pass
+    return result
+
+
+if not globals().get("_BUNDLE_AM2_SUMMARY_CONSISTENCY_PATCHED"):
+    _BUNDLE_AM2_ORIGINAL_PATH_WRITE_TEXT = _BundleAM2Path.write_text
+    _BundleAM2Path.write_text = _bundle_am2_write_text_wrapper
+    _bundle_am2_wrap_manifest_finalizer()
+    globals()["_BUNDLE_AM2_SUMMARY_CONSISTENCY_PATCHED"] = True
