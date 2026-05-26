@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -77,3 +78,42 @@ def test_bundle_ao_deduplicates_repeated_warning_attachment():
 
     assert summary["nonfatal_endurance_warning_count"] == 1
     assert len(summary["nonfatal_endurance_warnings"]) == 1
+
+
+def test_bundle_ao_writes_warning_sidecars_to_parent_and_unzipped(tmp_path):
+    parent = tmp_path / "autoplay-output"
+    unzipped = parent / "autoplay-campaign-results-unzipped"
+    unzipped.mkdir(parents=True)
+    namespace = _load_bundle_ao_namespace({"RESULT_DIR_FOR_TEST": str(parent)})
+    summary = {"result_dir": str(parent)}
+    warning = namespace["_bundle_ao_background_verifier_warning"](
+        "background_presentation_not_turn_bound_verified:expected_count=250:event_count=200:turn_bound_verified_count=200"
+    )
+
+    namespace["_bundle_ao_attach_nonfatal_warning"](summary, warning)
+
+    for directory in (parent, unzipped):
+        path = directory / "nonfatal-endurance-warnings-summary.json"
+        assert path.exists()
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert payload["warning_count"] == 1
+        assert payload["warnings"][0]["missing_turn_bound_verification_count"] == 50
+
+
+def test_bundle_ao_manifest_finalizer_refreshes_sidecar_after_finalize(tmp_path):
+    parent = tmp_path / "autoplay-output"
+    unzipped = parent / "autoplay-campaign-results-unzipped"
+    unzipped.mkdir(parents=True)
+
+    def hard_finalizer():
+        return {"ok": True}
+
+    namespace = _load_bundle_ao_namespace({"_manifest_hard_finalize_latest": hard_finalizer, "RESULT_DIR_FOR_TEST": str(parent)})
+    namespace["BUNDLE_AO_LAST_NONFATAL_ENDURANCE_WARNING"] = namespace["_bundle_ao_background_verifier_warning"](
+        "background_presentation_not_turn_bound_verified:expected_count=250:event_count=200:turn_bound_verified_count=200"
+    )
+
+    result = namespace["_manifest_hard_finalize_latest"]()
+
+    assert result["ok"] is True
+    assert (unzipped / "nonfatal-endurance-warnings-summary.json").exists()
