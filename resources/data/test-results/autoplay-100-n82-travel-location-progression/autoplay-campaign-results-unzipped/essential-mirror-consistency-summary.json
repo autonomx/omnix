@@ -26,7 +26,7 @@
   "artifact_manifest_digest_ok": true,
   "artifact_manifest_digest_file": "artifact-manifest-digest.json",
   "artifact_manifest_digest": {
-    "manifest_byte_size": 2006851,
+    "manifest_byte_size": 2022587,
     "embedded_artifact_count": 8,
     "zip_manifest_valid_count": 1
   },

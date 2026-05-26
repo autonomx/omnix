@@ -1,7 +1,7 @@
 {
   "advisory_only": true,
   "bundle_al_materialization_applied": true,
-  "copied_sidecar_count": 10,
+  "copied_sidecar_count": 9,
   "copied_sidecars": [
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-focused-suite-registry-summary.json",
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-live-result-summary.json",
@@ -11,8 +11,7 @@
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-readiness-truth-summary.json",
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-release-candidate-artifact-index-dashboard-summary.json",
     "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-release-candidate-artifact-index.json",
-    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-release-candidate-handoff-manifest.json",
-    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-sidecar-reconciliation-summary.json"
+    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-release-candidate-handoff-manifest.json"
   ],
   "format_version": "bundle_ak_slim_unzipped_mirror_summary_v1",
   "ok": true,

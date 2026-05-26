@@ -5,7 +5,7 @@
     "required_archive_artifacts_present"
   ],
   "advisory_only": true,
-  "archive_digest_sha256": "f34600c7e0ce48f7634ad6b111e16c0958c19c2d29adf506b5675a3b9e9a0d2b",
+  "archive_digest_sha256": "b2c7c39652bab725b903b551bcc03b977dd4740fce24e41364feab3d30397cff",
   "archive_index_ready": false,
   "format_version": "bundle_aj_artifact_index_dashboard_reconciled_v1",
   "missing_required_archive_artifact_count": 2,
@@ -19,7 +19,7 @@
   "source": "bundle_aj_sidecar_reconciliation_and_truth_finalization",
   "status_class": "fail",
   "status_label": "Archive Index Blocked",
-  "total_present_bytes": 98316352,
+  "total_present_bytes": 101894492,
   "tracked_completion_percent": 76.92,
   "tracked_file_count": 13
 }

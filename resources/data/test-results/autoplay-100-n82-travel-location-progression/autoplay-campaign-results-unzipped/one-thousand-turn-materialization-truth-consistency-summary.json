@@ -1,0 +1,136 @@
+{
+  "advisory_only": true,
+  "ak_summary_patched_path_count": 2,
+  "ak_summary_patched_paths": [
+    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-slim-unzipped-mirror-summary.json",
+    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-slim-unzipped-mirror-summary.json"
+  ],
+  "candidate_dirs": [
+    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression",
+    "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped"
+  ],
+  "format_version": "bundle_al_materialization_truth_consistency_summary_v1",
+  "graph_paths_ok": true,
+  "graph_result": {
+    "graph_objective_edge_count": 360,
+    "graph_ready": true,
+    "graph_route_chain_count": 9,
+    "graph_written_path_count": 4,
+    "graph_written_paths": [
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-progression-graph.json",
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-progression-graph-summary.json",
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-progression-graph.json",
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-progression-graph-summary.json"
+    ]
+  },
+  "ok": true,
+  "recommended_next_step": "review_materialized_graph_and_truth_consistency",
+  "source": "bundle_al_progression_graph_materialization_truth_consistency",
+  "truth_result": {
+    "aggregator_patched_path_count": 2,
+    "aggregator_patched_paths": [
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-readiness-aggregator-summary.json",
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-readiness-aggregator-summary.json"
+    ],
+    "dashboard_written_path_count": 2,
+    "dashboard_written_paths": [
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-readiness-dashboard-summary.json",
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-readiness-dashboard-summary.json"
+    ],
+    "truth_by_dir": {
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression": {
+        "advisory_only": true,
+        "bundle_al_truth_source_consistency_applied": true,
+        "checks": {
+          "content_exhaustion_forecast_ok": true,
+          "dialogue_repair_rate_ok": false,
+          "graph_progression_density_ok": true,
+          "live_result_ok_or_not_present": false,
+          "preflight_promoted_before_live": false,
+          "preflight_result_ok_or_not_present": false,
+          "release_candidate_ready_if_live_present": false,
+          "turn_action_repair_rate_observed": true,
+          "unique_node_density_ok": true
+        },
+        "format_version": "bundle_ai_readiness_truth_summary_v1",
+        "metrics": {
+          "dialogue_repair_checked_count": 100,
+          "dialogue_repair_rate": 0.39,
+          "dialogue_repair_repaired_count": 39,
+          "dialogue_repair_source_file": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\dialogue-repair-quality-summary.json",
+          "graph_progression_density": 1.0,
+          "live_result_present": true,
+          "max_dialogue_repair_rate": 0.25,
+          "min_graph_progression_density": 0.35,
+          "min_unique_node_density": 0.35,
+          "preflight_promoted_live_run": false,
+          "preflight_result_present": true,
+          "release_candidate_ready": false,
+          "turn_action_repair_rate": 0.0,
+          "unique_node_density": 1.0
+        },
+        "ok": false,
+        "ready_for_1000_turn_preflight": false,
+        "ready_for_live_1000_turn_run": false,
+        "recommended_next_step": "fix_truth_blocking_gates_before_1000_turn_preflight",
+        "source": "bundle_ai_progression_graph_runtime_edge_selection",
+        "truth_blocking_gates": [
+          "dialogue_repair_rate_ok",
+          "preflight_result_ok_or_not_present",
+          "preflight_promoted_before_live",
+          "live_result_ok_or_not_present",
+          "release_candidate_ready_if_live_present"
+        ]
+      },
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped": {
+        "advisory_only": true,
+        "bundle_al_truth_source_consistency_applied": true,
+        "checks": {
+          "content_exhaustion_forecast_ok": true,
+          "dialogue_repair_rate_ok": false,
+          "graph_progression_density_ok": true,
+          "live_result_ok_or_not_present": false,
+          "preflight_promoted_before_live": false,
+          "preflight_result_ok_or_not_present": false,
+          "release_candidate_ready_if_live_present": false,
+          "turn_action_repair_rate_observed": true,
+          "unique_node_density_ok": true
+        },
+        "format_version": "bundle_ai_readiness_truth_summary_v1",
+        "metrics": {
+          "dialogue_repair_checked_count": 100,
+          "dialogue_repair_rate": 0.39,
+          "dialogue_repair_repaired_count": 39,
+          "dialogue_repair_source_file": "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\dialogue-repair-quality-summary.json",
+          "graph_progression_density": 0.96,
+          "live_result_present": true,
+          "max_dialogue_repair_rate": 0.25,
+          "min_graph_progression_density": 0.35,
+          "min_unique_node_density": 0.35,
+          "preflight_promoted_live_run": false,
+          "preflight_result_present": true,
+          "release_candidate_ready": false,
+          "turn_action_repair_rate": 0.13,
+          "unique_node_density": 0.96
+        },
+        "ok": false,
+        "ready_for_1000_turn_preflight": false,
+        "ready_for_live_1000_turn_run": false,
+        "recommended_next_step": "fix_truth_blocking_gates_before_1000_turn_preflight",
+        "source": "bundle_ai_progression_graph_runtime_edge_selection",
+        "truth_blocking_gates": [
+          "dialogue_repair_rate_ok",
+          "preflight_result_ok_or_not_present",
+          "preflight_promoted_before_live",
+          "live_result_ok_or_not_present",
+          "release_candidate_ready_if_live_present"
+        ]
+      }
+    },
+    "truth_written_path_count": 2,
+    "truth_written_paths": [
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\one-thousand-turn-readiness-truth-summary.json",
+      "F:\\LLM\\omnix\\resources\\data\\test-results\\autoplay-100-n82-travel-location-progression\\autoplay-campaign-results-unzipped\\one-thousand-turn-readiness-truth-summary.json"
+    ]
+  }
+}

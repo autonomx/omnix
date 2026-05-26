@@ -1,0 +1,56 @@
+{
+  "advisory_failures": [],
+  "advisory_only": true,
+  "checks": {
+    "estimated_turn_capacity_ready": true,
+    "objective_edge_count_ready": true,
+    "objective_edge_ids_unique": true,
+    "repeat_escape_edges_present": true,
+    "required_verbs_covered": true,
+    "route_chain_count_ready": true,
+    "stale_loop_replacements_are_concrete": true,
+    "stale_loop_replacements_present": true
+  },
+  "covered_verbs": [
+    "ask",
+    "investigate",
+    "report",
+    "resolve",
+    "restock",
+    "travel"
+  ],
+  "format_version": "bundle_ae_1000_progression_graph_summary_v1",
+  "metrics": {
+    "covered_required_verb_count": 6,
+    "estimated_turn_capacity": 3834,
+    "objective_edge_count": 360,
+    "required_verb_count": 6,
+    "route_chain_count": 9,
+    "stage_template_count": 8,
+    "stale_loop_replacement_count": 6,
+    "target_turns": 1000
+  },
+  "ok": true,
+  "progression_graph_ready": true,
+  "recommended_next_step": "run_1000_turn_preflight_with_progression_graph",
+  "required_verbs": [
+    "ask",
+    "investigate",
+    "report",
+    "resolve",
+    "restock",
+    "travel"
+  ],
+  "route_chain_ids": [
+    "tavern_to_wagon_road",
+    "wagon_road_to_haunted_mill",
+    "mill_to_bridge_watch",
+    "bridge_to_sable_safehouse",
+    "safehouse_to_voss_backers",
+    "guildhall_to_refugee_route",
+    "quarry_to_bandit_redoubt",
+    "redoubt_to_endgame_route",
+    "dawn_road_epilogue_loops"
+  ],
+  "source": "bundle_ae_1000_progression_graph_expansion"
+}

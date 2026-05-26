@@ -13,12 +13,12 @@
       {
         "file": "autoplay-campaign-report.html",
         "present": true,
-        "size_bytes": 38470168
+        "size_bytes": 38808073
       },
       {
         "file": "autoplay-campaign-results.zip",
         "present": true,
-        "size_bytes": 59816674
+        "size_bytes": 63056955
       },
       {
         "file": "artifact-manifest-digest.json",
@@ -61,7 +61,7 @@
       {
         "file": "one-thousand-turn-release-candidate-dashboard-summary.json",
         "present": true,
-        "size_bytes": 1513
+        "size_bytes": 1467
       }
     ],
     "required_file_count": 7

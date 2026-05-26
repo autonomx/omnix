@@ -15,8 +15,8 @@
   "hard_repair_rate": 0.0,
   "metadata_repair_rate": 0.71,
   "visible_text_replacement_rate": 0.0,
-  "category_reclassification_rate": 0.52,
-  "category_reclassified_count": 52,
+  "category_reclassification_rate": 0.51,
+  "category_reclassified_count": 51,
   "expected_attachment_count": 100,
   "by_reason": {
     "attached_to_matching_turn": 100

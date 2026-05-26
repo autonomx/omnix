@@ -4,7 +4,7 @@
     "required_archive_artifacts_present"
   ],
   "advisory_only": true,
-  "archive_digest_sha256": "f34600c7e0ce48f7634ad6b111e16c0958c19c2d29adf506b5675a3b9e9a0d2b",
+  "archive_digest_sha256": "b2c7c39652bab725b903b551bcc03b977dd4740fce24e41364feab3d30397cff",
   "archive_index_ready": false,
   "checks": {
     "archive_digest_available": true,
@@ -18,7 +18,7 @@
     "missing_required_archive_file_count": 2,
     "present_tracked_file_count": 10,
     "required_archive_file_count": 4,
-    "total_present_bytes": 98316352,
+    "total_present_bytes": 101894492,
     "tracked_file_count": 13
   },
   "missing_required_archive_artifacts": [
@@ -33,7 +33,7 @@
       "file": "one-thousand-turn-readiness-aggregator-summary.json",
       "present": true,
       "required_for_archive": false,
-      "sha256": "c1b53bbf0bcace498968c8d0df06d0120c608e5a423a2acb7f8cfe37a34d63f9",
+      "sha256": "e58a3e830e86e2aab7873086ff4ca011ab59b33efb9c64dc9497a4a7d6ff0a63",
       "size_bytes": 8142
     },
     {
@@ -68,21 +68,21 @@
       "file": "one-thousand-turn-live-result-summary.json",
       "present": true,
       "required_for_archive": false,
-      "sha256": "d8b3187d5e56c322c33a841eda0488c96e8e4366aa6eb8b035660d3e9751699d",
+      "sha256": "665a3e2fc5f926017c7b67312c8b88b1c933ac7d2d508702fcd10623b8aa8714",
       "size_bytes": 1858
     },
     {
       "file": "one-thousand-turn-release-candidate-dashboard-summary.json",
       "present": true,
       "required_for_archive": false,
-      "sha256": "5b1b1f72aea3fbd094578db130af3906c411f0bd877415e96db86043aa646472",
-      "size_bytes": 1513
+      "sha256": "26fbb3d046ffab9445cddad9ae540e531e846ddfd6ef887c1adc8f5ed4ad78bb",
+      "size_bytes": 1467
     },
     {
       "file": "one-thousand-turn-release-candidate-handoff-manifest.json",
       "present": true,
       "required_for_archive": true,
-      "sha256": "fd6544b380475625fd542d1472e8672bbce01bb4aa67c548cf763440b4b3a3df",
+      "sha256": "f220d909875ac8304232cfea6c7c9939de1bc32b6c747535838e5aade6cfdef0",
       "size_bytes": 6211
     },
     {
@@ -110,15 +110,15 @@
       "file": "autoplay-campaign-report.html",
       "present": true,
       "required_for_archive": false,
-      "sha256": "3a07e90f894f9a4a58259b1a1a93e7e86b2c2b9819dcb825192be64115b356fd",
-      "size_bytes": 38470168
+      "sha256": "4df2b28751260613ab7fc1362ce45bd4eff70e14de51986d00fa1eff54c426f6",
+      "size_bytes": 38808073
     },
     {
       "file": "autoplay-campaign-results.zip",
       "present": true,
       "required_for_archive": false,
-      "sha256": "b338e913babe55c589e1957a7b3c82dd05e315f5a4bac4d811142b4a03367607",
-      "size_bytes": 59816674
+      "sha256": "ca79b342b7bc3f8381f3e6bbe62fea3fce8eebf7b782797c43c673c620cfa72f",
+      "size_bytes": 63056955
     }
   ]
 }

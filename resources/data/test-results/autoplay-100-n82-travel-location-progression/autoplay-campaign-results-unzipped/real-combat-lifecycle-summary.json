@@ -1,304 +1,304 @@
 {
   "attack_events": [
     {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 24,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 24,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 25,
-      "type": null
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 25,
-      "type": null
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447907+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:memory:00994832b9a8eef3\", \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 25,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 25,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447730+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:385504b010a1e957\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 25,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 25,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
-      "turn": 25,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 25,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 26,
-      "type": null
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 26,
-      "type": null
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447907+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:memory:00994832b9a8eef3\", \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 26,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 26,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447730+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:385504b010a1e957\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 26,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 26,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
-      "turn": 26,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 26,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 27,
-      "type": null
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 27,
-      "type": null
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447907+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:memory:00994832b9a8eef3\", \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 27,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 27,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447730+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:385504b010a1e957\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 27,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 27,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
-      "turn": 27,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 27,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 28,
-      "type": null
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 28,
-      "type": null
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447907+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:memory:00994832b9a8eef3\", \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 28,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 28,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447730+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:385504b010a1e957\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 28,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 28,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
-      "turn": 28,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 28,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 29,
-      "type": null
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 29,
-      "type": null
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447907+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:memory:00994832b9a8eef3\", \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 29,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 29,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447730+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:385504b010a1e957\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 29,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 29,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
-      "turn": 29,
-      "type": "memory"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 29,
-      "type": "semantic_intent"
-    },
-    {
-      "raw_preview": "{\"intent\": \"dialogue\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 30,
-      "type": null
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 30,
-      "type": null
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447907+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"memory\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:memory:00994832b9a8eef3\", \"signal_id\": \"npc_evo:Bran:memory:projection:c47a33d5eb74ea30\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"original_target\": \"Bran\", \"reason\": \"explicit_known_target\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 30,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\", \"target\": \"Bran\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
       "turn": 30,
-      "type": "memory"
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T21:19:28.447730+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"semantic_intent\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:semantic_intent:385504b010a1e957\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:0df63086a3ebc309\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 30,
-      "type": "semantic_intent"
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 31,
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\", \"target\": \"Bran\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 30,
-      "type": "semantic_intent"
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 31,
+      "type": "future_hook"
     },
     {
-      "raw_preview": "{\"importance\": 0.5, \"kind\": \"memory\", \"owner\": \"Bran\", \"summary\": \"This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.\"}",
-      "summary": "This current interrogation provides immediate evidence regarding the attack's origin—a merchant of silks hired them.",
-      "turn": 30,
-      "type": "memory"
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 31,
+      "type": "Intelligence"
     },
     {
-      "raw_preview": "{\"intent\": \"dialogue\", \"kind\": \"semantic_intent\", \"summary\": \"Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.\"}",
-      "summary": "Questioning the captured bandit to ascertain the identity of his employers and the specific reason for attacking Garran's caravan wagon.",
-      "turn": 30,
-      "type": "semantic_intent"
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 31,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 32,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 32,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 32,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 32,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 33,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 33,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 33,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 33,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 34,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 34,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 34,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 34,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 35,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 35,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 35,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 35,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 36,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 36,
+      "type": "future_hook"
+    },
+    {
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 36,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\"}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 36,
+      "type": "Intelligence"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 25, \"created_at\": \"2026-05-25T22:19:39.253583+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Intelligence\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:24:future_hook:29655ab5f28b2934\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fbe2f65ce71b4211\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 25}",
+      "summary": "A specific group (city merchant) was hired to attack a known asset (Garran's Wagon) for profit.",
+      "turn": 37,
+      "type": "future_hook"
     }
   ],
   "combat_text_turns": [
@@ -317,181 +317,175 @@
   ],
   "damage_events": [
     {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b9eb2cb1278cfa7c\", \"summary\": \"Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.\", \"turn_index\": 96}",
-      "summary": "Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.",
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
       "turn": 1,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:df41f39c3a98360a\", \"summary\": \"Specific physical evidence was discovered during the search of the old north watchpost area.\", \"turn_index\": 95}",
-      "summary": "Specific physical evidence was discovered during the search of the old north watchpost area.",
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b646d9754806d154\", \"summary\": \"Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.\", \"turn_index\": 95}",
+      "summary": "Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.",
       "turn": 1,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:e286968c6e18a0da\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:323bd9868fc7ceb0\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 95}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Lore\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:32e9fb0a03b24af2\", \"summary\": \"The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.\", \"turn_index\": 96}",
-      "summary": "The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.",
+      "raw_preview": "{\"kind\": \"Trail Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9877f7d31f4839f1\", \"summary\": \"Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.\", \"turn_index\": 95}",
+      "summary": "Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.",
       "turn": 1,
-      "type": "Lore"
+      "type": "Trail Confirmation"
     },
     {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b9eb2cb1278cfa7c\", \"summary\": \"Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.\", \"turn_index\": 96}",
-      "summary": "Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:448aef29e63993b6\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)\", \"turn_index\": 94}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3ee5bf647ef03910\", \"summary\": \"Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)\", \"turn_index\": 93}",
+      "summary": "Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
       "turn": 2,
       "type": null
     },
     {
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:df41f39c3a98360a\", \"summary\": \"Specific physical evidence was discovered during the search of the old north watchpost area.\", \"turn_index\": 95}",
-      "summary": "Specific physical evidence was discovered during the search of the old north watchpost area.",
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b646d9754806d154\", \"summary\": \"Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.\", \"turn_index\": 95}",
+      "summary": "Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.",
       "turn": 2,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:e286968c6e18a0da\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:323bd9868fc7ceb0\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 95}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Lore\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:32e9fb0a03b24af2\", \"summary\": \"The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.\", \"turn_index\": 96}",
-      "summary": "The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.",
+      "raw_preview": "{\"kind\": \"Trail Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9877f7d31f4839f1\", \"summary\": \"Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.\", \"turn_index\": 95}",
+      "summary": "Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.",
       "turn": 2,
-      "type": "Lore"
+      "type": "Trail Confirmation"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:448aef29e63993b6\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)\", \"turn_index\": 94}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3ee5bf647ef03910\", \"summary\": \"Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)\", \"turn_index\": 93}",
+      "summary": "Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b646d9754806d154\", \"summary\": \"Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.\", \"turn_index\": 95}",
+      "summary": "Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:323bd9868fc7ceb0\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 95}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
     },
     {
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 2,
+      "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b9eb2cb1278cfa7c\", \"summary\": \"Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.\", \"turn_index\": 96}",
-      "summary": "Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.",
-      "turn": 3,
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 4,
       "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:e286968c6e18a0da\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 96}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Lore\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:32e9fb0a03b24af2\", \"summary\": \"The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.\", \"turn_index\": 96}",
-      "summary": "The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.",
-      "turn": 3,
-      "type": "Lore"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 3}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T21:19:27.311946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:73ecc2697bdf18b2\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:323bd9868fc7ceb0\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 95}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9914d409939c5437\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"turn_index\": 4}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)\"}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T21:19:27.332871+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:6495964418d73d82\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9914d409939c5437\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
-      "turn": 4,
-      "type": "future_hook"
-    },
-    {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target\": \"Bran\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5cc4829e52e3642a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 4}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T21:19:27.311946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:73ecc2697bdf18b2\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T22:19:38.316516+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:3983de0d62eeec76\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5cc4829e52e3642a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "future_hook"
@@ -503,55 +497,61 @@
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
-      "turn": 4,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9914d409939c5437\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"turn_index\": 4}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
       "turn": 5,
-      "type": "Immediate Investigation Prompt"
+      "type": null
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5cc4829e52e3642a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 4}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T21:19:27.332871+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:6495964418d73d82\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9914d409939c5437\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:eb5346441cf61dfb\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)\", \"turn_index\": 5}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)",
+      "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 5, \"created_at\": \"2026-05-25T22:19:38.338149+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)\", \"target\": \"Bran\"}, \"projection_id\": \"adv:4:future_hook:c70c6dc6db19701f\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:eb5346441cf61dfb\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)\", \"target_grounding\": {\"grounded\": true, \"matched\": \"Bran\", \"npc_id\": \"Bran\", \"reason\": \"name_mentioned_in_projection_text\"}, \"target_inference\": \"expl",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)",
       "turn": 5,
       "type": "future_hook"
     },
     {
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target\": \"Bran\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
+      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)\", \"target\": \"Bran\"}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)",
       "turn": 5,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T21:19:27.311946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:73ecc2697bdf18b2\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T22:19:38.316516+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:3983de0d62eeec76\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5cc4829e52e3642a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 5,
       "type": "future_hook"
@@ -563,56 +563,56 @@
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)\"}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)",
       "turn": 5,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 6,
+      "type": null
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:eb5346441cf61dfb\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)\", \"turn_index\": 5}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran's hook, but relevant to scene state post-observation)",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:5cc4829e52e3642a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 4}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 6,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 6,
       "type": "Immediate Investigation Prompt"
     },
     {
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 5,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9914d409939c5437\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"turn_index\": 4}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
       "turn": 6,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:61bee74144ec40bd\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 6}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 6,
       "type": "Immediate Investigation Prompt"
     },
     {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 6, \"created_at\": \"2026-05-25T22:19:38.371014+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:5:future_hook:c72a05bbc20fbd07\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:61bee74144ec40bd\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 6}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 6,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 4, \"created_at\": \"2026-05-25T21:19:27.332871+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target\": \"Bran\"}, \"projection_id\": \"adv:3:future_hook:6495964418d73d82\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9914d409939c5437\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 4}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
       "turn": 6,
       "type": "future_hook"
     }
@@ -634,8 +634,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b9eb2cb1278cfa7c\", \"summary\": \"Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.\", \"turn_index\": 96}",
-      "summary": "Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.",
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
       "turn": 1,
       "type": null
     },
@@ -647,8 +647,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:df41f39c3a98360a\", \"summary\": \"Specific physical evidence was discovered during the search of the old north watchpost area.\", \"turn_index\": 95}",
-      "summary": "Specific physical evidence was discovered during the search of the old north watchpost area.",
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b646d9754806d154\", \"summary\": \"Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.\", \"turn_index\": 95}",
+      "summary": "Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.",
       "turn": 1,
       "type": null
     },
@@ -660,7 +660,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -673,7 +673,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -686,7 +686,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:e286968c6e18a0da\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:323bd9868fc7ceb0\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 95}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 1,
       "type": "Immediate Investigation Prompt"
@@ -699,10 +699,10 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Lore\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:32e9fb0a03b24af2\", \"summary\": \"The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.\", \"turn_index\": 96}",
-      "summary": "The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.",
+      "raw_preview": "{\"kind\": \"Trail Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9877f7d31f4839f1\", \"summary\": \"Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.\", \"turn_index\": 95}",
+      "summary": "Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.",
       "turn": 1,
-      "type": "Lore"
+      "type": "Trail Confirmation"
     },
     {
       "flags": {
@@ -712,8 +712,34 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b9eb2cb1278cfa7c\", \"summary\": \"Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.\", \"turn_index\": 96}",
-      "summary": "Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:448aef29e63993b6\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)\", \"turn_index\": 94}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3ee5bf647ef03910\", \"summary\": \"Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)\", \"turn_index\": 93}",
+      "summary": "Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)",
+      "turn": 1,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
       "turn": 2,
       "type": null
     },
@@ -725,8 +751,8 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"evidence\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:df41f39c3a98360a\", \"summary\": \"Specific physical evidence was discovered during the search of the old north watchpost area.\", \"turn_index\": 95}",
-      "summary": "Specific physical evidence was discovered during the search of the old north watchpost area.",
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b646d9754806d154\", \"summary\": \"Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.\", \"turn_index\": 95}",
+      "summary": "Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.",
       "turn": 2,
       "type": null
     },
@@ -738,7 +764,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -751,7 +777,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -764,7 +790,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:e286968c6e18a0da\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 96}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:323bd9868fc7ceb0\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 95}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 2,
       "type": "Immediate Investigation Prompt"
@@ -777,10 +803,101 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Lore\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:32e9fb0a03b24af2\", \"summary\": \"The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.\", \"turn_index\": 96}",
-      "summary": "The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.",
+      "raw_preview": "{\"kind\": \"Trail Confirmation\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:9877f7d31f4839f1\", \"summary\": \"Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.\", \"turn_index\": 95}",
+      "summary": "Veska's trail has been positively identified and tracked leading away from the watchpost toward the east.",
       "turn": 2,
-      "type": "Lore"
+      "type": "Trail Confirmation"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:448aef29e63993b6\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)\", \"turn_index\": 94}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Bran)",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:3ee5bf647ef03910\", \"summary\": \"Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)\", \"turn_index\": 93}",
+      "summary": "Bran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified. (Turn 98/99)",
+      "turn": 2,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"intent\": \"investigation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b646d9754806d154\", \"summary\": \"Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.\", \"turn_index\": 95}",
+      "summary": "Discovery of specific evidence at the watchpost: courier signs, Sable Chain marks, and confirmation of Veska's trail leading east.",
+      "turn": 3,
+      "type": null
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
+    },
+    {
+      "flags": {
+        "attack": false,
+        "combat": true,
+        "damage": true,
+        "resolution": false,
+        "round": false
+      },
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:323bd9868fc7ceb0\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 95}",
+      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
+      "turn": 3,
+      "type": "Immediate Investigation Prompt"
     },
     {
       "flags": {
@@ -792,7 +909,7 @@
       },
       "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 2,
+      "turn": 3,
       "type": "Immediate Investigation Prompt"
     },
     {
@@ -803,9 +920,9 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:b9eb2cb1278cfa7c\", \"summary\": \"Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.\", \"turn_index\": 96}",
-      "summary": "Successfully observed and intercepted Veska's courier just as they neared the old north watchpost boundary.",
-      "turn": 3,
+      "raw_preview": "{\"intent\": \"observation\", \"signal_id\": \"npc_evo:Bran:semantic_intent:projection:1788245613bfe081\", \"summary\": \"Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.\", \"turn_index\": 96}",
+      "summary": "Fast deterministic interpretation of player input: I intercept Veska's courier before the message can leave the old north watchpost.",
+      "turn": 4,
       "type": null
     },
     {
@@ -816,124 +933,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:6256230dbf3e7705\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 98}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:e286968c6e18a0da\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 96}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Lore\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:32e9fb0a03b24af2\", \"summary\": \"The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.\", \"turn_index\": 96}",
-      "summary": "The courier carries a message sealed with the sigil of Handler Veska from the old north watchpost.",
-      "turn": 3,
-      "type": "Lore"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified (Turn 98/99).",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 3}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"canonical_npc_id\": \"Bran\", \"consumed\": true, \"consumed_at_turn\": 3, \"created_at\": \"2026-05-25T21:19:27.311946+00:00\", \"format_version\": \"npc_evolution_arcs_v1\", \"kind\": \"future_hook\", \"npc_id\": \"Bran\", \"payload\": {\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}, \"projection_id\": \"adv:2:future_hook:73ecc2697bdf18b2\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"source\": \"deferred_advisory_promotion\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target_grounding\": {\"grounded\": true, \"npc_id\": \"Bran\", \"reason\": \"single_present_npc\"}, \"target_inference\": \"explicit_projection_target\", \"turn_index\": 3}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "future_hook"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"grounded_target\": \"Bran\", \"kind\": \"Immediate Investigation Prompt\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"target\": \"Bran\"}",
-      "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
-      "turn": 3,
-      "type": "Immediate Investigation Prompt"
-    },
-    {
-      "flags": {
-        "attack": false,
-        "combat": true,
-        "damage": true,
-        "resolution": false,
-        "round": false
-      },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8ce9c80a5704978a\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 3}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:b01450c18c372682\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
@@ -946,7 +946,7 @@
         "resolution": false,
         "round": false
       },
-      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:fade27af30989100\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 99}",
+      "raw_preview": "{\"kind\": \"Immediate Investigation Prompt\", \"signal_id\": \"npc_evo:Bran:future_hook:projection:8413c38842c0ea4e\", \"summary\": \"Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.\", \"turn_index\": 97}",
       "summary": "Garran suggests investigating the watchpost now that Veska's passage is confirmed and the path forward is clarified.",
       "turn": 4,
       "type": "Immediate Investigation Prompt"
@@ -1060,15 +1060,15 @@
     "missing_parts": [],
     "ok": true,
     "policy": "Direct-graph resolved combat counts as abstract deterministic combat-round evidence only when combat_lifecycle_summary records direct_graph_combat_count plus resolved/consequence evidence. It does not use broad transcript text.",
-    "real_attack_event_count": 855,
-    "real_damage_event_count": 5492,
+    "real_attack_event_count": 706,
+    "real_damage_event_count": 4714,
     "real_resolution_event_count": 70
   },
   "ok": true,
   "policy": "Direct-graph combat coverage is not counted as a real combat lifecycle unless round/initiative, damage/HP, and resolution evidence are all present.",
-  "real_attack_event_count": 855,
+  "real_attack_event_count": 706,
   "real_combat_lifecycle_ok": true,
-  "real_damage_event_count": 5492,
+  "real_damage_event_count": 4714,
   "real_resolution_event_count": 70,
   "real_round_event_count": 8,
   "resolution_events": [
@@ -1374,18 +1374,6 @@
     }
   ],
   "round_events": [
-    {
-      "raw_preview": "{\"action\": \"Initiative established; Bandit takes action.\", \"combat_narration_accepted\": true, \"combat_narration_attempted\": true, \"combat_narration_contract\": {\"constraints\": [\"Narrate only the resolved combat facts in this contract.\", \"Do not invent hits, misses, damage, death, loot, surrender, escape, dismemberment, or new enemies.\", \"If defeated is false, do not say the target dies, collapses dead, is slain, is killed, or is finished.\", \"If defeated is true, acknowledge that the target is defeated.\", \"If party_defeated is true, acknowledge that the party/player is defeated.\", \"Do not mention JSON, contract, simulation, validator, system, prompt, or LLM.\", \"Do not repeat the player's command verbatim.\"], \"facts\": {\"actor_id\": \"\", \"actor_name\": \"\", \"attack_roll\": null, \"attack_total\": null, \"combat_ended\": false, \"damage_applied\": null, \"defeated\": false, \"hit\": null, \"next_actor_id\": \"player\", \"party_defeated\": false, \"reason\": \"combat_started\", \"round\": 1, \"target_defense\": null, \"t",
-      "summary": "",
-      "turn": 67,
-      "type": null
-    },
-    {
-      "raw_preview": "{\"action\": \"Initiative established; Bandit takes action.\", \"followup_hooks\": [\"Player's turn to act against the Bandit\", \"Enemy: Bandit is active and ready for action\"], \"format_version\": \"rpg_narration_v2\", \"narration\": \"The confrontation begins immediately as the hostile Bandit makes its first move. You, having acted first due to your superior initiative, are ready to engage this foe. The Bandit has already taken a turn, setting the stage for you to deliver the opening blow.\", \"npc\": {\"line\": \"\", \"speaker\": \"Bandit\"}, \"reward\": \"\"}",
-      "summary": "",
-      "turn": 67,
-      "type": null
-    },
     {
       "consequence_event_count": 1,
       "direct_graph_combat_count": 16,
