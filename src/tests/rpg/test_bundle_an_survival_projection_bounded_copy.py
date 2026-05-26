@@ -25,6 +25,7 @@ def _resource_backed_survival_row() -> dict:
         "turn_index": 7,
         "player_action": "rest and drink water",
         "climate_survival": {
+            "tick": 7,
             "survival": {"thirst": 2, "hunger": 1, "fatigue": 3},
         },
         "resource_changes": {
