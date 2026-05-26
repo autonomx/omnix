@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -38,6 +39,30 @@ def test_bundle_ao2_recovers_run_autoplay_campaign_final_health_error(tmp_path):
     warning_payload = json.loads((output_dir / "autoplay-campaign-results-unzipped" / "nonfatal-endurance-warnings-summary.json").read_text(encoding="utf-8"))
     assert warning_payload["warning_count"] == 1
     assert warning_payload["warnings"][0]["final_health_rebuild_order_reason"] == "readiness_not_ok"
+
+
+def test_bundle_ao2_recovers_namespace_args_into_real_output_dir_and_core_artifacts(tmp_path):
+    output_dir = tmp_path / "autoplay-output"
+
+    def failing_runner(_args):
+        raise RuntimeError("final_health_rebuild_order_invalid:readiness_not_ok")
+
+    namespace = _load_bundle_ao2_namespace({"_run_autoplay_campaign": failing_runner})
+    args = argparse.Namespace(turns=250, output_dir=str(output_dir))
+
+    summary = namespace["_run_autoplay_campaign"](args)
+
+    assert summary["turns_executed"] == 250
+    assert summary["requested_turns"] == 250
+    assert summary["output_dir"] == str(output_dir)
+    for directory in (output_dir, output_dir / "autoplay-campaign-results-unzipped"):
+        assert (directory / "summary.json").exists()
+        assert (directory / "autoplay-health.json").exists()
+        assert (directory / "hundred-turn-evaluation.json").exists()
+        assert (directory / "nonfatal-finalization-recovery-summary.json").exists()
+        health = json.loads((directory / "autoplay-health.json").read_text(encoding="utf-8"))
+        assert health["turns_executed"] == 250
+        assert health["nonfatal_finalization_recovered"] is True
 
 
 def test_bundle_ao2_recovers_background_verifier_error_with_counts(tmp_path):
