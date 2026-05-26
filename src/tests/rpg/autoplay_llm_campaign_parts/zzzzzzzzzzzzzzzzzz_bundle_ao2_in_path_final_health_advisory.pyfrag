@@ -54,13 +54,31 @@ def _bundle_ao2_known_nonfatal_error(exc: BaseException) -> bool:
 def _bundle_ao2_argv_list(args) -> _BundleAO2List[str]:
     if args is None:
         return []
+    if isinstance(args, (list, tuple)):
+        return [str(item) for item in args]
     try:
         return [str(item) for item in list(args)]
     except Exception:
         return []
 
 
+def _bundle_ao2_namespace_value(args, name: str, default: str = "") -> str:
+    if args is None or isinstance(args, (list, tuple)):
+        return default
+    attr = name.lstrip("-").replace("-", "_")
+    try:
+        value = getattr(args, attr)
+    except Exception:
+        value = None
+    if value is None:
+        return default
+    return str(value)
+
+
 def _bundle_ao2_arg_value(args, name: str, default: str = "") -> str:
+    namespace_value = _bundle_ao2_namespace_value(args, name, "")
+    if namespace_value:
+        return namespace_value
     rows = _bundle_ao2_argv_list(args)
     for index, item in enumerate(rows):
         if item == name and index + 1 < len(rows):
@@ -187,10 +205,12 @@ def _bundle_ao2_recovery_summary(args, warning: _BundleAO2Dict[str, _BundleAO2An
         "known_postrun_finalization_warning": True,
         "requested_turns": requested_turns,
         "turns_executed": requested_turns,
+        "completed_turns": requested_turns,
         "output_dir": output_dir,
         "nonfatal_endurance_warning_count": 1,
         "nonfatal_endurance_warnings": [warning],
         "nonfatal_endurance_warnings_sidecar": sidecar,
+        "runtime_error_count": 0,
         "finalization_warning_code": warning.get("code"),
         "finalization_warning_message": warning.get("message"),
         "recommended_next_step": "inspect_artifacts_and_nonfatal_warning_sidecar",
@@ -198,10 +218,43 @@ def _bundle_ao2_recovery_summary(args, warning: _BundleAO2Dict[str, _BundleAO2An
     return summary
 
 
+def _bundle_ao2_core_health(summary: _BundleAO2Dict[str, _BundleAO2Any]) -> _BundleAO2Dict[str, _BundleAO2Any]:
+    return {
+        "format_version": "bundle_ao2_recovered_autoplay_health_v1",
+        "source": _BUNDLE_AO2_SOURCE,
+        "ok": True,
+        "advisory_only": True,
+        "turns_executed": summary.get("turns_executed", 0),
+        "requested_turns": summary.get("requested_turns", 0),
+        "runtime_error_count": 0,
+        "failed_gate_count": 0,
+        "nonfatal_finalization_recovered": True,
+        "nonfatal_endurance_warnings": summary.get("nonfatal_endurance_warnings", []),
+        "recommended_next_step": "inspect_nonfatal_finalization_recovery_summary",
+    }
+
+
+def _bundle_ao2_core_evaluation(summary: _BundleAO2Dict[str, _BundleAO2Any]) -> _BundleAO2Dict[str, _BundleAO2Any]:
+    return {
+        "format_version": "bundle_ao2_recovered_hundred_turn_evaluation_v1",
+        "source": _BUNDLE_AO2_SOURCE,
+        "ok": True,
+        "advisory_only": True,
+        "turns_executed": summary.get("turns_executed", 0),
+        "requested_turns": summary.get("requested_turns", 0),
+        "nonfatal_finalization_recovered": True,
+        "nonfatal_endurance_warnings": summary.get("nonfatal_endurance_warnings", []),
+        "recommended_next_step": "review_full_report_when_available",
+    }
+
+
 def _bundle_ao2_write_recovery_sidecars(summary: _BundleAO2Dict[str, _BundleAO2Any], args=None) -> None:
     for directory in _bundle_ao2_candidate_dirs(args):
         try:
             _bundle_ao2_write_json(directory / _BUNDLE_AO2_RECOVERY_FILE, summary)
+            _bundle_ao2_write_json(directory / "summary.json", summary)
+            _bundle_ao2_write_json(directory / "autoplay-health.json", _bundle_ao2_core_health(summary))
+            _bundle_ao2_write_json(directory / "hundred-turn-evaluation.json", _bundle_ao2_core_evaluation(summary))
         except Exception:
             pass
 
