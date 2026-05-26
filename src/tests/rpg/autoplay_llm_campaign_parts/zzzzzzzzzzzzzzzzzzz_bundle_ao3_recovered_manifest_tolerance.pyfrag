@@ -81,6 +81,10 @@ def _bundle_ao3_dirs_from_error(exc: BaseException) -> _BundleAO3List[_BundleAO3
         for directory in pair:
             if directory not in dirs:
                 dirs.append(directory)
+        # The invariant error path is the source of truth.  Do not also scan
+        # globals/resources, or unrelated run folders can be patched during tests
+        # and real reruns.
+        return dirs
     for value in list(globals().values()):
         try:
             if isinstance(value, (str, _BundleAO3Path)):
