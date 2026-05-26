@@ -6,11 +6,15 @@
 # known post-run background-presentation accounting verifier to a structured
 # advisory warning so artifacts can still be written and reviewed.
 
+import json as _bundle_ao_json
 import re as _bundle_ao_re
-from typing import Any as _BundleAOAny, Dict as _BundleAODict
+from pathlib import Path as _BundleAOPath
+from typing import Any as _BundleAOAny, Dict as _BundleAODict, List as _BundleAOList
 
 _BUNDLE_AO_WARNING_CODE = "background_presentation_not_turn_bound_verified"
 _BUNDLE_AO_SOURCE = "bundle_ao_nonfatal_endurance_finalization"
+_BUNDLE_AO_WARNING_FILE = "nonfatal-endurance-warnings-summary.json"
+_BUNDLE_AO_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
 
 
 def _bundle_ao_safe_dict(value: _BundleAOAny) -> _BundleAODict[str, _BundleAOAny]:
@@ -47,6 +51,81 @@ def _bundle_ao_background_verifier_warning(message: str) -> _BundleAODict[str, _
     }
 
 
+def _bundle_ao_discover_artifact_dirs(summary: _BundleAODict[str, _BundleAOAny] | None = None) -> _BundleAOList[_BundleAOPath]:
+    dirs: _BundleAOList[_BundleAOPath] = []
+    summary = _bundle_ao_safe_dict(summary)
+    candidate_values = [
+        summary.get("output_dir"),
+        summary.get("result_dir"),
+        summary.get("artifact_dir"),
+        summary.get("artifacts_dir"),
+        summary.get("unzipped_dir"),
+        summary.get("autoplay_output_dir"),
+    ]
+    for value in list(globals().values()) + candidate_values:
+        try:
+            if isinstance(value, (str, _BundleAOPath)):
+                candidate = _BundleAOPath(value)
+                if not candidate.exists() or not candidate.is_dir():
+                    continue
+                if candidate.name == _BUNDLE_AO_UNZIPPED_DIR:
+                    root = candidate.parent
+                    unzipped = candidate
+                elif (candidate / _BUNDLE_AO_UNZIPPED_DIR).exists():
+                    root = candidate
+                    unzipped = candidate / _BUNDLE_AO_UNZIPPED_DIR
+                else:
+                    continue
+                for directory in (root, unzipped):
+                    if directory.exists() and directory.is_dir() and directory not in dirs:
+                        dirs.append(directory)
+        except Exception:
+            pass
+    try:
+        base = _BundleAOPath("resources") / "data" / "test-results"
+        if base.exists() and base.is_dir():
+            for unzipped in base.glob(f"*/{_BUNDLE_AO_UNZIPPED_DIR}"):
+                root = unzipped.parent
+                for directory in (root, unzipped):
+                    if directory.exists() and directory.is_dir() and directory not in dirs:
+                        dirs.append(directory)
+    except Exception:
+        pass
+    return dirs
+
+
+def _bundle_ao_write_json(path: _BundleAOPath, payload: _BundleAODict[str, _BundleAOAny]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_ao_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_ao_write_warning_sidecars(summary: _BundleAODict[str, _BundleAOAny]) -> _BundleAODict[str, _BundleAOAny]:
+    warnings = summary.get("nonfatal_endurance_warnings")
+    if not isinstance(warnings, list):
+        warnings = []
+    payload = {
+        "format_version": "bundle_ao_nonfatal_endurance_warnings_summary_v1",
+        "source": _BUNDLE_AO_SOURCE,
+        "ok": True,
+        "advisory_only": True,
+        "warning_count": len(warnings),
+        "warnings": warnings,
+        "recommended_next_step": "review_nonfatal_endurance_warnings_after_artifact_export",
+    }
+    written: _BundleAOList[str] = []
+    for directory in _bundle_ao_discover_artifact_dirs(summary):
+        try:
+            target = directory / _BUNDLE_AO_WARNING_FILE
+            _bundle_ao_write_json(target, payload)
+            written.append(str(target))
+        except Exception:
+            pass
+    payload["written_paths"] = written
+    payload["written_path_count"] = len(written)
+    return payload
+
+
 def _bundle_ao_attach_nonfatal_warning(summary: _BundleAODict[str, _BundleAOAny], warning: _BundleAODict[str, _BundleAOAny]) -> _BundleAODict[str, _BundleAOAny]:
     target = summary if isinstance(summary, dict) else {}
     warnings = target.get("nonfatal_endurance_warnings")
@@ -62,6 +141,7 @@ def _bundle_ao_attach_nonfatal_warning(summary: _BundleAODict[str, _BundleAOAny]
     target["background_presentation_turn_bound_verification"] = warning
     target["background_presentation_turn_bound_verified"] = False
     target["background_presentation_turn_bound_verification_advisory_only"] = True
+    target["nonfatal_endurance_warnings_sidecar"] = _bundle_ao_write_warning_sidecars(target)
     return target
 
 
@@ -81,10 +161,30 @@ def _bundle_ao_assert_turn_bound_attachment_verified_wrapper(summary):
         return None
 
 
+def _bundle_ao_wrap_manifest_finalizer() -> None:
+    finalizer = globals().get("_manifest_hard_finalize_latest")
+    if not callable(finalizer) or getattr(finalizer, "_bundle_ao_wrapped", False):
+        return
+
+    def _bundle_ao_manifest_hard_finalize_latest():
+        result = finalizer()
+        # If a warning was attached before the hard finalizer, refresh the sidecar
+        # after final mirror creation so it is present in the final upload folder.
+        last = globals().get("BUNDLE_AO_LAST_NONFATAL_ENDURANCE_WARNING")
+        if isinstance(last, dict):
+            _bundle_ao_attach_nonfatal_warning({}, last)
+        return result
+
+    _bundle_ao_manifest_hard_finalize_latest._bundle_ao_wrapped = True
+    globals()["_BUNDLE_AO_ORIGINAL_MANIFEST_HARD_FINALIZE_LATEST"] = finalizer
+    globals()["_manifest_hard_finalize_latest"] = _bundle_ao_manifest_hard_finalize_latest
+
+
 if not globals().get("_BUNDLE_AO_NONFATAL_ENDURANCE_FINALIZATION_PATCHED"):
     verifier = globals().get("_assert_turn_bound_attachment_verified")
     if callable(verifier) and not getattr(verifier, "_bundle_ao_wrapped", False):
         globals()["_BUNDLE_AO_ORIGINAL_ASSERT_TURN_BOUND_ATTACHMENT_VERIFIED"] = verifier
         _bundle_ao_assert_turn_bound_attachment_verified_wrapper._bundle_ao_wrapped = True
         globals()["_assert_turn_bound_attachment_verified"] = _bundle_ao_assert_turn_bound_attachment_verified_wrapper
+    _bundle_ao_wrap_manifest_finalizer()
     globals()["_BUNDLE_AO_NONFATAL_ENDURANCE_FINALIZATION_PATCHED"] = True
