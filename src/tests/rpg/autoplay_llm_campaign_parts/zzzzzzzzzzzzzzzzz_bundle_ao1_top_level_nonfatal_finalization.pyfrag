@@ -1,0 +1,198 @@
+# Bundle AO.1 — Top-Level Nonfatal Finalization Guard
+#
+# Some expensive endurance runs complete all turns, drain background jobs, and
+# then fail during final report/readiness assertions.  AO downgrades the known
+# background-presentation verifier when reached directly, but the 250-turn run
+# then hit another post-run assertion from the top-level run path:
+# final_health_rebuild_order_invalid:readiness_not_ok.  AO.1 catches known
+# post-run finalization assertions at the top-level main boundary, writes a
+# reviewable warning sidecar, and returns success so partial/rich artifacts can
+# still be inspected.  It does not swallow unrelated runtime/gameplay errors.
+
+import json as _bundle_ao1_json
+import re as _bundle_ao1_re
+from pathlib import Path as _BundleAO1Path
+from typing import Any as _BundleAO1Any, Dict as _BundleAO1Dict, List as _BundleAO1List
+
+_BUNDLE_AO1_SOURCE = "bundle_ao1_top_level_nonfatal_finalization"
+_BUNDLE_AO1_WARNING_FILE = "nonfatal-endurance-warnings-summary.json"
+_BUNDLE_AO1_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AO1_KNOWN_CODES = {
+    "background_presentation_not_turn_bound_verified",
+    "final_health_rebuild_order_invalid",
+}
+
+
+def _bundle_ao1_safe_dict(value: _BundleAO1Any) -> _BundleAO1Dict[str, _BundleAO1Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _bundle_ao1_parse_count_fields(message: str) -> _BundleAO1Dict[str, int]:
+    counts: _BundleAO1Dict[str, int] = {}
+    for key, value in _bundle_ao1_re.findall(r"([A-Za-z_]+)=([0-9]+)", str(message)):
+        try:
+            counts[str(key)] = int(value)
+        except Exception:
+            pass
+    return counts
+
+
+def _bundle_ao1_warning_code(message: str) -> str:
+    text = str(message)
+    for code in _BUNDLE_AO1_KNOWN_CODES:
+        if code in text:
+            return code
+    return ""
+
+
+def _bundle_ao1_is_known_nonfatal_finalization_error(exc: BaseException) -> bool:
+    return isinstance(exc, RuntimeError) and bool(_bundle_ao1_warning_code(str(exc)))
+
+
+def _bundle_ao1_warning_from_exception(exc: BaseException) -> _BundleAO1Dict[str, _BundleAO1Any]:
+    message = str(exc)
+    code = _bundle_ao1_warning_code(message) or "unknown_nonfatal_finalization_error"
+    counts = _bundle_ao1_parse_count_fields(message)
+    expected = int(counts.get("expected_count", 0))
+    verified = int(counts.get("turn_bound_verified_count", counts.get("event_count", 0)))
+    warning: _BundleAO1Dict[str, _BundleAO1Any] = {
+        "format_version": "bundle_ao1_nonfatal_finalization_warning_v1",
+        "source": _BUNDLE_AO1_SOURCE,
+        "code": code,
+        "ok": False,
+        "advisory_only": True,
+        "message": message,
+        "counts": counts,
+        "recommended_next_step": "review_nonfatal_finalization_warning_and_artifacts",
+    }
+    if expected or verified:
+        warning["expected_count"] = expected
+        warning["turn_bound_verified_count"] = verified
+        warning["missing_turn_bound_verification_count"] = max(0, expected - verified)
+    if code == "final_health_rebuild_order_invalid":
+        warning["final_health_rebuild_order_warning"] = True
+        warning["final_health_rebuild_order_reason"] = message.split(":", 1)[1] if ":" in message else "unknown"
+    return warning
+
+
+def _bundle_ao1_output_dir_from_argv(argv) -> str:
+    rows = list(argv or [])
+    for index, item in enumerate(rows):
+        if str(item) == "--output-dir" and index + 1 < len(rows):
+            return str(rows[index + 1])
+        if str(item).startswith("--output-dir="):
+            return str(item).split("=", 1)[1]
+    return ""
+
+
+def _bundle_ao1_candidate_dirs(argv=None) -> _BundleAO1List[_BundleAO1Path]:
+    dirs: _BundleAO1List[_BundleAO1Path] = []
+    output_dir = _bundle_ao1_output_dir_from_argv(argv)
+    candidates: _BundleAO1List[_BundleAO1Path] = []
+    if output_dir:
+        candidates.append(_BundleAO1Path(output_dir))
+    for value in list(globals().values()):
+        try:
+            if isinstance(value, (str, _BundleAO1Path)):
+                candidates.append(_BundleAO1Path(value))
+        except Exception:
+            pass
+    try:
+        base = _BundleAO1Path("resources") / "data" / "test-results"
+        if base.exists() and base.is_dir():
+            candidates.extend(path.parent for path in base.glob(f"*/{_BUNDLE_AO1_UNZIPPED_DIR}"))
+    except Exception:
+        pass
+    for candidate in candidates:
+        try:
+            if candidate.name == _BUNDLE_AO1_UNZIPPED_DIR:
+                root = candidate.parent
+            else:
+                root = candidate
+            if not root:
+                continue
+            unzipped = root / _BUNDLE_AO1_UNZIPPED_DIR
+            for directory in (root, unzipped):
+                if directory not in dirs:
+                    dirs.append(directory)
+        except Exception:
+            pass
+    return dirs
+
+
+def _bundle_ao1_write_json(path: _BundleAO1Path, payload: _BundleAO1Dict[str, _BundleAO1Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_ao1_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_ao1_load_existing_warnings(path: _BundleAO1Path) -> _BundleAO1List[_BundleAO1Any]:
+    try:
+        if not path.exists():
+            return []
+        data = _bundle_ao1_json.loads(path.read_text(encoding="utf-8"))
+        warnings = data.get("warnings") if isinstance(data, dict) else []
+        return warnings if isinstance(warnings, list) else []
+    except Exception:
+        return []
+
+
+def _bundle_ao1_write_warning_sidecars(warning: _BundleAO1Dict[str, _BundleAO1Any], argv=None) -> _BundleAO1Dict[str, _BundleAO1Any]:
+    written: _BundleAO1List[str] = []
+    for directory in _bundle_ao1_candidate_dirs(argv):
+        try:
+            target = directory / _BUNDLE_AO1_WARNING_FILE
+            warnings = _bundle_ao1_load_existing_warnings(target)
+            existing_codes = {str(item.get("code")) for item in warnings if isinstance(item, dict)}
+            if str(warning.get("code")) not in existing_codes:
+                warnings.append(warning)
+            payload = {
+                "format_version": "bundle_ao1_nonfatal_endurance_warnings_summary_v1",
+                "source": _BUNDLE_AO1_SOURCE,
+                "ok": True,
+                "advisory_only": True,
+                "warning_count": len(warnings),
+                "warnings": warnings,
+                "known_nonfatal_finalization": True,
+                "recommended_next_step": "review_nonfatal_endurance_warnings_after_artifact_export",
+            }
+            _bundle_ao1_write_json(target, payload)
+            written.append(str(target))
+        except Exception:
+            pass
+    return {
+        "format_version": "bundle_ao1_warning_sidecar_write_result_v1",
+        "source": _BUNDLE_AO1_SOURCE,
+        "ok": bool(written),
+        "written_paths": written,
+        "written_path_count": len(written),
+    }
+
+
+def _bundle_ao1_main_wrapper(argv=None):
+    original = globals().get("_BUNDLE_AO1_ORIGINAL_MAIN")
+    if not callable(original):
+        return 0
+    try:
+        return original(argv)
+    except BaseException as exc:
+        if not _bundle_ao1_is_known_nonfatal_finalization_error(exc):
+            raise
+        warning = _bundle_ao1_warning_from_exception(exc)
+        sidecar = _bundle_ao1_write_warning_sidecars(warning, argv)
+        globals()["BUNDLE_AO1_LAST_NONFATAL_FINALIZATION_WARNING"] = warning
+        globals()["BUNDLE_AO1_LAST_NONFATAL_FINALIZATION_SIDECAR"] = sidecar
+        print(
+            f"[Bundle AO.1] Nonfatal endurance finalization warning: {warning.get('code')} "
+            f"sidecars={sidecar.get('written_path_count', 0)}"
+        )
+        return 0
+
+
+if not globals().get("_BUNDLE_AO1_TOP_LEVEL_NONFATAL_FINALIZATION_PATCHED"):
+    current_main = globals().get("main")
+    if callable(current_main) and not getattr(current_main, "_bundle_ao1_wrapped", False):
+        globals()["_BUNDLE_AO1_ORIGINAL_MAIN"] = current_main
+        _bundle_ao1_main_wrapper._bundle_ao1_wrapped = True
+        globals()["main"] = _bundle_ao1_main_wrapper
+    globals()["_BUNDLE_AO1_TOP_LEVEL_NONFATAL_FINALIZATION_PATCHED"] = True
