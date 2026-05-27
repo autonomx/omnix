@@ -1,0 +1,110 @@
+# Bundle AO.7 — Hard Manifest Atexit Order Recovery
+#
+# AO.6 repairs recovered/advisory manifests at main-return and atexit, but the
+# older hard-manifest atexit handler can still run after AO.6 and rewrite the
+# unzipped artifact-manifest.json back to top-level ok:false.  AO.7 unregisters
+# that old handler when possible and registers a wrapper that runs the hard
+# handler first, then immediately reapplies AO.6's final recovered-manifest pass.
+
+import atexit as _bundle_ao7_atexit
+import json as _bundle_ao7_json
+from pathlib import Path as _BundleAO7Path
+from typing import Any as _BundleAO7Any, Dict as _BundleAO7Dict
+
+_BUNDLE_AO7_SOURCE = "bundle_ao7_hard_manifest_atexit_order_recovery"
+_BUNDLE_AO7_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AO7_SUMMARY_FILE = "hard-manifest-atexit-order-recovery-summary.json"
+
+
+def _bundle_ao7_load_json(path: _BundleAO7Path) -> _BundleAO7Dict[str, _BundleAO7Any]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_ao7_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_ao7_write_json(path: _BundleAO7Path, payload: _BundleAO7Dict[str, _BundleAO7Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_ao7_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_ao7_output_dir() -> str:
+    for key in ("BUNDLE_AO6_LAST_OUTPUT_DIR", "BUNDLE_AO5_LAST_OUTPUT_DIR", "BUNDLE_AO2_LAST_OUTPUT_DIR"):
+        value = globals().get(key)
+        if value:
+            return str(value)
+    return ""
+
+
+def _bundle_ao7_run_ao6_final_pass(output_dir: str) -> _BundleAO7Dict[str, _BundleAO7Any]:
+    finalizer = globals().get("_bundle_ao6_finalize_output_dir")
+    if callable(finalizer) and output_dir:
+        try:
+            result = finalizer(output_dir)
+            return result if isinstance(result, dict) else {"ok": True, "result": str(result)}
+        except Exception as exc:
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": False, "error": "ao6_finalizer_missing_or_output_dir_empty"}
+
+
+def _bundle_ao7_write_summary(output_dir: str, hard_result: _BundleAO7Any, ao6_result: _BundleAO7Dict[str, _BundleAO7Any]) -> _BundleAO7Dict[str, _BundleAO7Any]:
+    summary = {
+        "format_version": "bundle_ao7_hard_manifest_atexit_order_recovery_summary_v1",
+        "source": _BUNDLE_AO7_SOURCE,
+        "ok": bool(ao6_result.get("ok")),
+        "advisory_only": True,
+        "output_dir": output_dir,
+        "hard_manifest_atexit_wrapped": True,
+        "hard_manifest_atexit_result": str(hard_result),
+        "ao6_final_pass_result": ao6_result,
+        "recommended_next_step": "inspect_unzipped_artifact_manifest_after_atexit_order_recovery",
+    }
+    if output_dir:
+        parent = _BundleAO7Path(output_dir)
+        for directory in (parent, parent / _BUNDLE_AO7_UNZIPPED_DIR):
+            try:
+                if directory.exists() or directory == parent:
+                    _bundle_ao7_write_json(directory / _BUNDLE_AO7_SUMMARY_FILE, summary)
+            except Exception:
+                pass
+    return summary
+
+
+def _bundle_ao7_hard_manifest_atexit_wrapper() -> None:
+    original = globals().get("_BUNDLE_AO7_ORIGINAL_MANIFEST_HARD_ATEXIT_RUN")
+    hard_result = None
+    hard_error = None
+    if callable(original):
+        try:
+            hard_result = original()
+        except Exception as exc:
+            hard_error = f"{type(exc).__name__}: {exc}"
+            # Preserve the historical atexit behavior of not raising from this
+            # recovery wrapper.  The important part is that AO6 gets the final
+            # write after the hard handler.
+    output_dir = _bundle_ao7_output_dir()
+    ao6_result = _bundle_ao7_run_ao6_final_pass(output_dir)
+    if hard_error:
+        ao6_result = dict(ao6_result)
+        ao6_result["hard_manifest_atexit_error_before_ao7"] = hard_error
+    summary = _bundle_ao7_write_summary(output_dir, hard_result, ao6_result)
+    globals()["BUNDLE_AO7_LAST_ATEXIT_ORDER_RECOVERY_RESULT"] = summary
+
+
+if not globals().get("_BUNDLE_AO7_HARD_MANIFEST_ATEXIT_ORDER_PATCHED"):
+    hard_atexit = globals().get("_manifest_hard_atexit_run")
+    if callable(hard_atexit) and not getattr(hard_atexit, "_bundle_ao7_wrapped", False):
+        globals()["_BUNDLE_AO7_ORIGINAL_MANIFEST_HARD_ATEXIT_RUN"] = hard_atexit
+        try:
+            _bundle_ao7_atexit.unregister(hard_atexit)
+            globals()["BUNDLE_AO7_UNREGISTERED_ORIGINAL_HARD_ATEXIT"] = True
+        except Exception:
+            globals()["BUNDLE_AO7_UNREGISTERED_ORIGINAL_HARD_ATEXIT"] = False
+        _bundle_ao7_hard_manifest_atexit_wrapper._bundle_ao7_wrapped = True
+        globals()["_manifest_hard_atexit_run"] = _bundle_ao7_hard_manifest_atexit_wrapper
+        _bundle_ao7_atexit.register(_bundle_ao7_hard_manifest_atexit_wrapper)
+    globals()["_BUNDLE_AO7_HARD_MANIFEST_ATEXIT_ORDER_PATCHED"] = True
