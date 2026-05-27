@@ -1,0 +1,49 @@
+# Bundle AR.4z — Numeric Priority Compatibility
+#
+# strategy_profiles.rerank_suggested_actions_for_strategy casts action["priority"]
+# to int.  AR.3/AR.4 originally used descriptive strings in priority metadata,
+# which can crash before turn 1 completes.  Keep priority numeric and move the
+# descriptive reason into a separate field.
+
+_BUNDLE_AR4Z_SOURCE = "bundle_ar4z_numeric_priority_compat"
+_BUNDLE_AR4Z_SURVIVAL_PRIORITY = 100000
+
+
+def _bundle_ar4z_category(action: str) -> str:
+    category_fn = globals().get("_bundle_ar4_category") or globals().get("_bundle_ar3_category")
+    if callable(category_fn):
+        try:
+            return str(category_fn(action) or "survival")
+        except Exception:
+            return "survival"
+    return "survival"
+
+
+def _bundle_ar3_action_entry(action: str, reason: str = "missing_survival_evidence_quota"):
+    return {
+        "action": action,
+        "label": action,
+        "text": action,
+        "source": globals().get("_BUNDLE_AR3_SOURCE", _BUNDLE_AR4Z_SOURCE),
+        "category": _bundle_ar4z_category(action),
+        "priority": _BUNDLE_AR4Z_SURVIVAL_PRIORITY,
+        "priority_reason": "forced_until_survival_exit_criteria_has_real_evidence",
+        "reason": reason,
+        "deterministic_authority": "simulation_must_validate_consumption_or_rest_effects",
+    }
+
+
+def _bundle_ar4_action_entry(action: str):
+    return {
+        "action": action,
+        "label": action,
+        "text": action,
+        "source": globals().get("_BUNDLE_AR4_SOURCE", _BUNDLE_AR4Z_SOURCE),
+        "category": _bundle_ar4z_category(action),
+        "priority": _BUNDLE_AR4Z_SURVIVAL_PRIORITY,
+        "priority_reason": "runtime_selected_until_survival_exit_criteria_has_real_evidence",
+        "deterministic_authority": "simulation_must_validate_consumption_or_rest_effects",
+    }
+
+
+globals()["BUNDLE_AR4Z_NUMERIC_PRIORITY_COMPAT_PATCHED"] = True
