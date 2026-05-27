@@ -4,12 +4,24 @@ import argparse
 import json
 from pathlib import Path
 
+import pytest
+
+
+_ORIGINAL_PATH_WRITE_TEXT = Path.write_text
 
 _FRAGMENT = (
     Path(__file__).resolve().parent
     / "autoplay_llm_campaign_parts"
     / "zzzzzzzzzzzzzzzzzzzzzzzzzz_bundle_ar_survival_autoplay_evidence.pyfrag"
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_bundle_ar_path_write_text():
+    """Keep AR's global Path.write_text hook from leaking into AP/AQ tests."""
+    Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
+    yield
+    Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
 
 
 def _load_bundle_ar_namespace(extra_globals=None):
