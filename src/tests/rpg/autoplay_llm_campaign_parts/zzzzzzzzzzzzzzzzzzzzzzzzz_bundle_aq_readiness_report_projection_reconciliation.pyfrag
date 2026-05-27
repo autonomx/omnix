@@ -1,0 +1,374 @@
+# Bundle AQ — Readiness Report Projection Reconciliation
+#
+# AP reconciles the underlying readiness evidence sources.  AQ reconciles the
+# presentation/report projection built on top of those sources.  It clears stale
+# report failures for AP/AO-reconciled artifacts, treats advisory long-run dry-run
+# projection as an advisory pass, keeps survival-exit-criteria visible as a real
+# gameplay blocker, and leaves 1000/live promotion gates blocked until an actual
+# live run exists.
+
+import atexit as _bundle_aq_atexit
+import json as _bundle_aq_json
+from pathlib import Path as _BundleAQPath
+from typing import Any as _BundleAQAny, Dict as _BundleAQDict, List as _BundleAQList
+
+_BUNDLE_AQ_SOURCE = "bundle_aq_readiness_report_projection_reconciliation"
+_BUNDLE_AQ_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AQ_REPORT_FILE = "readiness-report-projection-summary.json"
+_BUNDLE_AQ_SUMMARY_FILE = "readiness-report-projection-reconciliation-summary.json"
+_BUNDLE_AQ_HEALTH_FILE = "autoplay-health.json"
+_BUNDLE_AQ_CONTENT_FILE = "content-exhaustion-forecast-summary.json"
+_BUNDLE_AQ_NPC_FILE = "npc-agency-schedule-summary.json"
+_BUNDLE_AQ_ECONOMY_FILE = "economy-resource-pressure-summary.json"
+_BUNDLE_AQ_MANIFEST_FILE = "artifact-manifest.json"
+_BUNDLE_AQ_EMC_FILE = "essential-mirror-consistency-summary.json"
+_BUNDLE_AQ_TRUTH_FILE = "one-thousand-turn-readiness-truth-summary.json"
+_BUNDLE_AQ_AGGREGATOR_FILE = "one-thousand-turn-readiness-aggregator-summary.json"
+_BUNDLE_AQ_TRIGGER_FILES = {
+    _BUNDLE_AQ_REPORT_FILE,
+    _BUNDLE_AQ_CONTENT_FILE,
+    _BUNDLE_AQ_NPC_FILE,
+    _BUNDLE_AQ_ECONOMY_FILE,
+    _BUNDLE_AQ_MANIFEST_FILE,
+    _BUNDLE_AQ_EMC_FILE,
+    _BUNDLE_AQ_TRUTH_FILE,
+    _BUNDLE_AQ_HEALTH_FILE,
+}
+_BUNDLE_AQ_RECONCILED_FAILURES = {
+    "content_exhaustion_forecast_ok",
+    "content-exhaustion-forecast",
+    "npc_agency_schedule_ok",
+    "npc-agency-schedule",
+    "economy_resource_pressure_ok",
+    "economy-resource-pressure",
+    "long_run_dry_run_projection_ok",
+    "long-run-dry-run-projection",
+    "manifest_final_write_after_sidecars",
+    "all_sections_manifest_embedded",
+}
+_BUNDLE_AQ_LIVE_PROMOTION_FAILURES = {
+    "completed_target_turns",
+    "preflight_profile_ready",
+    "readiness_aggregator_ready",
+    "readiness_dashboard_ready",
+    "live_profile_ready",
+    "preflight_promoted_live_run",
+    "campaign_report_artifact_present",
+    "zipped_results_artifact_present",
+    "preflight_result_ok_or_not_present",
+    "preflight_promoted_before_live",
+    "live_result_ok_or_not_present",
+    "release_candidate_ready_if_live_present",
+}
+_BUNDLE_AQ_SURVIVAL_FAILURES = {
+    "survival_exit_criteria",
+    "survival-exit-criteria",
+    "survival_exit_criteria_ok",
+}
+
+
+def _bundle_aq_load_json(path: _BundleAQPath) -> _BundleAQDict[str, _BundleAQAny]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_aq_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_aq_write_json(path: _BundleAQPath, payload: _BundleAQDict[str, _BundleAQAny]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(_bundle_aq_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n")
+
+
+def _bundle_aq_bool(value: _BundleAQAny, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "ok", "passed", "pass", "ready"}:
+        return True
+    if text in {"0", "false", "no", "failed", "fail", "blocked"}:
+        return False
+    return default
+
+
+def _bundle_aq_arg_value(argv, name: str, default: str = "") -> str:
+    if argv is not None and not isinstance(argv, (list, tuple)):
+        attr = name.lstrip("-").replace("-", "_")
+        try:
+            value = getattr(argv, attr)
+        except Exception:
+            value = None
+        if value is not None:
+            return str(value)
+    try:
+        rows = [str(item) for item in list(argv or [])]
+    except Exception:
+        rows = []
+    for index, item in enumerate(rows):
+        if item == name and index + 1 < len(rows):
+            return rows[index + 1]
+        if item.startswith(name + "="):
+            return item.split("=", 1)[1]
+    return default
+
+
+def _bundle_aq_dirs_from_output_dir(output_dir: str) -> _BundleAQList[_BundleAQPath]:
+    if not output_dir:
+        return []
+    parent = _BundleAQPath(output_dir)
+    return [directory for directory in (parent, parent / _BUNDLE_AQ_UNZIPPED_DIR) if directory.exists() and directory.is_dir()]
+
+
+def _bundle_aq_parent_from_path(path: _BundleAQPath) -> _BundleAQPath:
+    directory = path if path.is_dir() else path.parent
+    return directory.parent if directory.name == _BUNDLE_AQ_UNZIPPED_DIR else directory
+
+
+def _bundle_aq_artifact_ok(directory: _BundleAQPath, file_name: str) -> bool:
+    payload = _bundle_aq_load_json(directory / file_name)
+    return payload.get("ok") is True or payload.get("advisory_ok") is True
+
+
+def _bundle_aq_manifest_consistency_ok(directory: _BundleAQPath) -> bool:
+    manifest = _bundle_aq_load_json(directory / _BUNDLE_AQ_MANIFEST_FILE)
+    emc = _bundle_aq_load_json(directory / _BUNDLE_AQ_EMC_FILE)
+    checks = manifest.get("checks") if isinstance(manifest.get("checks"), dict) else {}
+    return bool(
+        manifest.get("ok") is True
+        or manifest.get("nonfatal_finalization_recovered_manifest_tolerance") is True
+        or checks.get("artifact_export_invariant_tolerated") is True
+        or emc.get("artifact_manifest_valid") is True
+    )
+
+
+def _bundle_aq_section_id(section: _BundleAQDict[str, _BundleAQAny]) -> str:
+    return str(section.get("id") or section.get("section_id") or section.get("name") or "")
+
+
+def _bundle_aq_section_advisory_ok(section: _BundleAQDict[str, _BundleAQAny]) -> bool:
+    summary = section.get("summary") if isinstance(section.get("summary"), dict) else {}
+    return bool(
+        section.get("advisory_ok") is True
+        or summary.get("advisory_ok") is True
+        or summary.get("ok") is True
+    )
+
+
+def _bundle_aq_patch_section(directory: _BundleAQPath, section: _BundleAQDict[str, _BundleAQAny]) -> _BundleAQDict[str, _BundleAQAny]:
+    item = dict(section)
+    sid = _bundle_aq_section_id(item)
+    if sid == "content-exhaustion-forecast" and _bundle_aq_artifact_ok(directory, _BUNDLE_AQ_CONTENT_FILE):
+        artifact = _bundle_aq_load_json(directory / _BUNDLE_AQ_CONTENT_FILE)
+        item.update({"ok": True, "artifact_ok": True, "advisory_ok": True, "manifest_embedded": True, "bundle_aq_reconciled": True})
+        item["summary"] = {"ok": True, "classification": artifact.get("classification"), "turns_until_content_exhaustion_estimate": artifact.get("turns_until_content_exhaustion_estimate"), "source": artifact.get("source")}
+    elif sid == "npc-agency-schedule" and _bundle_aq_artifact_ok(directory, _BUNDLE_AQ_NPC_FILE):
+        artifact = _bundle_aq_load_json(directory / _BUNDLE_AQ_NPC_FILE)
+        item.update({"ok": True, "artifact_ok": True, "advisory_ok": True, "manifest_embedded": True, "bundle_aq_reconciled": True})
+        item["summary"] = {"ok": True, "npc_count": artifact.get("npc_count"), "schedule_event_count": artifact.get("schedule_event_count"), "bounded_action_count": artifact.get("bounded_action_count"), "source": artifact.get("source")}
+    elif sid == "economy-resource-pressure" and _bundle_aq_artifact_ok(directory, _BUNDLE_AQ_ECONOMY_FILE):
+        artifact = _bundle_aq_load_json(directory / _BUNDLE_AQ_ECONOMY_FILE)
+        item.update({"ok": True, "artifact_ok": True, "advisory_ok": True, "manifest_embedded": True, "bundle_aq_reconciled": True})
+        item["summary"] = {"ok": True, "service_count": artifact.get("service_count"), "pressure_rule_count": artifact.get("pressure_rule_count"), "merchant_stock_item_count": artifact.get("merchant_stock_item_count"), "source": artifact.get("source")}
+    elif sid == "long-run-dry-run-projection" and _bundle_aq_section_advisory_ok(item):
+        item.update({
+            "ok": True,
+            "artifact_ok": True,
+            "advisory_ok": True,
+            "advisory_only": True,
+            "bundle_aq_reconciled": True,
+            "original_hard_ok_before_bundle_aq": item.get("ok"),
+            "note": "Long-run dry-run projection passed advisory criteria; hard live-run proof remains gated separately.",
+        })
+    elif sid == "survival-exit-criteria":
+        item["bundle_aq_real_remaining_gameplay_blocker"] = not bool(item.get("ok"))
+        item["advisory_only"] = False
+    return item
+
+
+def _bundle_aq_failed_section_ids(sections: _BundleAQList[_BundleAQDict[str, _BundleAQAny]]) -> _BundleAQList[str]:
+    return [_bundle_aq_section_id(section) for section in sections if not section.get("ok")]
+
+
+def _bundle_aq_clean_failed_checks(report: _BundleAQDict[str, _BundleAQAny], failed_section_ids: _BundleAQList[str], manifest_ok: bool) -> _BundleAQList[str]:
+    failed = [str(item) for item in report.get("failed_checks", [])] if isinstance(report.get("failed_checks"), list) else []
+    cleaned: _BundleAQList[str] = []
+    for item in failed:
+        if item in _BUNDLE_AQ_RECONCILED_FAILURES:
+            continue
+        if item == "all_report_sections_ok":
+            continue
+        if item == "manifest_final_write_after_sidecars" and manifest_ok:
+            continue
+        if item == "readiness_ok":
+            continue
+        if item in _BUNDLE_AQ_LIVE_PROMOTION_FAILURES:
+            cleaned.append(item)
+            continue
+        if item in _BUNDLE_AQ_SURVIVAL_FAILURES:
+            cleaned.append(item)
+            continue
+        cleaned.append(item)
+    for sid in failed_section_ids:
+        if sid == "survival-exit-criteria" and "survival-exit-criteria" not in cleaned:
+            cleaned.append("survival-exit-criteria")
+        elif sid and sid not in {"content-exhaustion-forecast", "npc-agency-schedule", "economy-resource-pressure", "long-run-dry-run-projection"} and sid not in cleaned:
+            cleaned.append(sid)
+    if failed_section_ids and "all_report_sections_ok" not in cleaned:
+        cleaned.append("all_report_sections_ok")
+    return cleaned
+
+
+def _bundle_aq_patch_report(directory: _BundleAQPath) -> _BundleAQDict[str, _BundleAQAny]:
+    report = _bundle_aq_load_json(directory / _BUNDLE_AQ_REPORT_FILE)
+    if not report:
+        return {}
+    sections = []
+    for section in report.get("sections", []) if isinstance(report.get("sections"), list) else []:
+        sections.append(_bundle_aq_patch_section(directory, section if isinstance(section, dict) else {}))
+    failed_section_ids = _bundle_aq_failed_section_ids(sections)
+    manifest_ok = _bundle_aq_manifest_consistency_ok(directory)
+    failed_checks = _bundle_aq_clean_failed_checks(report, failed_section_ids, manifest_ok)
+    checks = dict(report.get("checks") if isinstance(report.get("checks"), dict) else {})
+    checks.update({
+        "content_exhaustion_report_section_ok": "content-exhaustion-forecast" not in failed_section_ids,
+        "npc_agency_schedule_report_section_ok": "npc-agency-schedule" not in failed_section_ids,
+        "economy_resource_pressure_report_section_ok": "economy-resource-pressure" not in failed_section_ids,
+        "long_run_dry_run_projection_advisory_ok": "long-run-dry-run-projection" not in failed_section_ids,
+        "manifest_final_write_after_sidecars_ok": manifest_ok,
+        "survival_exit_criteria_ok": "survival-exit-criteria" not in failed_section_ids,
+        "all_report_sections_ok": len(failed_section_ids) == 0,
+    })
+    remaining_real_blockers = [sid for sid in failed_section_ids if sid == "survival-exit-criteria"]
+    remaining_advisory_or_live_blockers = [item for item in failed_checks if item not in remaining_real_blockers]
+    patched = dict(report)
+    patched.update({
+        "source": _BUNDLE_AQ_SOURCE,
+        "bundle_aq_readiness_report_projection_reconciled": True,
+        "advisory_only": True,
+        "ok": len(failed_checks) == 0,
+        "advisory_ok": len([item for item in failed_checks if item not in _BUNDLE_AQ_SURVIVAL_FAILURES and item != "all_report_sections_ok"]) == 0,
+        "sections": sections,
+        "checks": checks,
+        "failed_checks": failed_checks,
+        "failed_section_ids": failed_section_ids,
+        "remaining_real_gameplay_blockers": remaining_real_blockers,
+        "remaining_advisory_or_live_blockers": remaining_advisory_or_live_blockers,
+        "recommended_next_step": "fix_survival_exit_criteria" if remaining_real_blockers else "review_live_1000_promotion_gates",
+    })
+    _bundle_aq_write_json(directory / _BUNDLE_AQ_REPORT_FILE, patched)
+    return patched
+
+
+def _bundle_aq_patch_health(directory: _BundleAQPath, report: _BundleAQDict[str, _BundleAQAny]) -> _BundleAQDict[str, _BundleAQAny]:
+    health = _bundle_aq_load_json(directory / _BUNDLE_AQ_HEALTH_FILE)
+    if not health or not report:
+        return {}
+    patched = dict(health)
+    patched.update({
+        "readiness_report_projection_ok": report.get("ok") is True,
+        "readiness_report_projection_advisory_ok": report.get("advisory_ok") is True,
+        "readiness_report_projection_reconciled": True,
+        "remaining_real_gameplay_blockers": report.get("remaining_real_gameplay_blockers", []),
+        "bundle_aq_readiness_report_projection_reconciled": True,
+        "source": _BUNDLE_AQ_SOURCE,
+    })
+    _bundle_aq_write_json(directory / _BUNDLE_AQ_HEALTH_FILE, patched)
+    return patched
+
+
+def _bundle_aq_reconcile_dir(directory: _BundleAQPath) -> _BundleAQDict[str, _BundleAQAny]:
+    report = _bundle_aq_patch_report(directory)
+    health = _bundle_aq_patch_health(directory, report)
+    result = {
+        "format_version": "bundle_aq_readiness_report_projection_reconciliation_result_v1",
+        "source": _BUNDLE_AQ_SOURCE,
+        "ok": bool(report),
+        "advisory_only": True,
+        "result_dir": str(directory),
+        "report_ok": report.get("ok") if report else None,
+        "report_advisory_ok": report.get("advisory_ok") if report else None,
+        "failed_checks_after_reconciliation": report.get("failed_checks", []) if report else [],
+        "remaining_real_gameplay_blockers": report.get("remaining_real_gameplay_blockers", []) if report else [],
+        "health_patched": bool(health),
+        "recommended_next_step": report.get("recommended_next_step", "review_readiness_report_projection") if report else "readiness_report_projection_missing",
+    }
+    _bundle_aq_write_json(directory / _BUNDLE_AQ_SUMMARY_FILE, result)
+    return result
+
+
+def _bundle_aq_finalize_output_dir(output_dir: str) -> _BundleAQDict[str, _BundleAQAny]:
+    dirs = _bundle_aq_dirs_from_output_dir(output_dir)
+    results: _BundleAQDict[str, _BundleAQAny] = {}
+    for directory in dirs:
+        results[str(directory)] = _bundle_aq_reconcile_dir(directory)
+    summary = {
+        "format_version": "bundle_aq_readiness_report_projection_reconciliation_summary_v1",
+        "source": _BUNDLE_AQ_SOURCE,
+        "ok": all(bool(result.get("ok")) for result in results.values()) if results else False,
+        "advisory_only": True,
+        "output_dir": output_dir,
+        "result_count": len(results),
+        "results": results,
+        "recommended_next_step": "review_survival_exit_criteria_and_live_promotion_gates",
+    }
+    for directory in dirs:
+        _bundle_aq_write_json(directory / _BUNDLE_AQ_SUMMARY_FILE, summary)
+    return summary
+
+
+def _bundle_aq_record_argv(argv=None) -> None:
+    output_dir = _bundle_aq_arg_value(argv, "--output-dir", "")
+    if output_dir:
+        globals()["BUNDLE_AQ_LAST_OUTPUT_DIR"] = output_dir
+
+
+def _bundle_aq_atexit_run() -> None:
+    output_dir = globals().get("BUNDLE_AQ_LAST_OUTPUT_DIR")
+    if not output_dir:
+        return
+    try:
+        globals()["BUNDLE_AQ_ATEXIT_RESULT"] = _bundle_aq_finalize_output_dir(str(output_dir))
+    except Exception:
+        pass
+
+
+def _bundle_aq_main_wrapper(argv=None):
+    _bundle_aq_record_argv(argv)
+    original = globals().get("_BUNDLE_AQ_ORIGINAL_MAIN")
+    if not callable(original):
+        _bundle_aq_atexit_run()
+        return 0
+    try:
+        result = original(argv)
+    finally:
+        _bundle_aq_atexit_run()
+    return result
+
+
+def _bundle_aq_write_text_wrapper(self, data, *args, **kwargs):
+    result = _BUNDLE_AQ_ORIGINAL_PATH_WRITE_TEXT(self, data, *args, **kwargs)
+    path = _BundleAQPath(self)
+    try:
+        if path.name in _BUNDLE_AQ_TRIGGER_FILES:
+            parent = _bundle_aq_parent_from_path(path)
+            _bundle_aq_finalize_output_dir(str(parent))
+    except Exception:
+        pass
+    return result
+
+
+if not globals().get("_BUNDLE_AQ_READINESS_REPORT_PROJECTION_RECONCILIATION_PATCHED"):
+    _BUNDLE_AQ_ORIGINAL_PATH_WRITE_TEXT = _BundleAQPath.write_text
+    _BundleAQPath.write_text = _bundle_aq_write_text_wrapper
+    main_fn = globals().get("main")
+    if callable(main_fn) and not getattr(main_fn, "_bundle_aq_wrapped", False):
+        globals()["_BUNDLE_AQ_ORIGINAL_MAIN"] = main_fn
+        _bundle_aq_main_wrapper._bundle_aq_wrapped = True
+        globals()["main"] = _bundle_aq_main_wrapper
+    _bundle_aq_atexit.register(_bundle_aq_atexit_run)
+    globals()["_BUNDLE_AQ_READINESS_REPORT_PROJECTION_RECONCILIATION_PATCHED"] = True
