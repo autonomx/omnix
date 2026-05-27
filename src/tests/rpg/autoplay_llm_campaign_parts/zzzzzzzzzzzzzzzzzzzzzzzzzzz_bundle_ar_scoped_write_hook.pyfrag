@@ -1,0 +1,31 @@
+# Bundle AR.1 — Scoped Survival Write Hook
+#
+# AR's first pass intentionally kept survival evidence honest, but its broad
+# Path.write_text trigger finalized the whole output directory on many ordinary
+# JSON writes.  In a rich/reused 250-turn output directory that creates long
+# pre-turn stalls.  Keep the cheap survival action injection, and leave the
+# expensive directory-wide survival evidence reconciliation to AR's main/atexit
+# finalizer.
+
+from pathlib import Path as _BundleARScopedPath
+
+
+def _bundle_ar_scoped_write_text_wrapper(self, data, *args, **kwargs):
+    path = _BundleARScopedPath(self)
+    text = data
+    try:
+        if isinstance(data, str) and path.suffix.lower() == ".json" and _bundle_ar_relevant_action_payload_name(path):
+            payload = _bundle_ar_json.loads(data)
+            patched = _bundle_ar_patch_advisory_payload(payload)
+            if patched is not payload and patched != payload:
+                text = _bundle_ar_json.dumps(patched, indent=2, sort_keys=True, default=str) + "\n"
+    except Exception:
+        text = data
+    return _BUNDLE_AR_SCOPED_ORIGINAL_PATH_WRITE_TEXT(self, text, *args, **kwargs)
+
+
+if globals().get("_BUNDLE_AR_SURVIVAL_AUTOPLAY_EVIDENCE_PATCHED") and not globals().get("_BUNDLE_AR_SCOPED_WRITE_HOOK_PATCHED"):
+    _BUNDLE_AR_SCOPED_ORIGINAL_PATH_WRITE_TEXT = globals().get("_BUNDLE_AR_ORIGINAL_PATH_WRITE_TEXT", _BundleARScopedPath.write_text)
+    _BundleARScopedPath.write_text = _bundle_ar_scoped_write_text_wrapper
+    globals()["_BUNDLE_AR_SCOPED_WRITE_HOOK_PATCHED"] = True
+    globals()["BUNDLE_AR_WRITE_FINALIZE_MODE"] = "main_and_atexit_only"
