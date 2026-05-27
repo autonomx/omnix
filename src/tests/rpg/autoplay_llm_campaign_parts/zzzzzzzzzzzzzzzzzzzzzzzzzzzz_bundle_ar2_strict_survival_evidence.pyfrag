@@ -1,0 +1,341 @@
+# Bundle AR.2 — Strict Survival Evidence + Parent/Unzipped Mirror
+#
+# AR must not pass survival readiness by treating graph/location text as rest or
+# buying supplies as consumption.  This follow-up restricts evidence to concrete
+# player-action fields (plus console PLAYER lines), separates purchase from
+# consumption, and mirrors the best strict evidence across parent/unzipped output
+# directories so both summaries agree.
+
+import re as _bundle_ar2_re
+from pathlib import Path as _BundleAR2Path
+from typing import Any as _BundleAR2Any, Dict as _BundleAR2Dict, List as _BundleAR2List
+
+_BUNDLE_AR2_SOURCE = "bundle_ar2_strict_survival_evidence"
+_BUNDLE_AR2_PLAYER_ACTION_FIELDS = (
+    "player_action",
+    "player_input",
+    "chosen_action",
+    "raw_action",
+    "command",
+    "player_command",
+    "selected_action",
+    "action_text",
+)
+_BUNDLE_AR2_EXCLUDED_EVIDENCE_NAME_PARTS = (
+    "progression-graph",
+    "npc-agency",
+    "economy-resource",
+    "content-exhaustion",
+    "content-depth",
+    "readiness-report",
+    "readiness-evidence",
+    "artifact-manifest",
+    "manifest",
+    "mirror-consistency",
+    "sidecar-reconciliation",
+    "materialization-truth",
+    "release-candidate",
+    "travel-location-graph",
+    "memory-state-compression",
+    "survival-autoplay-evidence",
+    "autoplay-health",
+)
+_BUNDLE_AR2_JSON_EVIDENCE_NAME_PARTS = (
+    "transcript",
+    "campaign-report",
+    "hundred-turn-evaluation",
+    "summary",
+    "timeline",
+    "journal",
+)
+_BUNDLE_AR2_TEXT_EVIDENCE_NAMES = {"console-log.txt"}
+_BUNDLE_AR2_PATTERNS = {
+    "drink_water": _bundle_ar2_re.compile(r"\b(drink|sip|consume|use)\b[^\n\r]{0,60}\b(water|canteen|waterskin|flask)\b", _bundle_ar2_re.I),
+    "eat_food": _bundle_ar2_re.compile(r"\b(eat|consume|use)\b[^\n\r]{0,60}\b(food|ration|rations|meal|bread|stew|provisions)\b", _bundle_ar2_re.I),
+    "rest": _bundle_ar2_re.compile(r"\b(rest|sleep|take a nap|bed down|stay the night|rent a room|use (?:the )?room|make camp|set up camp|camp for the night)\b", _bundle_ar2_re.I),
+    "buy_water": _bundle_ar2_re.compile(r"\bbuy\b[^\n\r]{0,60}\b(water|canteen|waterskin|flask)\b", _bundle_ar2_re.I),
+    "buy_food": _bundle_ar2_re.compile(r"\bbuy\b[^\n\r]{0,60}\b(food|ration|rations|meal|provisions)\b", _bundle_ar2_re.I),
+}
+
+
+def _bundle_ar2_action_category(text: str) -> str:
+    value = str(text or "")
+    if _BUNDLE_AR2_PATTERNS["drink_water"].search(value):
+        return "drink_water"
+    if _BUNDLE_AR2_PATTERNS["eat_food"].search(value):
+        return "eat_food"
+    if _BUNDLE_AR2_PATTERNS["rest"].search(value):
+        return "rest"
+    if _BUNDLE_AR2_PATTERNS["buy_water"].search(value):
+        return "buy_water"
+    if _BUNDLE_AR2_PATTERNS["buy_food"].search(value):
+        return "buy_food"
+    return ""
+
+
+def _bundle_ar2_relevant_evidence_name(path: _BundleAR2Path) -> bool:
+    name = path.name.lower()
+    if name in {_BUNDLE_AR_SUMMARY_FILE, _BUNDLE_AR_REPORT_FILE, "artifact-manifest.json"}:
+        return False
+    if any(part in name for part in _BUNDLE_AR2_EXCLUDED_EVIDENCE_NAME_PARTS):
+        return False
+    return any(part in name for part in _BUNDLE_AR2_JSON_EVIDENCE_NAME_PARTS)
+
+
+def _bundle_ar2_counts() -> _BundleAR2Dict[str, int]:
+    return {"drink_water_count": 0, "eat_food_count": 0, "rest_count": 0, "buy_water_count": 0, "buy_food_count": 0}
+
+
+def _bundle_ar2_text_from_node(node: _BundleAR2Any) -> str:
+    if isinstance(node, dict):
+        parts: _BundleAR2List[str] = []
+        for key in _BUNDLE_AR2_PLAYER_ACTION_FIELDS:
+            value = node.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(value.strip())
+        return " | ".join(parts)
+    return ""
+
+
+def _bundle_ar2_scan_payload_for_evidence(payload: _BundleAR2Any, source_file: str) -> _BundleAR2Dict[str, _BundleAR2Any]:
+    counts = _bundle_ar2_counts()
+    evidence: _BundleAR2List[_BundleAR2Dict[str, _BundleAR2Any]] = []
+    metric_sources: _BundleAR2List[str] = []
+    thirst_attention = False
+    for node in _bundle_ar_walk(payload, max_depth=8):
+        if isinstance(node, dict):
+            source = str(node.get("source") or "")
+            # Trust older runtime-side N128 counts, but never re-trust AR's loose
+            # parent summary counts from the first implementation.
+            if source != _BUNDLE_AR_SOURCE:
+                for key in counts:
+                    if key in node:
+                        counts[key] = max(counts[key], _bundle_ar_int(node.get(key), 0))
+                        metric_sources.append(source_file)
+            checks = node.get("checks") if isinstance(node.get("checks"), dict) else {}
+            if checks.get("thirst_balance_attention_ok") is True or node.get("thirst_balance_attention"):
+                thirst_attention = True
+        text = _bundle_ar2_text_from_node(node)
+        if not text:
+            continue
+        category = _bundle_ar2_action_category(text)
+        if not category:
+            continue
+        key = {
+            "drink_water": "drink_water_count",
+            "eat_food": "eat_food_count",
+            "rest": "rest_count",
+            "buy_water": "buy_water_count",
+            "buy_food": "buy_food_count",
+        }.get(category)
+        if key:
+            counts[key] += 1
+        if category in {"drink_water", "buy_water"}:
+            thirst_attention = True
+        if len(evidence) < 25:
+            evidence.append({"category": category, "source_file": source_file, "text": text[:240]})
+            metric_sources.append(source_file)
+    return {"counts": counts, "evidence": evidence, "metric_sources": sorted(set(metric_sources)), "thirst_balance_attention": thirst_attention}
+
+
+def _bundle_ar2_scan_console_for_evidence(path: _BundleAR2Path) -> _BundleAR2Dict[str, _BundleAR2Any]:
+    counts = _bundle_ar2_counts()
+    evidence: _BundleAR2List[_BundleAR2Dict[str, _BundleAR2Any]] = []
+    metric_sources: _BundleAR2List[str] = []
+    thirst_attention = False
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if " PLAYER: " not in line:
+                continue
+            text = line.split(" PLAYER: ", 1)[1].strip()
+            category = _bundle_ar2_action_category(text)
+            if not category:
+                continue
+            key = {
+                "drink_water": "drink_water_count",
+                "eat_food": "eat_food_count",
+                "rest": "rest_count",
+                "buy_water": "buy_water_count",
+                "buy_food": "buy_food_count",
+            }.get(category)
+            if key:
+                counts[key] += 1
+            if category in {"drink_water", "buy_water"}:
+                thirst_attention = True
+            if len(evidence) < 25:
+                evidence.append({"category": category, "source_file": path.name, "text": text[:240]})
+                metric_sources.append(path.name)
+    except Exception:
+        pass
+    return {"counts": counts, "evidence": evidence, "metric_sources": sorted(set(metric_sources)), "thirst_balance_attention": thirst_attention}
+
+
+def _bundle_ar2_merge_evidence(accumulator: _BundleAR2Dict[str, _BundleAR2Any], addition: _BundleAR2Dict[str, _BundleAR2Any]) -> None:
+    counts = accumulator.setdefault("counts", _bundle_ar2_counts())
+    for key, value in (addition.get("counts") or {}).items():
+        counts[key] = counts.get(key, 0) + _bundle_ar_int(value, 0)
+    accumulator.setdefault("evidence", [])
+    accumulator["evidence"].extend((addition.get("evidence") or [])[: max(0, 25 - len(accumulator["evidence"]))])
+    sources = set(accumulator.get("metric_sources") or [])
+    sources.update(addition.get("metric_sources") or [])
+    accumulator["metric_sources"] = sorted(sources)
+    accumulator["thirst_balance_attention"] = bool(accumulator.get("thirst_balance_attention") or addition.get("thirst_balance_attention"))
+
+
+def _bundle_ar2_collect_survival_evidence(directory: _BundleAR2Path) -> _BundleAR2Dict[str, _BundleAR2Any]:
+    accumulator: _BundleAR2Dict[str, _BundleAR2Any] = {
+        "counts": _bundle_ar2_counts(),
+        "evidence": [],
+        "metric_sources": [],
+        "thirst_balance_attention": False,
+    }
+    if not directory.exists() or not directory.is_dir():
+        return accumulator
+    try:
+        paths = [path for path in directory.rglob("*") if path.is_file()]
+    except Exception:
+        paths = []
+    for path in paths:
+        name = path.name.lower()
+        if name in _BUNDLE_AR2_TEXT_EVIDENCE_NAMES:
+            _bundle_ar2_merge_evidence(accumulator, _bundle_ar2_scan_console_for_evidence(path))
+            continue
+        if path.suffix.lower() != ".json" or not _bundle_ar2_relevant_evidence_name(path):
+            continue
+        try:
+            if path.stat().st_size > 4 * 1024 * 1024:
+                continue
+            payload = _bundle_ar_json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        _bundle_ar2_merge_evidence(accumulator, _bundle_ar2_scan_payload_for_evidence(payload, path.name))
+    return accumulator
+
+
+def _bundle_ar2_combined_evidence(dirs: _BundleAR2List[_BundleAR2Path]) -> _BundleAR2Dict[str, _BundleAR2Any]:
+    combined: _BundleAR2Dict[str, _BundleAR2Any] = {
+        "counts": _bundle_ar2_counts(),
+        "evidence": [],
+        "metric_sources": [],
+        "thirst_balance_attention": False,
+    }
+    for directory in dirs:
+        _bundle_ar2_merge_evidence(combined, _bundle_ar2_collect_survival_evidence(directory))
+    return combined
+
+
+def _bundle_ar2_patch_survival_summary(directory: _BundleAR2Path, collected: _BundleAR2Dict[str, _BundleAR2Any]) -> _BundleAR2Dict[str, _BundleAR2Any]:
+    original = _bundle_ar_load_json(directory / _BUNDLE_AR_SUMMARY_FILE)
+    counts = dict(collected.get("counts") if isinstance(collected.get("counts"), dict) else _bundle_ar2_counts())
+    for key in ("drink_water_count", "eat_food_count", "rest_count", "buy_water_count", "buy_food_count"):
+        counts[key] = _bundle_ar_int(counts.get(key), 0)
+    drink_ok = counts.get("drink_water_count", 0) > 0
+    eat_ok = counts.get("eat_food_count", 0) > 0
+    rest_ok = counts.get("rest_count", 0) > 0
+    metric_source_ok = bool(collected.get("metric_sources"))
+    thirst_attention_ok = bool(collected.get("thirst_balance_attention") or drink_ok or counts.get("buy_water_count", 0) > 0)
+    survival_autoplay_evidence_ok = drink_ok and eat_ok and rest_ok
+    survival_response_ok = survival_autoplay_evidence_ok and thirst_attention_ok
+    checks = dict(original.get("checks") if isinstance(original.get("checks"), dict) else {})
+    checks.update({
+        "survival_autoplay_evidence_ok": survival_autoplay_evidence_ok,
+        "survival_response_ok": survival_response_ok,
+        "survival_metric_source_ok": metric_source_ok,
+        "drink_water_count_ok": drink_ok,
+        "eat_food_count_ok": eat_ok,
+        "rest_count_ok": rest_ok,
+        "thirst_balance_attention_ok": thirst_attention_ok,
+    })
+    failed = [key for key, ok in checks.items() if key in _BUNDLE_AR_SURVIVAL_FAILURES and ok is not True]
+    ok = survival_autoplay_evidence_ok and survival_response_ok and metric_source_ok and thirst_attention_ok
+    patched = dict(original or {})
+    patched.update({
+        "format_version": "bundle_ar2_strict_survival_exit_criteria_summary_v1",
+        "source": _BUNDLE_AR2_SOURCE,
+        "ok": ok,
+        "advisory_ok": ok,
+        "advisory_only": False,
+        "bundle_ar_survival_autoplay_evidence": True,
+        "bundle_ar2_strict_survival_evidence": True,
+        "drink_water_count": counts.get("drink_water_count", 0),
+        "eat_food_count": counts.get("eat_food_count", 0),
+        "rest_count": counts.get("rest_count", 0),
+        "buy_water_count": counts.get("buy_water_count", 0),
+        "buy_food_count": counts.get("buy_food_count", 0),
+        "survival_action_count": counts.get("drink_water_count", 0) + counts.get("eat_food_count", 0) + counts.get("rest_count", 0),
+        "thirst_balance_attention": thirst_attention_ok,
+        "metric_source_files": collected.get("metric_sources", []),
+        "evidence": collected.get("evidence", []),
+        "checks": checks,
+        "failed_checks": failed,
+        "recommended_next_step": "survival_exit_criteria_passed" if ok else "make_autoplay_perform_real_drink_eat_rest_turns",
+    })
+    _bundle_ar_write_json(directory / _BUNDLE_AR_SUMMARY_FILE, patched)
+    return patched
+
+
+def _bundle_ar2_reconcile_dir(directory: _BundleAR2Path, collected: _BundleAR2Dict[str, _BundleAR2Any]) -> _BundleAR2Dict[str, _BundleAR2Any]:
+    survival = _bundle_ar2_patch_survival_summary(directory, collected)
+    report = _bundle_ar_patch_report(directory, survival)
+    health = _bundle_ar_patch_health(directory, survival, report)
+    truth = _bundle_ar_patch_gate_file(directory, _BUNDLE_AR_TRUTH_FILE, survival)
+    aggregator = _bundle_ar_patch_gate_file(directory, _BUNDLE_AR_AGGREGATOR_FILE, survival)
+    result = {
+        "format_version": "bundle_ar2_strict_survival_evidence_result_v1",
+        "source": _BUNDLE_AR2_SOURCE,
+        "ok": survival.get("ok") is True,
+        "advisory_only": False,
+        "result_dir": str(directory),
+        "survival_exit_criteria_ok": survival.get("ok") is True,
+        "drink_water_count": survival.get("drink_water_count", 0),
+        "eat_food_count": survival.get("eat_food_count", 0),
+        "rest_count": survival.get("rest_count", 0),
+        "buy_water_count": survival.get("buy_water_count", 0),
+        "buy_food_count": survival.get("buy_food_count", 0),
+        "thirst_balance_attention": survival.get("thirst_balance_attention"),
+        "metric_source_files": survival.get("metric_source_files", []),
+        "readiness_report_patched": bool(report),
+        "health_patched": bool(health),
+        "truth_patched": bool(truth),
+        "aggregator_patched": bool(aggregator),
+        "recommended_next_step": "survival_exit_criteria_passed" if survival.get("ok") is True else "rerun_with_concrete_drink_eat_rest_turns",
+    }
+    _bundle_ar_write_json(directory / _BUNDLE_AR_RECONCILIATION_FILE, result)
+    return result
+
+
+def _bundle_ar2_finalize_output_dir(output_dir: str) -> _BundleAR2Dict[str, _BundleAR2Any]:
+    dirs = _bundle_ar_dirs_from_output_dir(output_dir)
+    collected = _bundle_ar2_combined_evidence(dirs)
+    results: _BundleAR2Dict[str, _BundleAR2Any] = {}
+    for directory in dirs:
+        results[str(directory)] = _bundle_ar2_reconcile_dir(directory, collected)
+    summary = {
+        "format_version": "bundle_ar2_strict_survival_evidence_summary_v1",
+        "source": _BUNDLE_AR2_SOURCE,
+        "ok": all(bool(item.get("ok")) for item in results.values()) if results else False,
+        "advisory_only": False,
+        "output_dir": output_dir,
+        "result_count": len(results),
+        "results": results,
+        "strict_evidence": {
+            "counts": collected.get("counts", {}),
+            "metric_source_files": collected.get("metric_sources", []),
+            "thirst_balance_attention": collected.get("thirst_balance_attention"),
+        },
+        "recommended_next_step": "proceed_to_bundle_as_inventory_integration" if results and all(bool(item.get("ok")) for item in results.values()) else "rerun_with_concrete_drink_eat_rest_turns",
+    }
+    for directory in dirs:
+        _bundle_ar_write_json(directory / _BUNDLE_AR_RECONCILIATION_FILE, summary)
+    return summary
+
+
+if not globals().get("_BUNDLE_AR2_STRICT_SURVIVAL_EVIDENCE_PATCHED"):
+    globals()["_bundle_ar_action_category"] = _bundle_ar2_action_category
+    globals()["_bundle_ar_relevant_evidence_name"] = _bundle_ar2_relevant_evidence_name
+    globals()["_bundle_ar_text_from_node"] = _bundle_ar2_text_from_node
+    globals()["_bundle_ar_scan_payload_for_evidence"] = _bundle_ar2_scan_payload_for_evidence
+    globals()["_bundle_ar_collect_survival_evidence"] = _bundle_ar2_collect_survival_evidence
+    globals()["_bundle_ar_patch_survival_summary"] = lambda directory: _bundle_ar2_patch_survival_summary(directory, _bundle_ar2_collect_survival_evidence(directory))
+    globals()["_bundle_ar_finalize_output_dir"] = _bundle_ar2_finalize_output_dir
+    globals()["_BUNDLE_AR2_STRICT_SURVIVAL_EVIDENCE_PATCHED"] = True
