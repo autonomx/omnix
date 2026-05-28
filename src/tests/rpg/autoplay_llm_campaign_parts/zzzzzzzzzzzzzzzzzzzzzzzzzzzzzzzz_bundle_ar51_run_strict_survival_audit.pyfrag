@@ -1,0 +1,71 @@
+# Bundle AR.5.1 — Run Strict Survival Audit At Exit
+#
+# AR.5 defines the strict real-action source audit, but the uploaded 250-run did
+# not contain survival-real-action-source-audit-summary.json.  AR.5.1 wires the
+# audit into main/atexit so parent and unzipped summaries are patched after the
+# run artifacts are written.
+
+import atexit as _bundle_ar51_atexit
+
+_BUNDLE_AR51_SOURCE = "bundle_ar51_run_strict_survival_audit_at_exit"
+
+
+def _bundle_ar51_arg_value(argv, name: str, default: str = "") -> str:
+    if argv is not None and not isinstance(argv, (list, tuple)):
+        attr = name.lstrip("-").replace("-", "_")
+        try:
+            value = getattr(argv, attr)
+        except Exception:
+            value = None
+        if value is not None:
+            return str(value)
+    try:
+        rows = [str(item) for item in list(argv or [])]
+    except Exception:
+        rows = []
+    for index, item in enumerate(rows):
+        if item == name and index + 1 < len(rows):
+            return rows[index + 1]
+        if item.startswith(name + "="):
+            return item.split("=", 1)[1]
+    return default
+
+
+def _bundle_ar51_record_argv(argv=None) -> None:
+    output_dir = _bundle_ar51_arg_value(argv, "--output-dir", "")
+    if output_dir:
+        globals()["BUNDLE_AR51_LAST_OUTPUT_DIR"] = output_dir
+
+
+def _bundle_ar51_run_audit() -> None:
+    output_dir = globals().get("BUNDLE_AR51_LAST_OUTPUT_DIR") or globals().get("BUNDLE_AR4_LAST_OUTPUT_DIR")
+    audit = globals().get("_bundle_ar5_finalize_output_dir")
+    if not output_dir or not callable(audit):
+        return
+    try:
+        globals()["BUNDLE_AR51_ATEXIT_RESULT"] = audit(str(output_dir))
+    except Exception as exc:
+        globals()["BUNDLE_AR51_ATEXIT_RESULT"] = {"ok": False, "source": _BUNDLE_AR51_SOURCE, "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _bundle_ar51_main_wrapper(argv=None):
+    _bundle_ar51_record_argv(argv)
+    original = globals().get("_BUNDLE_AR51_ORIGINAL_MAIN")
+    if not callable(original):
+        _bundle_ar51_run_audit()
+        return 0
+    try:
+        result = original(argv)
+    finally:
+        _bundle_ar51_run_audit()
+    return result
+
+
+if not globals().get("_BUNDLE_AR51_RUN_STRICT_SURVIVAL_AUDIT_PATCHED"):
+    main_fn = globals().get("main")
+    if callable(main_fn) and not getattr(main_fn, "_bundle_ar51_wrapped", False):
+        globals()["_BUNDLE_AR51_ORIGINAL_MAIN"] = main_fn
+        _bundle_ar51_main_wrapper._bundle_ar51_wrapped = True
+        globals()["main"] = _bundle_ar51_main_wrapper
+    _bundle_ar51_atexit.register(_bundle_ar51_run_audit)
+    globals()["_BUNDLE_AR51_RUN_STRICT_SURVIVAL_AUDIT_PATCHED"] = True
