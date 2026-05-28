@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "static"
-JS_HARNESS = ROOT / "tests" / "rpg" / "js" / "survival_inspector_smoke.js"
+JS_HARNESS = ROOT / "tests" / "rpg" / "js" / "survival_inspector_smoke.cjs"
 SURVIVAL_JS = STATIC / "rpg" / "rpg-survival-inspector.js"
 
 
