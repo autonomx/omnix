@@ -135,7 +135,7 @@ def _gate_row(turn, *, pressure, needs, action=None, blocked=False, tick_results
 
 def test_bundle_bq_report_metrics_emit_advisory_gates_for_runaway_survival() -> None:
     rows = []
-    for turn in range(1, 6):
+    for turn in range(1, 7):
         rows.append(_gate_row(
             turn,
             pressure={"hunger": "low", "thirst": "critical", "fatigue": "low"},
