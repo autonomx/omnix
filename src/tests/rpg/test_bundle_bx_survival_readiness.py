@@ -10,11 +10,19 @@ from app.rpg.survival_report_metrics import build_survival_report_metrics
 from app.rpg.survival_report_polish import build_compact_survival_summary
 
 
-def _row(turn: int, *, thirst: int = 20, pressure: str = "low", blocked: bool = False, duplicate_tick: bool = False):
+def _row(
+    turn: int,
+    *,
+    thirst: int = 20,
+    pressure: str = "low",
+    blocked: bool = False,
+    duplicate_tick: bool = False,
+    action: str = "drink_water",
+):
     survival_result = {
         "ok": not blocked,
         "action_category": "survival",
-        "action": "drink_water",
+        "action": action,
     }
     if blocked:
         survival_result["blocked_reason"] = "no_water_available"
@@ -34,7 +42,7 @@ def _row(turn: int, *, thirst: int = 20, pressure: str = "low", blocked: bool = 
 
 
 def test_bundle_bx_readiness_projection_reports_ready_for_healthy_metrics() -> None:
-    metrics = build_survival_report_metrics([_row(1), _row(2)])
+    metrics = build_survival_report_metrics([_row(1), _row(2, action="rest")])
     compact = build_compact_survival_summary(metrics)
 
     readiness = build_survival_readiness_projection(metrics, compact)
@@ -48,7 +56,13 @@ def test_bundle_bx_readiness_projection_reports_ready_for_healthy_metrics() -> N
 
 
 def test_bundle_bx_readiness_projection_reports_watch_for_critical_pressure_and_blocked_actions() -> None:
-    rows = [_row(turn, thirst=95, pressure="critical", blocked=turn <= 3) for turn in range(1, 6)]
+    rows = [
+        _row(1, thirst=95, pressure="critical", blocked=True, action="drink_water"),
+        _row(2, thirst=95, pressure="critical", blocked=True, action="buy_water"),
+        _row(3, thirst=95, pressure="critical", blocked=True, action="fill_waterskin"),
+        _row(4, thirst=95, pressure="critical", blocked=False, action="rest"),
+        _row(5, thirst=95, pressure="critical", blocked=False, action="make_camp"),
+    ]
     metrics = build_survival_report_metrics(rows)
     compact = build_compact_survival_summary(metrics)
 
@@ -58,6 +72,7 @@ def test_bundle_bx_readiness_projection_reports_watch_for_critical_pressure_and_
     assert "critical_pressure_streak" in readiness["failed_advisory_gates"]
     assert "blocked_survival_actions>=3" in readiness["warnings"]
     assert "critical_pressure_streak_detected" in readiness["warnings"]
+    assert "survival_action_no_improvement" not in readiness["failed_advisory_gates"]
     assert readiness["pressure_snapshot"]["thirst"]["critical_turns"] == 5
 
 
