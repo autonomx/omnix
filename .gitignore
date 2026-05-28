@@ -113,3 +113,10 @@ src/data/rpg_sessions/*.json
 src/.mypy_cache/
 src/.pytest_cache/
 src/.ruff_cache/
+
+# RPG generated/runtime artifacts
+resources/data/test-results/
+resources/data/generated_images/
+resources/data/rpg_sessions/
+src/data/rpg_sessions/
+*.zip
