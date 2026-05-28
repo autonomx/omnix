@@ -1,10 +1,11 @@
-"""CA.1 — deterministic commerce follow-up repair for interactive CLI runs.
+"""CA.1/CA.2 — deterministic commerce follow-up repair for interactive CLI runs.
 
 The runtime can correctly surface a service inquiry such as Bran's meal offer,
-but a later vague follow-up like "what provisions do you have?" may be routed as
-plain talk/observe and lose the offer list.  For interactive playtests, keep a
-bounded in-process memory of the most recent authoritative service offers and use
-it to answer immediate commerce follow-up questions without inventing stock.
+but player-facing narration may omit the concrete offer list, or later follow-ups
+like "how much for bread?" may be routed as plain talk/observe and lose the
+service context.  For interactive playtests, keep a bounded in-process memory of
+the most recent authoritative service offers and use it to answer commerce
+questions without inventing stock.
 """
 from __future__ import annotations
 
@@ -79,6 +80,36 @@ def _normalize_offer(offer: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
+def infer_requested_service_kind(player_input: str) -> str:
+    text = _safe_str(player_input).strip().lower()
+    food_terms = ("food", "meal", "bread", "stew", "provision", "provisions", "eat", "supper", "dinner", "breakfast")
+    drink_terms = ("drink", "ale", "beer", "wine", "water", "mug")
+    lodging_terms = ("room", "bed", "lodging", "sleep", "stay", "rent")
+    if any(term in text for term in food_terms):
+        return "meal"
+    if any(term in text for term in drink_terms):
+        return "drink"
+    if any(term in text for term in lodging_terms):
+        return "lodging"
+    return ""
+
+
+def _context_matches_request(context: Mapping[str, Any], requested_kind: str) -> bool:
+    context = _safe_dict(context)
+    if not context:
+        return False
+    if not requested_kind:
+        return True
+    service_kind = _safe_str(context.get("service_kind")).strip().lower()
+    if service_kind == requested_kind:
+        return True
+    for offer in _safe_list(context.get("offers")):
+        offer = _safe_dict(offer)
+        if _safe_str(offer.get("service_kind")).strip().lower() == requested_kind:
+            return True
+    return False
+
+
 def extract_service_offer_context(raw_result: Mapping[str, Any]) -> Dict[str, Any]:
     """Return the most specific authoritative service offers found in a turn result."""
     candidates: List[Dict[str, Any]] = []
@@ -115,7 +146,12 @@ def is_commerce_followup_question(player_input: str) -> bool:
         "what provisions",
         "what food",
         "food for sale",
+        "bread for sale",
         "anything to eat",
+        "how much",
+        "cost",
+        "price",
+        "prices",
         "menu",
         "serve",
         "served",
@@ -123,6 +159,8 @@ def is_commerce_followup_question(player_input: str) -> bool:
         "for sale",
     )
     if any(term in text for term in commerce_terms):
+        return True
+    if infer_requested_service_kind(text) and any(term in text for term in ("have", "got", "available", "offer")):
         return True
     # Covers terse follow-ups after an established service inquiry.
     if text in {"well?", "what?", "and?"}:
@@ -153,20 +191,42 @@ def format_service_offer_answer(context: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _select_context_for_question(
+    *,
+    player_input: str,
+    current_context: Mapping[str, Any],
+    last_offer_context: Mapping[str, Any],
+) -> Dict[str, Any]:
+    requested_kind = infer_requested_service_kind(player_input)
+    current_context = _safe_dict(current_context)
+    last_offer_context = _safe_dict(last_offer_context)
+    if _context_matches_request(current_context, requested_kind):
+        return current_context
+    if _context_matches_request(last_offer_context, requested_kind):
+        return last_offer_context
+    if current_context and not requested_kind:
+        return current_context
+    return last_offer_context or current_context
+
+
 def apply_commerce_followup_repair(
     turn_summary: Mapping[str, Any],
     *,
     player_input: str,
     last_offer_context: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    """Patch an interactive turn summary if it is a vague commerce follow-up."""
+    """Patch an interactive turn summary if it is a commerce/service question."""
     out = deepcopy(_safe_dict(turn_summary))
-    context = _safe_dict(last_offer_context)
-    if not context or not is_commerce_followup_question(player_input):
+    if not is_commerce_followup_question(player_input):
         return out
     raw_result = _safe_dict(out.get("raw_result") or out.get("result"))
     current_context = extract_service_offer_context(raw_result)
-    if current_context:
+    context = _select_context_for_question(
+        player_input=player_input,
+        current_context=current_context,
+        last_offer_context=last_offer_context,
+    )
+    if not context:
         return out
 
     answer = format_service_offer_answer(context)
@@ -178,6 +238,8 @@ def apply_commerce_followup_repair(
         "applied": True,
         "source": COMMERCE_FOLLOWUP_SOURCE,
         "offer_context": context,
+        "requested_service_kind": infer_requested_service_kind(player_input),
+        "current_context_service_kind": _safe_str(current_context.get("service_kind")),
     }
     contract = deepcopy(_safe_dict(raw_result.get("turn_contract")))
     contract["service_inquiry_followup"] = {
@@ -208,7 +270,7 @@ def apply_commerce_followup_repair(
     out["narration_preview"] = answer["narration"]
     out["interactive_cli_commerce_followup"] = raw_result["interactive_cli_commerce_followup"]
     warnings = list(_safe_list(out.get("scenario_warnings")))
-    warning = "interactive_cli_commerce_followup_answered_from_last_authoritative_service_offers"
+    warning = "interactive_cli_commerce_followup_answered_from_authoritative_service_offers"
     if warning not in warnings:
         warnings.append(warning)
     out["scenario_warnings"] = warnings
