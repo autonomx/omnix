@@ -4,6 +4,7 @@ import json
 import zipfile
 
 from app.rpg.survival_report_artifacts import (
+    SURVIVAL_INDEX_HTML_NAME,
     SURVIVAL_METRICS_HTML_NAME,
     SURVIVAL_METRICS_JSON_NAME,
     SURVIVAL_READINESS_HTML_NAME,
@@ -59,6 +60,7 @@ def test_bundle_bh_builds_survival_artifact_payload() -> None:
     assert payload["summary_html_filename"] == SURVIVAL_SUMMARY_HTML_NAME
     assert payload["readiness_json_filename"] == SURVIVAL_READINESS_JSON_NAME
     assert payload["readiness_html_filename"] == SURVIVAL_READINESS_HTML_NAME
+    assert payload["index_html_filename"] == SURVIVAL_INDEX_HTML_NAME
     assert payload["metrics"]["summary"]["passive_tick_count"] == 1
     assert payload["metrics"]["summary"]["blocked_survival_action_count"] == 1
     assert payload["compact_summary"]["format_version"] == "survival_report_polish_v1"
@@ -67,6 +69,8 @@ def test_bundle_bh_builds_survival_artifact_payload() -> None:
     assert "Survival Report Metrics" in payload["html_text"]
     assert "Survival Summary" in payload["summary_html_text"]
     assert "Survival Readiness" in payload["readiness_html_text"]
+    assert "Survival Report Index" in payload["index_html_text"]
+    assert SURVIVAL_READINESS_HTML_NAME in payload["index_html_text"]
     metrics = json.loads(payload["json_text"])
     summary = json.loads(payload["summary_json_text"])
     readiness = json.loads(payload["readiness_json_text"])
@@ -87,12 +91,14 @@ def test_bundle_bh_writes_json_and_html_report_artifacts(tmp_path) -> None:
     summary_html_path = tmp_path / SURVIVAL_SUMMARY_HTML_NAME
     readiness_json_path = tmp_path / SURVIVAL_READINESS_JSON_NAME
     readiness_html_path = tmp_path / SURVIVAL_READINESS_HTML_NAME
+    index_html_path = tmp_path / SURVIVAL_INDEX_HTML_NAME
     assert json_path.exists()
     assert html_path.exists()
     assert summary_json_path.exists()
     assert summary_html_path.exists()
     assert readiness_json_path.exists()
     assert readiness_html_path.exists()
+    assert index_html_path.exists()
     metrics = json.loads(json_path.read_text(encoding="utf-8"))
     summary = json.loads(summary_json_path.read_text(encoding="utf-8"))
     readiness = json.loads(readiness_json_path.read_text(encoding="utf-8"))
@@ -104,10 +110,15 @@ def test_bundle_bh_writes_json_and_html_report_artifacts(tmp_path) -> None:
     html = html_path.read_text(encoding="utf-8")
     summary_html = summary_html_path.read_text(encoding="utf-8")
     readiness_html = readiness_html_path.read_text(encoding="utf-8")
+    index_html = index_html_path.read_text(encoding="utf-8")
     assert "no_water_available" in html
     assert "Advisory Survival Gates" in html
     assert "Survival Summary" in summary_html
     assert "Survival Readiness" in readiness_html
+    assert "Survival Report Index" in index_html
+    assert SURVIVAL_METRICS_HTML_NAME in index_html
+    assert SURVIVAL_SUMMARY_HTML_NAME in index_html
+    assert SURVIVAL_READINESS_HTML_NAME in index_html
 
 
 def test_bundle_bh_appends_survival_artifacts_to_zip(tmp_path) -> None:
@@ -118,6 +129,7 @@ def test_bundle_bh_appends_survival_artifacts_to_zip(tmp_path) -> None:
     assert result["ok"] is True
     assert result["survival_readiness"]["format_version"] == "survival_readiness_v1"
     assert result["zip_members"] == [
+        f"reports/{SURVIVAL_INDEX_HTML_NAME}",
         f"reports/{SURVIVAL_METRICS_JSON_NAME}",
         f"reports/{SURVIVAL_METRICS_HTML_NAME}",
         f"reports/{SURVIVAL_SUMMARY_JSON_NAME}",
@@ -127,6 +139,7 @@ def test_bundle_bh_appends_survival_artifacts_to_zip(tmp_path) -> None:
     ]
     with zipfile.ZipFile(zip_path, "r") as zf:
         names = set(zf.namelist())
+        assert f"reports/{SURVIVAL_INDEX_HTML_NAME}" in names
         assert f"reports/{SURVIVAL_METRICS_JSON_NAME}" in names
         assert f"reports/{SURVIVAL_METRICS_HTML_NAME}" in names
         assert f"reports/{SURVIVAL_SUMMARY_JSON_NAME}" in names
@@ -136,14 +149,17 @@ def test_bundle_bh_appends_survival_artifacts_to_zip(tmp_path) -> None:
         metrics = json.loads(zf.read(f"reports/{SURVIVAL_METRICS_JSON_NAME}").decode("utf-8"))
         summary = json.loads(zf.read(f"reports/{SURVIVAL_SUMMARY_JSON_NAME}").decode("utf-8"))
         readiness = json.loads(zf.read(f"reports/{SURVIVAL_READINESS_JSON_NAME}").decode("utf-8"))
+        index_html = zf.read(f"reports/{SURVIVAL_INDEX_HTML_NAME}").decode("utf-8")
     assert metrics["summary"]["passive_tick_count"] == 1
     assert metrics["format_version"] == "survival_report_metrics_v2"
     assert summary["format_version"] == "survival_report_polish_v1"
     assert readiness["format_version"] == "survival_readiness_v1"
+    assert "Survival Report Index" in index_html
 
 
 def test_bundle_bh_attaches_survival_artifact_manifest() -> None:
     artifact_result = {
+        "index_html_path": "out/survival-index.html",
         "json_path": "out/survival-report-metrics.json",
         "html_path": "out/survival-report-metrics.html",
         "summary_json_path": "out/survival-summary.json",
@@ -152,6 +168,7 @@ def test_bundle_bh_attaches_survival_artifact_manifest() -> None:
         "readiness_html_path": "out/survival-readiness.html",
         "zip_path": "out/results.zip",
         "zip_members": [
+            "reports/survival-index.html",
             "reports/survival-report-metrics.json",
             "reports/survival-summary.json",
             "reports/survival-readiness.json",
@@ -166,13 +183,16 @@ def test_bundle_bh_attaches_survival_artifact_manifest() -> None:
     assert manifest["survival_report_metrics"] == {"summary": {"turns_observed": 2}}
     assert manifest["survival_summary"] == {"status": "watch"}
     assert manifest["survival_readiness"] == {"status": "watch", "format_version": "survival_readiness_v1"}
+    assert manifest["survival_index_html"] == "out/survival-index.html"
     assert [item["kind"] for item in manifest["artifacts"]] == [
+        "survival_index_html",
         "survival_metrics_json",
         "survival_metrics_html",
         "survival_summary_json",
         "survival_summary_html",
         "survival_readiness_json",
         "survival_readiness_html",
+        "survival_index_zip_member",
         "survival_metrics_zip_member",
         "survival_summary_zip_member",
         "survival_readiness_zip_member",
@@ -184,6 +204,7 @@ def test_bundle_bh_autoplay_wrapper_exports_writer(tmp_path) -> None:
 
     assert result["ok"] is True
     assert result["survival_readiness"]["format_version"] == "survival_readiness_v1"
+    assert (tmp_path / SURVIVAL_INDEX_HTML_NAME).exists()
     assert (tmp_path / SURVIVAL_METRICS_JSON_NAME).exists()
     assert (tmp_path / SURVIVAL_METRICS_HTML_NAME).exists()
     assert (tmp_path / SURVIVAL_SUMMARY_JSON_NAME).exists()
