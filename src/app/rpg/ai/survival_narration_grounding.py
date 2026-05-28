@@ -159,8 +159,8 @@ def _has_category_evidence(category: str, evidence: Mapping[str, Any]) -> bool:
     categories = set(_safe_list(evidence.get("backed_categories")))
     if category in categories:
         return True
-    actions = {_norm_action_id(action) for action in _safe_list(evidence.get("actions"))}
-    if any(_ACTION_CATEGORY.get(action) == category for action in actions):
+    successful_actions = {_norm_action_id(action) for action in _safe_list(evidence.get("successful_actions"))}
+    if any(_ACTION_CATEGORY.get(action) == category for action in successful_actions):
         return True
     effects = _safe_dict(evidence.get("effects"))
     inventory_delta = _safe_dict(evidence.get("inventory_delta"))
@@ -218,6 +218,7 @@ def build_survival_narration_evidence(context: Mapping[str, Any]) -> Dict[str, A
     results = _all_survival_results(context)
     backed_categories: set[str] = set()
     actions: List[str] = []
+    successful_actions: List[str] = []
     blocked: List[Dict[str, str]] = []
     effects: Dict[str, int] = {}
     inventory_delta: Dict[str, int] = {}
@@ -232,6 +233,7 @@ def build_survival_narration_evidence(context: Mapping[str, Any]) -> Dict[str, A
             category = _ACTION_CATEGORY.get(action)
             if category and _result_is_success(result):
                 backed_categories.add(category)
+                successful_actions.append(action)
         if not _result_is_success(result):
             blocked.append({
                 "action": action,
@@ -269,6 +271,7 @@ def build_survival_narration_evidence(context: Mapping[str, Any]) -> Dict[str, A
             if need in survival
         },
         "actions": actions[-8:],
+        "successful_actions": successful_actions[-8:],
         "blocked_actions": blocked[-8:],
         "effects": effects,
         "inventory_delta": inventory_delta,
@@ -296,9 +299,12 @@ def survival_narration_prompt_block(context: Mapping[str, Any]) -> str:
         )
     backed = _safe_list(evidence.get("backed_categories"))
     lines.append("- Backed survival categories this turn: " + (", ".join(backed) if backed else "none"))
+    successful_actions = _safe_list(evidence.get("successful_actions"))
+    if successful_actions:
+        lines.append("- Successful authoritative survival actions: " + ", ".join(successful_actions))
     actions = _safe_list(evidence.get("actions"))
     if actions:
-        lines.append("- Authoritative survival actions: " + ", ".join(actions))
+        lines.append("- Observed survival actions: " + ", ".join(actions))
     effects = _safe_dict(evidence.get("effects"))
     if effects:
         lines.append("- Authoritative survival effects: " + ", ".join(f"{k}={v}" for k, v in sorted(effects.items())))
