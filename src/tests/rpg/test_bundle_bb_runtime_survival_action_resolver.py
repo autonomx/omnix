@@ -20,6 +20,7 @@ def _simulation_state_with_items(items):
             "events": [],
         },
         "player_state": {
+            "currency": {"gold": 0, "silver": 1, "copper": 0},
             "inventory": {
                 "items": items,
                 "equipment": {},
@@ -183,7 +184,7 @@ def test_bundle_bb_rest_resolves_without_inventory_mutation() -> None:
     assert simulation_state["survival"]["last_rest_turn"] == 8
 
 
-def test_bundle_bb_survival_purchase_is_blocked_until_economy_integration() -> None:
+def test_bundle_bb_survival_purchase_now_routes_to_runtime_economy() -> None:
     simulation_state = _simulation_state_with_items([])
 
     result = resolve_general_interaction(
@@ -193,8 +194,9 @@ def test_bundle_bb_survival_purchase_is_blocked_until_economy_integration() -> N
     )
 
     survival_result = result["survival_result"]
-    assert result["handled"] is False
-    assert survival_result["ok"] is False
+    assert result["handled"] is True
+    assert survival_result["ok"] is True
     assert survival_result["action"] == "buy_water"
-    assert survival_result["blocked_reason"] == "survival_purchase_requires_economy_runtime"
-    assert "Do not say supplies were bought." in survival_result["forbidden_narration"]
+    assert survival_result["inventory_delta"] == {"water": 1}
+    assert survival_result["merchant_result"]["source"] == "deterministic_merchant_runtime"
+    assert simulation_state["player_state"]["inventory"]["items"][0]["definition_id"] == "def:water"
