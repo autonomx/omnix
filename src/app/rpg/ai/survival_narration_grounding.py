@@ -155,8 +155,36 @@ def _all_survival_results(context: Mapping[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _has_category_evidence(category: str, evidence: Mapping[str, Any]) -> bool:
+    """Return whether a narration claim category is directly authorized.
+
+    This intentionally checks both the derived ``backed_categories`` list and the
+    raw authoritative evidence fields.  That makes validation resilient to old
+    transcript shapes where an action/effect is present but a report adapter has
+    not projected the category list yet.
+    """
     categories = set(_safe_list(evidence.get("backed_categories")))
-    return category in categories
+    if category in categories:
+        return True
+    actions = {_norm_action_id(action) for action in _safe_list(evidence.get("actions"))}
+    if any(_ACTION_CATEGORY.get(action) == category for action in actions):
+        return True
+    effects = _safe_dict(evidence.get("effects"))
+    inventory_delta = _safe_dict(evidence.get("inventory_delta"))
+    if category == "water":
+        return any(key.startswith("thirst") for key in effects) or any(
+            key in inventory_delta for key in ("water", "waterskin", "waterskin_water_charges")
+        )
+    if category == "food":
+        return any(key.startswith("hunger") for key in effects) or any(
+            key in inventory_delta for key in ("food", "rations")
+        )
+    if category == "rest":
+        return any(key.startswith("fatigue") for key in effects)
+    if category == "supplies":
+        return bool(inventory_delta or evidence.get("merchant_backed") or evidence.get("service_backed"))
+    if category == "healing":
+        return any("heal" in key or key in {"hp_delta", "health_delta"} for key in effects)
+    return False
 
 
 def _category_claimed(text: str, category: str) -> bool:
@@ -278,6 +306,18 @@ def survival_narration_prompt_block(context: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _is_passive_state_only_claim(sentence: str, category: str) -> bool:
+    lower = _norm(sentence)
+    return (
+        category in {"water", "food", "rest"}
+        and not any(token in lower for token in (
+            "quenched", "relieved", "eases", "eased", "sated", "fed", "refreshed", "rested", "restores", "restored",
+            "bought", "purchased", "paid", "meal", "stew", "rations", "water", "waterskin",
+            "room", "lodging", "bed", "sleep",
+        ))
+    )
+
+
 def validate_survival_narration_text(text: str, context: Mapping[str, Any]) -> Dict[str, Any]:
     evidence = build_survival_narration_evidence(context)
     text = _safe_str(text)
@@ -290,19 +330,7 @@ def validate_survival_narration_text(text: str, context: Mapping[str, Any]) -> D
         for category in _sentence_claim_categories(sentence):
             if _has_category_evidence(category, evidence):
                 continue
-            # Current-state references to the numeric need names are allowed only
-            # if they avoid outcome/change language.  "You are thirsty" is safe;
-            # "your thirst is quenched" is not.
-            lower = _norm(sentence)
-            passive_state_only = (
-                category in {"water", "food", "rest"}
-                and not any(token in lower for token in (
-                    "quenched", "relieved", "eases", "eased", "sated", "fed", "refreshed", "rested", "restores", "restored",
-                    "bought", "purchased", "paid", "meal", "stew", "rations", "water", "waterskin",
-                    "room", "lodging", "bed", "sleep",
-                ))
-            )
-            if passive_state_only:
+            if _is_passive_state_only_claim(sentence, category):
                 continue
             violations.append({
                 "category": category,
@@ -336,16 +364,7 @@ def sanitize_survival_narration_text(text: str, context: Mapping[str, Any], *, f
         for category in categories:
             if _has_category_evidence(category, evidence):
                 continue
-            lower = _norm(sentence)
-            passive_state_only = (
-                category in {"water", "food", "rest"}
-                and not any(token in lower for token in (
-                    "quenched", "relieved", "eases", "eased", "sated", "fed", "refreshed", "rested", "restores", "restored",
-                    "bought", "purchased", "paid", "meal", "stew", "rations", "water", "waterskin",
-                    "room", "lodging", "bed", "sleep",
-                ))
-            )
-            if passive_state_only:
+            if _is_passive_state_only_claim(sentence, category):
                 continue
             rejected = True
             break
