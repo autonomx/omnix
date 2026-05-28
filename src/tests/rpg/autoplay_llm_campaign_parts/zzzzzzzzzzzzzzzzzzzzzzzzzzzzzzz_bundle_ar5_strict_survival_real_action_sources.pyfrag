@@ -1,0 +1,173 @@
+# Bundle AR.5 — Strict Survival Real Action Sources
+#
+# AR.2 was intended to make survival evidence honest, but later AR3/AR4 summary
+# artifacts contain the text of proposed survival actions.  Counting those files
+# as metric sources can make survival appear passed even when the transcript/real
+# player actions never drank/eat/rested.  AR.5 overrides strict survival evidence
+# extraction to ignore AR3/AR4 summaries and use real action-bearing sources such
+# as console-log/autoplay-campaign-report/hundred-turn-evaluation.
+
+import json as _bundle_ar5_json
+import re as _bundle_ar5_re
+from pathlib import Path as _BundleAR5Path
+from typing import Any as _BundleAR5Any, Dict as _BundleAR5Dict, List as _BundleAR5List
+
+_BUNDLE_AR5_SOURCE = "bundle_ar5_strict_survival_real_action_sources"
+_BUNDLE_AR5_UNZIPPED_DIR = "autoplay-campaign-results-unzipped"
+_BUNDLE_AR5_RESULT_FILE = "survival-real-action-source-audit-summary.json"
+_BUNDLE_AR5_ALLOWED_JSON_FILES = {
+    "autoplay-campaign-report.json",
+    "hundred-turn-evaluation.json",
+    "summary.json",
+}
+_BUNDLE_AR5_ALLOWED_TEXT_FILES = {
+    "console-log.txt",
+}
+_BUNDLE_AR5_DENY_FILES = {
+    "survival-concrete-action-injection-summary.json",
+    "survival-concrete-action-injection-ledger.json",
+    "survival-runtime-action-selection-summary.json",
+    "survival-autoplay-evidence-summary.json",
+    "survival-exit-criteria-summary.json",
+    "readiness-report-projection-summary.json",
+    "autoplay-health.json",
+}
+_BUNDLE_AR5_PATTERNS = {
+    "drink_water_count": _bundle_ar5_re.compile(r"\bPLAYER:\s*[^\n\r]*(drink|sip|consume|use)[^\n\r]{0,80}\b(water|canteen|waterskin|flask)\b|\b(drink|sip|consume|use)\b[^\n\r]{0,80}\b(water|canteen|waterskin|flask)\b", _bundle_ar5_re.I),
+    "eat_food_count": _bundle_ar5_re.compile(r"\bPLAYER:\s*[^\n\r]*(eat|consume|use)[^\n\r]{0,80}\b(food|ration|rations|meal|bread|stew|provisions)\b|\b(eat|consume|use)\b[^\n\r]{0,80}\b(food|ration|rations|meal|bread|stew|provisions)\b", _bundle_ar5_re.I),
+    "rest_count": _bundle_ar5_re.compile(r"\bPLAYER:\s*[^\n\r]*(rest|sleep|camp|make camp|take a nap|bed down|rent a room|use room|stay the night)\b|\b(rest|sleep|camp|make camp|take a nap|bed down|rent a room|use room|stay the night)\b", _bundle_ar5_re.I),
+    "buy_food_count": _bundle_ar5_re.compile(r"\bPLAYER:\s*[^\n\r]*\bbuy\b[^\n\r]{0,80}\b(food|ration|rations|meal|provisions)\b|\bbuy\b[^\n\r]{0,80}\b(food|ration|rations|meal|provisions)\b", _bundle_ar5_re.I),
+    "buy_water_count": _bundle_ar5_re.compile(r"\bPLAYER:\s*[^\n\r]*\bbuy\b[^\n\r]{0,80}\b(water|canteen|waterskin|flask)\b|\bbuy\b[^\n\r]{0,80}\b(water|canteen|waterskin|flask)\b", _bundle_ar5_re.I),
+}
+
+
+def _bundle_ar5_load_json(path: _BundleAR5Path) -> _BundleAR5Dict[str, _BundleAR5Any]:
+    try:
+        if not path.exists() or not path.is_file():
+            return {}
+        data = _bundle_ar5_json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _bundle_ar5_write_json(path: _BundleAR5Path, payload: _BundleAR5Dict[str, _BundleAR5Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = _bundle_ar5_json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
+    writer = globals().get("_BUNDLE_AR5_ORIGINAL_PATH_WRITE_TEXT") or getattr(_BundleAR5Path, "write_text")
+    writer(path, text, encoding="utf-8")
+
+
+def _bundle_ar5_text_from_json(value: _BundleAR5Any, max_depth: int = 8) -> _BundleAR5List[str]:
+    texts: _BundleAR5List[str] = []
+    stack = [(value, 0)]
+    seen = set()
+    while stack:
+        node, depth = stack.pop()
+        if isinstance(node, (dict, list, tuple)):
+            marker = id(node)
+            if marker in seen:
+                continue
+            seen.add(marker)
+        if isinstance(node, str):
+            texts.append(node)
+        elif isinstance(node, dict) and depth < max_depth:
+            for child in node.values():
+                stack.append((child, depth + 1))
+        elif isinstance(node, (list, tuple)) and depth < max_depth:
+            for child in node:
+                stack.append((child, depth + 1))
+    return texts
+
+
+def _bundle_ar5_file_counts(path: _BundleAR5Path) -> _BundleAR5Dict[str, int]:
+    counts = {key: 0 for key in _BUNDLE_AR5_PATTERNS}
+    try:
+        if path.suffix.lower() == ".json":
+            texts = _bundle_ar5_text_from_json(_bundle_ar5_json.loads(path.read_text(encoding="utf-8")))
+            blob = "\n".join(texts)
+        else:
+            blob = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return counts
+    for key, pattern in _BUNDLE_AR5_PATTERNS.items():
+        counts[key] = len(pattern.findall(blob))
+    return counts
+
+
+def _bundle_ar5_collect_real_counts(directory: _BundleAR5Path) -> _BundleAR5Dict[str, _BundleAR5Any]:
+    counts = {key: 0 for key in _BUNDLE_AR5_PATTERNS}
+    source_files: _BundleAR5List[str] = []
+    for file_name in sorted(_BUNDLE_AR5_ALLOWED_JSON_FILES | _BUNDLE_AR5_ALLOWED_TEXT_FILES):
+        path = directory / file_name
+        if not path.exists() or not path.is_file() or path.name in _BUNDLE_AR5_DENY_FILES:
+            continue
+        file_counts = _bundle_ar5_file_counts(path)
+        if any(value > 0 for value in file_counts.values()):
+            source_files.append(file_name)
+        for key, value in file_counts.items():
+            counts[key] += int(value or 0)
+    return {"counts": counts, "source_files": source_files}
+
+
+def _bundle_ar5_patch_survival_outputs(directory: _BundleAR5Path) -> _BundleAR5Dict[str, _BundleAR5Any]:
+    collected = _bundle_ar5_collect_real_counts(directory)
+    counts = collected["counts"]
+    source_files = collected["source_files"]
+    ok = counts.get("drink_water_count", 0) > 0 and counts.get("eat_food_count", 0) > 0 and counts.get("rest_count", 0) > 0
+    thirst_attention = counts.get("drink_water_count", 0) > 0
+    result = {
+        "format_version": "bundle_ar5_strict_survival_real_action_source_audit_v1",
+        "source": _BUNDLE_AR5_SOURCE,
+        "ok": ok,
+        "result_dir": str(directory),
+        "counts": counts,
+        "metric_source_files": source_files,
+        "ignored_generated_summary_files": sorted(_BUNDLE_AR5_DENY_FILES),
+        "thirst_balance_attention": thirst_attention,
+        "recommended_next_step": "runtime_must_emit_real_drink_eat_rest_actions" if not ok else "survival_real_action_evidence_present",
+    }
+    _bundle_ar5_write_json(directory / _BUNDLE_AR5_RESULT_FILE, result)
+    for file_name in ("survival-autoplay-evidence-summary.json", "survival-exit-criteria-summary.json"):
+        payload = _bundle_ar5_load_json(directory / file_name)
+        if not payload:
+            continue
+        patched = dict(payload)
+        patched.update({
+            "source": _BUNDLE_AR5_SOURCE,
+            "ok": ok,
+            "bundle_ar5_real_action_source_audit": True,
+            "drink_water_count": counts.get("drink_water_count", 0),
+            "eat_food_count": counts.get("eat_food_count", 0),
+            "rest_count": counts.get("rest_count", 0),
+            "buy_food_count": counts.get("buy_food_count", 0),
+            "buy_water_count": counts.get("buy_water_count", 0),
+            "thirst_balance_attention": thirst_attention,
+            "metric_source_files": source_files,
+        })
+        if file_name == "survival-exit-criteria-summary.json":
+            checks = dict(patched.get("checks") if isinstance(patched.get("checks"), dict) else {})
+            checks.update({
+                "survival_autoplay_evidence_ok": ok,
+                "survival_response_ok": ok,
+                "survival_metric_source_ok": bool(source_files),
+                "drink_water_count_ok": counts.get("drink_water_count", 0) > 0,
+                "eat_food_count_ok": counts.get("eat_food_count", 0) > 0,
+                "thirst_balance_attention_ok": thirst_attention,
+            })
+            patched["checks"] = checks
+            patched["failed_checks"] = [key for key, value in checks.items() if key in {"survival_autoplay_evidence_ok", "survival_response_ok", "survival_metric_source_ok", "drink_water_count_ok", "eat_food_count_ok", "thirst_balance_attention_ok"} and not value]
+        _bundle_ar5_write_json(directory / file_name, patched)
+    return result
+
+
+def _bundle_ar5_finalize_output_dir(output_dir: str) -> _BundleAR5Dict[str, _BundleAR5Any]:
+    parent = _BundleAR5Path(output_dir) if output_dir else None
+    dirs = []
+    if parent:
+        dirs = [directory for directory in (parent, parent / _BUNDLE_AR5_UNZIPPED_DIR) if directory.exists() and directory.is_dir()]
+    results = {str(directory): _bundle_ar5_patch_survival_outputs(directory) for directory in dirs}
+    return {"format_version": "bundle_ar5_strict_survival_real_action_source_summary_v1", "source": _BUNDLE_AR5_SOURCE, "ok": all(item.get("ok") for item in results.values()) if results else False, "results": results, "result_count": len(results)}
+
+
+globals()["BUNDLE_AR5_STRICT_SURVIVAL_REAL_ACTION_SOURCES_PATCHED"] = True
