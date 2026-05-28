@@ -224,7 +224,11 @@ buttons[0].click();
 assert(submitted.length === 1, 'click did not submit a survival command');
 assert(submitted[0] === 'drink water', `expected drink water, got ${submitted[0]}`);
 
-const derivedPressure = context.window.RpgSurvivalInspector.survivalPressure({ result: { survival: { hunger: 10, thirst: 76, fatigue: 51 } } });
+const derivedPayload = { result: { survival: { hunger: 10, thirst: 76, fatigue: 51 } } };
+const derivedPressure = context.window.RpgSurvivalInspector.survivalPressure(
+  derivedPayload,
+  context.window.RpgSurvivalInspector.survivalState(derivedPayload)
+);
 assert(derivedPressure.thirst === 'critical', 'derived critical pressure failed');
 assert(derivedPressure.fatigue === 'high', 'derived high pressure failed');
 
