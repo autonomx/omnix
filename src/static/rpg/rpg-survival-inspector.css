@@ -91,6 +91,25 @@
 .rpg-survival-need--high .rpg-survival-meter span { background: rgba(249, 115, 22, 0.90); }
 .rpg-survival-need--critical .rpg-survival-meter span { background: rgba(239, 68, 68, 0.92); }
 
+.rpg-survival-inventory {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+
+.rpg-survival-inventory span {
+  padding: 6px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 0.76rem;
+  opacity: 0.9;
+}
+
+.rpg-survival-inventory strong {
+  font-weight: 800;
+}
+
 .rpg-survival-details {
   margin-top: 8px;
 }
@@ -116,7 +135,7 @@
   color: inherit;
   cursor: pointer;
   text-align: left;
-  min-width: 130px;
+  min-width: 150px;
 }
 
 .rpg-survival-action:hover {
@@ -129,11 +148,17 @@
   font-size: 0.84rem;
 }
 
-.rpg-survival-action small {
+.rpg-survival-action small,
+.rpg-survival-action-availability {
   display: block;
   margin-top: 2px;
   opacity: 0.68;
   font-size: 0.72rem;
+}
+
+.rpg-survival-action-availability {
+  font-style: normal;
+  opacity: 0.84;
 }
 
 .rpg-survival-events {
@@ -158,7 +183,8 @@
 }
 
 @media (max-width: 720px) {
-  .rpg-survival-needs {
+  .rpg-survival-needs,
+  .rpg-survival-inventory {
     grid-template-columns: 1fr;
   }
 }
