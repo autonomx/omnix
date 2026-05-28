@@ -108,6 +108,23 @@ def _find_item_by_id(items: List[Any], item_id: str) -> Dict[str, Any]:
 
 
 def _definition_id_from_ref(item_ref: str) -> str:
+    item_ref = _safe_str(item_ref).strip().lower()
+    direct_survival = {
+        "water": "def:water",
+        "clean water": "def:water",
+        "fresh water": "def:water",
+        "ration": "def:rations",
+        "rations": "def:rations",
+        "trail ration": "def:rations",
+        "trail rations": "def:rations",
+        "food": "def:rations",
+        "provisions": "def:rations",
+        "waterskin": "def:waterskin",
+        "water skin": "def:waterskin",
+        "filled waterskin": "def:waterskin",
+    }
+    if item_ref in direct_survival:
+        return direct_survival[item_ref]
     definition_id = infer_definition_id_from_name(item_ref)
     if definition_id:
         return definition_id
@@ -120,6 +137,21 @@ def _item_base_value(item: Dict[str, Any]) -> Dict[str, int]:
     normalized = normalize_item_instance(item)
     definition = definition_for_item_like(normalized)
     return _safe_dict(normalized.get("value") or definition.get("value"))
+
+
+def _purchased_item_from_merchant_item(merchant_item: Dict[str, Any], *, quantity: int) -> Dict[str, Any]:
+    """Create the player-owned item while preserving merchant item metadata.
+
+    Some survival supplies are intentionally local merchant definitions rather
+    than global catalog definitions.  Reconstructing by definition_id alone would
+    lose their tags/value/waterskin charges and break later survival actions.
+    """
+    bought_item = normalize_item_instance(deepcopy(_safe_dict(merchant_item)))
+    bought_item["item_id"] = ""
+    bought_item["quantity"] = max(1, _safe_int(quantity, 1))
+    bought_item["source"] = "deterministic_merchant_runtime"
+    bought_item.pop("price_multiplier", None)
+    return normalize_item_instance(bought_item)
 
 
 def _result(
@@ -197,7 +229,6 @@ def apply_merchant_interaction(
                 action=action,
                 extra={"definition_id": definition_id, "merchant_id": merchant_id},
             )
-
         available = _safe_int(merchant_item.get("quantity"), 1)
         if available < quantity:
             return _result(
@@ -248,11 +279,7 @@ def apply_merchant_interaction(
                 action=action,
             )
 
-        bought_item = normalize_item_instance({
-            "definition_id": definition_id,
-            "quantity": quantity,
-            "source": "deterministic_merchant_runtime",
-        })
+        bought_item = _purchased_item_from_merchant_item(merchant_item, quantity=quantity)
 
         player_add = add_item_to_items_list(_safe_list(player_inventory.get("items")), bought_item)
         player_inventory["items"] = _safe_list(player_add.get("items"))
