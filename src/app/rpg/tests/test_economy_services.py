@@ -176,6 +176,15 @@ def test_service_intent_detects_meal_inquiry():
     assert intent["provider_id"] == "npc:Bran"
 
 
+def test_service_intent_defaults_stew_purchase_to_bran_not_market_merchant():
+    intent = resolve_service_intent("ill buy a hot stew")
+
+    assert intent["matched"] is True
+    assert intent["kind"] == "service_purchase"
+    assert intent["service_kind"] == "meal"
+    assert intent["provider_id"] == "npc:Bran"
+
+
 def test_service_intent_detects_paid_information_inquiry():
     intent = resolve_service_intent("I ask Bran if he has heard any rumors")
 

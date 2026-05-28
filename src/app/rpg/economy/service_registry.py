@@ -260,7 +260,7 @@ def find_provider_by_text(text: str) -> Dict[str, Any]:
             return deepcopy(provider)
 
     # Useful defaults for current starter world.
-    if any(word in text_l for word in ("room", "rent", "lodging", "bed", "stay", "meal", "food", "drink", "ale", "rumor", "rumour")):
+    if any(word in text_l for word in ("room", "rent", "lodging", "bed", "stay", "meal", "food", "stew", "bread", "provision", "provisions", "drink", "ale", "rumor", "rumour")):
         return deepcopy(SERVICE_PROVIDERS["npc:Bran"])
     if any(word in text_l for word in ("shop", "buy", "sell", "sells", "merchant", "goods", "torch", "rope", "repair")):
         return deepcopy(SERVICE_PROVIDERS["npc:Elara"])

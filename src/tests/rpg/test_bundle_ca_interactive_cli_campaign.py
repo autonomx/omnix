@@ -10,6 +10,7 @@ from rpg.interactive_cli_commerce_followup import (
     extract_service_offer_context,
     infer_requested_service_kind,
     is_commerce_followup_question,
+    is_purchase_confirmation,
 )
 
 
@@ -123,7 +124,7 @@ def test_bundle_ca_builds_interactive_summary_json_safe() -> None:
         stop_reason="turn_limit",
     )
 
-    assert summary["format_version"] == "interactive_cli_campaign_v1"
+    assert summary["format_version"] == "interactive_cli_campaign_v2"
     assert summary["completed_turns"] == 2
     assert summary["warning_count"] == 1
     assert summary["elapsed_seconds"] == 3.25
@@ -218,6 +219,13 @@ def test_bundle_ca1_commerce_followup_question_detection_covers_vague_provisions
     assert not is_commerce_followup_question("I look around the tavern")
 
 
+def test_bundle_ca3_purchase_confirmation_detection_covers_tendered_coin() -> None:
+    assert is_purchase_confirmation("here you go, 1 silver, 5 copper. confirming the purchase")
+    assert is_purchase_confirmation("purchase confirmed")
+    assert is_commerce_followup_question("confirmed. Here you go, 1 silver, 5 copper")
+    assert not is_purchase_confirmation("ill buy a hot stew")
+
+
 def test_bundle_ca1_commerce_followup_repair_answers_from_last_authoritative_service_offer() -> None:
     context = extract_service_offer_context(_service_offer_result())
     turn = _fake_turn(
@@ -286,6 +294,51 @@ def test_bundle_ca2_repair_prefers_last_meal_offer_when_current_result_mismatche
     assert "Mug of ale" not in repaired["raw_npc"]["line"]
     assert "1 silver" in repaired["raw_npc"]["line"]
     assert "5 copper" in repaired["raw_npc"]["line"]
+
+
+def test_bundle_ca3_purchase_confirmation_applies_last_authoritative_meal_offer() -> None:
+    meal_context = extract_service_offer_context(_service_offer_result())
+    turn = _fake_turn(
+        session_id="s",
+        turn={"player": "here you go, 1 silver, 5 copper. confirming the purchase"},
+        turn_index=2,
+        scenario_name="x",
+        target_channel="x",
+    )
+    turn["raw_result"]["session"] = {
+        "simulation_state": {
+            "player_state": {
+                "resources": {"hunger": 70, "thirst": 20, "fatigue": 20},
+                "inventory_state": {
+                    "currency": {"gold": 0, "silver": 2, "copper": 0},
+                    "items": [],
+                },
+            },
+            "climate_survival": {
+                "survival": {"hunger": 70, "thirst": 20, "fatigue": 20},
+            },
+        }
+    }
+
+    repaired = apply_commerce_followup_repair(
+        turn,
+        player_input="confirmed. Here you go, 1 silver, 5 copper",
+        last_offer_context=meal_context,
+    )
+
+    service_result = repaired["raw_result"]["service_result"]
+    survival_action = repaired["raw_result"]["survival_action"]
+    simulation_state = repaired["raw_result"]["session"]["simulation_state"]
+    assert repaired["interactive_cli_commerce_followup"]["purchase_confirmation"] is True
+    assert service_result["selected_offer_id"] == "bran_meal_stew"
+    assert service_result["purchase"]["applied"] is True
+    assert survival_action["action_kind"] == "buy_meal"
+    assert simulation_state["player_state"]["resources"]["hunger"] == 35
+    assert simulation_state["player_state"]["inventory_state"]["currency"] == {
+        "gold": 0,
+        "silver": 0,
+        "copper": 5,
+    }
 
 
 def test_bundle_ca1_scripted_runner_carries_food_offer_into_followup(monkeypatch, tmp_path) -> None:

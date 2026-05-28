@@ -49,6 +49,7 @@ from tests.rpg.manual.session_helpers import (  # noqa: E402
     _ensure_manual_session,
     _reset_manual_session_artifacts,
 )
+from tests.rpg.manual.live_survival_seed import seed_live_survival_session  # noqa: E402
 from tests.rpg.manual.turn_execution import _extract_narration, _run_one_manual_turn  # noqa: E402
 
 INTERACTIVE_CLI_CAMPAIGN_VERSION = "interactive_cli_campaign_v2"
@@ -326,6 +327,7 @@ def run_interactive_campaign(
     artifact_detail: str = "debug",
     enable_llm_intent_fallback: bool = True,
     provider_factory: Callable[[], Any] | None = None,
+    seed_live_survival: bool = False,
 ) -> Dict[str, Any]:
     if turns <= 0:
         raise ValueError("turns_must_be_positive")
@@ -333,6 +335,8 @@ def run_interactive_campaign(
     if reset_session:
         _reset_manual_session_artifacts(session_id)
     _ensure_manual_session(session_id)
+    if seed_live_survival:
+        seed_live_survival_session(session_id, reset_first=False)
 
     commands = list(scripted_commands or [])
     turn_summaries: List[Dict[str, Any]] = []
@@ -386,6 +390,7 @@ def run_interactive_campaign(
             turn_summary,
             player_input=player_input,
             last_offer_context=last_service_offer_context,
+            persist_session_id=session_id,
         )
         raw_after_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
         repaired_context = extract_service_offer_context(raw_after_repair)
@@ -440,6 +445,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-reset-session-state", action="store_true", help="Do not delete saved session files before starting.")
     parser.add_argument("--no-console-llm", action="store_true", help="Do not print manual LLM console diagnostics per turn.")
     parser.add_argument("--no-llm-intent-fallback", action="store_true", help="Disable central-provider fallback intent classification for ambiguous service/commerce requests.")
+    parser.add_argument("--no-live-survival-seed", action="store_true", help="Do not seed the interactive session with starter survival needs, items, and currency.")
     parser.add_argument("--summary-only", action="store_true", help="Store compact turn summaries instead of raw result payloads.")
     parser.add_argument("--artifact-detail", choices=["summary", "debug", "full"], default="debug")
     return parser
@@ -461,6 +467,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         include_raw_result=not bool(args.summary_only),
         artifact_detail=args.artifact_detail,
         enable_llm_intent_fallback=not bool(args.no_llm_intent_fallback),
+        seed_live_survival=not bool(args.no_live_survival_seed),
     )
     return 0
 
