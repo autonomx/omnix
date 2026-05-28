@@ -270,6 +270,15 @@
     return payload;
   }
 
+  function ensureCommandBridgeScript() {
+    if (window.RpgCommandBridge || document.getElementById("rpg-command-bridge-script")) return;
+    const script = document.createElement("script");
+    script.id = "rpg-command-bridge-script";
+    script.src = "/static/rpg/rpg-command-bridge.js";
+    script.defer = true;
+    document.head.appendChild(script);
+  }
+
   function ensureLivePayloadBridgeScript() {
     if (window.RpgLivePayloadBridge || document.getElementById("rpg-live-payload-bridge-script")) return;
     const script = document.createElement("script");
@@ -281,6 +290,7 @@
 
   function ensureSurvivalInspectorScript() {
     if (window.RpgSurvivalInspector || document.getElementById("rpg-survival-inspector-script")) return;
+    ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
     const script = document.createElement("script");
     script.id = "rpg-survival-inspector-script";
@@ -294,6 +304,7 @@
     loadSettings,
     saveSettings,
     attachToPayload,
+    ensureCommandBridgeScript,
     ensureLivePayloadBridgeScript,
     ensureSurvivalInspectorScript,
   };
@@ -301,11 +312,13 @@
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
       render();
+      ensureCommandBridgeScript();
       ensureLivePayloadBridgeScript();
       ensureSurvivalInspectorScript();
     });
   } else {
     render();
+    ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
     ensureSurvivalInspectorScript();
   }
