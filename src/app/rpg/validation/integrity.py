@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Set, Tuple
 
+from app.rpg.survival import SURVIVAL_EVENT_LIMIT
+
 MAX_VISUAL_REQUESTS = 100
 MAX_VISUAL_ASSETS = 200
 MAX_ACTOR_MEMORY_ENTRIES = 50
@@ -188,6 +190,67 @@ def validate_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def validate_survival_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    simulation_state = _safe_dict(simulation_state)
+    survival = _safe_dict(simulation_state.get("survival"))
+    errors: List[Dict[str, Any]] = []
+    warnings: List[Dict[str, Any]] = []
+
+    if not survival:
+        return {
+            "ok": True,
+            "errors": [],
+            "warnings": [],
+            "counts": {"survival_events": 0},
+        }
+
+    for key in ("hunger", "thirst", "fatigue"):
+        value, ok_value = _coerce_int(survival.get(key))
+        if not ok_value:
+            errors.append(_err("survival_need_invalid_type", key))
+        elif value < 0 or value > 100:
+            errors.append(_err("survival_need_out_of_bounds", f"{key}:{value}"))
+
+    for key in ("last_food_turn", "last_water_turn", "last_rest_turn"):
+        value = survival.get(key)
+        if value is None or value == "":
+            continue
+        _, ok_value = _coerce_int(value)
+        if not ok_value:
+            warnings.append(_err("survival_last_turn_invalid_type", key))
+
+    events = _safe_list(survival.get("events"))
+    if len(events) > SURVIVAL_EVENT_LIMIT:
+        errors.append(_err("survival_events_over_cap", f"{len(events)} > {SURVIVAL_EVENT_LIMIT}"))
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            errors.append(_err("survival_event_invalid_type", str(index)))
+            continue
+        if not _safe_str(event.get("source")).strip():
+            warnings.append(_err("survival_event_missing_source", str(index)))
+
+    known_keys = {
+        "enabled",
+        "hunger",
+        "thirst",
+        "fatigue",
+        "last_food_turn",
+        "last_water_turn",
+        "last_rest_turn",
+        "events",
+    }
+    extra_keys = sorted(key for key in survival.keys() if key not in known_keys)
+    if extra_keys:
+        warnings.append(_err("survival_unknown_keys_will_be_pruned", ",".join(extra_keys)))
+
+    return {
+        "ok": len(errors) == 0,
+        "errors": errors,
+        "warnings": warnings,
+        "counts": {"survival_events": len(events)},
+    }
+
+
 def validate_session_manifest(session: Dict[str, Any]) -> Dict[str, Any]:
     session = _safe_dict(session)
     manifest = _safe_dict(session.get("manifest"))
@@ -212,8 +275,9 @@ def validate_session_manifest(session: Dict[str, Any]) -> Dict[str, Any]:
 def validate_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     visual = validate_visual_state(simulation_state)
     memory = validate_memory_state(simulation_state)
-    errors = list(visual["errors"]) + list(memory["errors"])
-    warnings = list(visual["warnings"]) + list(memory["warnings"])
+    survival = validate_survival_state(simulation_state)
+    errors = list(visual["errors"]) + list(memory["errors"]) + list(survival["errors"])
+    warnings = list(visual["warnings"]) + list(memory["warnings"]) + list(survival["warnings"])
     return {
         "ok": len(errors) == 0,
         "errors": errors,
@@ -223,6 +287,7 @@ def validate_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
             "visual_assets": visual["counts"]["visual_assets"],
             "memory_actors": memory["counts"]["actors"],
             "memory_rumors": memory["counts"]["rumors"],
+            "survival_events": survival["counts"]["survival_events"],
         },
     }
 
