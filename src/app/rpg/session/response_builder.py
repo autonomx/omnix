@@ -14,6 +14,7 @@ from app.rpg.session.runtime_promotions import attach_runtime_promotion_payloads
 from app.rpg.session.state_normalization import _safe_dict, _safe_list, _safe_str
 from app.rpg.session.survival_runtime import attach_survival_runtime_payloads
 from app.rpg.survival_action_context import attach_survival_action_context
+from app.rpg.survival_tick_runtime import apply_survival_runtime_tick
 
 
 def _first_dict(*values):
@@ -366,6 +367,18 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
     session = _safe_dict(survival_projection.get("session") or session)
     turn_contract = _safe_dict(survival_projection.get("turn_contract") or turn_contract)
     result_payload = _safe_dict(survival_projection.get("result_payload") or result_payload)
+
+    tick_projection = apply_survival_runtime_tick(
+        authoritative_result=authoritative_result,
+        session=session,
+        turn_contract=turn_contract,
+        result_payload=result_payload,
+        resolved_result=_safe_dict(result_payload.get("resolved_result") or resolved_result),
+    )
+    session = _safe_dict(tick_projection.get("session") or session)
+    turn_contract = _safe_dict(tick_projection.get("turn_contract") or turn_contract)
+    result_payload = _safe_dict(tick_projection.get("result_payload") or result_payload)
+
     if session:
         simulation_state = _safe_dict(session.get("simulation_state")) or simulation_state
     if simulation_state:
