@@ -19,6 +19,7 @@ from app.rpg.interactions.semantic_actions import (
     resolve_semantic_action_v2,
     semantic_action_kind,
 )
+from app.rpg.interactions.survival_action_runtime import resolve_survival_action
 from app.rpg.interactions.target_resolver import (
     expected_target_types_for_action,
     resolve_target_ref,
@@ -79,6 +80,32 @@ def _allowed_sources_for_action(kind: str) -> list[str]:
     return []
 
 
+def _survival_interaction_response(action: Dict[str, Any], survival_result: Dict[str, Any]) -> Dict[str, Any]:
+    interaction_result = {
+        "resolved": bool(survival_result.get("resolved")),
+        "changed_state": bool(survival_result.get("changed_state")),
+        "reason": _safe_str(survival_result.get("reason")),
+        "semantic_action_v2": deepcopy(action),
+        "survival_result": deepcopy(survival_result),
+        "action_category": "survival",
+        "action": _safe_str(survival_result.get("action")),
+        "effects": deepcopy(_safe_dict(survival_result.get("effects"))),
+        "inventory_delta": deepcopy(_safe_dict(survival_result.get("inventory_delta"))),
+        "survival_event": deepcopy(_safe_dict(survival_result.get("survival_event"))),
+        "blocked_reason": _safe_str(survival_result.get("blocked_reason")),
+        "source": "deterministic_general_interaction_runtime",
+    }
+
+    return {
+        "handled": bool(interaction_result.get("resolved")),
+        "semantic_action_v2": deepcopy(action),
+        "interaction_result": deepcopy(interaction_result),
+        "survival_result": deepcopy(survival_result),
+        "action_category": "survival",
+        "source": "deterministic_general_interaction_runtime",
+    }
+
+
 def resolve_general_interaction(
     simulation_state: Dict[str, Any],
     *,
@@ -91,6 +118,15 @@ def resolve_general_interaction(
         actor_id=actor_id,
     )
     kind = semantic_action_kind(action)
+
+    survival_result = resolve_survival_action(
+        simulation_state,
+        player_input=player_input,
+        semantic_action_v2=action,
+        tick=tick,
+    )
+    if survival_result.get("resolved") or survival_result.get("action_category") == "survival":
+        return _survival_interaction_response(action, survival_result)
 
     if not action.get("resolved"):
         return {
