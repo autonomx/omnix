@@ -9,6 +9,7 @@ from app.rpg.interactions.item_model import (
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,
 )
+from app.rpg.interactions.merchant_runtime import apply_merchant_interaction
 from app.rpg.survival import apply_survival_effect, ensure_survival_state
 
 _SURVIVAL_SOURCE = "runtime_action_resolver"
@@ -170,12 +171,7 @@ def _consume_waterskin_charge(simulation_state: Dict[str, Any]) -> Tuple[bool, D
 
 
 def detect_survival_action(player_input: str, semantic_action_v2: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
-    """Detect concrete survival actions without calling an LLM.
-
-    This deliberately recognizes only concrete, bounded survival operations. It
-    does not infer rewards, inventory, or survival effects beyond the explicit
-    runtime action map.
-    """
+    """Detect concrete survival actions without calling an LLM."""
     raw = _safe_str(player_input)
     text = _normalize_text(raw)
     action = _safe_dict(semantic_action_v2)
@@ -215,7 +211,6 @@ def detect_survival_action(player_input: str, semantic_action_v2: Optional[Mappi
 
 
 def _blocked_result(action: Dict[str, Any], reason: str, *, tick: int, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    ensure_survival_state(action.setdefault("_simulation_state", {})) if False else None
     payload = {
         "resolved": False,
         "changed_state": False,
@@ -229,6 +224,94 @@ def _blocked_result(action: Dict[str, Any], reason: str, *, tick: int, extra: Op
     }
     payload.update(_safe_dict(extra or {}))
     return payload
+
+
+def _merchant_buy_action_for_survival(action: str, semantic_action_v2: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    semantic = _safe_dict(semantic_action_v2)
+    target_ref = "water" if action == "buy_water" else "rations"
+    return {
+        "resolved": True,
+        "kind": "buy",
+        "actor_id": _safe_str(semantic.get("actor_id") or "player"),
+        "target_ref": target_ref,
+        "item_ref": target_ref,
+        "secondary_target_ref": _safe_str(semantic.get("secondary_target_ref")),
+        "merchant_id": _safe_str(semantic.get("merchant_id") or "npc:Elara"),
+        "quantity": max(1, _safe_int(semantic.get("quantity"), 1)),
+        "confidence": "high",
+        "raw_input": _safe_str(semantic.get("raw_input")),
+        "source": _RUNTIME_SOURCE,
+    }
+
+
+def _resolve_survival_purchase(
+    simulation_state: Dict[str, Any],
+    *,
+    action: str,
+    semantic_action_v2: Optional[Mapping[str, Any]],
+    detected: Dict[str, Any],
+    tick: int,
+) -> Dict[str, Any]:
+    merchant_action = _merchant_buy_action_for_survival(action, semantic_action_v2)
+    merchant_result = apply_merchant_interaction(
+        simulation_state,
+        semantic_action_v2=merchant_action,
+        tick=tick,
+    )
+    survival_state = ensure_survival_state(simulation_state)
+    if not merchant_result.get("resolved"):
+        return _blocked_result(
+            {"action": action},
+            _safe_str(merchant_result.get("reason")) or "survival_purchase_failed",
+            tick=tick,
+            extra={
+                "detected": detected,
+                "survival": deepcopy(survival_state),
+                "merchant_result": deepcopy(merchant_result),
+                "forbidden_narration": [
+                    "Do not say supplies were bought unless merchant_result.resolved is true.",
+                    "Do not add water, rations, or food unless a merchant/service transaction succeeds.",
+                ],
+            },
+        )
+
+    quantity = max(1, _safe_int(merchant_result.get("quantity"), 1))
+    inventory_delta = {"water": quantity} if action == "buy_water" else {"rations": quantity}
+    survival_event = {
+        "kind": action,
+        "tick": int(tick or 0),
+        "effects": {},
+        "inventory_delta": deepcopy(inventory_delta),
+        "merchant_result": deepcopy(merchant_result),
+        "source": _SURVIVAL_SOURCE,
+    }
+    survival_state.setdefault("events", [])
+    survival_state["events"] = (survival_state.get("events") or [])[-31:] + [survival_event]
+    simulation_state["survival"] = survival_state
+    return {
+        "resolved": True,
+        "changed_state": True,
+        "ok": True,
+        "action_category": "survival",
+        "action": action,
+        "reason": action,
+        "effects": {},
+        "inventory_delta": deepcopy(inventory_delta),
+        "merchant_result": deepcopy(merchant_result),
+        "survival_event": deepcopy(survival_event),
+        "survival": deepcopy(survival_state),
+        "detected": detected,
+        "turn_contract_fragment": {
+            "action_category": "survival",
+            "action": action,
+            "ok": True,
+            "effects": {},
+            "inventory_delta": deepcopy(inventory_delta),
+            "survival_event": deepcopy(survival_event),
+        },
+        "tick": int(tick or 0),
+        "source": _RUNTIME_SOURCE,
+    }
 
 
 def resolve_survival_action(
@@ -254,18 +337,12 @@ def resolve_survival_action(
     item_result: Dict[str, Any] = {}
 
     if action in {"buy_water", "buy_rations"}:
-        return _blocked_result(
-            {"action": action},
-            "survival_purchase_requires_economy_runtime",
+        return _resolve_survival_purchase(
+            simulation_state,
+            action=action,
+            semantic_action_v2=semantic_action_v2,
+            detected=detected,
             tick=tick,
-            extra={
-                "detected": detected,
-                "survival": deepcopy(survival_state),
-                "forbidden_narration": [
-                    "Do not say supplies were bought.",
-                    "Do not add water, rations, or food unless a merchant/service transaction succeeds.",
-                ],
-            },
         )
 
     if action == "drink_water":
@@ -275,7 +352,6 @@ def resolve_survival_action(
             if waterskin_removed:
                 action = "drink_from_waterskin"
                 item = waterskin_item
-                remove_result = waterskin_result
                 inventory_delta = {"waterskin_water_charges": -1}
             else:
                 return _blocked_result(
