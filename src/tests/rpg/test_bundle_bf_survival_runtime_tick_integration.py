@@ -72,7 +72,7 @@ def test_bundle_bf_standard_turn_applies_one_passive_tick_and_records_evidence()
     session = _session(runtime_state={"tick": 3})
     authoritative_result = _authoritative_result(
         session=session,
-        player_input="look around the tavern",
+        player_input="check my satchel straps",
         tick=3,
         turn_id="turn:bf:standard",
     )
