@@ -270,16 +270,30 @@
     return payload;
   }
 
+  function ensureSurvivalInspectorScript() {
+    if (window.RpgSurvivalInspector || document.getElementById("rpg-survival-inspector-script")) return;
+    const script = document.createElement("script");
+    script.id = "rpg-survival-inspector-script";
+    script.src = "/static/rpg/rpg-survival-inspector.js";
+    script.defer = true;
+    document.head.appendChild(script);
+  }
+
   window.RpgConversationSettings = {
     render,
     loadSettings,
     saveSettings,
     attachToPayload,
+    ensureSurvivalInspectorScript,
   };
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", render);
+    document.addEventListener("DOMContentLoaded", () => {
+      render();
+      ensureSurvivalInspectorScript();
+    });
   } else {
     render();
+    ensureSurvivalInspectorScript();
   }
 })();
