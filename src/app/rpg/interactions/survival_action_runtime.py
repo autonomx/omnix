@@ -5,6 +5,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from app.rpg.interactions.item_model import (
+    add_item_to_items_list,
     normalize_item_instance,
     recalculate_inventory_derived_fields,
     remove_quantity_from_items_list,
@@ -14,11 +15,23 @@ from app.rpg.survival import apply_survival_effect, ensure_survival_state
 
 _SURVIVAL_SOURCE = "runtime_action_resolver"
 _RUNTIME_SOURCE = "deterministic_survival_action_runtime"
+_SERVICE_SOURCE = "deterministic_survival_service_runtime"
 
 _WATER_TERMS = {"water", "waterskin water", "fresh water", "clean water"}
 _WATERSKIN_TERMS = {"waterskin", "water skin", "filled waterskin"}
 _RATION_TERMS = {"ration", "rations", "trail ration", "trail rations", "iron ration", "iron rations"}
-_FOOD_TERMS = {"food", "meal", "bread", "cheese", "apple", "stew", "provisions"}
+_FOOD_TERMS = {"food", "meal", "bread", "cheese", "apple", "stew", "provisions", "tavern meal"}
+_MAX_WATERSKIN_CHARGES = 3
+_SERVICE_COSTS_COPPER = {
+    "tavern_meal": 5,
+    "buy_meal": 5,
+    "inn_lodging": 10,
+    "buy_lodging": 10,
+    "ration_pack": 8,
+    "fill_waterskin": 0,
+    "drink_from_well": 0,
+    "drink_from_stream": 0,
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -131,11 +144,10 @@ def _find_charged_waterskin(items: List[Any]) -> Tuple[int, Dict[str, Any], int,
         metadata = _safe_dict(item.get("metadata"))
         state = _safe_dict(item.get("state"))
         if "water_charges" in metadata:
-            charges = _safe_int(metadata.get("water_charges"), 0)
-            return index, item, charges, "metadata"
+            return index, item, _safe_int(metadata.get("water_charges"), 0), "metadata"
         if "water_charges" in state:
-            charges = _safe_int(state.get("water_charges"), 0)
-            return index, item, charges, "state"
+            return index, item, _safe_int(state.get("water_charges"), 0), "state"
+        return index, item, 0, "metadata"
     return -1, {}, 0, ""
 
 
@@ -170,6 +182,97 @@ def _consume_waterskin_charge(simulation_state: Dict[str, Any]) -> Tuple[bool, D
     }
 
 
+def _refill_waterskin(simulation_state: Dict[str, Any]) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]:
+    inventory = _player_inventory(simulation_state)
+    items = [normalize_item_instance(_safe_dict(item)) for item in _safe_list(inventory.get("items"))]
+    index, item, charges, charge_container = _find_charged_waterskin(items)
+    if index < 0 or not item:
+        return False, {}, {"reason": "no_waterskin_available"}
+    updated = deepcopy(item)
+    if charge_container in {"", "metadata"}:
+        metadata = _safe_dict(updated.get("metadata"))
+        metadata["water_charges"] = _MAX_WATERSKIN_CHARGES
+        updated["metadata"] = metadata
+    else:
+        state = _safe_dict(updated.get("state"))
+        state["water_charges"] = _MAX_WATERSKIN_CHARGES
+        updated["state"] = state
+    items[index] = updated
+    inventory["items"] = items
+    inventory = recalculate_inventory_derived_fields(inventory)
+    simulation_state["player_state"]["inventory"] = inventory
+    return True, updated, {
+        "charges_before": charges,
+        "charges_after": _MAX_WATERSKIN_CHARGES,
+        "source": _SERVICE_SOURCE,
+    }
+
+
+def _currency_container(simulation_state: Dict[str, Any]) -> Dict[str, int]:
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory = _safe_dict(player_state.get("inventory"))
+    currency = _safe_dict(inventory.get("currency") or player_state.get("currency"))
+    currency = {
+        "gold": max(0, _safe_int(currency.get("gold"), 0)),
+        "silver": max(0, _safe_int(currency.get("silver"), 0)),
+        "copper": max(0, _safe_int(currency.get("copper"), 0)),
+    }
+    player_state["currency"] = currency
+    inventory["currency"] = currency
+    player_state["inventory"] = inventory
+    simulation_state["player_state"] = player_state
+    return currency
+
+
+def _currency_to_copper(currency: Mapping[str, Any]) -> int:
+    return _safe_int(currency.get("gold"), 0) * 100 + _safe_int(currency.get("silver"), 0) * 10 + _safe_int(currency.get("copper"), 0)
+
+
+def _copper_to_currency(value: int) -> Dict[str, int]:
+    value = max(0, int(value or 0))
+    gold, rem = divmod(value, 100)
+    silver, copper = divmod(rem, 10)
+    return {"gold": gold, "silver": silver, "copper": copper}
+
+
+def _spend_service_cost(simulation_state: Dict[str, Any], action: str) -> Dict[str, Any]:
+    cost = _SERVICE_COSTS_COPPER.get(action, 0)
+    currency = _currency_container(simulation_state)
+    before = deepcopy(currency)
+    total = _currency_to_copper(currency)
+    if total < cost:
+        return {
+            "ok": False,
+            "reason": "insufficient_currency",
+            "cost_copper": cost,
+            "currency_before": before,
+            "source": _SERVICE_SOURCE,
+        }
+    after = _copper_to_currency(total - cost)
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    inventory = _safe_dict(player_state.get("inventory"))
+    player_state["currency"] = after
+    inventory["currency"] = after
+    player_state["inventory"] = inventory
+    simulation_state["player_state"] = player_state
+    return {
+        "ok": True,
+        "cost_copper": cost,
+        "currency_before": before,
+        "currency_after": deepcopy(after),
+        "source": _SERVICE_SOURCE,
+    }
+
+
+def _add_inventory_item(simulation_state: Dict[str, Any], item: Dict[str, Any]) -> Dict[str, Any]:
+    inventory = _player_inventory(simulation_state)
+    add_result = add_item_to_items_list(_safe_list(inventory.get("items")), item)
+    inventory["items"] = _safe_list(add_result.get("items"))
+    inventory = recalculate_inventory_derived_fields(inventory)
+    simulation_state["player_state"]["inventory"] = inventory
+    return add_result
+
+
 def detect_survival_action(player_input: str, semantic_action_v2: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """Detect concrete survival actions without calling an LLM."""
     raw = _safe_str(player_input)
@@ -182,13 +285,27 @@ def detect_survival_action(player_input: str, semantic_action_v2: Optional[Mappi
         return {"detected": False, "reason": "empty_player_input", "source": _RUNTIME_SOURCE}
 
     has_drink = bool(re.search(r"\b(drink|sip|quaff)\b", text)) or kind in {"consume", "use_item"} and bool(re.search(r"\b(water|waterskin|water skin)\b", target))
-    has_eat = bool(re.search(r"\b(eat|consume)\b", text)) or kind in {"consume", "use_item"} and bool(re.search(r"\b(ration|rations|food|meal|bread|provisions)\b", target))
-    has_buy = bool(re.search(r"\b(buy|purchase)\b", text)) or kind == "buy"
+    has_eat = bool(re.search(r"\b(eat|consume|order)\b", text)) or kind in {"consume", "use_item"} and bool(re.search(r"\b(ration|rations|food|meal|bread|provisions)\b", target))
+    has_buy = bool(re.search(r"\b(buy|purchase|order|pay for|rent)\b", text)) or kind == "buy"
 
-    if has_buy and re.search(r"\b(water|waterskin|water skin)\b", text):
+    if re.search(r"\b(fill|refill|top up)\b", text) and re.search(r"\b(waterskin|water skin)\b", text + " " + target):
+        return {"detected": True, "action": "fill_waterskin", "target_terms": list(_WATERSKIN_TERMS), "source": _RUNTIME_SOURCE}
+    if has_drink and re.search(r"\b(well|stream|river|spring|fountain)\b", text + " " + target):
+        source = "stream" if re.search(r"\b(stream|river)\b", text + " " + target) else "well"
+        return {"detected": True, "action": f"drink_from_{source}", "target_terms": [source], "source": _RUNTIME_SOURCE}
+
+    if has_buy and re.search(r"\b(waterskin|water skin)\b", text):
+        return {"detected": True, "action": "buy_waterskin", "target_terms": ["waterskin"], "source": _RUNTIME_SOURCE}
+    if has_buy and re.search(r"\b(water)\b", text):
         return {"detected": True, "action": "buy_water", "target_terms": ["water"], "source": _RUNTIME_SOURCE}
+    if has_buy and re.search(r"\b(ration pack|rations pack|provision pack|supplies pack)\b", text):
+        return {"detected": True, "action": "ration_pack", "target_terms": ["rations"], "source": _RUNTIME_SOURCE}
     if has_buy and re.search(r"\b(ration|rations|food|provisions)\b", text):
         return {"detected": True, "action": "buy_rations", "target_terms": ["rations"], "source": _RUNTIME_SOURCE}
+    if has_buy and re.search(r"\b(meal|stew|supper|breakfast|dinner|food)\b", text):
+        return {"detected": True, "action": "tavern_meal", "target_terms": ["meal"], "source": _RUNTIME_SOURCE}
+    if has_buy and re.search(r"\b(room|lodging|bed|inn stay|night)\b", text):
+        return {"detected": True, "action": "inn_lodging", "target_terms": ["lodging"], "source": _RUNTIME_SOURCE}
 
     if has_drink and re.search(r"\b(waterskin|water skin)\b", text + " " + target):
         return {"detected": True, "action": "drink_from_waterskin", "target_terms": list(_WATERSKIN_TERMS), "source": _RUNTIME_SOURCE}
@@ -228,7 +345,7 @@ def _blocked_result(action: Dict[str, Any], reason: str, *, tick: int, extra: Op
 
 def _merchant_buy_action_for_survival(action: str, semantic_action_v2: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     semantic = _safe_dict(semantic_action_v2)
-    target_ref = "water" if action == "buy_water" else "rations"
+    target_ref = "waterskin" if action == "buy_waterskin" else "water" if action == "buy_water" else "rations"
     return {
         "resolved": True,
         "kind": "buy",
@@ -253,11 +370,7 @@ def _resolve_survival_purchase(
     tick: int,
 ) -> Dict[str, Any]:
     merchant_action = _merchant_buy_action_for_survival(action, semantic_action_v2)
-    merchant_result = apply_merchant_interaction(
-        simulation_state,
-        semantic_action_v2=merchant_action,
-        tick=tick,
-    )
+    merchant_result = apply_merchant_interaction(simulation_state, semantic_action_v2=merchant_action, tick=tick)
     survival_state = ensure_survival_state(simulation_state)
     if not merchant_result.get("resolved"):
         return _blocked_result(
@@ -276,7 +389,12 @@ def _resolve_survival_purchase(
         )
 
     quantity = max(1, _safe_int(merchant_result.get("quantity"), 1))
-    inventory_delta = {"water": quantity} if action == "buy_water" else {"rations": quantity}
+    if action == "buy_water":
+        inventory_delta = {"water": quantity}
+    elif action == "buy_waterskin":
+        inventory_delta = {"waterskin": quantity}
+    else:
+        inventory_delta = {"rations": quantity}
     survival_event = {
         "kind": action,
         "tick": int(tick or 0),
@@ -314,6 +432,124 @@ def _resolve_survival_purchase(
     }
 
 
+def _resolve_expanded_survival_service(simulation_state: Dict[str, Any], *, action: str, detected: Dict[str, Any], tick: int) -> Dict[str, Any]:
+    survival_state = ensure_survival_state(simulation_state)
+    cost_result = _spend_service_cost(simulation_state, action)
+    if not cost_result.get("ok"):
+        return _blocked_result(
+            {"action": action},
+            _safe_str(cost_result.get("reason")) or "service_unavailable",
+            tick=tick,
+            extra={"detected": detected, "survival": deepcopy(survival_state), "service_result": deepcopy(cost_result)},
+        )
+
+    inventory_delta: Dict[str, int] = {}
+    service_result: Dict[str, Any] = deepcopy(cost_result)
+    effect_kind = action
+    effects: Dict[str, int] = {}
+
+    if action == "tavern_meal":
+        effect_kind = "tavern_meal"
+        effects = {"hunger": -35}
+        service_result["service_type"] = "tavern_meal"
+    elif action == "inn_lodging":
+        effect_kind = "inn_lodging"
+        effects = {"fatigue": -55}
+        service_result["service_type"] = "inn_lodging"
+    elif action == "ration_pack":
+        add_result = _add_inventory_item(simulation_state, {
+            "item_id": "item:rations",
+            "definition_id": "def:rations",
+            "name": "Trail Rations",
+            "kind": "supply",
+            "quantity": 3,
+            "stackable": True,
+            "max_stack": 10,
+            "unit_weight": 0.5,
+            "tags": ["rations", "food", "survival"],
+            "source": _SERVICE_SOURCE,
+        })
+        inventory_delta = {"rations": 3}
+        service_result.update({"service_type": "ration_pack", "add_item_result": deepcopy(add_result)})
+    elif action == "fill_waterskin":
+        refilled, item, refill_result = _refill_waterskin(simulation_state)
+        if not refilled:
+            return _blocked_result(
+                {"action": action},
+                _safe_str(refill_result.get("reason")) or "no_waterskin_available",
+                tick=tick,
+                extra={"detected": detected, "survival": deepcopy(survival_state), "service_result": deepcopy(refill_result)},
+            )
+        inventory_delta = {"waterskin_water_charges": _safe_int(refill_result.get("charges_after"), 0) - _safe_int(refill_result.get("charges_before"), 0)}
+        service_result.update({"service_type": "water_source", "refill_result": deepcopy(refill_result), "item": deepcopy(item)})
+    elif action in {"drink_from_well", "drink_from_stream"}:
+        effect_kind = action
+        effects = {"thirst": -35}
+        service_result["service_type"] = "water_source"
+    else:
+        return _blocked_result({"action": action}, "unsupported_survival_service", tick=tick, extra={"detected": detected, "survival": deepcopy(survival_state)})
+
+    effect_result = {}
+    if effects:
+        effect_result = apply_survival_effect(
+            simulation_state,
+            kind=effect_kind,
+            effects=effects,
+            tick=tick,
+            source=_SURVIVAL_SOURCE,
+        )
+        if not effect_result.get("ok"):
+            return _blocked_result(
+                {"action": action},
+                _safe_str(effect_result.get("reason")) or "survival_service_effect_failed",
+                tick=tick,
+                extra={"detected": detected, "service_result": deepcopy(service_result), "effect_result": deepcopy(effect_result)},
+            )
+        survival_state = _safe_dict(effect_result.get("survival"))
+    else:
+        survival_state = ensure_survival_state(simulation_state)
+
+    survival_event = deepcopy(_safe_dict(effect_result.get("survival_event"))) if effect_result else {
+        "kind": action,
+        "tick": int(tick or 0),
+        "before": {},
+        "after": {},
+        "effects": {},
+        "source": _SURVIVAL_SOURCE,
+    }
+    survival_event["inventory_delta"] = deepcopy(inventory_delta)
+    survival_event["service_result"] = deepcopy(service_result)
+    survival_state.setdefault("events", [])
+    if not effect_result:
+        survival_state["events"] = (survival_state.get("events") or [])[-31:] + [survival_event]
+        simulation_state["survival"] = survival_state
+
+    return {
+        "resolved": True,
+        "changed_state": True,
+        "ok": True,
+        "action_category": "survival",
+        "action": action,
+        "reason": action,
+        "effects": deepcopy(_safe_dict(effect_result.get("effects"))) if effect_result else {},
+        "inventory_delta": deepcopy(inventory_delta),
+        "service_result": deepcopy(service_result),
+        "survival_event": deepcopy(survival_event),
+        "survival": deepcopy(survival_state),
+        "detected": detected,
+        "turn_contract_fragment": {
+            "action_category": "survival",
+            "action": action,
+            "ok": True,
+            "effects": deepcopy(_safe_dict(effect_result.get("effects"))) if effect_result else {},
+            "inventory_delta": deepcopy(inventory_delta),
+            "survival_event": deepcopy(survival_event),
+        },
+        "tick": int(tick or 0),
+        "source": _RUNTIME_SOURCE,
+    }
+
+
 def resolve_survival_action(
     simulation_state: Dict[str, Any],
     *,
@@ -336,7 +572,7 @@ def resolve_survival_action(
     inventory_delta: Dict[str, int] = {}
     item_result: Dict[str, Any] = {}
 
-    if action in {"buy_water", "buy_rations"}:
+    if action in {"buy_water", "buy_rations", "buy_waterskin"}:
         return _resolve_survival_purchase(
             simulation_state,
             action=action,
@@ -344,6 +580,9 @@ def resolve_survival_action(
             detected=detected,
             tick=tick,
         )
+
+    if action in {"tavern_meal", "inn_lodging", "ration_pack", "fill_waterskin", "drink_from_well", "drink_from_stream"}:
+        return _resolve_expanded_survival_service(simulation_state, action=action, detected=detected, tick=tick)
 
     if action == "drink_water":
         removed, item, remove_result = _remove_one_inventory_item(simulation_state, _WATER_TERMS)
@@ -358,12 +597,7 @@ def resolve_survival_action(
                     {"action": "drink_water"},
                     "no_water_available",
                     tick=tick,
-                    extra={
-                        "detected": detected,
-                        "survival": deepcopy(survival_state),
-                        "inventory_result": deepcopy(remove_result),
-                        "waterskin_result": deepcopy(waterskin_result),
-                    },
+                    extra={"detected": detected, "survival": deepcopy(survival_state), "inventory_result": deepcopy(remove_result), "waterskin_result": deepcopy(waterskin_result)},
                 )
         else:
             item_result = item
@@ -376,11 +610,7 @@ def resolve_survival_action(
                 {"action": action},
                 _safe_str(remove_result.get("reason")) or "no_waterskin_available",
                 tick=tick,
-                extra={
-                    "detected": detected,
-                    "survival": deepcopy(survival_state),
-                    "waterskin_result": deepcopy(remove_result),
-                },
+                extra={"detected": detected, "survival": deepcopy(survival_state), "waterskin_result": deepcopy(remove_result)},
             )
         item_result = item
         inventory_delta = {"waterskin_water_charges": -1}
@@ -392,11 +622,7 @@ def resolve_survival_action(
                 {"action": action},
                 "no_rations_available",
                 tick=tick,
-                extra={
-                    "detected": detected,
-                    "survival": deepcopy(survival_state),
-                    "inventory_result": deepcopy(remove_result),
-                },
+                extra={"detected": detected, "survival": deepcopy(survival_state), "inventory_result": deepcopy(remove_result)},
             )
         item_result = item
         inventory_delta = {"rations": -1}
@@ -408,11 +634,7 @@ def resolve_survival_action(
                 {"action": action},
                 "no_food_available",
                 tick=tick,
-                extra={
-                    "detected": detected,
-                    "survival": deepcopy(survival_state),
-                    "inventory_result": deepcopy(remove_result),
-                },
+                extra={"detected": detected, "survival": deepcopy(survival_state), "inventory_result": deepcopy(remove_result)},
             )
         item_result = item
         inventory_delta = {"food": -1}
@@ -425,12 +647,7 @@ def resolve_survival_action(
             extra={"detected": detected, "survival": deepcopy(survival_state)},
         )
 
-    effect_result = apply_survival_effect(
-        simulation_state,
-        kind=action,
-        tick=tick,
-        source=_SURVIVAL_SOURCE,
-    )
+    effect_result = apply_survival_effect(simulation_state, kind=action, tick=tick, source=_SURVIVAL_SOURCE)
     if not effect_result.get("ok"):
         return _blocked_result(
             {"action": action},
