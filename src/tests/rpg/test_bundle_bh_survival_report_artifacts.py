@@ -58,6 +58,8 @@ def test_bundle_bh_builds_survival_artifact_payload() -> None:
     assert payload["metrics"]["summary"]["passive_tick_count"] == 1
     assert payload["metrics"]["summary"]["blocked_survival_action_count"] == 1
     assert payload["compact_summary"]["format_version"] == "survival_report_polish_v1"
+    assert payload["survival_readiness"]["format_version"] == "survival_readiness_v1"
+    assert payload["survival_readiness"]["advisory_only"] is True
     assert "Survival Report Metrics" in payload["html_text"]
     assert "Survival Summary" in payload["summary_html_text"]
     metrics = json.loads(payload["json_text"])
@@ -65,12 +67,14 @@ def test_bundle_bh_builds_survival_artifact_payload() -> None:
     assert metrics["format_version"] == "survival_report_metrics_v2"
     assert metrics["advisory_gates"]["advisory_only"] is True
     assert summary["status"] in {"healthy", "watch", "warning"}
+    json.dumps(payload["survival_readiness"])
 
 
 def test_bundle_bh_writes_json_and_html_report_artifacts(tmp_path) -> None:
     result = write_survival_report_artifacts(tmp_path, _rows())
 
     assert result["ok"] is True
+    assert result["survival_readiness"]["format_version"] == "survival_readiness_v1"
     json_path = tmp_path / SURVIVAL_METRICS_JSON_NAME
     html_path = tmp_path / SURVIVAL_METRICS_HTML_NAME
     summary_json_path = tmp_path / SURVIVAL_SUMMARY_JSON_NAME
@@ -98,6 +102,7 @@ def test_bundle_bh_appends_survival_artifacts_to_zip(tmp_path) -> None:
     result = append_survival_report_artifacts_to_zip(zip_path, _rows(), prefix="reports")
 
     assert result["ok"] is True
+    assert result["survival_readiness"]["format_version"] == "survival_readiness_v1"
     assert result["zip_members"] == [
         f"reports/{SURVIVAL_METRICS_JSON_NAME}",
         f"reports/{SURVIVAL_METRICS_HTML_NAME}",
@@ -127,12 +132,14 @@ def test_bundle_bh_attaches_survival_artifact_manifest() -> None:
         "zip_members": ["reports/survival-report-metrics.json", "reports/survival-summary.json"],
         "metrics": {"summary": {"turns_observed": 2}},
         "compact_summary": {"status": "watch"},
+        "survival_readiness": {"status": "watch", "format_version": "survival_readiness_v1"},
     }
 
     manifest = attach_survival_artifact_manifest({"artifacts": []}, artifact_result)
 
     assert manifest["survival_report_metrics"] == {"summary": {"turns_observed": 2}}
     assert manifest["survival_summary"] == {"status": "watch"}
+    assert manifest["survival_readiness"] == {"status": "watch", "format_version": "survival_readiness_v1"}
     assert [item["kind"] for item in manifest["artifacts"]] == [
         "survival_metrics_json",
         "survival_metrics_html",
@@ -147,6 +154,7 @@ def test_bundle_bh_autoplay_wrapper_exports_writer(tmp_path) -> None:
     result = autoplay_write_survival_report_artifacts(tmp_path, _rows())
 
     assert result["ok"] is True
+    assert result["survival_readiness"]["format_version"] == "survival_readiness_v1"
     assert (tmp_path / SURVIVAL_METRICS_JSON_NAME).exists()
     assert (tmp_path / SURVIVAL_METRICS_HTML_NAME).exists()
     assert (tmp_path / SURVIVAL_SUMMARY_JSON_NAME).exists()
