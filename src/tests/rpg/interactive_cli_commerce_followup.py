@@ -1,11 +1,10 @@
-"""CA.1/CA.2 — deterministic commerce follow-up repair for interactive CLI runs.
+"""CA.1/CA.2/CB.2 — deterministic commerce repair for interactive CLI runs.
 
 The runtime can correctly surface a service inquiry such as Bran's meal offer,
 but player-facing narration may omit the concrete offer list, or later follow-ups
 like "how much for bread?" may be routed as plain talk/observe and lose the
-service context.  For interactive playtests, keep a bounded in-process memory of
-the most recent authoritative service offers and use it to answer commerce
-questions without inventing stock.
+service context.  CB.2 also covers purchase attempts like "I'll buy a hot stew"
+when the runtime fails to match the authoritative offer.
 """
 from __future__ import annotations
 
@@ -82,7 +81,7 @@ def _normalize_offer(offer: Mapping[str, Any]) -> Dict[str, Any]:
 
 def infer_requested_service_kind(player_input: str) -> str:
     text = _safe_str(player_input).strip().lower()
-    food_terms = ("food", "meal", "bread", "stew", "provision", "provisions", "eat", "supper", "dinner", "breakfast")
+    food_terms = ("food", "meal", "bread", "stew", "strew", "provision", "provisions", "eat", "supper", "dinner", "breakfast")
     drink_terms = ("drink", "ale", "beer", "wine", "water", "mug")
     lodging_terms = ("room", "bed", "lodging", "sleep", "stay", "rent")
     if any(term in text for term in food_terms):
@@ -92,6 +91,28 @@ def infer_requested_service_kind(player_input: str) -> str:
     if any(term in text for term in lodging_terms):
         return "lodging"
     return ""
+
+
+def is_purchase_intent(player_input: str) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    purchase_terms = (
+        "i'll buy",
+        "ill buy",
+        "i will buy",
+        "i buy",
+        "buy a",
+        "buy the",
+        "buy hot",
+        "purchase",
+        "pay for",
+        "give me",
+        "get me",
+        "i want to buy",
+        "i'd like to buy",
+        "id like to buy",
+        "take my coin",
+    )
+    return any(term in text for term in purchase_terms)
 
 
 def _context_matches_request(context: Mapping[str, Any], requested_kind: str) -> bool:
@@ -160,9 +181,10 @@ def is_commerce_followup_question(player_input: str) -> bool:
     )
     if any(term in text for term in commerce_terms):
         return True
+    if is_purchase_intent(text):
+        return True
     if infer_requested_service_kind(text) and any(term in text for term in ("have", "got", "available", "offer")):
         return True
-    # Covers terse follow-ups after an established service inquiry.
     if text in {"well?", "what?", "and?"}:
         return True
     if text.startswith("i ask") and "what" in text and "have" in text:
@@ -170,7 +192,7 @@ def is_commerce_followup_question(player_input: str) -> bool:
     return False
 
 
-def format_service_offer_answer(context: Mapping[str, Any]) -> Dict[str, Any]:
+def format_service_offer_answer(context: Mapping[str, Any], *, purchase: bool = False) -> Dict[str, Any]:
     context = _safe_dict(context)
     offers = _safe_list(context.get("offers"))
     provider = _safe_str(context.get("provider_name") or "The merchant").strip() or "The merchant"
@@ -183,6 +205,13 @@ def format_service_offer_answer(context: Mapping[str, Any]) -> Dict[str, Any]:
         }
     labels = [_offer_label(_safe_dict(row)) for row in offers]
     offer_sentence = "; ".join(labels)
+    if purchase:
+        line = f"I can sell you {offer_sentence}. Confirm the purchase and I will take the listed price."
+        return {
+            "narration": f"{provider} matches your purchase request to the available offer: {offer_sentence}.",
+            "action": "Purchase intent matched to authoritative service offer; awaiting/confirming deterministic purchase resolution.",
+            "npc": {"speaker": provider, "line": line},
+        }
     line = f"I can offer {offer_sentence}."
     return {
         "narration": f"{provider} lists the available provisions: {offer_sentence}.",
@@ -215,7 +244,7 @@ def apply_commerce_followup_repair(
     player_input: str,
     last_offer_context: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    """Patch an interactive turn summary if it is a commerce/service question."""
+    """Patch an interactive turn summary if it is a commerce/service question or purchase attempt."""
     out = deepcopy(_safe_dict(turn_summary))
     if not is_commerce_followup_question(player_input):
         return out
@@ -229,7 +258,8 @@ def apply_commerce_followup_repair(
     if not context:
         return out
 
-    answer = format_service_offer_answer(context)
+    purchase = is_purchase_intent(player_input)
+    answer = format_service_offer_answer(context, purchase=purchase)
     raw_result = deepcopy(raw_result)
     raw_result["narration"] = answer["narration"]
     raw_result["visible_interaction_reason"] = answer["action"]
@@ -240,10 +270,12 @@ def apply_commerce_followup_repair(
         "offer_context": context,
         "requested_service_kind": infer_requested_service_kind(player_input),
         "current_context_service_kind": _safe_str(current_context.get("service_kind")),
+        "purchase_intent": purchase,
     }
     contract = deepcopy(_safe_dict(raw_result.get("turn_contract")))
     contract["service_inquiry_followup"] = {
         "answered": True,
+        "purchase_intent": purchase,
         "source": COMMERCE_FOLLOWUP_SOURCE,
         "service_result": context,
         "available_actions": [
@@ -271,6 +303,8 @@ def apply_commerce_followup_repair(
     out["interactive_cli_commerce_followup"] = raw_result["interactive_cli_commerce_followup"]
     warnings = list(_safe_list(out.get("scenario_warnings")))
     warning = "interactive_cli_commerce_followup_answered_from_authoritative_service_offers"
+    if purchase:
+        warning = "interactive_cli_purchase_intent_matched_to_authoritative_service_offer"
     if warning not in warnings:
         warnings.append(warning)
     out["scenario_warnings"] = warnings
