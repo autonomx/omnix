@@ -1,35 +1,28 @@
-"""Bundle BG — survival report/autoplay metric aggregation.
+"""Bundle BG/BQ — survival report/autoplay metric aggregation and advisory gates.
 
 This module is deliberately runtime-shape tolerant: autoplay transcripts, turn
 contracts, response payloads, and compact report sidecars have historically used
-slightly different nesting.  BG walks those bounded rows and extracts canonical
+slightly different nesting.  It walks those bounded rows and extracts canonical
 BA-BF survival evidence without mutating gameplay state.
 """
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from copy import deepcopy
 from html import escape
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 SURVIVAL_REPORT_SOURCE = "runtime_survival_report_metrics"
-SURVIVAL_REPORT_VERSION = "survival_report_metrics_v1"
+SURVIVAL_REPORT_VERSION = "survival_report_metrics_v2"
 SURVIVAL_TIMELINE_LIMIT = 250
 SURVIVAL_TOP_REASON_LIMIT = 12
+SURVIVAL_CRITICAL_STREAK_GATE = 4
+SURVIVAL_BLOCKED_ACTION_GATE = 3
+SURVIVAL_NO_IMPROVEMENT_GATE = 3
+SURVIVAL_SUGGESTION_DOMINANCE_GATE = 6
 
 _NEEDS: Tuple[str, str, str] = ("hunger", "thirst", "fatigue")
 _PRESSURE_LABELS: Tuple[str, str, str, str] = ("low", "moderate", "high", "critical")
-_DIRECT_ACTIONS = {
-    "drink_water",
-    "drink_from_waterskin",
-    "eat_food",
-    "eat_rations",
-    "rest",
-    "sleep",
-    "make_camp",
-    "buy_water",
-    "buy_rations",
-}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -153,17 +146,39 @@ def _survival_tick_results(row: Mapping[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def _suggested_survival_count(row: Mapping[str, Any]) -> Tuple[int, int]:
+    total = 0
+    survival = 0
+    for item in _walk(row):
+        for key in ("suggested_actions", "next_actions", "recommended_actions"):
+            actions = _safe_list(item.get(key))
+            if not actions:
+                continue
+            for action in actions:
+                action = _safe_dict(action)
+                label = _safe_str(action.get("action") or action.get("command") or action.get("action_id"))
+                action_type = _safe_str(action.get("action_type") or action.get("category"))
+                if not label:
+                    continue
+                total += 1
+                if action_type == "survival" or label.startswith("survival:") or _norm_action(label).startswith("survival_"):
+                    survival += 1
+    return survival, total
+
+
 def _row_timeline_entry(row: Mapping[str, Any], fallback_turn: int) -> Dict[str, Any]:
     turn = _turn_index(row, fallback_turn)
     survival_state = _extract_survival_state(row)
     pressure = _extract_pressure(row, survival_state)
     tick_results = _survival_tick_results(row)
     action_results = _survival_action_results(row)
+    suggested_survival, suggested_total = _suggested_survival_count(row)
     entry = {
         "turn": turn,
         "needs": {need: _safe_int(_safe_dict(survival_state).get(need), 0) for need in _NEEDS},
         "pressure": pressure,
         "tick_applied": any(bool(item.get("applied")) for item in tick_results),
+        "tick_result_count": len(tick_results),
         "tick_reason": _safe_str((tick_results[-1] if tick_results else {}).get("reason")),
         "actions": [_norm_action(item.get("action")) for item in action_results if _norm_action(item.get("action"))],
         "blocked_actions": [
@@ -174,8 +189,128 @@ def _row_timeline_entry(row: Mapping[str, Any], fallback_turn: int) -> Dict[str,
             for item in action_results
             if item.get("ok") is False or item.get("blocked_reason")
         ],
+        "suggested_survival_count": suggested_survival,
+        "suggested_action_count": suggested_total,
+        "survival_suggestion_dominant": bool(suggested_total and suggested_survival >= suggested_total and suggested_survival > 0),
     }
     return entry
+
+
+def _max_critical_streak(timeline: List[Dict[str, Any]]) -> Dict[str, int]:
+    current = {need: 0 for need in _NEEDS}
+    max_seen = {need: 0 for need in _NEEDS}
+    for row in timeline:
+        pressure = _safe_dict(row.get("pressure"))
+        for need in _NEEDS:
+            if pressure.get(need) == "critical":
+                current[need] += 1
+            else:
+                current[need] = 0
+            max_seen[need] = max(max_seen[need], current[need])
+    return max_seen
+
+
+def _max_repeated_action_without_improvement(timeline: List[Dict[str, Any]]) -> Dict[str, int]:
+    max_seen: Dict[str, int] = {}
+    current_action = ""
+    current_need = ""
+    current_count = 0
+    last_value = None
+    need_by_action = {
+        "drink_water": "thirst",
+        "drink_from_waterskin": "thirst",
+        "buy_water": "thirst",
+        "eat_rations": "hunger",
+        "eat_food": "hunger",
+        "buy_rations": "hunger",
+        "rest": "fatigue",
+        "sleep": "fatigue",
+        "make_camp": "fatigue",
+    }
+    for row in timeline:
+        actions = _safe_list(row.get("actions"))
+        action = _safe_str(actions[0]) if actions else ""
+        need = need_by_action.get(action, "")
+        value = _safe_int(_safe_dict(row.get("needs")).get(need), 0) if need else None
+        if action and need and action == current_action and need == current_need and last_value is not None and value is not None and value >= last_value:
+            current_count += 1
+        elif action and need:
+            current_action = action
+            current_need = need
+            current_count = 1
+        else:
+            current_action = ""
+            current_need = ""
+            current_count = 0
+        if action:
+            max_seen[action] = max(max_seen.get(action, 0), current_count)
+        last_value = value
+    return max_seen
+
+
+def _max_suggestion_dominance_streak(timeline: List[Dict[str, Any]]) -> int:
+    current = 0
+    max_seen = 0
+    for row in timeline:
+        if row.get("survival_suggestion_dominant"):
+            current += 1
+        else:
+            current = 0
+        max_seen = max(max_seen, current)
+    return max_seen
+
+
+def _build_advisory_gates(
+    *,
+    timeline: List[Dict[str, Any]],
+    blocked_counts: Counter[str],
+    blocked_reasons: Counter[str],
+    tick_counts: Counter[str],
+) -> Dict[str, Any]:
+    critical_streaks = _max_critical_streak(timeline)
+    no_improvement = _max_repeated_action_without_improvement(timeline)
+    dominance_streak = _max_suggestion_dominance_streak(timeline)
+    double_tick_turns = [row["turn"] for row in timeline if _safe_int(row.get("tick_result_count"), 0) > 1]
+
+    gates: Dict[str, Any] = {}
+    gates["critical_pressure_streak"] = {
+        "ok": all(value < SURVIVAL_CRITICAL_STREAK_GATE for value in critical_streaks.values()),
+        "threshold": SURVIVAL_CRITICAL_STREAK_GATE,
+        "max_by_need": critical_streaks,
+        "source": SURVIVAL_REPORT_SOURCE,
+    }
+    gates["repeated_blocked_actions"] = {
+        "ok": all(value < SURVIVAL_BLOCKED_ACTION_GATE for value in blocked_counts.values()),
+        "threshold": SURVIVAL_BLOCKED_ACTION_GATE,
+        "counts": dict(blocked_counts),
+        "reasons": dict(blocked_reasons.most_common(SURVIVAL_TOP_REASON_LIMIT)),
+        "source": SURVIVAL_REPORT_SOURCE,
+    }
+    gates["survival_action_no_improvement"] = {
+        "ok": all(value < SURVIVAL_NO_IMPROVEMENT_GATE for value in no_improvement.values()),
+        "threshold": SURVIVAL_NO_IMPROVEMENT_GATE,
+        "max_by_action": no_improvement,
+        "source": SURVIVAL_REPORT_SOURCE,
+    }
+    gates["passive_tick_single_application"] = {
+        "ok": not double_tick_turns,
+        "double_tick_turns": double_tick_turns[:25],
+        "source": SURVIVAL_REPORT_SOURCE,
+    }
+    gates["survival_suggestion_dominance"] = {
+        "ok": dominance_streak < SURVIVAL_SUGGESTION_DOMINANCE_GATE,
+        "threshold": SURVIVAL_SUGGESTION_DOMINANCE_GATE,
+        "max_streak": dominance_streak,
+        "source": SURVIVAL_REPORT_SOURCE,
+    }
+    failed = [name for name, gate in gates.items() if not _safe_dict(gate).get("ok", True)]
+    return {
+        "ok": not failed,
+        "failed": failed,
+        "gates": gates,
+        "advisory_only": True,
+        "source": SURVIVAL_REPORT_SOURCE,
+    }
 
 
 def build_survival_report_metrics(rows: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
@@ -220,6 +355,12 @@ def build_survival_report_metrics(rows: Iterable[Mapping[str, Any]]) -> Dict[str
     passive_tick_count = sum(count for reason, count in tick_counts.items() if not reason.startswith("skipped:"))
     direct_action_count = sum(action_counts.values())
     blocked_action_count = sum(blocked_counts.values())
+    advisory_gates = _build_advisory_gates(
+        timeline=timeline,
+        blocked_counts=blocked_counts,
+        blocked_reasons=blocked_reasons,
+        tick_counts=tick_counts,
+    )
 
     if blocked_action_count:
         warning_counts["blocked_survival_actions"] = blocked_action_count
@@ -227,6 +368,8 @@ def build_survival_report_metrics(rows: Iterable[Mapping[str, Any]]) -> Dict[str
         warning_counts["critical_survival_pressure"] = sum(1 for need in _NEEDS if max_pressure_value[need] >= 90)
     if direct_action_count and passive_tick_count and direct_action_count > passive_tick_count * 2:
         warning_counts["possible_survival_action_loop"] = direct_action_count
+    for name in _safe_list(advisory_gates.get("failed")):
+        warning_counts[f"gate:{name}"] += 1
 
     capped_timeline = timeline[-SURVIVAL_TIMELINE_LIMIT:]
     return {
@@ -239,6 +382,7 @@ def build_survival_report_metrics(rows: Iterable[Mapping[str, Any]]) -> Dict[str
             "max_pressure_value": dict(max_pressure_value),
             "warning_counts": dict(warning_counts),
         },
+        "advisory_gates": advisory_gates,
         "tick_counts_by_reason": dict(sorted(tick_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "blocked_action_counts": dict(sorted(blocked_counts.items())),
@@ -270,6 +414,8 @@ def render_survival_report_html(metrics: Mapping[str, Any]) -> str:
     action_counts = _safe_dict(metrics.get("action_counts"))
     blocked_counts = _safe_dict(metrics.get("blocked_action_counts"))
     tick_counts = _safe_dict(metrics.get("tick_counts_by_reason"))
+    advisory_gates = _safe_dict(metrics.get("advisory_gates"))
+    gates = _safe_dict(advisory_gates.get("gates"))
     timeline = _safe_list(metrics.get("timeline"))[-40:]
 
     def rows_for_counts(counts: Mapping[str, Any]) -> str:
@@ -290,6 +436,14 @@ def render_survival_report_html(metrics: Mapping[str, Any]) -> str:
         "</tr>"
         for need in _NEEDS
     )
+    gate_rows = "".join(
+        "<tr>"
+        f"<td>{escape(name)}</td>"
+        f"<td>{'ok' if _safe_dict(gate).get('ok') else 'warning'}</td>"
+        f"<td>{escape(str(gate))}</td>"
+        "</tr>"
+        for name, gate in sorted(gates.items())
+    ) or "<tr><td colspan='3'>No survival gates evaluated.</td></tr>"
     timeline_rows = "".join(
         "<tr>"
         f"<td>{_safe_int(_safe_dict(row).get('turn'))}</td>"
@@ -311,6 +465,8 @@ def render_survival_report_html(metrics: Mapping[str, Any]) -> str:
             f"<div><strong>Direct survival actions</strong><span>{_safe_int(summary.get('direct_survival_action_count'))}</span></div>",
             f"<div><strong>Blocked survival actions</strong><span>{_safe_int(summary.get('blocked_survival_action_count'))}</span></div>",
             "</div>",
+            "<h3>Advisory Survival Gates</h3>",
+            f"<table><thead><tr><th>Gate</th><th>Status</th><th>Details</th></tr></thead><tbody>{gate_rows}</tbody></table>",
             "<h3>Passive Tick Reasons</h3>",
             f"<table><tbody>{rows_for_counts(tick_counts)}</tbody></table>",
             "<h3>Direct Survival Actions</h3>",
