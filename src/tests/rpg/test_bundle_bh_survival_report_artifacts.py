@@ -54,7 +54,9 @@ def test_bundle_bh_builds_survival_artifact_payload() -> None:
     assert payload["metrics"]["summary"]["passive_tick_count"] == 1
     assert payload["metrics"]["summary"]["blocked_survival_action_count"] == 1
     assert "Survival Report Metrics" in payload["html_text"]
-    assert json.loads(payload["json_text"])["format_version"] == "survival_report_metrics_v1"
+    metrics = json.loads(payload["json_text"])
+    assert metrics["format_version"] == "survival_report_metrics_v2"
+    assert metrics["advisory_gates"]["advisory_only"] is True
 
 
 def test_bundle_bh_writes_json_and_html_report_artifacts(tmp_path) -> None:
@@ -65,8 +67,13 @@ def test_bundle_bh_writes_json_and_html_report_artifacts(tmp_path) -> None:
     html_path = tmp_path / SURVIVAL_METRICS_HTML_NAME
     assert json_path.exists()
     assert html_path.exists()
-    assert json.loads(json_path.read_text(encoding="utf-8"))["summary"]["blocked_survival_action_count"] == 1
-    assert "no_water_available" in html_path.read_text(encoding="utf-8")
+    metrics = json.loads(json_path.read_text(encoding="utf-8"))
+    assert metrics["summary"]["blocked_survival_action_count"] == 1
+    assert metrics["format_version"] == "survival_report_metrics_v2"
+    assert "advisory_gates" in metrics
+    html = html_path.read_text(encoding="utf-8")
+    assert "no_water_available" in html
+    assert "Advisory Survival Gates" in html
 
 
 def test_bundle_bh_appends_survival_artifacts_to_zip(tmp_path) -> None:
@@ -85,6 +92,7 @@ def test_bundle_bh_appends_survival_artifacts_to_zip(tmp_path) -> None:
         assert f"reports/{SURVIVAL_METRICS_HTML_NAME}" in names
         metrics = json.loads(zf.read(f"reports/{SURVIVAL_METRICS_JSON_NAME}").decode("utf-8"))
     assert metrics["summary"]["passive_tick_count"] == 1
+    assert metrics["format_version"] == "survival_report_metrics_v2"
 
 
 def test_bundle_bh_attaches_survival_artifact_manifest() -> None:
