@@ -27,7 +27,7 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
+      .replace(/\"/g, "&quot;")
       .replace(/'/g, "&#039;");
   }
 
@@ -37,16 +37,19 @@
 
   function resultRoot(payload) {
     payload = safeObj(payload);
+    if (payload.payload) payload = safeObj(payload.payload);
     return safeObj(payload.result || payload);
   }
 
   function turnContractRoot(payload) {
     payload = safeObj(payload);
+    if (payload.payload) payload = safeObj(payload.payload);
     return safeObj(payload.turn_contract || safeObj(payload.result).turn_contract || payload);
   }
 
   function simulationRoot(payload) {
     payload = safeObj(payload);
+    if (payload.payload) payload = safeObj(payload.payload);
     return safeObj(
       payload.simulation_state ||
       safeObj(payload.session).simulation_state ||
@@ -85,7 +88,7 @@
       safeObj(contract.survival_action_context).survival_pressure
     );
     if (Object.keys(pressure).length) return pressure;
-    survival = safeObj(survival);
+    survival = safeObj(survival || survivalState(payload));
     const out = {};
     ["hunger", "thirst", "fatigue"].forEach((key) => {
       const value = safeNum(survival[key], 0);
@@ -242,15 +245,32 @@
 
   function submitSurvivalCommand(command) {
     command = safeStr(command).trim();
-    if (!command) return;
+    if (!command) return { handled: false, method: "empty", source: SOURCE };
+    if (window.RpgCommandBridge && typeof window.RpgCommandBridge.submitCommand === "function") {
+      return window.RpgCommandBridge.submitCommand(command, {
+        source: SOURCE,
+        action_type: "survival",
+      });
+    }
     if (typeof window.rpgSendMessage === "function") {
       window.rpgSendMessage(command);
-      return;
+      return { handled: true, method: "rpgSendMessage", source: SOURCE };
     }
     if (typeof window.sendRpgMessage === "function") {
       window.sendRpgMessage(command);
-      return;
+      return { handled: true, method: "sendRpgMessage", source: SOURCE };
     }
+    try {
+      const event = new CustomEvent("rpg:submit_command", {
+        bubbles: true,
+        cancelable: true,
+        detail: { command, meta: { source: SOURCE, action_type: "survival" } },
+      });
+      const allowed = window.dispatchEvent(event);
+      if (event.defaultPrevented || allowed === false) {
+        return { handled: true, method: "event", source: SOURCE };
+      }
+    } catch (_) {}
     const input =
       document.getElementById("rpg-command-input") ||
       document.getElementById("message-input") ||
@@ -259,12 +279,18 @@
       input.value = command;
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.focus();
+      return { handled: true, method: "input", source: SOURCE };
     }
+    return { handled: false, method: "unhandled", source: SOURCE };
   }
 
   function bindActionButtons(panel) {
     panel.querySelectorAll("[data-rpg-survival-command]").forEach((button) => {
-      button.addEventListener("click", () => submitSurvivalCommand(button.getAttribute("data-rpg-survival-command")));
+      button.addEventListener("click", () => {
+        const result = submitSurvivalCommand(button.getAttribute("data-rpg-survival-command"));
+        button.dataset.submitMethod = safeStr(result && result.method);
+        button.dataset.submitHandled = result && result.handled ? "true" : "false";
+      });
     });
   }
 
@@ -306,7 +332,7 @@
   }
 
   function maybeRenderPayload(payload) {
-    payload = safeObj(payload);
+    payload = safeObj(safeObj(payload).payload || payload);
     const survival = survivalState(payload);
     const context = survivalActionContext(payload);
     if (!Object.keys(survival).length && !Object.keys(context).length) return;
@@ -339,11 +365,12 @@
     survivalPressure,
     suggestedSurvivalActions,
     recentSurvivalEvents,
+    submitSurvivalCommand,
   };
 
-  window.addEventListener("rpg:survival_payload", (event) => maybeRenderPayload(safeObj(event.detail)));
-  window.addEventListener("rpg:turn_payload", (event) => maybeRenderPayload(safeObj(event.detail)));
-  window.addEventListener("rpg:inspector_payload", (event) => maybeRenderPayload(safeObj(event.detail)));
+  window.addEventListener("rpg:survival_payload", (event) => maybeRenderPayload(safeObj(event.detail).payload || safeObj(event.detail)));
+  window.addEventListener("rpg:turn_payload", (event) => maybeRenderPayload(safeObj(event.detail).payload || safeObj(event.detail)));
+  window.addEventListener("rpg:inspector_payload", (event) => maybeRenderPayload(safeObj(event.detail).payload || safeObj(event.detail)));
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", installFetchObserver);
