@@ -1,7 +1,7 @@
-"""Bundle BU — canonical survival stack regression manifest.
+"""Bundle BU/BX — canonical survival stack regression manifest.
 
 Keep this file lightweight and dependency-free.  It gives humans and automation a
-single source of truth for the BA→BT survival regression slice without relying on
+single source of truth for the BA→BX survival regression slice without relying on
 copy/pasted command history from chat sessions.
 """
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, List
 
-SURVIVAL_STACK_MANIFEST_VERSION = "survival_stack_manifest_v1"
+SURVIVAL_STACK_MANIFEST_VERSION = "survival_stack_manifest_v2"
 
 SURVIVAL_STACK_TEST_FILES: List[str] = [
     "src/tests/rpg/test_bundle_ba_runtime_survival_state_model.py",
@@ -31,6 +31,7 @@ SURVIVAL_STACK_TEST_FILES: List[str] = [
     "src/tests/rpg/test_bundle_bs_survival_narration_grounding.py",
     "src/tests/rpg/test_bundle_bs1_world_scene_survival_grounding_bridge.py",
     "src/tests/rpg/test_bundle_bt_survival_report_ui_polish.py",
+    "src/tests/rpg/test_bundle_bx_survival_readiness.py",
 ]
 
 SURVIVAL_STACK_PHASES: List[str] = [
@@ -41,7 +42,7 @@ SURVIVAL_STACK_PHASES: List[str] = [
     "BE survival persistence save/load",
     "BF runtime passive tick integration",
     "BG/BQ survival report metrics and gates",
-    "BH survival report artifacts",
+    "BH/BW survival report artifacts and compact summary",
     "BI report writer hook",
     "BJ autoplay survival smoke",
     "BK survival UI projection",
@@ -53,6 +54,7 @@ SURVIVAL_STACK_PHASES: List[str] = [
     "BS narration grounding contract",
     "BS.1 world scene narrator grounding bridge",
     "BT report/UI polish",
+    "BX survival readiness projection",
 ]
 
 
