@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.session.survival_persistence import normalize_survival_for_persistence
 from app.rpg.validation.integrity import validate_package_integrity
 
 _PACKAGE_SCHEMA_VERSION = 1
@@ -124,7 +125,7 @@ def _normalize_memory_state_for_export(memory_state: Dict[str, Any]) -> Dict[str
 
 
 def _normalize_simulation_state_for_export(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    simulation_state = _safe_dict(simulation_state)
+    simulation_state = normalize_survival_for_persistence(_safe_dict(simulation_state))
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
     memory_state = _safe_dict(simulation_state.get("memory_state"))
 
