@@ -47,7 +47,7 @@ class _FakeProvider:
         return ChatResponse(content=self.content, model=self.config.model)
 
 
-def test_bundle_cb_deterministic_classifier_requests_llm_for_mismatched_bread_to_drink() -> None:
+def test_bundle_cb_deterministic_classifier_still_records_mismatch_diagnostics() -> None:
     current = extract_service_offer_context(_drink_offer_result())
     last = extract_service_offer_context(_service_offer_result())
 
@@ -61,22 +61,43 @@ def test_bundle_cb_deterministic_classifier_requests_llm_for_mismatched_bread_to
     assert deterministic["requested_service_kind"] == "meal"
     assert deterministic["current_context_service_kind"] == "drink"
     assert deterministic["service_kind_mismatch"] is True
-    assert deterministic["needs_llm"] is True
 
 
-def test_bundle_cb_deterministic_classifier_does_not_request_llm_for_clear_meal_context() -> None:
+def test_bundle_cb3_always_on_router_calls_provider_even_for_clear_meal_context() -> None:
+    provider = _FakeProvider()
     current = extract_service_offer_context(_service_offer_result())
 
-    deterministic = build_deterministic_intent_classification(
+    diagnostics = classify_service_intent_with_fallback(
         player_input="what food do you have for sale?",
         current_offer_context=current,
         last_offer_context={},
+        provider_factory=lambda: provider,
     )
 
-    assert deterministic["commerce_question"] is True
-    assert deterministic["requested_service_kind"] == "meal"
-    assert deterministic["confidence"] >= 0.80
-    assert deterministic["needs_llm"] is False
+    assert len(provider.calls) == 1
+    assert diagnostics["format_version"] == "interactive_cli_intent_diagnostics_v2"
+    assert diagnostics["intent_router_mode"] == "always"
+    assert diagnostics["provider_requested"] is True
+    assert diagnostics["provider_called"] is True
+    assert diagnostics["final_classification"]["service_kind"] == "meal"
+
+
+def test_bundle_cb3_fallback_mode_can_skip_provider_for_clear_deterministic_case() -> None:
+    provider = _FakeProvider()
+    current = extract_service_offer_context(_service_offer_result())
+
+    diagnostics = classify_service_intent_with_fallback(
+        player_input="what food do you have for sale?",
+        current_offer_context=current,
+        last_offer_context={},
+        provider_factory=lambda: provider,
+        force_llm=False,
+    )
+
+    assert len(provider.calls) == 0
+    assert diagnostics["intent_router_mode"] == "fallback"
+    assert diagnostics["provider_called"] is False
+    assert diagnostics["why_provider_not_called"] == "fallback_mode_deterministic_not_ambiguous"
 
 
 def test_bundle_cb_llm_intent_classifier_calls_provider_and_parses_json() -> None:
@@ -97,24 +118,27 @@ def test_bundle_cb_llm_intent_classifier_calls_provider_and_parses_json() -> Non
     assert result["diagnostics"]["model"] == "fake-intent-model"
 
 
-def test_bundle_cb_classify_with_fallback_records_provider_diagnostics_for_mismatch() -> None:
-    provider = _FakeProvider()
-    current = extract_service_offer_context(_drink_offer_result())
+def test_bundle_cb_classify_with_router_records_provider_diagnostics_for_purchase_attempt() -> None:
+    provider = _FakeProvider(json.dumps({
+        "action_type": "service_purchase",
+        "service_kind": "meal",
+        "target_npc": "Bran",
+        "requested_terms": ["hot stew"],
+        "confidence": 0.94,
+    }))
     last = extract_service_offer_context(_service_offer_result())
 
     diagnostics = classify_service_intent_with_fallback(
-        player_input="do you have bread for sale?",
-        current_offer_context=current,
+        player_input="I'll buy a hot stew",
+        current_offer_context={},
         last_offer_context=last,
         provider_factory=lambda: provider,
     )
 
-    assert diagnostics["format_version"] == "interactive_cli_intent_diagnostics_v1"
     assert diagnostics["provider_requested"] is True
     assert diagnostics["provider_called"] is True
     assert diagnostics["provider_parse_ok"] is True
-    assert diagnostics["deterministic_classification"]["service_kind_mismatch"] is True
-    assert diagnostics["llm_classification"]["service_kind"] == "meal"
+    assert diagnostics["llm_classification"]["action_type"] == "service_purchase"
     assert diagnostics["final_classification"]["service_kind"] == "meal"
 
 
@@ -131,17 +155,18 @@ def test_bundle_cb_validate_llm_intent_is_advisory_not_authoritative_inventory()
     assert bad["ok"] is False
 
 
-def test_bundle_cb1_interactive_runner_embeds_provider_diagnostics_and_narration_source(monkeypatch, tmp_path) -> None:
+def test_bundle_cb1_interactive_runner_embeds_provider_diagnostics_every_turn(monkeypatch, tmp_path) -> None:
     provider = _FakeProvider()
     monkeypatch.setattr(cli, "_run_one_manual_turn", _fake_turn)
     monkeypatch.setattr(cli, "_ensure_manual_session", lambda session_id: {"session_id": session_id})
     monkeypatch.setattr(cli, "_reset_manual_session_artifacts", lambda session_id: None)
 
     result = cli.run_interactive_campaign(
-        turns=2,
+        turns=3,
         session_id="interactive_cb_test_session",
         output_dir=tmp_path,
         scripted_commands=[
+            "I look around",
             "I ask bran if he has any food for sale",
             "do you have bread for sale?",
         ],
@@ -150,15 +175,14 @@ def test_bundle_cb1_interactive_runner_embeds_provider_diagnostics_and_narration
     )
 
     assert result["summary"]["format_version"] == "interactive_cli_campaign_v2"
-    assert result["summary"]["provider_requested_count"] >= 1
-    assert result["summary"]["provider_called_count"] == 1
-    assert result["summary"]["commerce_followup_repair_count"] == 2
-    second = result["turns"][1]
-    assert second["interactive_cli_intent_diagnostics"]["provider_called"] is True
-    assert second["interactive_cli_intent_diagnostics"]["final_classification"]["service_kind"] == "meal"
-    assert second["narration_source"] == "repaired"
+    assert result["summary"]["provider_requested_count"] == 3
+    assert result["summary"]["provider_called_count"] == 3
+    assert len(provider.calls) == 3
+    assert result["turns"][0]["interactive_cli_intent_diagnostics"]["provider_called"] is True
+    assert result["turns"][1]["interactive_cli_intent_diagnostics"]["provider_called"] is True
+    assert result["turns"][2]["interactive_cli_intent_diagnostics"]["final_classification"]["service_kind"] == "meal"
     transcript = json.loads((tmp_path / "interactive-transcript.json").read_text(encoding="utf-8"))
-    assert transcript["summary"]["provider_called_count"] == 1
+    assert transcript["summary"]["provider_called_count"] == 3
     assert "interactive_cli_intent_diagnostics" in json.dumps(transcript)
     html = (tmp_path / "interactive-report.html").read_text(encoding="utf-8")
     assert "Provider / intent diagnostics" in html
