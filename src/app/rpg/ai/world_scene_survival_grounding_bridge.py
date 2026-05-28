@@ -23,6 +23,7 @@ from app.rpg.ai.survival_narration_grounding import (
     build_survival_narration_evidence,
     sanitize_survival_narration_payload,
     survival_narration_prompt_block,
+    validate_survival_narration_text,
 )
 
 _TARGET_MODULE = "app.rpg.ai.world_scene_narrator"
@@ -30,10 +31,19 @@ _PATCH_FLAG = "_BS1_SURVIVAL_GROUNDING_PATCHED"
 _ORIGINAL_PROMPT_ATTR = "_bs1_original_build_scene_prompt"
 _ORIGINAL_SANITIZE_ATTR = "_bs1_original_sanitize_narration_payload"
 _HOOK_FLAG = "_BS1_SURVIVAL_GROUNDING_IMPORT_HOOK_INSTALLED"
+_LEGACY_FALLBACK_TEXTS = {
+    "the action resolves according to the current survival state.",
+    "the action changes the scene, and the people nearby react according to what just happened.",
+    "the survival action resolves.",
+}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
 
 
 def _has_survival_evidence(narration_context: Dict[str, Any]) -> bool:
@@ -47,6 +57,11 @@ def _has_survival_evidence(narration_context: Dict[str, Any]) -> bool:
         or evidence.get("inventory_delta")
         or evidence.get("backed_categories")
     )
+
+
+def _is_legacy_survival_fallback(value: Any) -> bool:
+    text = " ".join(_safe_str(value).split()).strip().lower()
+    return text in _LEGACY_FALLBACK_TEXTS
 
 
 def append_survival_grounding_to_prompt(prompt: str, narration_context: Dict[str, Any]) -> str:
@@ -75,6 +90,46 @@ def sanitize_world_scene_survival_payload(payload: Dict[str, Any], narration_con
     return sanitized
 
 
+def _merge_bs1_sanitized_payload(
+    *,
+    original_payload: Dict[str, Any],
+    legacy_payload: Dict[str, Any],
+    narration_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Run BS after legacy sanitize, salvaging grounded original sentences if legacy over-fell back."""
+    legacy_payload = dict(_safe_dict(legacy_payload))
+    narration_context = _safe_dict(narration_context)
+    original_payload = dict(_safe_dict(original_payload))
+
+    sanitized = sanitize_world_scene_survival_payload(legacy_payload, narration_context)
+    original_sanitized = sanitize_world_scene_survival_payload(original_payload, narration_context)
+
+    if _is_legacy_survival_fallback(sanitized.get("narration")):
+        original_narration = _safe_str(original_sanitized.get("narration")).strip()
+        if original_narration and not _is_legacy_survival_fallback(original_narration):
+            validation = validate_survival_narration_text(original_narration, narration_context)
+            if validation.get("ok"):
+                sanitized["narration"] = original_narration
+
+    # Preserve the most complete BS grounding record after any salvage.
+    combined_text = " ".join(
+        [
+            _safe_str(sanitized.get("narration")),
+            _safe_str(sanitized.get("action")),
+            _safe_str(_safe_dict(sanitized.get("npc")).get("line")),
+        ]
+    )
+    validation = validate_survival_narration_text(combined_text, narration_context)
+    sanitized["survival_narration_grounding"] = {
+        "ok": validation.get("ok"),
+        "violations": validation.get("violations"),
+        "evidence": validation.get("evidence"),
+        "source": "survival_narration_grounding_contract",
+        "legacy_salvage_checked": True,
+    }
+    return sanitized
+
+
 def patch_world_scene_narrator_module(module: ModuleType) -> ModuleType:
     """Patch a loaded world_scene_narrator module in-place."""
     if getattr(module, _PATCH_FLAG, False):
@@ -99,7 +154,11 @@ def patch_world_scene_narrator_module(module: ModuleType) -> ModuleType:
             narration_context,
             authoritative_action=authoritative_action,
         )
-        return sanitize_world_scene_survival_payload(sanitized, _safe_dict(narration_context))
+        return _merge_bs1_sanitized_payload(
+            original_payload=_safe_dict(payload),
+            legacy_payload=_safe_dict(sanitized),
+            narration_context=_safe_dict(narration_context),
+        )
 
     build_scene_prompt.__name__ = "build_scene_prompt"
     build_scene_prompt.__doc__ = (getattr(original_prompt, "__doc__", "") or "") + "\n\nBS.1 survival grounding bridge active."
