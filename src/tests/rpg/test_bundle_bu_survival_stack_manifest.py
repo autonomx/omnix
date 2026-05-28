@@ -13,7 +13,7 @@ from rpg.survival_stack_manifest import (
     survival_stack_summary,
 )
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_bundle_bu_survival_stack_manifest_lists_current_ba_to_bt_stack() -> None:
