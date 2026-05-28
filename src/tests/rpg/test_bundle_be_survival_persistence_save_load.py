@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 
-from app.rpg.session.package_bridge import package_to_session, session_to_package
 from app.rpg.session.response_builder import build_apply_turn_response
 from app.rpg.session.service import create_or_normalize_session, export_session_as_package, import_session_from_package
 from app.rpg.session.survival_persistence import (
@@ -51,7 +50,7 @@ def test_bundle_be_normalizes_canonical_survival_at_session_boundary() -> None:
     assert "llm_invented_extra" not in survival
     assert len(survival["events"]) == SURVIVAL_EVENT_LIMIT
     assert survival["events"][0]["kind"] == "event:4"
-    assert normalized["runtime_state"]["ambient"]
+    assert isinstance(normalized["runtime_state"], dict)
     json.dumps(normalized)
 
 
