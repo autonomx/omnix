@@ -1,27 +1,29 @@
-"""CB — LLM intent fallback for interactive CLI service/commerce requests.
+"""CB/CB.2/CB.3 — LLM intent routing for interactive CLI turns.
 
-The provider is used only as a semantic router when deterministic service
-classification is weak, missing, or contradictory.  It never authorizes inventory
-or prices; it can only propose a structured intent that the deterministic service
-context must validate.
+CB originally called the provider only when deterministic classification looked
+ambiguous.  CB.3 makes the interactive CLI use the provider as the first-class
+semantic intent router on every player turn by default.  Deterministic parsing is
+still recorded as diagnostic context, but it no longer decides whether the LLM is
+called.  The LLM remains advisory: inventory, prices, mutation, and success/fail
+outcomes still come only from deterministic runtime/service state.
 """
 from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping
 
 from app.providers.base import ChatMessage
 from app.shared import get_provider, load_settings
 from rpg.interactive_cli_commerce_followup import (
-    COMMERCE_FOLLOWUP_SOURCE,
     infer_requested_service_kind,
     is_commerce_followup_question,
+    is_purchase_intent,
 )
 
-LLM_INTENT_SOURCE = "interactive_cli_llm_intent_fallback_v1"
+LLM_INTENT_SOURCE = "interactive_cli_llm_intent_router_v2"
 _VALID_SERVICE_KINDS = {"meal", "drink", "lodging", "supplies", "commerce", "unknown", ""}
-_VALID_ACTION_TYPES = {"service_inquiry", "service_purchase", "commerce_inquiry", "talk", "observe", "unknown", ""}
+_VALID_ACTION_TYPES = {"service_inquiry", "service_purchase", "commerce_inquiry", "talk", "observe", "travel", "combat", "unknown", ""}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -65,8 +67,7 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
     if not text:
         return {}
     try:
-        value = json.loads(text)
-        return _safe_dict(value)
+        return _safe_dict(json.loads(text))
     except Exception:
         pass
     match = re.search(r"\{.*\}", text, flags=re.DOTALL)
@@ -89,14 +90,12 @@ def _sanitize_llm_intent(payload: Mapping[str, Any]) -> Dict[str, Any]:
     requested_terms = [_safe_str(item).strip().lower() for item in _safe_list(payload.get("requested_terms")) if _safe_str(item).strip()]
     if not requested_terms and payload.get("requested_offer"):
         requested_terms = [_safe_str(payload.get("requested_offer")).strip().lower()]
-    target_npc = _safe_str(payload.get("target_npc") or payload.get("provider") or "").strip()
-    confidence = max(0.0, min(1.0, _safe_float(payload.get("confidence"), 0.0)))
     return {
         "action_type": action_type,
         "service_kind": service_kind,
-        "target_npc": target_npc,
+        "target_npc": _safe_str(payload.get("target_npc") or payload.get("provider") or "").strip(),
         "requested_terms": requested_terms[:12],
-        "confidence": confidence,
+        "confidence": max(0.0, min(1.0, _safe_float(payload.get("confidence"), 0.0))),
         "source": LLM_INTENT_SOURCE,
     }
 
@@ -109,17 +108,21 @@ def build_deterministic_intent_classification(
 ) -> Dict[str, Any]:
     requested_kind = infer_requested_service_kind(player_input)
     commerce_question = is_commerce_followup_question(player_input)
+    purchase_intent = is_purchase_intent(player_input)
     current_kind = _safe_str(_safe_dict(current_offer_context).get("service_kind")).strip().lower()
     last_kind = _safe_str(_safe_dict(last_offer_context).get("service_kind")).strip().lower()
     context_kind = current_kind or last_kind
     mismatch = bool(requested_kind and current_kind and requested_kind != current_kind)
     has_offer_context = bool(_safe_dict(current_offer_context) or _safe_dict(last_offer_context))
-    action_type = "service_inquiry" if commerce_question or requested_kind else "unknown"
+    action_type = "service_purchase" if purchase_intent else ("service_inquiry" if commerce_question or requested_kind else "unknown")
     confidence = 0.0
     reasons: list[str] = []
     if commerce_question:
         confidence += 0.45
         reasons.append("commerce_terms_detected")
+    if purchase_intent:
+        confidence += 0.20
+        reasons.append("purchase_terms_detected")
     if requested_kind:
         confidence += 0.35
         reasons.append(f"requested_service_kind:{requested_kind}")
@@ -129,10 +132,14 @@ def build_deterministic_intent_classification(
     if mismatch:
         confidence = min(confidence, 0.40)
         reasons.append(f"service_kind_mismatch:{requested_kind}!={current_kind}")
-    needs_llm = bool(commerce_question and (not requested_kind or mismatch or confidence < 0.70))
+    low_confidence = confidence < 0.70
+    needs_llm = bool((commerce_question or purchase_intent or requested_kind) and (not requested_kind or mismatch or low_confidence))
     if commerce_question and not has_offer_context:
         needs_llm = True
         reasons.append("no_authoritative_offer_context_yet")
+    if purchase_intent and has_offer_context and low_confidence:
+        needs_llm = True
+        reasons.append("purchase_intent_low_confidence_with_offer_context")
     return {
         "action_type": action_type,
         "service_kind": requested_kind or context_kind or "unknown",
@@ -141,6 +148,7 @@ def build_deterministic_intent_classification(
         "last_context_service_kind": last_kind,
         "confidence": round(min(1.0, confidence), 3),
         "commerce_question": commerce_question,
+        "purchase_intent": purchase_intent,
         "service_kind_mismatch": mismatch,
         "needs_llm": needs_llm,
         "reasons": reasons,
@@ -162,10 +170,12 @@ def _build_prompt(
         "last_authoritative_service_context": _safe_dict(last_offer_context),
     }
     return (
-        "You are an RPG intent classifier. Return only strict JSON.\n"
-        "Classify the player's intent; do not invent inventory, prices, or outcomes.\n"
+        "You are an RPG intent router. Return only strict JSON.\n"
+        "Classify the player's intent; do not invent inventory, prices, success, failure, rewards, or state mutation.\n"
+        "Use action_type service_purchase for buy/pay/give-me purchase attempts.\n"
+        "Use action_type service_inquiry or commerce_inquiry for questions about prices, menus, stock, food, drink, rooms, or supplies.\n"
         "Use service_kind meal for food/bread/stew/provisions, drink for ale/water, lodging for rooms/beds.\n"
-        "Schema: {\"action_type\": \"service_inquiry|service_purchase|commerce_inquiry|talk|observe|unknown\", "
+        "Schema: {\"action_type\": \"service_inquiry|service_purchase|commerce_inquiry|talk|observe|travel|combat|unknown\", "
         "\"service_kind\": \"meal|drink|lodging|supplies|commerce|unknown\", "
         "\"target_npc\": string, \"requested_terms\": [string], \"confidence\": number}.\n"
         f"Input payload:\n{json.dumps(payload, ensure_ascii=False, sort_keys=True)}"
@@ -201,18 +211,12 @@ def call_llm_intent_classifier(
     if provider is None:
         diagnostics["error"] = "provider_unavailable"
         return {"intent": {}, "diagnostics": diagnostics}
-    prompt = _build_prompt(
-        player_input=player_input,
-        deterministic=deterministic,
-        current_offer_context=current_offer_context,
-        last_offer_context=last_offer_context,
-    )
     try:
         diagnostics["provider_called"] = True
         response = provider.chat_completion(
             [
                 ChatMessage(role="system", content="Return only JSON. You classify intent; simulation remains authoritative."),
-                ChatMessage(role="user", content=prompt),
+                ChatMessage(role="user", content=_build_prompt(player_input=player_input, deterministic=deterministic, current_offer_context=current_offer_context, last_offer_context=last_offer_context)),
             ],
             stream=False,
             temperature=0,
@@ -222,8 +226,7 @@ def call_llm_intent_classifier(
         diagnostics["raw_text_excerpt"] = raw_text[:600]
         if not diagnostics.get("model"):
             diagnostics["model"] = _safe_str(getattr(response, "model", ""))
-        parsed = _extract_json_object(raw_text)
-        intent = _sanitize_llm_intent(parsed)
+        intent = _sanitize_llm_intent(_extract_json_object(raw_text))
         diagnostics["parse_ok"] = bool(intent and intent.get("action_type") != "unknown")
         return {"intent": intent, "diagnostics": diagnostics}
     except Exception as exc:
@@ -245,14 +248,8 @@ def validate_llm_intent_against_context(intent: Mapping[str, Any], last_offer_co
         ok = False
         reason = "invalid_service_kind"
     elif context_kind and service_kind in {"meal", "drink", "lodging"} and context_kind != service_kind:
-        # This is not fatal for runtime; it means the classifier selected a kind
-        # that does not match the remembered authoritative offer context.
         reason = f"accepted_but_context_kind_differs:{service_kind}!={context_kind}"
-    return {
-        "ok": ok,
-        "reason": reason,
-        "source": LLM_INTENT_SOURCE,
-    }
+    return {"ok": ok, "reason": reason, "source": LLM_INTENT_SOURCE}
 
 
 def classify_service_intent_with_fallback(
@@ -262,35 +259,16 @@ def classify_service_intent_with_fallback(
     last_offer_context: Mapping[str, Any] | None = None,
     enable_llm: bool = True,
     provider_factory: Callable[[], Any] | None = None,
+    force_llm: bool = True,
 ) -> Dict[str, Any]:
-    deterministic = build_deterministic_intent_classification(
-        player_input=player_input,
-        current_offer_context=current_offer_context,
-        last_offer_context=last_offer_context,
-    )
+    deterministic = build_deterministic_intent_classification(player_input=player_input, current_offer_context=current_offer_context, last_offer_context=last_offer_context)
     llm_intent: Dict[str, Any] = {}
-    llm_diag: Dict[str, Any] = {
-        "provider_requested": False,
-        "provider_called": False,
-        "why_provider_not_called": "deterministic_not_ambiguous",
-        "source": LLM_INTENT_SOURCE,
-    }
+    llm_diag: Dict[str, Any] = {"provider_requested": False, "provider_called": False, "why_provider_not_called": "llm_intent_router_disabled", "source": LLM_INTENT_SOURCE}
     validation = {"ok": False, "reason": "not_run", "source": LLM_INTENT_SOURCE}
-    final = {
-        "action_type": deterministic.get("action_type"),
-        "service_kind": deterministic.get("service_kind"),
-        "confidence": deterministic.get("confidence"),
-        "source": deterministic.get("source"),
-    }
-
-    if enable_llm and deterministic.get("needs_llm"):
-        result = call_llm_intent_classifier(
-            player_input=player_input,
-            deterministic=deterministic,
-            current_offer_context=current_offer_context,
-            last_offer_context=last_offer_context,
-            provider_factory=provider_factory,
-        )
+    final = {"action_type": deterministic.get("action_type"), "service_kind": deterministic.get("service_kind"), "confidence": deterministic.get("confidence"), "source": deterministic.get("source")}
+    should_call_llm = bool(enable_llm and (force_llm or deterministic.get("needs_llm")))
+    if should_call_llm:
+        result = call_llm_intent_classifier(player_input=player_input, deterministic=deterministic, current_offer_context=current_offer_context, last_offer_context=last_offer_context, provider_factory=provider_factory)
         llm_intent = _safe_dict(result.get("intent"))
         llm_diag = _safe_dict(result.get("diagnostics"))
         validation = validate_llm_intent_against_context(llm_intent, last_offer_context)
@@ -306,9 +284,12 @@ def classify_service_intent_with_fallback(
         else:
             final["source"] = deterministic.get("source")
     elif not enable_llm:
-        llm_diag["why_provider_not_called"] = "llm_intent_fallback_disabled"
+        llm_diag["why_provider_not_called"] = "llm_intent_router_disabled"
+    else:
+        llm_diag["why_provider_not_called"] = "fallback_mode_deterministic_not_ambiguous"
     return {
-        "format_version": "interactive_cli_intent_diagnostics_v1",
+        "format_version": "interactive_cli_intent_diagnostics_v2",
+        "intent_router_mode": "always" if force_llm else "fallback",
         "deterministic_classification": deterministic,
         "llm_classification": llm_intent,
         "llm_validation": validation,
