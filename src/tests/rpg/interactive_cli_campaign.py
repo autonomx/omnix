@@ -1,4 +1,4 @@
-"""CA — interactive command-line RPG campaign runner.
+"""CA/CB — interactive command-line RPG campaign runner.
 
 This runner is for live human/agent playtesting, not LLM-as-player autoplay.
 It prompts for player input in the terminal for a fixed number of turns, captures
@@ -11,7 +11,9 @@ Examples from repo root:
     python src/tests/rpg/interactive_cli_campaign.py --turns 30 --script-file commands.txt
 
 A coding agent such as Cline/Codex can drive stdin live, while the runtime still
-uses the normal deterministic apply_turn path.
+uses the normal deterministic apply_turn path.  CB adds provider/narrator
+classification diagnostics so the report explains whether the central provider
+was actually called for ambiguous service/commerce intent parsing.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ import zipfile
 from datetime import datetime
 from html import escape
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Sequence
 
 THIS_FILE = Path(__file__).resolve()
 TESTS_ROOT = THIS_FILE.parents[1]
@@ -34,13 +36,14 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from app.rpg.survival_report_artifacts import (  # noqa: E402
-    append_survival_report_artifacts_to_zip,
-    write_survival_report_artifacts,
-)
+from app.rpg.survival_report_artifacts import write_survival_report_artifacts  # noqa: E402
 from rpg.interactive_cli_commerce_followup import (  # noqa: E402
     apply_commerce_followup_repair,
     extract_service_offer_context,
+)
+from rpg.interactive_cli_intent_fallback import (  # noqa: E402
+    classify_service_intent_with_fallback,
+    narration_source_for_turn,
 )
 from tests.rpg.manual.session_helpers import (  # noqa: E402
     _ensure_manual_session,
@@ -48,7 +51,7 @@ from tests.rpg.manual.session_helpers import (  # noqa: E402
 )
 from tests.rpg.manual.turn_execution import _extract_narration, _run_one_manual_turn  # noqa: E402
 
-INTERACTIVE_CLI_CAMPAIGN_VERSION = "interactive_cli_campaign_v1"
+INTERACTIVE_CLI_CAMPAIGN_VERSION = "interactive_cli_campaign_v2"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results"
 STOP_COMMANDS = {"/quit", "/exit", "/stop"}
 
@@ -120,6 +123,8 @@ def _turn_report_row(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
         "error": turn_summary.get("error"),
         "scenario_warnings": _safe_list(turn_summary.get("scenario_warnings")),
         "regression_warnings": _safe_list(turn_summary.get("regression_warnings")),
+        "interactive_cli_intent_diagnostics": _safe_dict(turn_summary.get("interactive_cli_intent_diagnostics")),
+        "narration_source": _safe_str(turn_summary.get("narration_source")),
     }
 
 
@@ -137,6 +142,9 @@ def build_interactive_campaign_summary(
     errors = 0
     llm_turns = 0
     commerce_repairs = 0
+    provider_requested = 0
+    provider_called = 0
+    narration_sources: Dict[str, int] = {}
     for turn in turns:
         warnings.extend(_safe_list(turn.get("scenario_warnings")))
         warnings.extend(_safe_list(turn.get("regression_warnings")))
@@ -146,6 +154,13 @@ def build_interactive_campaign_summary(
             llm_turns += 1
         if _safe_dict(turn.get("interactive_cli_commerce_followup")).get("applied"):
             commerce_repairs += 1
+        diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
+        if diagnostics.get("provider_requested"):
+            provider_requested += 1
+        if diagnostics.get("provider_called"):
+            provider_called += 1
+        source = _safe_str(turn.get("narration_source") or narration_source_for_turn(turn) or "unknown")
+        narration_sources[source] = narration_sources.get(source, 0) + 1
     return {
         "format_version": INTERACTIVE_CLI_CAMPAIGN_VERSION,
         "run_id": run_id,
@@ -159,7 +174,10 @@ def build_interactive_campaign_summary(
         "error_count": errors,
         "warning_count": len(warnings),
         "llm_turn_count": llm_turns,
+        "provider_requested_count": provider_requested,
+        "provider_called_count": provider_called,
         "commerce_followup_repair_count": commerce_repairs,
+        "narration_sources": narration_sources,
         "warnings": sorted(set(_safe_str(w) for w in warnings if _safe_str(w)))[:100],
     }
 
@@ -180,9 +198,24 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
                 if k in {"hunger", "thirst", "fatigue"}
             )
         commerce = _safe_dict(turn.get("interactive_cli_commerce_followup"))
+        diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
+        narration_source = _safe_str(turn.get("narration_source") or narration_source_for_turn(turn))
         commerce_html = ""
         if commerce.get("applied"):
-            commerce_html = "<p><strong>Commerce follow-up:</strong> answered from last authoritative service offers.</p>"
+            commerce_html = "<p><strong>Commerce follow-up:</strong> answered from authoritative service offers.</p>"
+        diagnostics_html = "\n".join([
+            "<details><summary>Provider / intent diagnostics</summary>",
+            "<ul>",
+            f"<li>provider requested: {escape(_safe_str(diagnostics.get('provider_requested')))}</li>",
+            f"<li>provider called: {escape(_safe_str(diagnostics.get('provider_called')))}</li>",
+            f"<li>provider: {escape(_safe_str(diagnostics.get('provider_name')))}</li>",
+            f"<li>model: {escape(_safe_str(diagnostics.get('model')))}</li>",
+            f"<li>why not called/error: {escape(_safe_str(diagnostics.get('why_provider_not_called') or diagnostics.get('provider_error')))}</li>",
+            f"<li>narration source: {escape(narration_source)}</li>",
+            "</ul>",
+            f"<pre>{escape(_json_dumps(diagnostics))}</pre>",
+            "</details>",
+        ])
         warning_html = "".join(f"<li>{escape(_safe_str(w))}</li>" for w in _safe_list(turn.get("scenario_warnings")) + _safe_list(turn.get("regression_warnings")))
         if not warning_html:
             warning_html = "<li>none</li>"
@@ -193,7 +226,9 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
                 f"<p><strong>Player:</strong> {escape(_safe_str(turn.get('player_input')))}</p>",
                 f"<p><strong>Narration:</strong> {escape(narration or '[no narration found]')}</p>",
                 f"<p><strong>Survival:</strong> {survival_text or 'n/a'}</p>",
+                f"<p><strong>Narration source:</strong> {escape(narration_source)}</p>",
                 commerce_html,
+                diagnostics_html,
                 "<details><summary>Warnings</summary><ul>",
                 warning_html,
                 "</ul></details>",
@@ -218,6 +253,8 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
         f"<div class='metric'><strong>Stop</strong><br>{escape(_safe_str(summary.get('stop_reason')))}</div>",
         f"<div class='metric'><strong>Warnings</strong><br>{escape(_safe_str(summary.get('warning_count')))}</div>",
         f"<div class='metric'><strong>Errors</strong><br>{escape(_safe_str(summary.get('error_count')))}</div>",
+        f"<div class='metric'><strong>Provider requested</strong><br>{escape(_safe_str(summary.get('provider_requested_count')))}</div>",
+        f"<div class='metric'><strong>Provider called</strong><br>{escape(_safe_str(summary.get('provider_called_count')))}</div>",
         f"<div class='metric'><strong>Commerce repairs</strong><br>{escape(_safe_str(summary.get('commerce_followup_repair_count')))}</div>",
         "</div>",
         "<p>Open survival artifact index if present: <a href='survival/survival-index.html'>survival/survival-index.html</a></p>",
@@ -287,6 +324,8 @@ def run_interactive_campaign(
     console_llm: bool = True,
     include_raw_result: bool = True,
     artifact_detail: str = "debug",
+    enable_llm_intent_fallback: bool = True,
+    provider_factory: Callable[[], Any] | None = None,
 ) -> Dict[str, Any]:
     if turns <= 0:
         raise ValueError("turns_must_be_positive")
@@ -335,14 +374,26 @@ def run_interactive_campaign(
         )
         raw_before_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
         current_offer_context = extract_service_offer_context(raw_before_repair)
-        if current_offer_context:
+        diagnostics = classify_service_intent_with_fallback(
+            player_input=player_input,
+            current_offer_context=current_offer_context,
+            last_offer_context=last_service_offer_context,
+            enable_llm=enable_llm_intent_fallback,
+            provider_factory=provider_factory,
+        )
+        turn_summary["interactive_cli_intent_diagnostics"] = diagnostics
+        turn_summary = apply_commerce_followup_repair(
+            turn_summary,
+            player_input=player_input,
+            last_offer_context=last_service_offer_context,
+        )
+        raw_after_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+        repaired_context = extract_service_offer_context(raw_after_repair)
+        if repaired_context:
+            last_service_offer_context = repaired_context
+        elif current_offer_context:
             last_service_offer_context = current_offer_context
-        else:
-            turn_summary = apply_commerce_followup_repair(
-                turn_summary,
-                player_input=player_input,
-                last_offer_context=last_service_offer_context,
-            )
+        turn_summary["narration_source"] = narration_source_for_turn(turn_summary)
         turn_summaries.append(turn_summary)
         raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
         narration = _safe_str(turn_summary.get("raw_narration") or _extract_narration(raw_result))
@@ -351,6 +402,10 @@ def run_interactive_campaign(
             print(f"NARRATION> {narration}", flush=True)
         if npc.get("speaker") and npc.get("line"):
             print(f"{npc['speaker']}> {npc['line']}", flush=True)
+        if diagnostics.get("provider_called"):
+            print(f"[diagnostic] provider intent classifier called: {diagnostics.get('provider_name')} {diagnostics.get('model')}", flush=True)
+        elif diagnostics.get("provider_requested"):
+            print(f"[diagnostic] provider intent classifier requested but not called: {diagnostics.get('why_provider_not_called') or diagnostics.get('provider_error')}", flush=True)
         if turn_summary.get("error"):
             print(f"ERROR> {turn_summary['error']}", flush=True)
 
@@ -384,6 +439,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--script-file", default="", help="Optional newline-delimited player commands for non-interactive smoke runs.")
     parser.add_argument("--no-reset-session-state", action="store_true", help="Do not delete saved session files before starting.")
     parser.add_argument("--no-console-llm", action="store_true", help="Do not print manual LLM console diagnostics per turn.")
+    parser.add_argument("--no-llm-intent-fallback", action="store_true", help="Disable central-provider fallback intent classification for ambiguous service/commerce requests.")
     parser.add_argument("--summary-only", action="store_true", help="Store compact turn summaries instead of raw result payloads.")
     parser.add_argument("--artifact-detail", choices=["summary", "debug", "full"], default="debug")
     return parser
@@ -404,6 +460,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         console_llm=not bool(args.no_console_llm),
         include_raw_result=not bool(args.summary_only),
         artifact_detail=args.artifact_detail,
+        enable_llm_intent_fallback=not bool(args.no_llm_intent_fallback),
     )
     return 0
 
