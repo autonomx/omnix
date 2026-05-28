@@ -8,6 +8,7 @@ from rpg import interactive_cli_campaign as cli
 from rpg.interactive_cli_commerce_followup import (
     apply_commerce_followup_repair,
     extract_service_offer_context,
+    infer_requested_service_kind,
     is_commerce_followup_question,
 )
 
@@ -44,10 +45,45 @@ def _service_offer_result():
     }
 
 
+def _drink_offer_result():
+    return {
+        "ok": True,
+        "narration": "The NPC does not hand over any coin.",
+        "npc": {"speaker": "NPC", "line": "No coin changes hands. I can't agree to that."},
+        "turn_contract": {
+            "action": {"action_type": "service_inquiry"},
+            "service_result": {
+                "kind": "service_inquiry",
+                "status": "offers_available",
+                "provider_id": "npc:Bran",
+                "provider_name": "Bran",
+                "service_kind": "drink",
+                "offers": [
+                    {
+                        "offer_id": "bran_drink_ale",
+                        "label": "Mug of ale",
+                        "description": "A mug of local ale.",
+                        "service_kind": "drink",
+                        "provider_id": "npc:Bran",
+                        "provider_name": "Bran",
+                        "price": {"gold": 0, "silver": 0, "copper": 8},
+                        "availability": "available",
+                    }
+                ],
+            },
+            "survival": {"hunger": 10, "thirst": 20, "fatigue": 5},
+            "survival_pressure": {"hunger": "low", "thirst": "low", "fatigue": "low"},
+        },
+    }
+
+
 def _fake_turn(*, session_id, turn, turn_index, scenario_name, target_channel, **kwargs):
     player_input = turn.get("player") if isinstance(turn, dict) else str(turn)
-    if "food for sale" in player_input.lower():
+    lowered = player_input.lower()
+    if "food for sale" in lowered:
         raw_result = _service_offer_result()
+    elif "bread for sale" in lowered:
+        raw_result = _drink_offer_result()
     else:
         thirst = max(0, 50 - turn_index)
         raw_result = {
@@ -175,6 +211,10 @@ def test_bundle_ca1_commerce_followup_question_detection_covers_vague_provisions
     assert is_commerce_followup_question("i ask: what kind of provisions do you have available?")
     assert is_commerce_followup_question("i ask: well? what do you have?")
     assert is_commerce_followup_question("do you serve food?")
+    assert is_commerce_followup_question("how much for bread?")
+    assert is_commerce_followup_question("ok, let me know how much does bread cost")
+    assert is_commerce_followup_question("do you have bread for sale?")
+    assert infer_requested_service_kind("how much for bread?") == "meal"
     assert not is_commerce_followup_question("I look around the tavern")
 
 
@@ -203,32 +243,79 @@ def test_bundle_ca1_commerce_followup_repair_answers_from_last_authoritative_ser
     assert "hot bowl of stew and bread" in repaired["raw_npc"]["line"].lower()
 
 
+def test_bundle_ca2_repair_overrides_vague_current_service_answer_to_include_prices() -> None:
+    turn = _fake_turn(
+        session_id="s",
+        turn={"player": "I ask bran if he has any food for sale"},
+        turn_index=1,
+        scenario_name="x",
+        target_channel="x",
+    )
+    repaired = apply_commerce_followup_repair(
+        turn,
+        player_input="I ask bran if he has any food for sale",
+        last_offer_context={},
+    )
+
+    assert repaired["interactive_cli_commerce_followup"]["applied"] is True
+    assert "Hot stew" in repaired["raw_narration"]
+    assert "1 silver" in repaired["raw_npc"]["line"]
+    assert "5 copper" in repaired["raw_npc"]["line"]
+
+
+def test_bundle_ca2_repair_prefers_last_meal_offer_when_current_result_mismatches_bread_to_ale() -> None:
+    meal_context = extract_service_offer_context(_service_offer_result())
+    turn = _fake_turn(
+        session_id="s",
+        turn={"player": "do you have bread for sale?"},
+        turn_index=5,
+        scenario_name="x",
+        target_channel="x",
+    )
+    repaired = apply_commerce_followup_repair(
+        turn,
+        player_input="do you have bread for sale?",
+        last_offer_context=meal_context,
+    )
+
+    blob = json.dumps(repaired, ensure_ascii=False)
+    assert repaired["interactive_cli_commerce_followup"]["applied"] is True
+    assert repaired["interactive_cli_commerce_followup"]["requested_service_kind"] == "meal"
+    assert repaired["interactive_cli_commerce_followup"]["current_context_service_kind"] == "drink"
+    assert "Hot stew" in blob
+    assert "Mug of ale" not in repaired["raw_npc"]["line"]
+    assert "1 silver" in repaired["raw_npc"]["line"]
+    assert "5 copper" in repaired["raw_npc"]["line"]
+
+
 def test_bundle_ca1_scripted_runner_carries_food_offer_into_followup(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(cli, "_run_one_manual_turn", _fake_turn)
     monkeypatch.setattr(cli, "_ensure_manual_session", lambda session_id: {"session_id": session_id})
     monkeypatch.setattr(cli, "_reset_manual_session_artifacts", lambda session_id: None)
 
     result = cli.run_interactive_campaign(
-        turns=3,
+        turns=5,
         session_id="interactive_food_test_session",
         output_dir=tmp_path,
         scripted_commands=[
-            "I say: Bran, do you have any food for sale?",
-            "i ask: what kind of provisions do you have available?",
-            "i ask: well? what do you have?",
+            "I ask bran if he has any food for sale",
+            "i say: bran, what food do you have for sale?",
+            "how much for bread?",
+            "ok, let me know how much does bread cost",
+            "do you have bread for sale?",
         ],
         console_llm=False,
     )
 
-    assert result["summary"]["commerce_followup_repair_count"] == 2
-    second = result["turns"][1]
-    third = result["turns"][2]
-    assert "Hot stew" in second["raw_narration"]
-    assert "1 silver" in second["raw_npc"]["line"]
-    assert "5 copper" in third["raw_npc"]["line"]
+    assert result["summary"]["commerce_followup_repair_count"] == 5
+    for turn in result["turns"]:
+        assert "Hot stew" in turn["raw_narration"]
+        assert "1 silver" in turn["raw_npc"]["line"]
+        assert "5 copper" in turn["raw_npc"]["line"]
     transcript = json.loads((tmp_path / "interactive-transcript.json").read_text(encoding="utf-8"))
-    assert transcript["summary"]["commerce_followup_repair_count"] == 2
+    assert transcript["summary"]["commerce_followup_repair_count"] == 5
     assert "Hot stew" in json.dumps(transcript, ensure_ascii=False)
+    assert "Mug of ale" not in result["turns"][-1]["raw_npc"]["line"]
 
 
 def test_bundle_ca_cli_source_has_usage_and_main_guard() -> None:
