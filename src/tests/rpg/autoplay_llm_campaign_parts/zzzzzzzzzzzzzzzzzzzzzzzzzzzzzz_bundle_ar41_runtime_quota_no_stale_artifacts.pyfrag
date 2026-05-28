@@ -1,0 +1,91 @@
+# Bundle AR.4.1 — Runtime Quota Ignores Stale Artifacts
+#
+# AR.4 correctly patched runtime selectors, but it decided whether survival work
+# was still needed by reading old/generated output-dir summaries.  Reusing the
+# same output directory meant stale AR/summary files could claim drink/eat/rest
+# evidence before turn 1, so emitted_action_count stayed 0.  AR.4.1 makes runtime
+# selection quotas depend only on current-process emitted survival actions, while
+# final summaries may still display artifact counts for diagnostics.
+
+_BUNDLE_AR41_SOURCE = "bundle_ar41_runtime_quota_no_stale_artifacts"
+_BUNDLE_AR41_FINAL_SELECTOR_NAMES = {
+    "_select_player_action",
+    "choose_fallback_player_action",
+    "deterministic_concrete_player_action",
+}
+_BUNDLE_AR41_HELPER_NAME_BLOCKLIST = (
+    "context",
+    "prompt",
+    "messages",
+    "budget",
+    "trace",
+    "validate",
+    "normalize",
+    "extract",
+    "rough",
+    "vague",
+    "guard",
+    "latency",
+    "anti_loop",
+    "cache_key",
+    "rerank",
+    "suggested",
+    "candidate",
+)
+
+
+def _bundle_ar41_emitted_counts_only():
+    fn = globals().get("_bundle_ar4_emitted_counts")
+    if callable(fn):
+        try:
+            return fn()
+        except Exception:
+            pass
+    keys = globals().get("_BUNDLE_AR4_COUNT_KEYS", {}) or {}
+    return {value: 0 for value in keys.values()}
+
+
+def _bundle_ar4_next_action(counts=None):
+    # Runtime calls pass no explicit counts.  Use current-process emitted actions
+    # only, never stale/generated artifact summaries from a reused output dir.
+    if counts is None:
+        counts = _bundle_ar41_emitted_counts_only()
+    missing_fn = globals().get("_bundle_ar4_missing_categories")
+    sequence = globals().get("_BUNDLE_AR4_ACTION_SEQUENCE", []) or []
+    if not callable(missing_fn):
+        return ""
+    try:
+        missing = set(missing_fn(counts))
+    except Exception:
+        missing = set()
+    for category, action in sequence:
+        if category in missing:
+            return action
+    return ""
+
+
+def _bundle_ar4_should_wrap_function(name, value):
+    if not callable(value) or getattr(value, "_bundle_ar4_wrapped", False):
+        return False
+    lowered = str(name).lower()
+    if lowered.startswith("_bundle_") or "bundle_ar" in lowered:
+        return False
+    if lowered in _BUNDLE_AR41_FINAL_SELECTOR_NAMES:
+        return True
+    if any(token in lowered for token in _BUNDLE_AR41_HELPER_NAME_BLOCKLIST):
+        return False
+    # Allow future final selectors but avoid wrapping context builders and rerankers.
+    return lowered.endswith("select_player_action") or lowered.endswith("choose_player_action")
+
+
+def _bundle_ar41_patch_runtime_functions_once():
+    patch_fn = globals().get("_bundle_ar4_patch_runtime_functions")
+    if callable(patch_fn):
+        try:
+            return patch_fn()
+        except Exception:
+            return {"ok": False, "source": _BUNDLE_AR41_SOURCE, "error": "patch_runtime_functions_failed"}
+    return {"ok": False, "source": _BUNDLE_AR41_SOURCE, "error": "bundle_ar4_patch_runtime_functions_missing"}
+
+
+globals()["BUNDLE_AR41_RUNTIME_QUOTA_NO_STALE_ARTIFACTS_PATCHED"] = True
