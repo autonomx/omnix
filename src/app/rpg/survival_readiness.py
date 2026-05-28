@@ -1,11 +1,14 @@
-"""Bundle BX — compact survival long-run readiness projection.
+"""Bundle BX/BY — compact survival long-run readiness projection.
 
 This module consumes the v2 survival metrics and/or BT compact summary and emits
 a small advisory readiness object for 100/1000-turn report gates.  It does not
-fail gameplay by itself; callers decide whether to treat warnings as fatal.
+fail gameplay by itself; callers decide whether to treat warnings as fatal.  BY
+adds a tiny HTML renderer so readiness can be shipped as a first-class report
+artifact beside metrics and summary files.
 """
 from __future__ import annotations
 
+from html import escape
 from typing import Any, Dict, Mapping
 
 SURVIVAL_READINESS_VERSION = "survival_readiness_v1"
@@ -25,6 +28,10 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
 
 
 def build_survival_readiness_projection(
@@ -98,6 +105,51 @@ def build_survival_readiness_projection(
         },
         "source": SURVIVAL_READINESS_SOURCE,
     }
+
+
+def render_survival_readiness_html(readiness: Mapping[str, Any]) -> str:
+    readiness = _safe_dict(readiness)
+    status = _safe_str(readiness.get("status") or "unknown")
+    warnings = _safe_list(readiness.get("warnings"))
+    failed = _safe_list(readiness.get("failed_advisory_gates"))
+    pressure = _safe_dict(readiness.get("pressure_snapshot"))
+    warning_html = (
+        "<ul>" + "".join(f"<li>{escape(_safe_str(item))}</li>" for item in warnings) + "</ul>"
+        if warnings else
+        "<p>No survival readiness warnings.</p>"
+    )
+    failed_html = (
+        "<ul>" + "".join(f"<li>{escape(_safe_str(item))}</li>" for item in failed) + "</ul>"
+        if failed else
+        "<p>No failed advisory survival gates.</p>"
+    )
+    pressure_html = "".join(
+        "<div class='survival-readiness-pressure'>"
+        f"<strong>{escape(_safe_str(need).title())}</strong>"
+        f"<span>max {_safe_int(_safe_dict(row).get('max'))}/100</span>"
+        f"<small>critical {_safe_int(_safe_dict(row).get('critical_turns'))} · high {_safe_int(_safe_dict(row).get('high_turns'))}</small>"
+        "</div>"
+        for need, row in pressure.items()
+    )
+    return "\n".join([
+        f"<section id='survival-readiness' class='survival-readiness survival-readiness--{escape(status)}'>",
+        "<h2>Survival Readiness</h2>",
+        "<div class='survival-readiness-grid'>",
+        f"<div><strong>Status</strong><span>{escape(status)}</span></div>",
+        f"<div><strong>Advisory only</strong><span>{str(bool(readiness.get('advisory_only'))).lower()}</span></div>",
+        f"<div><strong>Turns observed</strong><span>{_safe_int(readiness.get('turns_observed'))}</span></div>",
+        f"<div><strong>Passive ticks</strong><span>{_safe_int(readiness.get('passive_ticks'))}</span></div>",
+        f"<div><strong>Direct actions</strong><span>{_safe_int(readiness.get('direct_survival_actions'))}</span></div>",
+        f"<div><strong>Blocked actions</strong><span>{_safe_int(readiness.get('blocked_survival_actions'))}</span></div>",
+        "</div>",
+        "<h3>Pressure Snapshot</h3>",
+        f"<div class='survival-readiness-pressure-grid'>{pressure_html}</div>",
+        "<h3>Warnings</h3>",
+        warning_html,
+        "<h3>Failed Advisory Gates</h3>",
+        failed_html,
+        "</section>",
+    ])
 
 
 def attach_survival_readiness(report_payload: Mapping[str, Any]) -> Dict[str, Any]:
