@@ -85,11 +85,12 @@ def test_bundle_bg_aggregates_passive_ticks_actions_blocked_actions_and_pressure
 
     metrics = build_survival_report_metrics(rows)
 
-    assert metrics["format_version"] == "survival_report_metrics_v1"
+    assert metrics["format_version"] == "survival_report_metrics_v2"
     assert metrics["summary"]["turns_observed"] == 4
     assert metrics["summary"]["passive_tick_count"] == 2
     assert metrics["summary"]["direct_survival_action_count"] == 1
     assert metrics["summary"]["blocked_survival_action_count"] == 1
+    assert metrics["advisory_gates"]["advisory_only"] is True
     assert metrics["tick_counts_by_reason"] == {
         "skipped:direct_survival_action": 1,
         "standard_turn": 1,
@@ -163,6 +164,7 @@ def test_bundle_bg_merge_payload_and_render_html_section() -> None:
     assert merged["report_sections"]["survival"] == merged["survival_report_metrics"]
     assert "Survival Report Metrics" in html
     assert "Passive ticks" in html
+    assert "Advisory Survival Gates" in html
     assert "Pressure Distribution" in html
     assert "standard_turn" in html
     assert "thirst" in html
@@ -175,6 +177,7 @@ def test_bundle_bg_empty_report_is_stable_and_json_safe() -> None:
 
     assert metrics["summary"]["turns_observed"] == 0
     assert metrics["summary"]["passive_tick_count"] == 0
+    assert metrics["advisory_gates"]["ok"] is True
     assert metrics["pressure_counts"] == {
         "hunger": {"low": 0, "moderate": 0, "high": 0, "critical": 0},
         "thirst": {"low": 0, "moderate": 0, "high": 0, "critical": 0},
