@@ -9,6 +9,7 @@ semantics stay stable while future patches can target small logical files.
 
 from __future__ import annotations
 
+import json
 import linecache
 import sys
 from pathlib import Path
@@ -31,7 +32,6 @@ def _register_autoplay_runtime_aliases() -> None:
     resolve to the already-loaded runtime module instead of importing a second,
     lightweight loader-only copy.
     """
-
     module = sys.modules.get(__name__)
     if module is None:
         return
@@ -60,7 +60,6 @@ def _combine_autoplay_campaign_fragments(fragments: List[Path]) -> str:
     contain ``from __future__`` imports.  Python requires those imports before any
     other executable statement in the *combined* module, so normalize them here.
     """
-
     future_imports: List[str] = []
     seen_futures = set()
     body_parts: List[str] = []
@@ -128,10 +127,46 @@ def _load_autoplay_campaign_runtime() -> None:
         _register_autoplay_runtime_aliases()
 
 
+def _run_survival_report_writer_hook(argv: List[str], exit_code: object) -> None:
+    try:
+        from tests.rpg.autoplay.survival_report_writer_hook import (
+            run_autoplay_survival_report_writer_hook,
+        )
+    except Exception as exc:  # pragma: no cover - defensive post-run hook
+        print(
+            "[AUTOPLAY-SURVIVAL-REPORT] hook_import_failed " + repr(exc),
+            file=sys.stderr,
+        )
+        return
+
+    result = run_autoplay_survival_report_writer_hook(
+        script_path=Path(__file__).resolve(),
+        argv=argv,
+        exit_code=exit_code,
+    )
+    try:
+        print(
+            "[AUTOPLAY-SURVIVAL-REPORT] "
+            + json.dumps(
+                {
+                    "ok": bool(result.get("ok")),
+                    "rows_observed": result.get("rows_observed", 0),
+                    "zip_path": result.get("zip_path", ""),
+                    "source": result.get("source", ""),
+                },
+                sort_keys=True,
+            )
+        )
+    except Exception:  # pragma: no cover - diagnostics only
+        print("[AUTOPLAY-SURVIVAL-REPORT] hook_completed", file=sys.stderr)
+
+
 if __name__ == "__main__":
     _register_autoplay_runtime_aliases()
     _load_autoplay_campaign_runtime()
     main_fn = globals().get("main")
     if not callable(main_fn):
         raise RuntimeError("autoplay_campaign_main_missing_after_fragment_load")
-    raise SystemExit(main_fn(sys.argv[1:]))
+    _exit_code = main_fn(sys.argv[1:])
+    _run_survival_report_writer_hook(sys.argv[1:], _exit_code)
+    raise SystemExit(_exit_code)
