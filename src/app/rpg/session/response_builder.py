@@ -13,6 +13,7 @@ from app.rpg.presentation import (
 from app.rpg.session.runtime_promotions import attach_runtime_promotion_payloads
 from app.rpg.session.state_normalization import _safe_dict, _safe_list, _safe_str
 from app.rpg.session.survival_runtime import attach_survival_runtime_payloads
+from app.rpg.survival_action_context import attach_survival_action_context
 
 
 def _first_dict(*values):
@@ -234,7 +235,10 @@ def build_turn_payload(
         "effect_result": _safe_dict(last_turn.get("effect_result")),
         "transaction_menus": transaction_menus,
     }
-    return attach_runtime_promotion_payloads(payload, simulation_state, runtime_state)
+    payload = attach_runtime_promotion_payloads(payload, simulation_state, runtime_state)
+    if simulation_state:
+        payload = attach_survival_action_context(payload, simulation_state)
+    return payload
 
 
 
@@ -259,6 +263,7 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
             simulation_state,
             runtime_state,
         )
+        turn_contract = attach_survival_action_context(turn_contract, simulation_state)
     narration = result_sub.get("narration")
     if narration is None:
         narration = authoritative.get("deterministic_fallback_narration")
@@ -349,6 +354,7 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
             simulation_state,
             runtime_state,
         )
+        result_payload = attach_survival_action_context(result_payload, simulation_state)
 
     survival_projection = attach_survival_runtime_payloads(
         authoritative_result=authoritative_result,
@@ -360,6 +366,11 @@ def build_apply_turn_response(authoritative_result: Dict[str, Any]) -> Dict[str,
     session = _safe_dict(survival_projection.get("session") or session)
     turn_contract = _safe_dict(survival_projection.get("turn_contract") or turn_contract)
     result_payload = _safe_dict(survival_projection.get("result_payload") or result_payload)
+    if session:
+        simulation_state = _safe_dict(session.get("simulation_state")) or simulation_state
+    if simulation_state:
+        turn_contract = attach_survival_action_context(turn_contract, simulation_state)
+        result_payload = attach_survival_action_context(result_payload, simulation_state)
 
     return {
         "ok": True,
