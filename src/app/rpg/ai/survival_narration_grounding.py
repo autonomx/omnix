@@ -90,6 +90,19 @@ def _norm(value: Any) -> str:
     return re.sub(r"\s+", " ", _safe_str(value).strip().lower().replace("_", " "))
 
 
+def _norm_action_id(value: Any) -> str:
+    text = _safe_str(value).strip().lower().replace("-", "_").replace(":", "_").replace(" ", "_")
+    text = re.sub(r"_+", "_", text).strip("_")
+    if text.startswith("survival_"):
+        text = text[len("survival_"):]
+    return text
+
+
+def _result_is_success(result: Mapping[str, Any]) -> bool:
+    result = _safe_dict(result)
+    return result.get("ok") is not False and not result.get("blocked_reason")
+
+
 def _walk(value: Any, *, depth: int = 0, max_depth: int = 7) -> Iterable[Dict[str, Any]]:
     if depth > max_depth:
         return
@@ -110,17 +123,33 @@ def _first_survival_state(context: Mapping[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _semantic_result_key(result: Mapping[str, Any]) -> str:
+    result = _safe_dict(result)
+    return "|".join(
+        [
+            _norm_action_id(result.get("action")),
+            _safe_str(result.get("ok")),
+            _safe_str(result.get("blocked_reason") or result.get("reason")),
+            str(sorted(_safe_dict(result.get("effects")).items())),
+            str(sorted(_safe_dict(result.get("inventory_delta")).items())),
+        ]
+    )
+
+
 def _all_survival_results(context: Mapping[str, Any]) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
-    seen: set[int] = set()
+    seen: set[str] = set()
     for item in _walk(context):
         candidate = _safe_dict(item.get("survival_result"))
-        if candidate and id(candidate) not in seen:
-            seen.add(id(candidate))
-            results.append(candidate)
+        if candidate:
+            key = _semantic_result_key(candidate)
+            if key not in seen:
+                seen.add(key)
+                results.append(candidate)
         if _safe_str(item.get("action_category")) == "survival" and _safe_str(item.get("action")):
-            if id(item) not in seen:
-                seen.add(id(item))
+            key = _semantic_result_key(item)
+            if key not in seen:
+                seen.add(key)
                 results.append(item)
     return results
 
@@ -164,17 +193,18 @@ def build_survival_narration_evidence(context: Mapping[str, Any]) -> Dict[str, A
     service_backed = False
 
     for result in results:
-        action = _safe_str(result.get("action")).strip().lower()
+        action = _norm_action_id(result.get("action"))
         if action:
             actions.append(action)
             category = _ACTION_CATEGORY.get(action)
-            if category and result.get("ok") is not False and not result.get("blocked_reason"):
+            if category and _result_is_success(result):
                 backed_categories.add(category)
-        if result.get("ok") is False or result.get("blocked_reason"):
+        if not _result_is_success(result):
             blocked.append({
                 "action": action,
                 "reason": _safe_str(result.get("blocked_reason") or result.get("reason")),
             })
+            continue
         for key, value in _safe_dict(result.get("effects")).items():
             effects[key] = effects.get(key, 0) + _safe_int(value)
         for key, value in _safe_dict(result.get("inventory_delta")).items():
@@ -267,7 +297,7 @@ def validate_survival_narration_text(text: str, context: Mapping[str, Any]) -> D
             passive_state_only = (
                 category in {"water", "food", "rest"}
                 and not any(token in lower for token in (
-                    "quenched", "relieved", "sated", "fed", "refreshed", "rested", "restores", "restored",
+                    "quenched", "relieved", "eases", "eased", "sated", "fed", "refreshed", "rested", "restores", "restored",
                     "bought", "purchased", "paid", "meal", "stew", "rations", "water", "waterskin",
                     "room", "lodging", "bed", "sleep",
                 ))
@@ -310,7 +340,7 @@ def sanitize_survival_narration_text(text: str, context: Mapping[str, Any], *, f
             passive_state_only = (
                 category in {"water", "food", "rest"}
                 and not any(token in lower for token in (
-                    "quenched", "relieved", "sated", "fed", "refreshed", "rested", "restores", "restored",
+                    "quenched", "relieved", "eases", "eased", "sated", "fed", "refreshed", "rested", "restores", "restored",
                     "bought", "purchased", "paid", "meal", "stew", "rations", "water", "waterskin",
                     "room", "lodging", "bed", "sleep",
                 ))
