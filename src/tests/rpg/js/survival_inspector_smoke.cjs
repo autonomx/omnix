@@ -2,6 +2,7 @@ const fs = require('fs');
 const vm = require('vm');
 
 const sourcePath = process.argv[2];
+const commandBridgePath = process.argv[3];
 if (!sourcePath) {
   throw new Error('missing survival inspector source path');
 }
@@ -164,19 +165,38 @@ class FakeDocument {
 
 const document = new FakeDocument();
 const submitted = [];
+const submitEvents = [];
+function CustomEvent(type, init) {
+  this.type = type;
+  this.detail = (init && init.detail) || {};
+  this.bubbles = !!(init && init.bubbles);
+  this.cancelable = !!(init && init.cancelable);
+  this.defaultPrevented = false;
+  this.preventDefault = () => {
+    if (this.cancelable) this.defaultPrevented = true;
+  };
+}
 const context = {
   console,
+  CustomEvent,
   Event: function Event(type, init) { this.type = type; Object.assign(this, init || {}); },
   document,
   window: {
     document,
     __submitted: submitted,
     rpgSendMessage: (command) => submitted.push(command),
+    dispatchEvent: (event) => {
+      if (event.type === 'rpg:submit_command') submitEvents.push(event);
+      return true;
+    },
     addEventListener: () => {},
   },
 };
 context.globalThis = context;
 
+if (commandBridgePath) {
+  vm.runInNewContext(fs.readFileSync(commandBridgePath, 'utf8'), context, { filename: commandBridgePath });
+}
 const source = fs.readFileSync(sourcePath, 'utf8');
 vm.runInNewContext(source, context, { filename: sourcePath });
 
@@ -223,13 +243,12 @@ assert(buttons.length === 2, 'expected two survival command buttons');
 buttons[0].click();
 assert(submitted.length === 1, 'click did not submit a survival command');
 assert(submitted[0] === 'drink water', `expected drink water, got ${submitted[0]}`);
+assert(buttons[0].dataset.submitHandled === 'true', 'submit handled dataset missing');
+assert(buttons[0].dataset.submitMethod === 'rpgSendMessage', `unexpected submit method ${buttons[0].dataset.submitMethod}`);
 
 const derivedPayload = { result: { survival: { hunger: 10, thirst: 76, fatigue: 51 } } };
-const derivedPressure = context.window.RpgSurvivalInspector.survivalPressure(
-  derivedPayload,
-  context.window.RpgSurvivalInspector.survivalState(derivedPayload)
-);
+const derivedPressure = context.window.RpgSurvivalInspector.survivalPressure(derivedPayload);
 assert(derivedPressure.thirst === 'critical', 'derived critical pressure failed');
 assert(derivedPressure.fatigue === 'high', 'derived high pressure failed');
 
-console.log(JSON.stringify({ ok: true, buttons: buttons.length, submitted: submitted[0] }));
+console.log(JSON.stringify({ ok: true, buttons: buttons.length, submitted: submitted[0], method: buttons[0].dataset.submitMethod }));
