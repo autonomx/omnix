@@ -155,13 +155,7 @@ def _all_survival_results(context: Mapping[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _has_category_evidence(category: str, evidence: Mapping[str, Any]) -> bool:
-    """Return whether a narration claim category is directly authorized.
-
-    This intentionally checks both the derived ``backed_categories`` list and the
-    raw authoritative evidence fields.  That makes validation resilient to old
-    transcript shapes where an action/effect is present but a report adapter has
-    not projected the category list yet.
-    """
+    """Return whether a narration claim category is directly authorized."""
     categories = set(_safe_list(evidence.get("backed_categories")))
     if category in categories:
         return True
@@ -187,9 +181,20 @@ def _has_category_evidence(category: str, evidence: Mapping[str, Any]) -> bool:
     return False
 
 
+def _category_term_matches(lower_text: str, term: str) -> bool:
+    term = _norm(term)
+    if not term:
+        return False
+    if " " in term:
+        pattern = r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])"
+    else:
+        pattern = r"\b" + re.escape(term) + r"\b"
+    return re.search(pattern, lower_text) is not None
+
+
 def _category_claimed(text: str, category: str) -> bool:
     lower = _norm(text)
-    return any(term in lower for term in _CATEGORY_TERMS.get(category, ()))
+    return any(_category_term_matches(lower, term) for term in _CATEGORY_TERMS.get(category, ()))
 
 
 def _sentence_claim_categories(sentence: str) -> List[str]:
