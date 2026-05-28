@@ -38,6 +38,10 @@ from app.rpg.survival_report_artifacts import (  # noqa: E402
     append_survival_report_artifacts_to_zip,
     write_survival_report_artifacts,
 )
+from rpg.interactive_cli_commerce_followup import (  # noqa: E402
+    apply_commerce_followup_repair,
+    extract_service_offer_context,
+)
 from tests.rpg.manual.session_helpers import (  # noqa: E402
     _ensure_manual_session,
     _reset_manual_session_artifacts,
@@ -132,6 +136,7 @@ def build_interactive_campaign_summary(
     warnings: List[str] = []
     errors = 0
     llm_turns = 0
+    commerce_repairs = 0
     for turn in turns:
         warnings.extend(_safe_list(turn.get("scenario_warnings")))
         warnings.extend(_safe_list(turn.get("regression_warnings")))
@@ -139,6 +144,8 @@ def build_interactive_campaign_summary(
             errors += 1
         if bool(turn.get("llm_called")):
             llm_turns += 1
+        if _safe_dict(turn.get("interactive_cli_commerce_followup")).get("applied"):
+            commerce_repairs += 1
     return {
         "format_version": INTERACTIVE_CLI_CAMPAIGN_VERSION,
         "run_id": run_id,
@@ -152,6 +159,7 @@ def build_interactive_campaign_summary(
         "error_count": errors,
         "warning_count": len(warnings),
         "llm_turn_count": llm_turns,
+        "commerce_followup_repair_count": commerce_repairs,
         "warnings": sorted(set(_safe_str(w) for w in warnings if _safe_str(w)))[:100],
     }
 
@@ -171,6 +179,10 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
                 for k, v in survival.items()
                 if k in {"hunger", "thirst", "fatigue"}
             )
+        commerce = _safe_dict(turn.get("interactive_cli_commerce_followup"))
+        commerce_html = ""
+        if commerce.get("applied"):
+            commerce_html = "<p><strong>Commerce follow-up:</strong> answered from last authoritative service offers.</p>"
         warning_html = "".join(f"<li>{escape(_safe_str(w))}</li>" for w in _safe_list(turn.get("scenario_warnings")) + _safe_list(turn.get("regression_warnings")))
         if not warning_html:
             warning_html = "<li>none</li>"
@@ -181,6 +193,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
                 f"<p><strong>Player:</strong> {escape(_safe_str(turn.get('player_input')))}</p>",
                 f"<p><strong>Narration:</strong> {escape(narration or '[no narration found]')}</p>",
                 f"<p><strong>Survival:</strong> {survival_text or 'n/a'}</p>",
+                commerce_html,
                 "<details><summary>Warnings</summary><ul>",
                 warning_html,
                 "</ul></details>",
@@ -205,6 +218,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
         f"<div class='metric'><strong>Stop</strong><br>{escape(_safe_str(summary.get('stop_reason')))}</div>",
         f"<div class='metric'><strong>Warnings</strong><br>{escape(_safe_str(summary.get('warning_count')))}</div>",
         f"<div class='metric'><strong>Errors</strong><br>{escape(_safe_str(summary.get('error_count')))}</div>",
+        f"<div class='metric'><strong>Commerce repairs</strong><br>{escape(_safe_str(summary.get('commerce_followup_repair_count')))}</div>",
         "</div>",
         "<p>Open survival artifact index if present: <a href='survival/survival-index.html'>survival/survival-index.html</a></p>",
         "</section>",
@@ -283,6 +297,7 @@ def run_interactive_campaign(
 
     commands = list(scripted_commands or [])
     turn_summaries: List[Dict[str, Any]] = []
+    last_service_offer_context: Dict[str, Any] = {}
     started_at = time.time()
     stop_reason = "turn_limit"
 
@@ -318,11 +333,24 @@ def run_interactive_campaign(
             include_raw_result=include_raw_result,
             artifact_detail=artifact_detail,
         )
+        raw_before_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+        current_offer_context = extract_service_offer_context(raw_before_repair)
+        if current_offer_context:
+            last_service_offer_context = current_offer_context
+        else:
+            turn_summary = apply_commerce_followup_repair(
+                turn_summary,
+                player_input=player_input,
+                last_offer_context=last_service_offer_context,
+            )
         turn_summaries.append(turn_summary)
         raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
         narration = _safe_str(turn_summary.get("raw_narration") or _extract_narration(raw_result))
+        npc = _safe_dict(turn_summary.get("raw_npc") or raw_result.get("npc"))
         if narration:
             print(f"NARRATION> {narration}", flush=True)
+        if npc.get("speaker") and npc.get("line"):
+            print(f"{npc['speaker']}> {npc['line']}", flush=True)
         if turn_summary.get("error"):
             print(f"ERROR> {turn_summary['error']}", flush=True)
 
