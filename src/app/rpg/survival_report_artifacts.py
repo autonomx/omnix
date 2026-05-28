@@ -1,11 +1,11 @@
-"""Bundle BH/BW — survival metrics artifact writer helpers.
+"""Bundle BH/BW/BX — survival metrics artifact writer helpers.
 
 BG introduced aggregation and HTML rendering primitives.  BH turns those
 primitives into concrete artifact files that autoplay/report pipelines can write
 or bundle into ZIP outputs without duplicating survival logic.  BW adds compact
-summary artifacts beside the detailed metrics files so reports can show a
-product-facing survival card near the top while still keeping the full debug
-metrics available.
+summary artifacts beside the detailed metrics files.  BX attaches compact
+long-run readiness projection for 100/1000-turn reporting without requiring huge
+transcripts.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
 
+from app.rpg.survival_readiness import build_survival_readiness_projection
 from app.rpg.survival_report_metrics import (
     build_survival_report_metrics,
     render_survival_report_html,
@@ -51,11 +52,13 @@ def _write_text(path: Path, content: str) -> Path:
 def survival_metrics_artifact_payload(rows: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
     metrics = build_survival_report_metrics(rows)
     compact_summary = build_compact_survival_summary(metrics)
+    survival_readiness = build_survival_readiness_projection(metrics, compact_summary)
     html = render_survival_report_html(metrics)
     summary_html = render_compact_survival_summary_html(metrics)
     return {
         "metrics": metrics,
         "compact_summary": compact_summary,
+        "survival_readiness": survival_readiness,
         "json_filename": SURVIVAL_METRICS_JSON_NAME,
         "html_filename": SURVIVAL_METRICS_HTML_NAME,
         "summary_json_filename": SURVIVAL_SUMMARY_JSON_NAME,
@@ -87,6 +90,7 @@ def write_survival_report_artifacts(
         "ok": True,
         "metrics": _safe_dict(payload.get("metrics")),
         "compact_summary": _safe_dict(payload.get("compact_summary")),
+        "survival_readiness": _safe_dict(payload.get("survival_readiness")),
         "json_path": str(json_path),
         "html_path": str(html_path),
         "summary_json_path": str(summary_json_path),
@@ -127,6 +131,7 @@ def append_survival_report_artifacts_to_zip(
         "ok": True,
         "metrics": _safe_dict(payload.get("metrics")),
         "compact_summary": _safe_dict(payload.get("compact_summary")),
+        "survival_readiness": _safe_dict(payload.get("survival_readiness")),
         "zip_path": str(zip_path),
         "zip_members": [json_arcname, html_arcname, summary_json_arcname, summary_html_arcname],
         "source": SURVIVAL_ARTIFACT_SOURCE,
@@ -175,5 +180,7 @@ def attach_survival_artifact_manifest(report_manifest: Optional[Mapping[str, Any
     manifest["survival_report_metrics"] = _safe_dict(artifact_result.get("metrics"))
     if artifact_result.get("compact_summary"):
         manifest["survival_summary"] = _safe_dict(artifact_result.get("compact_summary"))
+    if artifact_result.get("survival_readiness"):
+        manifest["survival_readiness"] = _safe_dict(artifact_result.get("survival_readiness"))
     manifest["source"] = manifest.get("source") or SURVIVAL_ARTIFACT_SOURCE
     return manifest
