@@ -61,6 +61,26 @@ def _select_session(session_id: str, session_override: Dict[str, Any] | None = N
     return _d(loaded)
 
 
+def _first_call_diagnostics(action_advisory: Dict[str, Any], semantic_advisory: Dict[str, Any]) -> Dict[str, Any]:
+    return _d(
+        _d(semantic_advisory).get("first_call_grounding_diagnostics")
+        or _d(action_advisory).get("first_call_grounding_diagnostics")
+    )
+
+
+def _packet_from_diagnostics(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+    return _d(_d(diagnostics).get("turn_grounding_packet"))
+
+
+def _first_call_packet(action_advisory: Dict[str, Any], semantic_advisory: Dict[str, Any]) -> Dict[str, Any]:
+    return _packet_from_diagnostics(_first_call_diagnostics(action_advisory, semantic_advisory))
+
+
+def _addressed_profile(packet: Dict[str, Any]) -> Dict[str, Any]:
+    addressed = _l(_d(packet.get("npc_context")).get("addressed_npcs"))
+    return _d(addressed[0]) if addressed else {}
+
+
 def _stateful_action_from_first_call(
     action_advisory: Dict[str, Any],
     semantic_advisory: Dict[str, Any],
@@ -93,22 +113,6 @@ def _disable_duplicate_runtime_first_call(performance_override: Dict[str, Any] |
     return merged
 
 
-def _first_call_diagnostics(action_advisory: Dict[str, Any], semantic_advisory: Dict[str, Any]) -> Dict[str, Any]:
-    return _d(
-        _d(semantic_advisory).get("first_call_grounding_diagnostics")
-        or _d(action_advisory).get("first_call_grounding_diagnostics")
-    )
-
-
-def _packet_from_diagnostics(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
-    return _d(_d(diagnostics).get("turn_grounding_packet"))
-
-
-def _addressed_profile(packet: Dict[str, Any]) -> Dict[str, Any]:
-    addressed = _l(_d(packet.get("npc_context")).get("addressed_npcs"))
-    return _d(addressed[0]) if addressed else {}
-
-
 def _is_nonstateful_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
     advisory = _d(advisory)
     if not advisory:
@@ -132,13 +136,88 @@ def _is_nonstateful_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
     )
 
 
+def _is_direct_npc_question_from_packet(
+    *,
+    player_input: str,
+    action_advisory: Dict[str, Any],
+    semantic_advisory: Dict[str, Any],
+) -> bool:
+    """Heuristic safety net for malformed/default-stateful first-call outputs.
+
+    The first-call LLM can still return malformed JSON or omit stateful=false.
+    If the deterministic grounding packet clearly says the player addressed an
+    NPC and the player utterance is an opinion/question, keep the turn inside
+    non-stateful dialogue instead of letting canonical runtime invent combat.
+    """
+    packet = _first_call_packet(action_advisory, semantic_advisory)
+    priority = _d(packet.get("priority_context"))
+    npc_context = _d(packet.get("npc_context"))
+    addressed_ids = _l(priority.get("addressed_npc_ids"))
+    addressed_profiles = _l(npc_context.get("addressed_npcs"))
+    if not addressed_ids and not addressed_profiles:
+        return False
+
+    text = _s(player_input).strip().lower()
+    if not text:
+        return False
+
+    question_mark = "?" in text
+    question_terms = (
+        "what do you think",
+        "what are your thoughts",
+        "your thoughts",
+        "opinion",
+        "do you think",
+        "how do you feel",
+        "tell me about",
+        "can you tell me",
+        "what can you tell",
+        "why",
+        "how",
+        "what",
+    )
+    stateful_terms = (
+        "buy ",
+        "sell ",
+        "give me",
+        "attack",
+        "hit ",
+        "stab",
+        "shoot",
+        "cast ",
+        "take ",
+        "steal",
+        "travel",
+        "go to",
+        "hire",
+        "join me",
+        "pay ",
+        "room",
+        "bread",
+        "ration",
+    )
+    if any(term in text for term in stateful_terms):
+        return False
+    return question_mark or any(term in text for term in question_terms)
+
+
 def _should_safe_fallback_nonstateful_dialogue(
     action_advisory: Dict[str, Any],
     semantic_advisory: Dict[str, Any],
     selection: Dict[str, Any],
+    *,
+    player_input: str = "",
 ) -> bool:
     if _d(selection).get("consumable"):
         return False
+    if _d(selection).get("reason") == "service_or_commerce_runtime_wins":
+        return False
+    if _is_direct_npc_question_from_packet(
+        player_input=player_input,
+        action_advisory=action_advisory,
+        semantic_advisory=semantic_advisory,
+    ):
+        return True
     if _d(selection).get("reason") != "no_safe_non_stateful_visible_response":
         return False
     return _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory)
@@ -298,7 +377,12 @@ def apply_turn(
         return non_stateful_result
 
     selection = _d(non_stateful_result.get("selection"))
-    if _should_safe_fallback_nonstateful_dialogue(action_advisory, semantic_advisory, selection):
+    if _should_safe_fallback_nonstateful_dialogue(
+        action_advisory,
+        semantic_advisory,
+        selection,
+        player_input=_s(player_input),
+    ):
         fallback = _safe_dialogue_fallback_result(
             session=session,
             simulation_state=simulation_state,
