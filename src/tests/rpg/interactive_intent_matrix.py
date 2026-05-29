@@ -1,4 +1,4 @@
-"""CD/CE/CE.1 — interactive intent matrix regression suite.
+"""CD/CE/CE.1/CE.2.1 — interactive intent matrix regression suite.
 
 This is the realistic test layer that was missing: short player-facing scripts
 that exercise the same interactive CLI path a human/Cline/Codex agent uses.
@@ -9,9 +9,9 @@ Manual/live-provider usage from repo root:
     python src/tests/rpg/interactive_intent_matrix.py --live-provider --scenario commerce_food_purchase
 
 Pytest can import and run the same scenario definitions with fake provider/runtime
-for stable offline regression coverage. CE tightens visible-output expectations
-so quest repair cannot swallow dialogue, rumor/news, or survival/self-use turns.
-CE.1 makes text expectations inspect visible output only, never the player input.
+for stable offline regression coverage. CE.1 makes text expectations inspect
+visible output only. CE.2.1 adds explicit NPC-line expectations so generic
+narration cannot hide blank NPC responses.
 """
 from __future__ import annotations
 
@@ -42,6 +42,8 @@ class TurnExpectation:
     contains_any: Sequence[str] = field(default_factory=tuple)
     contains_all: Sequence[str] = field(default_factory=tuple)
     forbids: Sequence[str] = field(default_factory=tuple)
+    npc_line_contains_any: Sequence[str] = field(default_factory=tuple)
+    require_npc_line: bool = False
     final_action_type: str = ""
     final_service_kind: str = ""
     narration_source_any: Sequence[str] = field(default_factory=tuple)
@@ -63,12 +65,7 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
             scenario_id="commerce_food_purchase",
             title="Commerce: ask Bran for food, price, and purchase",
             description="Covers the previously broken food/bread/stew flow.",
-            commands=(
-                "I ask Bran if he has any food for sale.",
-                "What food do you have for sale?",
-                "How much for bread?",
-                "I'll buy a hot stew.",
-            ),
+            commands=("I ask Bran if he has any food for sale.", "What food do you have for sale?", "How much for bread?", "I'll buy a hot stew."),
             expectations=(
                 TurnExpectation(1, contains_all=("Hot stew", "1 silver", "5 copper"), final_service_kind="meal"),
                 TurnExpectation(2, contains_all=("Hot stew", "1 silver", "5 copper"), final_service_kind="meal"),
@@ -80,10 +77,7 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
             scenario_id="quest_no_backed_state",
             title="Quest: ask Bran for work when no backed quest exists",
             description="Quest requests must not return blank text or hallucinated quests.",
-            commands=(
-                "I'm looking for a quest.",
-                "What do you say, Bran? Have any quests for me?",
-            ),
+            commands=("I'm looking for a quest.", "What do you say, Bran? Have any quests for me?"),
             expectations=(
                 TurnExpectation(1, contains_any=("no backed quest", "do not have a confirmed job or quest"), final_action_type="quest_inquiry", narration_source_any=("quest_repaired",)),
                 TurnExpectation(2, contains_any=("no backed quest", "do not have a confirmed job or quest"), final_action_type="quest_inquiry", narration_source_any=("quest_repaired",)),
@@ -93,10 +87,7 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
             scenario_id="rumor_news_no_backed_state",
             title="Rumor/news: ask Bran for rumors or news",
             description="Rumor/news intent must be recognized and grounded instead of blank fallback or quest repair copy.",
-            commands=(
-                "Any rumors around here?",
-                "Any news lately, Bran?",
-            ),
+            commands=("Any rumors around here?", "Any news lately, Bran?"),
             expectations=(
                 TurnExpectation(1, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest", "speaker\": \"self"), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
                 TurnExpectation(2, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest", "speaker\": \"self"), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
@@ -106,11 +97,7 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
             scenario_id="survival_food_and_water",
             title="Survival: ask about hunger/thirst and use provisions",
             description="Survival commands should keep visible output grounded and never become service or quest repairs.",
-            commands=(
-                "I check how hungry and thirsty I am.",
-                "I drink water from my waterskin.",
-                "I eat a ration.",
-            ),
+            commands=("I check how hungry and thirsty I am.", "I drink water from my waterskin.", "I eat a ration."),
             expectations=(
                 TurnExpectation(1, contains_any=("hunger", "thirst", "survival", "state"), forbids=("confirmed job or quest",), final_service_kind="unknown", provider_called=True),
                 TurnExpectation(2, contains_any=("drink", "water", "waterskin", "thirst"), forbids=("confirmed job or quest", "Hot stew"), final_action_type="observe", final_service_kind="unknown"),
@@ -120,14 +107,11 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
         IntentMatrixScenario(
             scenario_id="npc_dialogue_persona",
             title="NPC dialogue: ask Bran who he is and what he knows",
-            description="General dialogue should call provider intent router and avoid quest/rumor repair swallowing persona answers.",
-            commands=(
-                "Bran, who are you?",
-                "What do you know about this place?",
-            ),
+            description="General dialogue should call provider intent router and avoid blank NPC responses.",
+            commands=("Bran, who are you?", "What do you know about this place?"),
             expectations=(
-                TurnExpectation(1, contains_any=("Bran", "tavern", "inn", "keeper"), forbids=("confirmed job or quest", "confirmed rumors", "speaker\": \"self"), provider_called=True),
-                TurnExpectation(2, contains_any=("place", "tavern", "road", "town"), forbids=("confirmed job or quest", "confirmed rumors", "confirmed news", "speaker\": \"self"), provider_called=True),
+                TurnExpectation(1, contains_any=("Bran", "tavern", "inn", "keeper"), npc_line_contains_any=("Bran", "tavern", "inn", "keeper"), require_npc_line=True, forbids=("confirmed job or quest", "confirmed rumors", "speaker\": \"self"), provider_called=True),
+                TurnExpectation(2, contains_any=("place", "tavern", "road", "town"), npc_line_contains_any=("place", "tavern", "road", "town"), require_npc_line=True, forbids=("confirmed job or quest", "confirmed rumors", "confirmed news", "speaker\": \"self"), narration_source_any=("dialogue_repaired",), provider_called=True),
             ),
         ),
     ]
@@ -139,6 +123,13 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def _visible_npc_line(turn: Mapping[str, Any]) -> str:
+    raw = _safe_dict(turn.get("raw_result") or turn.get("result"))
+    raw_npc = _safe_dict(turn.get("raw_npc"))
+    result_npc = _safe_dict(raw.get("npc"))
+    return _safe_str(raw_npc.get("line") or result_npc.get("line"))
 
 
 def _visible_turn_blob(turn: Mapping[str, Any]) -> str:
@@ -156,9 +147,6 @@ def _visible_turn_blob(turn: Mapping[str, Any]) -> str:
 
 
 def _turn_blob(turn: Mapping[str, Any]) -> str:
-    # CE.1: visible-output expectations intentionally exclude player_input and
-    # full raw JSON diagnostics so tests cannot pass because the user typed the
-    # expected word or because a hidden diagnostic echoed it.
     return _visible_turn_blob(turn)
 
 
@@ -177,12 +165,17 @@ def validate_matrix_run(scenario: IntentMatrixScenario, result: Mapping[str, Any
             continue
         turn = _safe_dict(turns[index])
         blob = _turn_blob(turn).lower()
+        npc_line = _visible_npc_line(turn).lower()
         if expectation.contains_all:
             for text in expectation.contains_all:
                 if text.lower() not in blob:
                     failures.append(f"turn {expectation.turn_index}: expected visible text not found: {text!r}")
         if expectation.contains_any and not any(text.lower() in blob for text in expectation.contains_any):
             failures.append(f"turn {expectation.turn_index}: none of expected visible texts found: {list(expectation.contains_any)!r}")
+        if expectation.require_npc_line and not npc_line.strip():
+            failures.append(f"turn {expectation.turn_index}: expected non-empty visible NPC line")
+        if expectation.npc_line_contains_any and not any(text.lower() in npc_line for text in expectation.npc_line_contains_any):
+            failures.append(f"turn {expectation.turn_index}: none of expected NPC-line texts found: {list(expectation.npc_line_contains_any)!r}")
         for text in expectation.forbids:
             if text.lower() in blob:
                 failures.append(f"turn {expectation.turn_index}: forbidden visible text found: {text!r}")
@@ -258,19 +251,7 @@ def run_intent_matrix(
     scenarios = list(scenarios or default_intent_matrix_scenarios())
     output_root = output_root or DEFAULT_OUTPUT_ROOT
     output_root.mkdir(parents=True, exist_ok=True)
-    results = [
-        run_matrix_scenario(
-            scenario,
-            output_root=output_root,
-            provider_factory=provider_factory,
-            turn_executor_patch=turn_executor_patch,
-            ensure_session_patch=ensure_session_patch,
-            reset_session_patch=reset_session_patch,
-            live_provider=live_provider,
-            seed_live_survival=seed_live_survival,
-        )
-        for scenario in scenarios
-    ]
+    results = [run_matrix_scenario(scenario, output_root=output_root, provider_factory=provider_factory, turn_executor_patch=turn_executor_patch, ensure_session_patch=ensure_session_patch, reset_session_patch=reset_session_patch, live_provider=live_provider, seed_live_survival=seed_live_survival) for scenario in scenarios]
     summary = {"format_version": MATRIX_VERSION, "scenario_count": len(results), "passed": sum(1 for item in results if item["validation"]["ok"]), "failed": [item["validation"] for item in results if not item["validation"]["ok"]], "output_root": str(output_root)}
     (output_root / "interactive-intent-matrix-summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
     return {"summary": summary, "results": results}
