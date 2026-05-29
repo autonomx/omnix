@@ -27,7 +27,11 @@ class _MatrixFakeProvider:
         self.calls.append({"messages": messages, "model": model, "stream": stream, "kwargs": kwargs})
         assert all(isinstance(message, ChatMessage) for message in messages)
         text = "\n".join(message.content for message in messages).lower()
-        if any(term in text for term in ("quest", "quests", "work", "job", "task")):
+        if "what do you know about this place" in text:
+            payload = {"action_type": "rumor_inquiry", "service_kind": "rumor", "target_npc": "self", "requested_terms": ["this place"], "confidence": 0.91}
+        elif "who are you" in text:
+            payload = {"action_type": "talk", "service_kind": "unknown", "target_npc": "Bran", "requested_terms": ["who are you"], "confidence": 0.88}
+        elif any(term in text for term in ("quest", "quests", "work", "job", "task")):
             payload = {"action_type": "quest_inquiry", "service_kind": "quest", "target_npc": "Bran", "requested_terms": ["quests"], "confidence": 0.95}
         elif any(term in text for term in ("rumor", "rumors", "news")):
             payload = {"action_type": "rumor_inquiry", "service_kind": "rumor", "target_npc": "Bran", "requested_terms": ["rumors"], "confidence": 0.94}
@@ -43,14 +47,7 @@ class _MatrixFakeProvider:
 
 
 class _PlaceRumorFakeProvider(_MatrixFakeProvider):
-    def chat_completion(self, messages, model=None, stream=False, **kwargs):
-        self.calls.append({"messages": messages, "model": model, "stream": stream, "kwargs": kwargs})
-        text = "\n".join(message.content for message in messages).lower()
-        if "what do you know about this place" in text:
-            payload = {"action_type": "rumor_inquiry", "service_kind": "rumor", "target_npc": "self", "requested_terms": ["this place"], "confidence": 0.91}
-        else:
-            payload = {"action_type": "talk", "service_kind": "unknown", "target_npc": "Bran", "requested_terms": ["dialogue"], "confidence": 0.8}
-        return ChatResponse(content=json.dumps(payload), model=self.config.model)
+    pass
 
 
 def _service_offer_result() -> Dict[str, Any]:
@@ -76,14 +73,11 @@ def _service_offer_result() -> Dict[str, Any]:
 
 
 def _empty_quest_result() -> Dict[str, Any]:
-    return {
-        "ok": True,
-        "narration": "The moment responds without producing a major new consequence.",
-        "npc": {"speaker": "", "line": ""},
-        "visible_interaction_reason": "no_supported_semantic_action_detected",
-        "turn_contract": {"action": {"action_type": "observe"}, "survival": {"hunger": 10, "thirst": 20, "fatigue": 5}},
-        "companion_quest_summary": {"by_npc": {}, "by_quest": {}, "events": []},
-    }
+    return {"ok": True, "narration": "The moment responds without producing a major new consequence.", "npc": {"speaker": "", "line": ""}, "visible_interaction_reason": "no_supported_semantic_action_detected", "turn_contract": {"action": {"action_type": "observe"}, "survival": {"hunger": 10, "thirst": 20, "fatigue": 5}}, "companion_quest_summary": {"by_npc": {}, "by_quest": {}, "events": []}}
+
+
+def _generic_place_result() -> Dict[str, Any]:
+    return {"ok": True, "narration": "You ask the general question about this place. The immediate environment offers no specific details, leaving you with a vague sense of where you are.", "npc": {"speaker": "", "line": ""}, "turn_contract": {"action": {"action_type": "observe"}, "survival": {"hunger": 10, "thirst": 20, "fatigue": 5}}}
 
 
 def _survival_result(player_input: str, turn_index: int) -> Dict[str, Any]:
@@ -94,16 +88,7 @@ def _survival_result(player_input: str, turn_index: int) -> Dict[str, Any]:
         narration = "You eat a ration and your hunger eases."
     else:
         narration = "Your survival state shows hunger and thirst are currently manageable."
-    return {
-        "ok": True,
-        "narration": narration,
-        "npc": {"speaker": "", "line": ""},
-        "turn_contract": {
-            "action": {"action_type": "survival"},
-            "survival": {"hunger": max(0, 20 - turn_index), "thirst": max(0, 30 - turn_index), "fatigue": 5},
-            "survival_pressure": {"hunger": "low", "thirst": "low", "fatigue": "low"},
-        },
-    }
+    return {"ok": True, "narration": narration, "npc": {"speaker": "", "line": ""}, "turn_contract": {"action": {"action_type": "survival"}, "survival": {"hunger": max(0, 20 - turn_index), "thirst": max(0, 30 - turn_index), "fatigue": 5}, "survival_pressure": {"hunger": "low", "thirst": "low", "fatigue": "low"}}}
 
 
 def _dialogue_result(player_input: str) -> Dict[str, Any]:
@@ -120,6 +105,8 @@ def _matrix_fake_turn(*, session_id, turn, turn_index, scenario_name, target_cha
     lowered = player_input.lower()
     if any(term in lowered for term in ("food", "bread", "stew", "how much", "buy")):
         raw_result = _service_offer_result()
+    elif "what do you know about this place" in lowered:
+        raw_result = _generic_place_result()
     elif any(term in lowered for term in ("quest", "quests", "rumor", "rumors", "news", "work", "job")):
         raw_result = _empty_quest_result()
     elif any(term in lowered for term in ("hungry", "thirsty", "drink", "water", "ration", "survival")):
@@ -204,7 +191,15 @@ def test_bundle_ce1_validator_does_not_count_player_input_as_visible_response() 
     assert any("expected visible" in failure for failure in validation["failures"])
 
 
-def test_bundle_ce2_place_dialogue_is_repaired_when_provider_misclassifies_as_rumor(tmp_path) -> None:
+def test_bundle_ce21_validator_requires_visible_npc_line() -> None:
+    scenario = matrix.IntentMatrixScenario(scenario_id="npc_line_probe", title="NPC line probe", commands=("What do you know about this place?",), expectations=(matrix.TurnExpectation(1, contains_any=("place",), npc_line_contains_any=("place",), require_npc_line=True, provider_called=True),))
+    bad_result = {"summary": {"completed_turns": 1}, "turns": [{"player_input": "What do you know about this place?", "raw_narration": "You ask about this place and get a vague feeling.", "raw_npc": {"speaker": "", "line": ""}, "interactive_cli_intent_diagnostics": {"provider_called": True, "final_classification": {"action_type": "rumor_inquiry", "service_kind": "rumor"}}, "narration_source": "provider_intent_classifier"}]}
+    validation = matrix.validate_matrix_run(scenario, bad_result)
+    assert validation["ok"] is False
+    assert any("NPC line" in failure for failure in validation["failures"])
+
+
+def test_bundle_ce21_place_dialogue_repairs_blank_npc_even_with_generic_narration(tmp_path) -> None:
     scenario = [s for s in matrix.default_intent_matrix_scenarios() if s.scenario_id == "npc_dialogue_persona"][0]
     provider = _PlaceRumorFakeProvider()
     _, result = _run_offline_matrix(tmp_path, [scenario], provider=provider)
@@ -216,9 +211,10 @@ def test_bundle_ce2_place_dialogue_is_repaired_when_provider_misclassifies_as_ru
     assert turns[1]["interactive_cli_quest_followup"]["applied"] is True
     assert turns[1]["interactive_cli_quest_followup"]["inquiry_kind"] == "dialogue"
     assert turns[1]["narration_source"] == "dialogue_repaired"
-    assert any(word in json.dumps(turns[1].get("raw_npc", {}), ensure_ascii=False).lower() for word in ("place", "tavern", "road", "town"))
+    npc_blob = json.dumps(turns[1].get("raw_npc", {}), ensure_ascii=False).lower()
+    assert any(word in npc_blob for word in ("place", "tavern", "road", "town"))
     assert "confirmed rumors" not in json.dumps(turns[1], ensure_ascii=False)
-    assert '"speaker": "self"' not in json.dumps(turns[1].get("raw_npc", {}), ensure_ascii=False)
+    assert '"speaker": "self"' not in npc_blob
 
 
 def test_bundle_cd_cli_requires_live_provider_flag(capsys) -> None:
