@@ -1,11 +1,14 @@
-"""CB/CB.2/CB.3 — LLM intent routing for interactive CLI turns.
+"""CB/CB.2/CB.3/CB.5 — LLM intent routing for interactive CLI turns.
 
-CB originally called the provider only when deterministic classification looked
-ambiguous.  CB.3 makes the interactive CLI use the provider as the first-class
-semantic intent router on every player turn by default.  Deterministic parsing is
-still recorded as diagnostic context, but it no longer decides whether the LLM is
-called.  The LLM remains advisory: inventory, prices, mutation, and success/fail
-outcomes still come only from deterministic runtime/service state.
+Interactive CLI playtests call the provider as the first-class semantic intent
+router on every player turn by default. Deterministic parsing is retained as
+context/diagnostics, but it no longer gates whether the LLM is called. The LLM
+remains advisory: inventory, prices, rewards, quest creation, and state mutation
+still come only from deterministic runtime state.
+
+CB.5 adds first-class quest/rumor/news/work inquiry intents so provider output
+like `service_kind: paid_information` for "any quests?" is not collapsed to an
+unsupported unknown intent.
 """
 from __future__ import annotations
 
@@ -21,9 +24,36 @@ from rpg.interactive_cli_commerce_followup import (
     is_purchase_intent,
 )
 
-LLM_INTENT_SOURCE = "interactive_cli_llm_intent_router_v2"
-_VALID_SERVICE_KINDS = {"meal", "drink", "lodging", "supplies", "commerce", "unknown", ""}
-_VALID_ACTION_TYPES = {"service_inquiry", "service_purchase", "commerce_inquiry", "talk", "observe", "travel", "combat", "unknown", ""}
+LLM_INTENT_SOURCE = "interactive_cli_llm_intent_router_v3"
+_VALID_SERVICE_KINDS = {
+    "meal",
+    "drink",
+    "lodging",
+    "supplies",
+    "commerce",
+    "quest",
+    "rumor",
+    "news",
+    "work",
+    "paid_information",
+    "unknown",
+    "",
+}
+_VALID_ACTION_TYPES = {
+    "service_inquiry",
+    "service_purchase",
+    "commerce_inquiry",
+    "quest_inquiry",
+    "rumor_inquiry",
+    "work_inquiry",
+    "talk",
+    "observe",
+    "travel",
+    "combat",
+    "unknown",
+    "",
+}
+_QUEST_TERMS = ("quest", "quests", "rumor", "rumors", "news", "work", "job", "jobs", "lead", "leads", "task", "errand")
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -43,6 +73,11 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except Exception:
         return default
+
+
+def _is_quest_text(player_input: str) -> bool:
+    text = _safe_str(player_input).lower()
+    return any(term in text for term in _QUEST_TERMS)
 
 
 def _provider_metadata(provider: Any = None) -> Dict[str, Any]:
@@ -81,15 +116,30 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
 
 def _sanitize_llm_intent(payload: Mapping[str, Any]) -> Dict[str, Any]:
     payload = _safe_dict(payload)
-    action_type = _safe_str(payload.get("action_type") or payload.get("intent") or "unknown").strip().lower()
-    service_kind = _safe_str(payload.get("service_kind") or "unknown").strip().lower()
-    if action_type not in _VALID_ACTION_TYPES:
-        action_type = "unknown"
-    if service_kind not in _VALID_SERVICE_KINDS:
-        service_kind = "unknown"
+    raw_action_type = _safe_str(payload.get("action_type") or payload.get("intent") or "unknown").strip().lower()
+    raw_service_kind = _safe_str(payload.get("service_kind") or "unknown").strip().lower()
     requested_terms = [_safe_str(item).strip().lower() for item in _safe_list(payload.get("requested_terms")) if _safe_str(item).strip()]
     if not requested_terms and payload.get("requested_offer"):
         requested_terms = [_safe_str(payload.get("requested_offer")).strip().lower()]
+
+    term_blob = " ".join(requested_terms + [raw_service_kind, raw_action_type])
+    if any(term in term_blob for term in _QUEST_TERMS):
+        if "rumor" in term_blob:
+            action_type = "rumor_inquiry"
+            service_kind = "rumor"
+        elif "news" in term_blob:
+            action_type = "rumor_inquiry"
+            service_kind = "news"
+        elif any(term in term_blob for term in ("work", "job", "task", "errand")):
+            action_type = "work_inquiry"
+            service_kind = "work"
+        else:
+            action_type = "quest_inquiry"
+            service_kind = "quest"
+    else:
+        action_type = raw_action_type if raw_action_type in _VALID_ACTION_TYPES else "unknown"
+        service_kind = raw_service_kind if raw_service_kind in _VALID_SERVICE_KINDS else "unknown"
+
     return {
         "action_type": action_type,
         "service_kind": service_kind,
@@ -109,14 +159,23 @@ def build_deterministic_intent_classification(
     requested_kind = infer_requested_service_kind(player_input)
     commerce_question = is_commerce_followup_question(player_input)
     purchase_intent = is_purchase_intent(player_input)
+    quest_inquiry = _is_quest_text(player_input)
     current_kind = _safe_str(_safe_dict(current_offer_context).get("service_kind")).strip().lower()
     last_kind = _safe_str(_safe_dict(last_offer_context).get("service_kind")).strip().lower()
     context_kind = current_kind or last_kind
     mismatch = bool(requested_kind and current_kind and requested_kind != current_kind)
     has_offer_context = bool(_safe_dict(current_offer_context) or _safe_dict(last_offer_context))
-    action_type = "service_purchase" if purchase_intent else ("service_inquiry" if commerce_question or requested_kind else "unknown")
+    if quest_inquiry:
+        action_type = "quest_inquiry"
+        service_kind = "quest"
+    else:
+        action_type = "service_purchase" if purchase_intent else ("service_inquiry" if commerce_question or requested_kind else "unknown")
+        service_kind = requested_kind or context_kind or "unknown"
     confidence = 0.0
     reasons: list[str] = []
+    if quest_inquiry:
+        confidence += 0.60
+        reasons.append("quest_terms_detected")
     if commerce_question:
         confidence += 0.45
         reasons.append("commerce_terms_detected")
@@ -133,7 +192,7 @@ def build_deterministic_intent_classification(
         confidence = min(confidence, 0.40)
         reasons.append(f"service_kind_mismatch:{requested_kind}!={current_kind}")
     low_confidence = confidence < 0.70
-    needs_llm = bool((commerce_question or purchase_intent or requested_kind) and (not requested_kind or mismatch or low_confidence))
+    needs_llm = bool(quest_inquiry or ((commerce_question or purchase_intent or requested_kind) and (not requested_kind or mismatch or low_confidence)))
     if commerce_question and not has_offer_context:
         needs_llm = True
         reasons.append("no_authoritative_offer_context_yet")
@@ -142,17 +201,18 @@ def build_deterministic_intent_classification(
         reasons.append("purchase_intent_low_confidence_with_offer_context")
     return {
         "action_type": action_type,
-        "service_kind": requested_kind or context_kind or "unknown",
+        "service_kind": service_kind,
         "requested_service_kind": requested_kind,
         "current_context_service_kind": current_kind,
         "last_context_service_kind": last_kind,
         "confidence": round(min(1.0, confidence), 3),
         "commerce_question": commerce_question,
         "purchase_intent": purchase_intent,
+        "quest_inquiry": quest_inquiry,
         "service_kind_mismatch": mismatch,
         "needs_llm": needs_llm,
         "reasons": reasons,
-        "source": "deterministic_commerce_classifier_v1",
+        "source": "deterministic_interactive_intent_hints_v2",
     }
 
 
@@ -171,12 +231,14 @@ def _build_prompt(
     }
     return (
         "You are an RPG intent router. Return only strict JSON.\n"
-        "Classify the player's intent; do not invent inventory, prices, success, failure, rewards, or state mutation.\n"
+        "Classify the player's intent; do not invent inventory, quests, prices, rewards, success, failure, or state mutation.\n"
         "Use action_type service_purchase for buy/pay/give-me purchase attempts.\n"
         "Use action_type service_inquiry or commerce_inquiry for questions about prices, menus, stock, food, drink, rooms, or supplies.\n"
-        "Use service_kind meal for food/bread/stew/provisions, drink for ale/water, lodging for rooms/beds.\n"
-        "Schema: {\"action_type\": \"service_inquiry|service_purchase|commerce_inquiry|talk|observe|travel|combat|unknown\", "
-        "\"service_kind\": \"meal|drink|lodging|supplies|commerce|unknown\", "
+        "Use action_type quest_inquiry for asking an NPC for quests, work, jobs, tasks, or errands.\n"
+        "Use action_type rumor_inquiry for asking about rumors or news.\n"
+        "Use service_kind meal for food/bread/stew/provisions, drink for ale/water, lodging for rooms/beds, quest for quests/work, rumor for rumors/news.\n"
+        "Schema: {\"action_type\": \"service_inquiry|service_purchase|commerce_inquiry|quest_inquiry|rumor_inquiry|work_inquiry|talk|observe|travel|combat|unknown\", "
+        "\"service_kind\": \"meal|drink|lodging|supplies|commerce|quest|rumor|news|work|paid_information|unknown\", "
         "\"target_npc\": string, \"requested_terms\": [string], \"confidence\": number}.\n"
         f"Input payload:\n{json.dumps(payload, ensure_ascii=False, sort_keys=True)}"
     )
@@ -288,7 +350,7 @@ def classify_service_intent_with_fallback(
     else:
         llm_diag["why_provider_not_called"] = "fallback_mode_deterministic_not_ambiguous"
     return {
-        "format_version": "interactive_cli_intent_diagnostics_v2",
+        "format_version": "interactive_cli_intent_diagnostics_v3",
         "intent_router_mode": "always" if force_llm else "fallback",
         "deterministic_classification": deterministic,
         "llm_classification": llm_intent,
@@ -311,6 +373,8 @@ def narration_source_for_turn(turn_summary: Mapping[str, Any]) -> str:
     turn_summary = _safe_dict(turn_summary)
     if _safe_dict(turn_summary.get("interactive_cli_commerce_followup")).get("applied"):
         return "repaired"
+    if _safe_dict(turn_summary.get("interactive_cli_quest_followup")).get("applied"):
+        return "quest_repaired"
     diagnostics = _safe_dict(turn_summary.get("interactive_cli_intent_diagnostics"))
     if diagnostics.get("provider_called"):
         return "provider_intent_classifier"
