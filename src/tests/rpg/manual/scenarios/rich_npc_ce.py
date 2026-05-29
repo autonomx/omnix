@@ -53,6 +53,16 @@ _BRAN_RICH_PROFILE: Dict[str, Any] = {
     },
 }
 
+_SCENE: Dict[str, Any] = {
+    "scene_id": "scene:rusty_flagon_common_room",
+    "location_id": "loc_rusty_flagon",
+    "location_name": "The Rusty Flagon",
+    "summary": "A low, smoky common room near the old road. Bran tends the bar while travelers talk quietly.",
+    "present_npc_ids": ["npc:bran"],
+}
+
+_REL = {"trust": 42, "respect": 35, "relationship": 42, "score": 42}
+
 
 RICH_NPC_CE_SCENARIOS: Dict[str, Dict[str, Any]] = {
     "bran_opinion_sword_styles_uses_rich_profile": {
@@ -68,44 +78,37 @@ RICH_NPC_CE_SCENARIOS: Dict[str, Dict[str, Any]] = {
             "frequency": "never",
             "conversation_chance_percent": 0,
         },
+        "setup_scene": _SCENE,
+        "setup_present_npc_state": {
+            "present_npc_ids": ["npc:bran"],
+            "nearby_npc_ids": ["npc:bran"],
+            "npc_index": {"npc:bran": _BRAN_RICH_PROFILE},
+        },
+        "setup_social_state": {
+            "relationships": {
+                "npc:bran": dict(_REL),
+                "Bran": dict(_REL),
+            }
+        },
+        "setup_social_profiles": {"npc:bran": _BRAN_RICH_PROFILE},
         "setup_interaction_state": {
             "player_location_id": "loc_rusty_flagon",
             "player_hp": 20,
             "player_max_hp": 20,
-            "scene": {
-                "scene_id": "scene:rusty_flagon_common_room",
-                "location_id": "loc_rusty_flagon",
-                "location_name": "The Rusty Flagon",
-                "summary": "A low, smoky common room near the old road. Bran tends the bar while travelers talk quietly.",
-                "present_npc_ids": ["npc:bran"],
-            },
-            "current_scene": {
-                "scene_id": "scene:rusty_flagon_common_room",
-                "location_id": "loc_rusty_flagon",
-                "location_name": "The Rusty Flagon",
-                "summary": "A low, smoky common room near the old road. Bran tends the bar while travelers talk quietly.",
-                "present_npc_ids": ["npc:bran"],
-            },
             "present_npc_ids": ["npc:bran"],
             "nearby_npc_ids": ["npc:bran"],
-            "present_npc_state": {
-                "present_npc_ids": ["npc:bran"],
-                "nearby_npc_ids": ["npc:bran"],
-                "npc_index": {"npc:bran": _BRAN_RICH_PROFILE},
-            },
-            "npc_index": {"npc:bran": _BRAN_RICH_PROFILE},
             "relationships": {
-                "npc:bran": {"trust": 42, "respect": 35, "relationship": 42, "score": 42},
-                "Bran": {"trust": 42, "respect": 35, "relationship": 42, "score": 42},
+                "npc:bran": dict(_REL),
+                "Bran": dict(_REL),
             },
             "relationship_state": {
-                "npc:bran": {"trust": 42, "respect": 35, "relationship": 42, "score": 42},
-                "Bran": {"trust": 42, "respect": 35, "relationship": 42, "score": 42},
+                "npc:bran": dict(_REL),
+                "Bran": dict(_REL),
             },
             "social_state": {
                 "relationships": {
-                    "npc:bran": {"trust": 42, "respect": 35, "relationship": 42, "score": 42},
-                    "Bran": {"trust": 42, "respect": 35, "relationship": 42, "score": 42},
+                    "npc:bran": dict(_REL),
+                    "Bran": dict(_REL),
                 },
                 "profiles": {"npc:bran": _BRAN_RICH_PROFILE},
             },
