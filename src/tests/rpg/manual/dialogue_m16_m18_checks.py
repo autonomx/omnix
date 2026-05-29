@@ -176,6 +176,7 @@ def _run_first_call_grounding_check(
         "check_type": "dialogue_first_call_grounding",
         "ok": not failures,
         "failures": failures,
+        "error": ";".join(failures),
         "expected_npc_id": expected_npc_id,
         "addressed_npc_ids": addressed_ids,
         "packet_version": _safe_str(packet.get("format_version")),
