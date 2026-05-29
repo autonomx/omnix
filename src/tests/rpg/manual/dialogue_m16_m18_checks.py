@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List
 
 from app.rpg.dialogue_context.arc_context import build_arc_dialogue_context
@@ -12,8 +13,12 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _safe_str(value: Any) -> str:
-    return value if isinstance(value, str) else ""
+    return value if isinstance(value, str) else ("" if value is None else str(value))
 
 
 def _extract_simulation_state(
@@ -51,6 +56,138 @@ def _extract_simulation_state(
     return first_non_empty
 
 
+def _extract_first_call_grounding_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    candidates = [
+        result.get("first_call_grounding_diagnostics"),
+        nested.get("first_call_grounding_diagnostics"),
+        _safe_dict(result.get("first_call_semantic_advisory")).get("first_call_grounding_diagnostics"),
+        _safe_dict(result.get("first_call_action_advisory")).get("first_call_grounding_diagnostics"),
+        _safe_dict(nested.get("first_call_semantic_advisory")).get("first_call_grounding_diagnostics"),
+        _safe_dict(nested.get("first_call_action_advisory")).get("first_call_grounding_diagnostics"),
+        _safe_dict(result.get("first_call_visible_response")).get("first_call_grounding_diagnostics"),
+        _safe_dict(nested.get("first_call_visible_response")).get("first_call_grounding_diagnostics"),
+    ]
+    for candidate in candidates:
+        candidate = _safe_dict(candidate)
+        if candidate:
+            return candidate
+    return {}
+
+
+def _extract_first_call_packet(result: Dict[str, Any]) -> Dict[str, Any]:
+    diagnostics = _extract_first_call_grounding_diagnostics(result)
+    return _safe_dict(diagnostics.get("turn_grounding_packet"))
+
+
+def _extract_visible_text(result: Dict[str, Any]) -> str:
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    pieces: List[str] = []
+    for source in (result, nested, _safe_dict(result.get("visible_response")), _safe_dict(nested.get("visible_response"))):
+        for key in ("narration", "final_narration", "summary", "text"):
+            value = _safe_str(source.get(key)).strip()
+            if value:
+                pieces.append(value)
+        npc = _safe_dict(source.get("npc"))
+        for key in ("speaker", "line"):
+            value = _safe_str(npc.get(key)).strip()
+            if value:
+                pieces.append(value)
+    return "\n".join(pieces)
+
+
+def _run_first_call_grounding_check(
+    *,
+    check: Dict[str, Any],
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    packet = _extract_first_call_packet(result)
+    diagnostics = _extract_first_call_grounding_diagnostics(result)
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    failures: List[str] = []
+
+    expected_npc_id = _safe_str(check.get("expected_npc_id") or "npc:bran")
+    expected_format = _safe_str(check.get("expected_packet_version") or "turn_grounding_packet_v1")
+
+    if not diagnostics:
+        failures.append("missing_first_call_grounding_diagnostics")
+    if _safe_str(packet.get("format_version")) != expected_format:
+        failures.append("missing_or_wrong_turn_grounding_packet_version")
+
+    priority = _safe_dict(packet.get("priority_context"))
+    addressed_ids = [_safe_str(v) for v in _safe_list(priority.get("addressed_npc_ids"))]
+    if expected_npc_id and expected_npc_id not in addressed_ids:
+        failures.append("expected_addressed_npc_missing")
+
+    npc_context = _safe_dict(packet.get("npc_context"))
+    addressed_profiles = [_safe_dict(v) for v in _safe_list(npc_context.get("addressed_npcs"))]
+    bran_profile = {}
+    for profile in addressed_profiles:
+        if _safe_str(profile.get("id")) == expected_npc_id:
+            bran_profile = profile
+            break
+    if not bran_profile:
+        failures.append("expected_npc_profile_missing")
+
+    biography = _safe_dict(bran_profile.get("biography"))
+    personality = _safe_dict(bran_profile.get("personality_profile"))
+    visible_profile = _safe_dict(bran_profile.get("visible_profile"))
+    if check.get("require_biography", True) and not (
+        _safe_str(biography.get("public")) or _safe_str(visible_profile.get("public_biography"))
+    ):
+        failures.append("missing_public_biography")
+    if check.get("require_personality", True) and not _safe_str(personality.get("summary")):
+        failures.append("missing_personality_summary")
+    if check.get("require_speech_examples", True) and not _safe_list(personality.get("speech_examples")):
+        failures.append("missing_speech_examples")
+
+    expected_non_stateful = check.get("expected_non_stateful")
+    if expected_non_stateful is not None:
+        stateful_values = [
+            result.get("stateful"),
+            nested.get("stateful"),
+            _safe_dict(result.get("resolved_result")).get("stateful"),
+            _safe_dict(nested.get("resolved_result")).get("stateful"),
+        ]
+        explicit_stateful = [v for v in stateful_values if isinstance(v, bool)]
+        if bool(expected_non_stateful) and explicit_stateful and any(explicit_stateful):
+            failures.append("expected_non_stateful_but_stateful_true")
+
+        needs_runtime_values = [
+            result.get("needs_runtime_resolution"),
+            nested.get("needs_runtime_resolution"),
+            _safe_dict(result.get("resolved_result")).get("needs_runtime_resolution"),
+            _safe_dict(nested.get("resolved_result")).get("needs_runtime_resolution"),
+        ]
+        explicit_runtime = [v for v in needs_runtime_values if isinstance(v, bool)]
+        if bool(expected_non_stateful) and explicit_runtime and any(explicit_runtime):
+            failures.append("expected_no_runtime_resolution_but_runtime_required")
+
+    text = _extract_visible_text(result).lower()
+    for term in _safe_list(check.get("forbidden_private_terms")):
+        term_text = _safe_str(term).lower().strip()
+        if term_text and term_text in text:
+            failures.append(f"private_term_leaked:{term_text[:40]}")
+
+    return {
+        "check_type": "dialogue_first_call_grounding",
+        "ok": not failures,
+        "failures": failures,
+        "expected_npc_id": expected_npc_id,
+        "addressed_npc_ids": addressed_ids,
+        "packet_version": _safe_str(packet.get("format_version")),
+        "has_diagnostics": bool(diagnostics),
+        "has_bran_profile": bool(bran_profile),
+        "has_public_biography": bool(_safe_str(biography.get("public")) or _safe_str(visible_profile.get("public_biography"))),
+        "has_personality_summary": bool(_safe_str(personality.get("summary"))),
+        "speech_example_count": len(_safe_list(personality.get("speech_examples"))),
+        "visible_text_preview": text[:500],
+    }
+
+
 def run_dialogue_m16_m18_check(
     *,
     check: Dict[str, Any],
@@ -59,6 +196,9 @@ def run_dialogue_m16_m18_check(
 ) -> Dict[str, Any]:
     simulation_state = _extract_simulation_state(result=result, session=session)
     check_type = str(check.get("type") or "")
+
+    if check_type == "dialogue_first_call_grounding":
+        return _run_first_call_grounding_check(check=check, result=result)
 
     if check_type == "dialogue_context":
         npc_id = str(check.get("npc_id") or "")
