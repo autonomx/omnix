@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Dict
 
 from app.rpg.ai.action_intelligence import get_action_advisory
@@ -15,6 +16,37 @@ def _d(value: Any) -> Dict[str, Any]:
 
 def _s(value: Any) -> str:
     return str(value) if value is not None else ""
+
+
+def _load_manual_session_override(session_id: str) -> Dict[str, Any]:
+    """Best-effort bridge for manual scenario sessions.
+
+    Manual scenarios persist rich setup state through the manual harness helpers,
+    while production runtime loaders may return a canonical session shell without
+    those test-only setup fields.  Keep this import guarded so normal gameplay
+    never depends on tests.
+    """
+    if not _s(session_id).startswith("manual_service_"):
+        return {}
+    try:
+        from tests.rpg.manual.session_helpers import _ensure_manual_session
+
+        return _d(_ensure_manual_session(session_id))
+    except Exception:
+        return {}
+
+
+def _select_session(session_id: str, session_override: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    override = _d(session_override)
+    if override:
+        return deepcopy(override)
+
+    manual = _load_manual_session_override(session_id)
+    if manual:
+        return manual
+
+    loaded = canonical_runtime.load_runtime_session(session_id)
+    return _d(loaded)
 
 
 def _stateful_action_from_first_call(
@@ -58,20 +90,17 @@ def apply_turn(
     action: Dict[str, Any] | None = None,
     *,
     performance_override: Dict[str, Any] | None = None,
+    session_override: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Interactive CLI two-call entry point.
 
-    CE.1 keeps the ordinary canonical runtime intact, but adds a first-call
-    grounding/intention pass before the authoritative runtime for interactive
-    CLI/manual use:
-    - deterministic service/commerce match wins and falls through to runtime;
-    - stateful first-call outputs fall through to runtime with duplicate advisor
-      calls disabled;
-    - non-stateful interpretive NPC dialogue can be returned directly.
+    CE.1.3 bridges manual scenario setup state into the first-call grounding
+    layer.  Production/canonical runtime remains authoritative for stateful
+    actions; only non-stateful interpretive NPC dialogue can return directly.
     """
 
-    session = canonical_runtime.load_runtime_session(session_id)
-    if session is None:
+    session = _select_session(session_id, session_override=session_override)
+    if not session:
         return {"ok": False, "error": "session_not_found"}
 
     simulation_state = _d(session.get("simulation_state"))
@@ -126,6 +155,11 @@ def apply_turn(
         non_stateful_result["tick"] = int(runtime_state.get("tick", 0) or 0)
         non_stateful_result["first_call_action_advisory"] = action_advisory
         non_stateful_result["first_call_semantic_advisory"] = semantic_advisory
+        non_stateful_result["first_call_grounding_diagnostics"] = _d(
+            semantic_advisory.get("first_call_grounding_diagnostics")
+            or action_advisory.get("first_call_grounding_diagnostics")
+            or non_stateful_result.get("first_call_grounding_diagnostics")
+        )
         return non_stateful_result
 
     first_call_action = _stateful_action_from_first_call(action_advisory, semantic_advisory)
