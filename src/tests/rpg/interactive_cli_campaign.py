@@ -1,4 +1,4 @@
-"""CA/CB/CF — interactive command-line RPG campaign runner.
+"""CA/CB/CF/CF.1 — interactive command-line RPG campaign runner.
 
 This runner is for live human/agent playtesting, not LLM-as-player autoplay.
 It prompts for player input in the terminal for a fixed number of turns, captures
@@ -12,13 +12,16 @@ Examples from repo root:
 
 A coding agent such as Cline/Codex can drive stdin live, while the runtime still
 uses the normal deterministic apply_turn path.  CB adds provider/narrator
-classification diagnostics. CF adds per-turn performance timing so slow live
-provider/runtime phases are visible in JSON, HTML, and ZIP artifacts.
+classification diagnostics. CF adds per-turn performance timing. CF.1 enables
+manual-harness stage tracing for interactive turns so slow runtime/apply-turn
+costs can be split into apply_turn, token logging, artifact emission, summary
+compaction, sanitization, and raw-result restore costs.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import uuid
@@ -46,6 +49,11 @@ from rpg.interactive_cli_intent_fallback import (  # noqa: E402
     narration_source_for_turn,
 )
 from rpg.interactive_cli_quest_followup import apply_quest_followup_repair  # noqa: E402
+from tests.rpg.manual.perf_trace import (  # noqa: E402
+    clear_manual_harness_trace,
+    get_manual_harness_trace,
+    summarize_manual_harness_trace,
+)
 from tests.rpg.manual.session_helpers import (  # noqa: E402
     _ensure_manual_session,
     _reset_manual_session_artifacts,
@@ -53,7 +61,7 @@ from tests.rpg.manual.session_helpers import (  # noqa: E402
 from tests.rpg.manual.live_survival_seed import seed_live_survival_session  # noqa: E402
 from tests.rpg.manual.turn_execution import _extract_narration, _run_one_manual_turn  # noqa: E402
 
-INTERACTIVE_CLI_CAMPAIGN_VERSION = "interactive_cli_campaign_v3"
+INTERACTIVE_CLI_CAMPAIGN_VERSION = "interactive_cli_campaign_v4"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results"
 STOP_COMMANDS = {"/quit", "/exit", "/stop"}
 SLOW_TURN_THRESHOLD_SECONDS = 10.0
@@ -107,6 +115,24 @@ def _sum_phase(turns: Sequence[Mapping[str, Any]], key: str) -> float:
     return round(sum(_safe_float(_safe_dict(turn.get("interactive_cli_performance")).get(key)) for turn in turns), 4)
 
 
+def _run_manual_turn_with_trace(**kwargs: Any) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    previous = os.environ.get("RPG_TRACE_MANUAL_HARNESS")
+    os.environ["RPG_TRACE_MANUAL_HARNESS"] = "1"
+    clear_manual_harness_trace()
+    try:
+        turn_summary = _run_one_manual_turn(**kwargs)
+        rows = get_manual_harness_trace()
+        trace_summary = summarize_manual_harness_trace(rows)
+        trace_summary["row_count"] = len(rows)
+        return turn_summary, trace_summary
+    finally:
+        clear_manual_harness_trace()
+        if previous is None:
+            os.environ.pop("RPG_TRACE_MANUAL_HARNESS", None)
+        else:
+            os.environ["RPG_TRACE_MANUAL_HARNESS"] = previous
+
+
 def _performance_summary(turns: Sequence[Mapping[str, Any]], *, elapsed_seconds: float) -> Dict[str, Any]:
     totals = [_safe_float(_safe_dict(turn.get("interactive_cli_performance")).get("turn_total_seconds")) for turn in turns]
     totals = [value for value in totals if value > 0]
@@ -135,12 +161,13 @@ def _performance_summary(turns: Sequence[Mapping[str, Any]], *, elapsed_seconds:
                     "turn_total_seconds": round(total, 4),
                     "runtime_apply_turn_seconds": round(_safe_float(perf.get("runtime_apply_turn_seconds")), 4),
                     "intent_router_seconds": round(_safe_float(perf.get("intent_router_seconds")), 4),
+                    "manual_harness_slowest_stages": _safe_list(_safe_dict(perf.get("manual_harness_trace_summary")).get("slowest_stages"))[:5],
                     "narration_source": _safe_str(turn.get("narration_source")),
                     "provider_called": bool(_safe_dict(turn.get("interactive_cli_intent_diagnostics")).get("provider_called")),
                 }
             )
     return {
-        "format_version": "interactive_cli_performance_v1",
+        "format_version": "interactive_cli_performance_v2",
         "elapsed_seconds": round(elapsed_seconds, 4),
         "completed_turns": len(turns),
         "avg_turn_seconds": round(sum(totals) / len(totals), 4) if totals else 0.0,
@@ -153,7 +180,7 @@ def _performance_summary(turns: Sequence[Mapping[str, Any]], *, elapsed_seconds:
         "slow_turns": slow_turns[:20],
         "phase_totals_seconds": phase_totals,
         "phase_avg_seconds": phase_averages,
-        "note": "runtime_apply_turn_seconds includes deterministic runtime plus any narration work inside _run_one_manual_turn; intent_router_seconds includes the central provider intent-classifier call.",
+        "note": "runtime_apply_turn_seconds includes _run_one_manual_turn; manual_harness_slowest_stages breaks that down when CF.1 tracing is enabled. intent_router_seconds includes the central provider intent-classifier call.",
     }
 
 
@@ -278,6 +305,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
         quest = _safe_dict(turn.get("interactive_cli_quest_followup"))
         diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
         perf = _safe_dict(turn.get("interactive_cli_performance"))
+        harness = _safe_dict(perf.get("manual_harness_trace_summary"))
         narration_source = _safe_str(turn.get("narration_source") or narration_source_for_turn(turn))
         commerce_html = ""
         if commerce.get("applied"):
@@ -287,15 +315,21 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
             kind = _safe_str(quest.get("inquiry_kind") or "quest")
             has_backed = _safe_dict(quest.get("quest_context")).get("has_backed_quest")
             quest_html = f"<p><strong>{escape(kind.title())} repair:</strong> answered from bounded/authoritative context. backed quest: {escape(_safe_str(has_backed))}</p>"
+        slow_stage_html = "".join(
+            f"<li>{escape(_safe_str(item.get('event')))}: {escape(_safe_str(item.get('elapsed_seconds')))}s</li>"
+            for item in _safe_list(harness.get("slowest_stages"))[:8]
+        ) or "<li>none</li>"
         perf_html = ""
         if perf:
             perf_html = "".join([
                 "<details><summary>Turn performance</summary><ul>",
                 f"<li>total: {escape(_safe_str(perf.get('turn_total_seconds')))}s</li>",
-                f"<li>runtime/apply turn: {escape(_safe_str(perf.get('runtime_apply_turn_seconds')))}s</li>",
+                f"<li>runtime/manual harness: {escape(_safe_str(perf.get('runtime_apply_turn_seconds')))}s</li>",
                 f"<li>intent router/provider classifier: {escape(_safe_str(perf.get('intent_router_seconds')))}s</li>",
                 f"<li>commerce repair: {escape(_safe_str(perf.get('commerce_repair_seconds')))}s</li>",
                 f"<li>quest/dialogue repair: {escape(_safe_str(perf.get('quest_dialogue_repair_seconds')))}s</li>",
+                "</ul><h4>Manual harness slowest stages</h4><ul>",
+                slow_stage_html,
                 "</ul>",
                 f"<pre>{escape(_json_dumps(perf))}</pre>",
                 "</details>",
@@ -444,10 +478,10 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
             break
 
         turn_started = time.perf_counter()
-        perf: Dict[str, Any] = {"format_version": "interactive_cli_turn_performance_v1"}
+        perf: Dict[str, Any] = {"format_version": "interactive_cli_turn_performance_v2"}
 
         phase = time.perf_counter()
-        turn_summary = _run_one_manual_turn(
+        turn_summary, manual_trace_summary = _run_manual_turn_with_trace(
             session_id=session_id,
             turn={"player": player_input},
             turn_index=len(turn_summaries) + 1,
@@ -460,6 +494,7 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
             artifact_detail=artifact_detail,
         )
         perf["runtime_apply_turn_seconds"] = _elapsed_since(phase)
+        perf["manual_harness_trace_summary"] = manual_trace_summary
 
         phase = time.perf_counter()
         raw_before_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
@@ -467,13 +502,7 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
         perf["offer_context_extract_seconds"] = _elapsed_since(phase)
 
         phase = time.perf_counter()
-        diagnostics = classify_service_intent_with_fallback(
-            player_input=player_input,
-            current_offer_context=current_offer_context,
-            last_offer_context=last_service_offer_context,
-            enable_llm=enable_llm_intent_fallback,
-            provider_factory=provider_factory,
-        )
+        diagnostics = classify_service_intent_with_fallback(player_input=player_input, current_offer_context=current_offer_context, last_offer_context=last_service_offer_context, enable_llm=enable_llm_intent_fallback, provider_factory=provider_factory)
         perf["intent_router_seconds"] = _elapsed_since(phase)
         turn_summary["interactive_cli_intent_diagnostics"] = diagnostics
 
@@ -550,18 +579,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_dir = Path(args.output_dir) if args.output_dir else default_output_dir(run_id)
     session_id = _safe_str(args.session_id).strip() or f"interactive_cli_{run_id}"
     commands = read_scripted_commands(args.script_file) if args.script_file else None
-    run_interactive_campaign(
-        turns=int(args.turns),
-        session_id=session_id,
-        output_dir=output_dir,
-        scripted_commands=commands,
-        reset_session=not bool(args.no_reset_session_state),
-        console_llm=not bool(args.no_console_llm),
-        include_raw_result=not bool(args.summary_only),
-        artifact_detail=args.artifact_detail,
-        enable_llm_intent_fallback=not bool(args.no_llm_intent_fallback),
-        seed_live_survival=not bool(args.no_live_survival_seed),
-    )
+    run_interactive_campaign(turns=int(args.turns), session_id=session_id, output_dir=output_dir, scripted_commands=commands, reset_session=not bool(args.no_reset_session_state), console_llm=not bool(args.no_console_llm), include_raw_result=not bool(args.summary_only), artifact_detail=args.artifact_detail, enable_llm_intent_fallback=not bool(args.no_llm_intent_fallback), seed_live_survival=not bool(args.no_live_survival_seed))
     return 0
 
 
