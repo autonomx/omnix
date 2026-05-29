@@ -241,7 +241,7 @@ def test_direct_npc_question_packet_blocks_canonical_runtime_even_when_advisory_
     assert result["consumed"] is True
     assert result["llm_purpose"] == "first_call_safe_dialogue_fallback"
     assert result["npc"]["speaker"] == "Bran"
-    assert result["visible_interaction_reason"] if "visible_interaction_reason" in result else result["result"]["visible_interaction_reason"] == "first_call_safe_dialogue_fallback"
+    assert result["result"]["visible_interaction_reason"] == "first_call_safe_dialogue_fallback"
 
 
 def test_dialogue_grounding_check_accepts_compact_grounding_validation_bridge():
