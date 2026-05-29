@@ -1,4 +1,4 @@
-"""CD — interactive intent matrix regression suite.
+"""CD/CE — interactive intent matrix regression suite.
 
 This is the realistic test layer that was missing: short player-facing scripts
 that exercise the same interactive CLI path a human/Cline/Codex agent uses.
@@ -9,17 +9,17 @@ Manual/live-provider usage from repo root:
     python src/tests/rpg/interactive_intent_matrix.py --live-provider --scenario commerce_food_purchase
 
 Pytest can import and run the same scenario definitions with fake provider/runtime
-for stable offline regression coverage.
+for stable offline regression coverage. CE tightens visible-output expectations
+so quest repair cannot swallow dialogue, rumor/news, or survival/self-use turns.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Sequence
 
 THIS_FILE = Path(__file__).resolve()
 TESTS_ROOT = THIS_FILE.parents[1]
@@ -31,7 +31,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 
 from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 
-MATRIX_VERSION = "interactive_intent_matrix_v1"
+MATRIX_VERSION = "interactive_intent_matrix_v2"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-intent-matrix"
 
 
@@ -91,42 +91,42 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
         IntentMatrixScenario(
             scenario_id="rumor_news_no_backed_state",
             title="Rumor/news: ask Bran for rumors or news",
-            description="Rumor/news intent must be recognized and grounded instead of blank fallback.",
+            description="Rumor/news intent must be recognized and grounded instead of blank fallback or quest repair copy.",
             commands=(
                 "Any rumors around here?",
                 "Any news lately, Bran?",
             ),
             expectations=(
-                TurnExpectation(1, contains_any=("confirmed job or quest", "no backed quest", "right now"), final_action_type="rumor_inquiry", narration_source_any=("quest_repaired",)),
-                TurnExpectation(2, contains_any=("confirmed job or quest", "no backed quest", "right now"), final_action_type="rumor_inquiry", narration_source_any=("quest_repaired",)),
+                TurnExpectation(1, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest",), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
+                TurnExpectation(2, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest",), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
             ),
         ),
         IntentMatrixScenario(
             scenario_id="survival_food_and_water",
             title="Survival: ask about hunger/thirst and use provisions",
-            description="Survival commands should keep visible output grounded and non-empty.",
+            description="Survival commands should keep visible output grounded and never become service or quest repairs.",
             commands=(
                 "I check how hungry and thirsty I am.",
                 "I drink water from my waterskin.",
                 "I eat a ration.",
             ),
             expectations=(
-                TurnExpectation(1, contains_any=("hunger", "thirst", "survival", "state"), provider_called=True),
-                TurnExpectation(2, contains_any=("drink", "water", "waterskin", "thirst"), final_service_kind="unknown"),
-                TurnExpectation(3, contains_any=("eat", "ration", "hunger"), final_service_kind="unknown"),
+                TurnExpectation(1, contains_any=("hunger", "thirst", "survival", "state"), forbids=("confirmed job or quest",), final_service_kind="unknown", provider_called=True),
+                TurnExpectation(2, contains_any=("drink", "water", "waterskin", "thirst"), forbids=("confirmed job or quest", "Hot stew"), final_action_type="observe", final_service_kind="unknown"),
+                TurnExpectation(3, contains_any=("eat", "ration", "hunger"), forbids=("confirmed job or quest", "Hot stew"), final_action_type="observe", final_service_kind="unknown"),
             ),
         ),
         IntentMatrixScenario(
             scenario_id="npc_dialogue_persona",
             title="NPC dialogue: ask Bran who he is and what he knows",
-            description="General dialogue should call provider intent router and avoid empty NPC response.",
+            description="General dialogue should call provider intent router and avoid quest repair swallowing persona answers.",
             commands=(
                 "Bran, who are you?",
                 "What do you know about this place?",
             ),
             expectations=(
-                TurnExpectation(1, contains_any=("Bran", "tavern", "inn", "keeper", "right now"), provider_called=True),
-                TurnExpectation(2, contains_any=("place", "tavern", "road", "town", "right now"), provider_called=True),
+                TurnExpectation(1, contains_any=("Bran", "tavern", "inn", "keeper"), forbids=("confirmed job or quest",), provider_called=True),
+                TurnExpectation(2, contains_any=("place", "tavern", "road", "town"), forbids=("confirmed job or quest",), provider_called=True),
             ),
         ),
     ]
@@ -180,13 +180,9 @@ def validate_matrix_run(scenario: IntentMatrixScenario, result: Mapping[str, Any
                 failures.append(f"turn {expectation.turn_index}: forbidden text found: {text!r}")
         final = _final_classification(turn)
         if expectation.final_action_type and _safe_str(final.get("action_type")) != expectation.final_action_type:
-            failures.append(
-                f"turn {expectation.turn_index}: final action_type {_safe_str(final.get('action_type'))!r} != {expectation.final_action_type!r}"
-            )
+            failures.append(f"turn {expectation.turn_index}: final action_type {_safe_str(final.get('action_type'))!r} != {expectation.final_action_type!r}")
         if expectation.final_service_kind and _safe_str(final.get("service_kind")) != expectation.final_service_kind:
-            failures.append(
-                f"turn {expectation.turn_index}: final service_kind {_safe_str(final.get('service_kind'))!r} != {expectation.final_service_kind!r}"
-            )
+            failures.append(f"turn {expectation.turn_index}: final service_kind {_safe_str(final.get('service_kind'))!r} != {expectation.final_service_kind!r}")
         diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
         if expectation.provider_called is not None and bool(diagnostics.get("provider_called")) is not bool(expectation.provider_called):
             failures.append(f"turn {expectation.turn_index}: provider_called expected {expectation.provider_called}")
@@ -196,15 +192,7 @@ def validate_matrix_run(scenario: IntentMatrixScenario, result: Mapping[str, Any
     summary = _safe_dict(result.get("summary"))
     if int(summary.get("completed_turns") or 0) != len(scenario.commands):
         failures.append(f"completed_turns {summary.get('completed_turns')} != commands {len(scenario.commands)}")
-    return {
-        "ok": not failures,
-        "scenario_id": scenario.scenario_id,
-        "title": scenario.title,
-        "failures": failures,
-        "summary": summary,
-        "artifact_paths": _safe_dict(result.get("artifacts")),
-        "source": MATRIX_VERSION,
-    }
+    return {"ok": not failures, "scenario_id": scenario.scenario_id, "title": scenario.title, "failures": failures, "summary": summary, "artifact_paths": _safe_dict(result.get("artifacts")), "source": MATRIX_VERSION}
 
 
 def run_matrix_scenario(
@@ -275,13 +263,7 @@ def run_intent_matrix(
         )
         for scenario in scenarios
     ]
-    summary = {
-        "format_version": MATRIX_VERSION,
-        "scenario_count": len(results),
-        "passed": sum(1 for item in results if item["validation"]["ok"]),
-        "failed": [item["validation"] for item in results if not item["validation"]["ok"]],
-        "output_root": str(output_root),
-    }
+    summary = {"format_version": MATRIX_VERSION, "scenario_count": len(results), "passed": sum(1 for item in results if item["validation"]["ok"]), "failed": [item["validation"] for item in results if not item["validation"]["ok"]], "output_root": str(output_root)}
     (output_root / "interactive-intent-matrix-summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
     return {"summary": summary, "results": results}
 
@@ -311,12 +293,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     scenarios = _select_scenarios(args.scenario)
     output_root = Path(args.output_root) if args.output_root else DEFAULT_OUTPUT_ROOT
-    result = run_intent_matrix(
-        scenarios=scenarios,
-        output_root=output_root,
-        live_provider=True,
-        seed_live_survival=not bool(args.no_live_survival_seed),
-    )
+    result = run_intent_matrix(scenarios=scenarios, output_root=output_root, live_provider=True, seed_live_survival=not bool(args.no_live_survival_seed))
     print(json.dumps(result["summary"], indent=2, ensure_ascii=False, sort_keys=True, default=str))
     return 0 if not result["summary"]["failed"] else 1
 
