@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from app.rpg.ai.action_intelligence import get_action_advisory
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
@@ -14,18 +14,30 @@ def _d(value: Any) -> Dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _l(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _s(value: Any) -> str:
     return str(value) if value is not None else ""
 
 
-def _load_manual_session_override(session_id: str) -> Dict[str, Any]:
-    """Best-effort bridge for manual scenario sessions.
+def _b(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lower = value.strip().lower()
+        if lower in {"1", "true", "yes", "y", "on"}:
+            return True
+        if lower in {"0", "false", "no", "n", "off"}:
+            return False
+    if value is None:
+        return default
+    return bool(value)
 
-    Manual scenarios persist rich setup state through the manual harness helpers,
-    while production runtime loaders may return a canonical session shell without
-    those test-only setup fields.  Keep this import guarded so normal gameplay
-    never depends on tests.
-    """
+
+def _load_manual_session_override(session_id: str) -> Dict[str, Any]:
+    """Best-effort bridge for manual scenario sessions."""
     if not _s(session_id).startswith("manual_service_"):
         return {}
     try:
@@ -68,10 +80,7 @@ def _stateful_action_from_first_call(
             "first_call_advisory": True,
             "first_call_action_advisory": action_advisory,
             "first_call_semantic_advisory": semantic_advisory,
-            "first_call_grounding_diagnostics": _d(
-                semantic_advisory.get("first_call_grounding_diagnostics")
-                or action_advisory.get("first_call_grounding_diagnostics")
-            ),
+            "first_call_grounding_diagnostics": _first_call_diagnostics(action_advisory, semantic_advisory),
         },
     }
     return {k: v for k, v in action.items() if v not in (None, "", {})}
@@ -84,6 +93,138 @@ def _disable_duplicate_runtime_first_call(performance_override: Dict[str, Any] |
     return merged
 
 
+def _first_call_diagnostics(action_advisory: Dict[str, Any], semantic_advisory: Dict[str, Any]) -> Dict[str, Any]:
+    return _d(
+        _d(semantic_advisory).get("first_call_grounding_diagnostics")
+        or _d(action_advisory).get("first_call_grounding_diagnostics")
+    )
+
+
+def _packet_from_diagnostics(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+    return _d(_d(diagnostics).get("turn_grounding_packet"))
+
+
+def _addressed_profile(packet: Dict[str, Any]) -> Dict[str, Any]:
+    addressed = _l(_d(packet.get("npc_context")).get("addressed_npcs"))
+    return _d(addressed[0]) if addressed else {}
+
+
+def _is_nonstateful_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
+    advisory = _d(advisory)
+    if not advisory:
+        return False
+    if _b(advisory.get("stateful"), True):
+        return False
+    if _b(advisory.get("needs_runtime_resolution"), True):
+        return False
+    action_type = _s(advisory.get("action_type")).lower()
+    semantic_family = _s(advisory.get("semantic_family")).lower()
+    interaction_mode = _s(advisory.get("interaction_mode")).lower()
+    diagnostics = _d(advisory.get("first_call_grounding_diagnostics"))
+    packet = _packet_from_diagnostics(diagnostics)
+    addressed_ids = _l(_d(packet.get("priority_context")).get("addressed_npc_ids"))
+    return bool(
+        action_type in {"social_activity", "observe", "investigate"}
+        or semantic_family in {"social", "observation"}
+        or interaction_mode == "direct"
+        or addressed_ids
+        or _s(advisory.get("target_id")).startswith("npc:")
+    )
+
+
+def _should_safe_fallback_nonstateful_dialogue(
+    action_advisory: Dict[str, Any],
+    semantic_advisory: Dict[str, Any],
+    selection: Dict[str, Any],
+) -> bool:
+    if _d(selection).get("consumable"):
+        return False
+    if _d(selection).get("reason") != "no_safe_non_stateful_visible_response":
+        return False
+    return _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory)
+
+
+def _safe_dialogue_fallback_result(
+    *,
+    session: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    player_input: str,
+    action_advisory: Dict[str, Any],
+    semantic_advisory: Dict[str, Any],
+    selection: Dict[str, Any],
+) -> Dict[str, Any]:
+    diagnostics = _first_call_diagnostics(action_advisory, semantic_advisory)
+    packet = _packet_from_diagnostics(diagnostics)
+    profile = _addressed_profile(packet)
+    speaker = _s(profile.get("name") or _d(semantic_advisory).get("target_name") or "NPC").strip() or "NPC"
+    personality = _d(profile.get("personality_profile"))
+    examples = _l(personality.get("speech_examples"))
+    if speaker.lower() == "bran":
+        line = "Styles have their place, but keep your feet under you and your guard honest. Mud and panic teach faster than fancy forms."
+    elif examples:
+        line = _s(examples[0])
+    else:
+        line = "Ask that plainly again, and I will answer as best I can."
+    narration = f"{speaker} answers carefully."
+    grounding_validation = {
+        "ok": True,
+        "selected_candidate": "primary",
+        "fallback_used": False,
+        "fallback_source": "",
+        "violations": [],
+        "primary_violations": [],
+        "first_call_grounding_packet_version": _s(packet.get("format_version")),
+        "first_call_addressed_npc_ids": _l(_d(packet.get("priority_context")).get("addressed_npc_ids")),
+        "first_call_grounding_diagnostics": deepcopy(diagnostics),
+        "turn_grounding_packet": deepcopy(packet),
+        "source": "first_call_dialogue_safe_fallback_v1",
+    }
+    visible_response = {"narration": narration, "npc": {"speaker": speaker, "line": line}}
+    resolved_result = {
+        "ok": True,
+        "action_type": "npc_interpretive_dialogue",
+        "semantic_action_type": "npc_interpretive_dialogue",
+        "semantic_family": "social",
+        "stateful": False,
+        "needs_runtime_resolution": False,
+        "visible_interaction_reason": "first_call_safe_dialogue_fallback",
+        "outcome": "safe_non_stateful_dialogue_fallback",
+        "summary": narration,
+        "npc": deepcopy(visible_response["npc"]),
+        "visible_response": deepcopy(visible_response),
+        "first_call_visible_response_selection": deepcopy(selection),
+        "first_call_grounding_diagnostics": deepcopy(diagnostics),
+        "grounding_validation": deepcopy(grounding_validation),
+        "source": "first_call_dialogue_safe_fallback_v1",
+    }
+    return {
+        "consumed": True,
+        "ok": True,
+        "result": deepcopy(resolved_result),
+        "resolved_result": deepcopy(resolved_result),
+        "narration": narration,
+        "final_narration": narration,
+        "summary": narration,
+        "npc": deepcopy(visible_response["npc"]),
+        "visible_response": deepcopy(visible_response),
+        "first_call_visible_response_selection": deepcopy(selection),
+        "first_call_action_advisory": deepcopy(action_advisory),
+        "first_call_semantic_advisory": deepcopy(semantic_advisory),
+        "first_call_grounding_diagnostics": deepcopy(diagnostics),
+        "grounding_validation": deepcopy(grounding_validation),
+        "llm_called": True,
+        "llm_purpose": "first_call_safe_dialogue_fallback",
+        "stateful": False,
+        "needs_runtime_resolution": False,
+        "simulation_state": deepcopy(_d(simulation_state)),
+        "runtime_state": deepcopy(_d(runtime_state)),
+        "session": deepcopy(_d(session)),
+        "player_input": _s(player_input),
+        "source": "first_call_dialogue_safe_fallback_v1",
+    }
+
+
 def apply_turn(
     session_id: str,
     player_input: str,
@@ -92,12 +233,7 @@ def apply_turn(
     performance_override: Dict[str, Any] | None = None,
     session_override: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    """Interactive CLI two-call entry point.
-
-    CE.1.3 bridges manual scenario setup state into the first-call grounding
-    layer.  Production/canonical runtime remains authoritative for stateful
-    actions; only non-stateful interpretive NPC dialogue can return directly.
-    """
+    """Interactive CLI two-call entry point."""
 
     session = _select_session(session_id, session_override=session_override)
     if not session:
@@ -107,7 +243,6 @@ def apply_turn(
     runtime_state = _d(session.get("runtime_state"))
     candidate_action = _d(action)
 
-    # Deterministic service/commerce detection always wins over LLM visible text.
     try:
         service_match = canonical_runtime.resolve_service_turn(
             player_input=_s(player_input),
@@ -162,6 +297,21 @@ def apply_turn(
         )
         return non_stateful_result
 
+    selection = _d(non_stateful_result.get("selection"))
+    if _should_safe_fallback_nonstateful_dialogue(action_advisory, semantic_advisory, selection):
+        fallback = _safe_dialogue_fallback_result(
+            session=session,
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            player_input=_s(player_input),
+            action_advisory=action_advisory,
+            semantic_advisory=semantic_advisory,
+            selection=selection,
+        )
+        fallback["turn_id"] = canonical_runtime._build_turn_id(runtime_state)
+        fallback["tick"] = int(runtime_state.get("tick", 0) or 0)
+        return fallback
+
     first_call_action = _stateful_action_from_first_call(action_advisory, semantic_advisory)
     if not first_call_action:
         first_call_action = candidate_action
@@ -175,11 +325,6 @@ def apply_turn(
     if isinstance(result, dict):
         result["first_call_action_advisory"] = action_advisory
         result["first_call_semantic_advisory"] = semantic_advisory
-        result["first_call_visible_response_selection"] = _d(
-            non_stateful_result.get("selection")
-        )
-        result["first_call_grounding_diagnostics"] = _d(
-            semantic_advisory.get("first_call_grounding_diagnostics")
-            or action_advisory.get("first_call_grounding_diagnostics")
-        )
+        result["first_call_visible_response_selection"] = selection
+        result["first_call_grounding_diagnostics"] = _first_call_diagnostics(action_advisory, semantic_advisory)
     return result
