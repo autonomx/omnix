@@ -161,6 +161,10 @@ def _run_survival_report_writer_hook(argv: List[str], exit_code: object) -> None
         print("[AUTOPLAY-SURVIVAL-REPORT] hook_completed", file=sys.stderr)
 
 
+if __name__ != "__main__":
+    _load_autoplay_campaign_runtime()
+
+
 if __name__ == "__main__":
     _register_autoplay_runtime_aliases()
     _load_autoplay_campaign_runtime()
