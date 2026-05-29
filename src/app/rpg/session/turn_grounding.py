@@ -46,7 +46,26 @@ def _npc_name(npc_id: str, npc: Dict[str, Any]) -> str:
 
 
 def _scene(sim: Dict[str, Any], rt: Dict[str, Any]) -> Dict[str, Any]:
-    return _d(rt.get("current_scene") or rt.get("grounded_scene_context") or sim.get("current_scene"))
+    return _d(
+        rt.get("current_scene")
+        or rt.get("grounded_scene_context")
+        or sim.get("current_scene")
+        or sim.get("scene")
+    )
+
+
+def _iter_npc_sources(src: Dict[str, Any]) -> List[Any]:
+    values: List[Any] = []
+    for key in ("npc_index", "npcs", "known_npcs", "nearby_npcs", "characters"):
+        values.append(src.get(key))
+
+    present_state = _d(src.get("present_npc_state"))
+    for key in ("npc_index", "npcs", "present_npcs", "nearby_npcs", "characters"):
+        values.append(present_state.get(key))
+
+    social_state = _d(src.get("social_state"))
+    values.append(social_state.get("profiles"))
+    return values
 
 
 def _npcs(sim: Dict[str, Any], rt: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -64,8 +83,7 @@ def _npcs(sim: Dict[str, Any], rt: Dict[str, Any]) -> List[Dict[str, Any]]:
         rows.append(npc)
 
     for src in (sim, rt):
-        for key in ("npc_index", "npcs", "known_npcs", "nearby_npcs", "characters"):
-            value = src.get(key)
+        for value in _iter_npc_sources(src):
             if isinstance(value, dict):
                 for npc_id, npc in value.items():
                     add(_s(npc_id), npc)
@@ -78,8 +96,9 @@ def _npcs(sim: Dict[str, Any], rt: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _present_ids(sim: Dict[str, Any], rt: Dict[str, Any], scene: Dict[str, Any]) -> List[str]:
     player = _d(sim.get("player_state"))
+    present_state = _d(sim.get("present_npc_state"))
     ids = []
-    for source in (scene, player, rt):
+    for source in (scene, player, rt, present_state):
         ids += _l(source.get("present_npc_ids")) + _l(source.get("nearby_npc_ids"))
     return _dedupe(ids, 12)
 
