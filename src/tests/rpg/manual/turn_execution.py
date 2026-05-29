@@ -4,12 +4,6 @@ import json
 from datetime import datetime
 from typing import Any, Callable, Dict
 
-
-def _timestamped_print(*args, **kwargs):
-    """Print with timestamp prefix."""
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    print(f"[{timestamp}]", *args, **kwargs)
-
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.perf_trace import (
     record_manual_harness_trace,
@@ -23,6 +17,12 @@ from tests.rpg.manual.story_event_queue_m25_m27_checks import (
 )
 from tests.rpg.manual.summary_sanitizer import sanitize_turn_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
+
+
+def _timestamped_print(*args, **kwargs):
+    """Print with timestamp prefix."""
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"[{timestamp}]", *args, **kwargs)
 
 
 def _trace_value_shape(value):
@@ -88,6 +88,7 @@ def _run_one_manual_turn(
     story_event_queue_checks: list | None = None,
     include_raw_result: bool = False,
     artifact_detail: str = "debug",
+    performance_override: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Run a single turn for a manual scenario."""
     raw_turn = turn
@@ -126,6 +127,7 @@ def _run_one_manual_turn(
                 result = apply_turn(
                     session_id=session_id,
                     player_input=player_input,
+                    performance_override=performance_override,
                 )
 
             record_manual_harness_trace("checkpoint_05_after_apply_turn", result_shape=_trace_value_shape(result))

@@ -25,6 +25,15 @@ from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 
 MATRIX_VERSION = "interactive_intent_matrix_v2"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-intent-matrix"
+MATRIX_FAST_TURN_PERFORMANCE = {
+    "fast_turn_mode": True,
+    "enable_action_advisory": False,
+    "enable_semantic_action_advisory": False,
+    "enable_live_narration_llm": False,
+    "enable_narration_retry": False,
+    "enable_continuity_grounding": False,
+    "compact_save": True,
+}
 
 
 @dataclass(frozen=True)
@@ -232,8 +241,8 @@ def _matrix_performance(results: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
             total = _safe_float(turn_perf.get("turn_total_seconds"))
             if total > 0:
                 all_turn_totals.append(total)
-            for key, value in _safe_dict(perf.get("phase_totals_seconds")).items():
-                phase_totals[key] = phase_totals.get(key, 0.0) + _safe_float(value)
+        for key, value in _safe_dict(perf.get("phase_totals_seconds")).items():
+            phase_totals[key] = phase_totals.get(key, 0.0) + _safe_float(value)
     slowest = sorted(scenarios, key=lambda item: _safe_float(item.get("avg_turn_seconds")), reverse=True)
     return {
         "format_version": "interactive_intent_matrix_performance_v1",
@@ -261,7 +270,18 @@ def run_matrix_scenario(scenario: IntentMatrixScenario, *, output_root: Path | N
             cli._ensure_manual_session = ensure_session_patch  # type: ignore[method-assign]
         if reset_session_patch is not None:
             cli._reset_manual_session_artifacts = reset_session_patch  # type: ignore[method-assign]
-        result = cli.run_interactive_campaign(turns=len(scenario.commands), session_id=f"intent_matrix_{scenario.scenario_id}", output_dir=output_dir, scripted_commands=list(scenario.commands), console_llm=False, provider_factory=provider_factory, enable_llm_intent_fallback=live_provider, seed_live_survival=seed_live_survival)
+        result = cli.run_interactive_campaign(
+            turns=len(scenario.commands),
+            session_id=f"intent_matrix_{scenario.scenario_id}",
+            output_dir=output_dir,
+            scripted_commands=list(scenario.commands),
+            console_llm=False,
+            provider_factory=provider_factory,
+            enable_llm_intent_fallback=live_provider,
+            seed_live_survival=seed_live_survival,
+            defer_runtime_narration=True,
+            runtime_performance_override=MATRIX_FAST_TURN_PERFORMANCE,
+        )
     finally:
         cli._run_one_manual_turn = original_turn_executor  # type: ignore[method-assign]
         cli._ensure_manual_session = original_ensure  # type: ignore[method-assign]

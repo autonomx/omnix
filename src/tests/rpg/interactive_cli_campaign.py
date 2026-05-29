@@ -26,6 +26,7 @@ import sys
 import time
 import uuid
 import zipfile
+from contextlib import nullcontext
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -40,6 +41,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
         sys.path.insert(0, path)
 
 from app.rpg.survival_report_artifacts import write_survival_report_artifacts  # noqa: E402
+from app.rpg.session.deferred_narration_guard import deferred_runtime_narration_context  # noqa: E402
 from rpg.interactive_cli_commerce_followup import (  # noqa: E402
     apply_commerce_followup_repair,
     extract_service_offer_context,
@@ -115,12 +117,22 @@ def _sum_phase(turns: Sequence[Mapping[str, Any]], key: str) -> float:
     return round(sum(_safe_float(_safe_dict(turn.get("interactive_cli_performance")).get(key)) for turn in turns), 4)
 
 
-def _run_manual_turn_with_trace(**kwargs: Any) -> tuple[Dict[str, Any], Dict[str, Any]]:
+def _run_manual_turn_with_trace(
+    *,
+    defer_runtime_narration: bool = False,
+    **kwargs: Any,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
     previous = os.environ.get("RPG_TRACE_MANUAL_HARNESS")
     os.environ["RPG_TRACE_MANUAL_HARNESS"] = "1"
     clear_manual_harness_trace()
+    context = (
+        deferred_runtime_narration_context(True)
+        if defer_runtime_narration
+        else nullcontext()
+    )
     try:
-        turn_summary = _run_one_manual_turn(**kwargs)
+        with context:
+            turn_summary = _run_one_manual_turn(**kwargs)
         rows = get_manual_harness_trace()
         trace_summary = summarize_manual_harness_trace(rows)
         trace_summary["row_count"] = len(rows)
@@ -441,7 +453,7 @@ def read_scripted_commands(path: str | Path) -> List[str]:
     return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
 
 
-def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, input_func: Callable[[str], str] = input, scripted_commands: Sequence[str] | None = None, reset_session: bool = True, console_llm: bool = True, include_raw_result: bool = True, artifact_detail: str = "debug", enable_llm_intent_fallback: bool = True, provider_factory: Callable[[], Any] | None = None, seed_live_survival: bool = False) -> Dict[str, Any]:
+def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, input_func: Callable[[str], str] = input, scripted_commands: Sequence[str] | None = None, reset_session: bool = True, console_llm: bool = True, include_raw_result: bool = True, artifact_detail: str = "debug", enable_llm_intent_fallback: bool = True, provider_factory: Callable[[], Any] | None = None, seed_live_survival: bool = False, defer_runtime_narration: bool = False, runtime_performance_override: Mapping[str, Any] | None = None, force_llm_intent: bool = True) -> Dict[str, Any]:
     if turns <= 0:
         raise ValueError("turns_must_be_positive")
     session_id = _safe_str(session_id).strip() or f"interactive_cli_{uuid.uuid4().hex[:8]}"
@@ -482,6 +494,7 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
 
         phase = time.perf_counter()
         turn_summary, manual_trace_summary = _run_manual_turn_with_trace(
+            defer_runtime_narration=defer_runtime_narration,
             session_id=session_id,
             turn={"player": player_input},
             turn_index=len(turn_summaries) + 1,
@@ -492,6 +505,7 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
             console_llm_max_chars=4000,
             include_raw_result=include_raw_result,
             artifact_detail=artifact_detail,
+            performance_override=dict(runtime_performance_override or {}),
         )
         perf["runtime_apply_turn_seconds"] = _elapsed_since(phase)
         perf["manual_harness_trace_summary"] = manual_trace_summary
@@ -502,7 +516,7 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
         perf["offer_context_extract_seconds"] = _elapsed_since(phase)
 
         phase = time.perf_counter()
-        diagnostics = classify_service_intent_with_fallback(player_input=player_input, current_offer_context=current_offer_context, last_offer_context=last_service_offer_context, enable_llm=enable_llm_intent_fallback, provider_factory=provider_factory)
+        diagnostics = classify_service_intent_with_fallback(player_input=player_input, current_offer_context=current_offer_context, last_offer_context=last_service_offer_context, enable_llm=enable_llm_intent_fallback, provider_factory=provider_factory, force_llm=force_llm_intent)
         perf["intent_router_seconds"] = _elapsed_since(phase)
         turn_summary["interactive_cli_intent_diagnostics"] = diagnostics
 
