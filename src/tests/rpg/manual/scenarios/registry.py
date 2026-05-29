@@ -202,6 +202,11 @@ try:
 except Exception:
     PLAYER_ACTION_CONTEXT_M52_M54_SCENARIOS = {}
 
+try:
+    from tests.rpg.manual.scenarios.rich_npc_ce import RICH_NPC_CE_SCENARIOS
+except Exception:
+    RICH_NPC_CE_SCENARIOS = {}
+
 
 def build_service_scenarios(
     legacy_scenarios: Dict[str, Dict[str, Any]] | None = None,
@@ -227,6 +232,7 @@ def build_service_scenarios(
         STORY_PROPOSAL_M10_M12_SCENARIOS,
         STORY_PACK_M13_M15_SCENARIOS,
         DIALOGUE_M16_M18_SCENARIOS,
+        RICH_NPC_CE_SCENARIOS,
         NPC_EVOLUTION_M19_M21_SCENARIOS,
         CAMPAIGN_DIRECTOR_M22_M24_SCENARIOS,
         INVENTORY_M2_M8_SCENARIOS,
