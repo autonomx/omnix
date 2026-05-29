@@ -67,6 +67,40 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
     return {}
 
 
+def _prompt_payload(prompt: str) -> Dict[str, Any]:
+    if "INPUT:\n" not in prompt:
+        return {}
+    try:
+        return _safe_dict(json.loads(prompt.split("INPUT:\n", 1)[1]))
+    except Exception:
+        return {}
+
+
+def _attach_first_call_diagnostics(
+    advisory: Dict[str, Any],
+    *,
+    prompt: str,
+    raw_result: Any,
+    raw_text: str = "",
+    source: str,
+) -> Dict[str, Any]:
+    advisory = _safe_dict(advisory)
+    payload = _prompt_payload(prompt)
+    diagnostics = {
+        "source": source,
+        "prompt": prompt,
+        "prompt_preview": prompt[:4000],
+        "prompt_truncated": len(prompt) > 4000,
+        "turn_grounding_packet": _safe_dict(payload.get("turn_grounding_packet")),
+        "normalized_result": {k: v for k, v in advisory.items() if k != "first_call_grounding_diagnostics"},
+        "raw_text": _clip_text(raw_text, 4000),
+        "raw_result_type": type(raw_result).__name__,
+        "format_version": "first_call_grounding_diagnostics_v1",
+    }
+    advisory["first_call_grounding_diagnostics"] = diagnostics
+    return advisory
+
+
 def build_action_intelligence_prompt(
     player_input: str,
     simulation_state: Dict[str, Any],
@@ -190,6 +224,7 @@ def merge_action_advisory(candidate_action: Dict[str, Any], advisory: Dict[str, 
     metadata["needs_runtime_resolution"] = _safe_bool(advisory.get("needs_runtime_resolution"), metadata["stateful"])
     metadata["visible_response_if_no_runtime_needed"] = _safe_dict(advisory.get("visible_response"))
     metadata["grounding_packet_version"] = _safe_str(advisory.get("grounding_packet_version") or "turn_grounding_packet_v1")
+    metadata["first_call_grounding_diagnostics"] = _safe_dict(advisory.get("first_call_grounding_diagnostics"))
     merged["metadata"] = metadata
     return merged
 
@@ -209,10 +244,12 @@ def get_action_advisory(
         if hasattr(llm_gateway, "complete_json"):
             result = llm_gateway.complete_json(prompt)
             if isinstance(result, dict):
-                return normalize_action_advisory(result, candidate_action)
+                advisory = normalize_action_advisory(result, candidate_action)
+                return _attach_first_call_diagnostics(advisory, prompt=prompt, raw_result=result, source="action_intelligence.complete_json")
         if hasattr(llm_gateway, "complete"):
             result = llm_gateway.complete(prompt)
             raw_text = _safe_str(result.get("text") or result.get("content") or "") if isinstance(result, dict) else _safe_str(result)
     except Exception:
         return {}
-    return normalize_action_advisory(_extract_json_object(raw_text), candidate_action)
+    advisory = normalize_action_advisory(_extract_json_object(raw_text), candidate_action)
+    return _attach_first_call_diagnostics(advisory, prompt=prompt, raw_result=raw_text, raw_text=raw_text, source="action_intelligence.complete")
