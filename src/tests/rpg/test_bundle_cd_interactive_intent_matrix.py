@@ -42,6 +42,17 @@ class _MatrixFakeProvider:
         return ChatResponse(content=json.dumps(payload), model=self.config.model)
 
 
+class _PlaceRumorFakeProvider(_MatrixFakeProvider):
+    def chat_completion(self, messages, model=None, stream=False, **kwargs):
+        self.calls.append({"messages": messages, "model": model, "stream": stream, "kwargs": kwargs})
+        text = "\n".join(message.content for message in messages).lower()
+        if "what do you know about this place" in text:
+            payload = {"action_type": "rumor_inquiry", "service_kind": "rumor", "target_npc": "self", "requested_terms": ["this place"], "confidence": 0.91}
+        else:
+            payload = {"action_type": "talk", "service_kind": "unknown", "target_npc": "Bran", "requested_terms": ["dialogue"], "confidence": 0.8}
+        return ChatResponse(content=json.dumps(payload), model=self.config.model)
+
+
 def _service_offer_result() -> Dict[str, Any]:
     return {
         "ok": True,
@@ -141,8 +152,8 @@ def _matrix_fake_turn(*, session_id, turn, turn_index, scenario_name, target_cha
     }
 
 
-def _run_offline_matrix(tmp_path, scenarios=None):
-    provider = _MatrixFakeProvider()
+def _run_offline_matrix(tmp_path, scenarios=None, provider=None):
+    provider = provider or _MatrixFakeProvider()
     result = matrix.run_intent_matrix(
         scenarios=scenarios,
         output_root=tmp_path,
@@ -233,6 +244,48 @@ def test_bundle_cd_validator_catches_missing_visible_offer_price() -> None:
 
     assert validation["ok"] is False
     assert any("Hot stew" in failure or "1 silver" in failure or "5 copper" in failure for failure in validation["failures"])
+
+
+def test_bundle_ce1_validator_does_not_count_player_input_as_visible_response() -> None:
+    scenario = matrix.IntentMatrixScenario(
+        scenario_id="visible_only_probe",
+        title="Visible only probe",
+        commands=("What do you know about this place?",),
+        expectations=(matrix.TurnExpectation(1, contains_any=("place",), provider_called=True),),
+    )
+    bad_result = {
+        "summary": {"completed_turns": 1},
+        "turns": [
+            {
+                "player_input": "What do you know about this place?",
+                "raw_narration": "Bran says nothing useful.",
+                "raw_npc": {"speaker": "Bran", "line": "Nothing useful."},
+                "interactive_cli_intent_diagnostics": {"provider_called": True, "final_classification": {"action_type": "talk", "service_kind": "unknown"}},
+                "narration_source": "provider_intent_classifier",
+            }
+        ],
+    }
+
+    validation = matrix.validate_matrix_run(scenario, bad_result)
+
+    assert validation["ok"] is False
+    assert any("expected visible" in failure for failure in validation["failures"])
+
+
+def test_bundle_ce1_place_dialogue_is_not_swallowed_by_rumor_repair(tmp_path) -> None:
+    scenario = [s for s in matrix.default_intent_matrix_scenarios() if s.scenario_id == "npc_dialogue_persona"][0]
+    provider = _PlaceRumorFakeProvider()
+    _, result = _run_offline_matrix(tmp_path, [scenario], provider=provider)
+
+    validation = result["results"][0]["validation"]
+    assert validation["ok"] is True
+    turns = result["results"][0]["result"]["turns"]
+    assert turns[1]["interactive_cli_intent_diagnostics"]["final_classification"]["action_type"] == "rumor_inquiry"
+    assert turns[1]["interactive_cli_intent_diagnostics"]["final_classification"]["target_npc"] == "self"
+    assert "interactive_cli_quest_followup" not in turns[1] or not turns[1]["interactive_cli_quest_followup"].get("applied")
+    assert turns[1]["narration_source"] == "provider_intent_classifier"
+    assert "confirmed rumors" not in json.dumps(turns[1], ensure_ascii=False)
+    assert '"speaker": "self"' not in json.dumps(turns[1].get("raw_npc", {}), ensure_ascii=False)
 
 
 def test_bundle_cd_cli_requires_live_provider_flag(capsys) -> None:
