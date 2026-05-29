@@ -59,26 +59,43 @@ def _extract_simulation_state(
 def _extract_first_call_grounding_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _safe_dict(result)
     nested = _safe_dict(result.get("result"))
+    grounding_validation = _safe_dict(result.get("grounding_validation") or nested.get("grounding_validation"))
     candidates = [
         result.get("first_call_grounding_diagnostics"),
         nested.get("first_call_grounding_diagnostics"),
+        grounding_validation.get("first_call_grounding_diagnostics"),
         _safe_dict(result.get("first_call_semantic_advisory")).get("first_call_grounding_diagnostics"),
         _safe_dict(result.get("first_call_action_advisory")).get("first_call_grounding_diagnostics"),
         _safe_dict(nested.get("first_call_semantic_advisory")).get("first_call_grounding_diagnostics"),
         _safe_dict(nested.get("first_call_action_advisory")).get("first_call_grounding_diagnostics"),
         _safe_dict(result.get("first_call_visible_response")).get("first_call_grounding_diagnostics"),
         _safe_dict(nested.get("first_call_visible_response")).get("first_call_grounding_diagnostics"),
+        _safe_dict(result.get("first_call_visible_response_selection")).get("first_call_grounding_diagnostics"),
+        _safe_dict(nested.get("first_call_visible_response_selection")).get("first_call_grounding_diagnostics"),
     ]
     for candidate in candidates:
         candidate = _safe_dict(candidate)
         if candidate:
             return candidate
+    packet = _safe_dict(grounding_validation.get("turn_grounding_packet"))
+    if packet:
+        return {
+            "format_version": "first_call_grounding_diagnostics_v1",
+            "turn_grounding_packet": packet,
+            "source": "grounding_validation_bridge",
+        }
     return {}
 
 
 def _extract_first_call_packet(result: Dict[str, Any]) -> Dict[str, Any]:
     diagnostics = _extract_first_call_grounding_diagnostics(result)
-    return _safe_dict(diagnostics.get("turn_grounding_packet"))
+    packet = _safe_dict(diagnostics.get("turn_grounding_packet"))
+    if packet:
+        return packet
+    result = _safe_dict(result)
+    nested = _safe_dict(result.get("result"))
+    grounding_validation = _safe_dict(result.get("grounding_validation") or nested.get("grounding_validation"))
+    return _safe_dict(grounding_validation.get("turn_grounding_packet"))
 
 
 def _extract_visible_text(result: Dict[str, Any]) -> str:
