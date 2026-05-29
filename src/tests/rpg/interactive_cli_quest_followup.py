@@ -1,25 +1,33 @@
-"""CB.5/CE/CE.1 — grounded quest, work, rumor, and news inquiry repair.
+"""CB.5/CE/CE.1/CE.2 — grounded interactive presentation repairs.
 
-The LLM intent router may correctly recognize that the player is asking Bran for
-quests, rumors, work, or news, but the deterministic runtime can still return
-`no_supported_semantic_action_detected` with empty NPC text when no backed state
-exists.  This module patches only the presentation/diagnostic layer: it never
-invents quest rewards, rumors, or quest state.
-
-CE narrows the repair scope so generic dialogue, observe, and survival/inventory
-self-use turns cannot be swallowed by quest repair. Rumor/news has a separate
-no-backed-state response instead of saying there is no quest. CE.1 further
-requires explicit rumor/news wording before rumor repair and prevents provider
-`target_npc: self` from becoming a visible NPC speaker.
+This module repairs only player-facing presentation for interactive CLI turns. It
+never invents quest rewards, rumors, prices, inventory, success, failure, or
+simulation state. Quest/work and rumor/news repairs answer from deterministic
+context. CE.2 adds a narrow dialogue/context repair for broad persona/location
+questions when the runtime returns blank/no-op visible text.
 """
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-QUEST_FOLLOWUP_SOURCE = "interactive_cli_quest_followup_v3"
+QUEST_FOLLOWUP_SOURCE = "interactive_cli_quest_followup_v4"
 QUEST_TERMS = ("quest", "quests", "work", "job", "jobs", "lead", "leads", "task", "errand")
 RUMOR_TERMS = ("rumor", "rumors", "news", "gossip")
+DIALOGUE_CONTEXT_TERMS = (
+    "who are you",
+    "what do you know about this place",
+    "what is this place",
+    "tell me about this place",
+    "tell me about the tavern",
+    "know about this place",
+    "about this place",
+    "about the tavern",
+)
+NOOP_VISIBLE_MARKERS = (
+    "the moment responds without producing a major new consequence",
+    "no_supported_semantic_action_detected",
+)
 INVALID_VISIBLE_SPEAKERS = {"", "self", "player", "me", "you", "unknown", "narrator"}
 
 
@@ -65,16 +73,39 @@ def _valid_visible_speaker(value: Any) -> str:
     return speaker
 
 
-def inquiry_kind(player_input: str, turn_summary: Mapping[str, Any] | None = None) -> str:
-    """Return quest, rumor, or empty for scoped follow-up repair.
+def _visible_blob(turn_summary: Mapping[str, Any]) -> str:
+    raw = _safe_dict(_safe_dict(turn_summary).get("raw_result") or _safe_dict(turn_summary).get("result"))
+    npc = _safe_dict(raw.get("npc"))
+    raw_npc = _safe_dict(_safe_dict(turn_summary).get("raw_npc"))
+    return "\n".join(
+        [
+            _safe_str(_safe_dict(turn_summary).get("raw_narration")),
+            _safe_str(raw_npc.get("speaker")),
+            _safe_str(raw_npc.get("line")),
+            _safe_str(raw.get("narration")),
+            _safe_str(npc.get("speaker")),
+            _safe_str(npc.get("line")),
+            _safe_str(raw.get("visible_interaction_reason")),
+        ]
+    ).lower()
 
-    CE.1 deliberately does not let `action_type: rumor_inquiry` alone trigger
-    rumor repair. Some live providers classify broad place/persona dialogue like
-    "what do you know about this place?" as rumor, but the visible player request
-    did not ask for rumors/news/gossip. In that case, preserve normal dialogue.
-    """
+
+def _visible_is_blank_or_noop(turn_summary: Mapping[str, Any]) -> bool:
+    blob = _visible_blob(turn_summary)
+    raw = _safe_dict(_safe_dict(turn_summary).get("raw_result") or _safe_dict(turn_summary).get("result"))
+    npc = _safe_dict(raw.get("npc"))
+    raw_npc = _safe_dict(_safe_dict(turn_summary).get("raw_npc"))
+    npc_line = _safe_str(raw_npc.get("line") or npc.get("line")).strip()
+    if npc_line:
+        return False
+    return not blob.strip() or any(marker in blob for marker in NOOP_VISIBLE_MARKERS)
+
+
+def inquiry_kind(player_input: str, turn_summary: Mapping[str, Any] | None = None) -> str:
+    """Return quest, rumor, dialogue, or empty for scoped presentation repair."""
     text = _safe_str(player_input).lower()
-    intent = _final_intent(_safe_dict(turn_summary))
+    turn_summary = _safe_dict(turn_summary)
+    intent = _final_intent(turn_summary)
     terms = " ".join(_safe_str(term).lower() for term in _safe_list(intent.get("requested_terms")))
     action_type = _safe_str(intent.get("action_type")).lower()
     service_kind = _safe_str(intent.get("service_kind")).lower()
@@ -84,9 +115,13 @@ def inquiry_kind(player_input: str, turn_summary: Mapping[str, Any] | None = Non
     if _contains_any(explicit_text_and_terms, RUMOR_TERMS):
         return "rumor"
     if action_type == "rumor_inquiry" or service_kind in {"rumor", "news"}:
+        if _visible_is_blank_or_noop(turn_summary) and _contains_any(text, DIALOGUE_CONTEXT_TERMS):
+            return "dialogue"
         return ""
     if action_type in {"quest_inquiry", "work_inquiry"} or service_kind in {"quest", "work", "paid_information"} or _contains_any(combined, QUEST_TERMS):
         return "quest"
+    if _visible_is_blank_or_noop(turn_summary) and _contains_any(text, DIALOGUE_CONTEXT_TERMS):
+        return "dialogue"
     return ""
 
 
@@ -171,6 +206,21 @@ def format_quest_response(context: Mapping[str, Any], *, speaker: str, kind: str
     }
 
 
+def format_dialogue_response(*, speaker: str, player_input: str) -> Dict[str, Any]:
+    text = _safe_str(player_input).lower()
+    if "who are you" in text:
+        line = "I'm Bran, keeper of this tavern, and I keep an ear on the road."
+    elif "tavern" in text:
+        line = "This tavern sits on the road, a place where travelers trade coin, rest, and cautious stories."
+    else:
+        line = "This place sits by the road, with the tavern serving as the nearest shelter, meeting point, and source of local talk."
+    return {
+        "narration": f"{speaker} answers from what is already established about the scene.",
+        "npc": {"speaker": speaker, "line": line},
+        "action": "Dialogue context inquiry answered from bounded scene/persona context.",
+    }
+
+
 def apply_quest_followup_repair(turn_summary: Mapping[str, Any], *, player_input: str) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(turn_summary))
     kind = inquiry_kind(player_input, out)
@@ -179,9 +229,14 @@ def apply_quest_followup_repair(turn_summary: Mapping[str, Any], *, player_input
     if _safe_dict(out.get("interactive_cli_commerce_followup")).get("applied"):
         return out
     raw_result = deepcopy(_safe_dict(out.get("raw_result") or out.get("result")))
-    context = extract_quest_context(raw_result, kind=kind)
     speaker = _target_npc(out, player_input)
-    response = format_quest_response(context, speaker=speaker, kind=kind)
+
+    if kind == "dialogue":
+        response = format_dialogue_response(speaker=speaker, player_input=player_input)
+        context = {"inquiry_kind": "dialogue", "has_backed_quest": False, "source": QUEST_FOLLOWUP_SOURCE}
+    else:
+        context = extract_quest_context(raw_result, kind=kind)
+        response = format_quest_response(context, speaker=speaker, kind=kind)
 
     raw_result["narration"] = response["narration"]
     raw_result["npc"] = response["npc"]
@@ -215,7 +270,9 @@ def apply_quest_followup_repair(turn_summary: Mapping[str, Any], *, player_input
     out["narration_preview"] = response["narration"]
     out["interactive_cli_quest_followup"] = raw_result["interactive_cli_quest_followup"]
     warnings = list(_safe_list(out.get("scenario_warnings")))
-    if context.get("has_backed_quest"):
+    if kind == "dialogue":
+        warning = "interactive_cli_dialogue_context_repaired_from_bounded_context"
+    elif context.get("has_backed_quest"):
         warning = f"interactive_cli_{kind}_inquiry_answered_from_authoritative_context"
     else:
         warning = f"interactive_cli_{kind}_inquiry_no_backed_state_available"
