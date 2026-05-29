@@ -19,6 +19,10 @@ from tests.rpg.manual.summary_sanitizer import sanitize_turn_for_summary
 from tests.rpg.manual.token_usage import _record_token_usage
 
 
+_INTERACTIVE_FIRST_CALL_MODULE = "app.rpg.session.interactive_first_call_runtime"
+_CANONICAL_RUNTIME_MODULE = "app.rpg.session.runtime"
+
+
 def _timestamped_print(*args, **kwargs):
     """Print with timestamp prefix."""
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -37,9 +41,16 @@ def _trace_value_shape(value):
 
 
 def _get_apply_turn() -> Callable:
-    """Robustly locate apply_turn from the actual module path."""
+    """Robustly locate apply_turn from the actual module path.
+
+    CE.1.1: the manual/interactive harness must use the two-call wrapper by
+    default so the first LLM call receives the grounded packet and can safely
+    consume non-stateful interpretive dialogue. The canonical runtime remains a
+    fallback for non-interactive or legacy environments.
+    """
     candidates = [
-        ("app.rpg.session.runtime", "apply_turn"),
+        (_INTERACTIVE_FIRST_CALL_MODULE, "apply_turn"),
+        (_CANONICAL_RUNTIME_MODULE, "apply_turn"),
         ("app.rpg.session.service", "apply_turn"),
         ("app.rpg.session.turn_runtime", "apply_turn"),
         ("app.rpg.session.runtime_service", "apply_turn"),
@@ -50,10 +61,17 @@ def _get_apply_turn() -> Callable:
             module = __import__(module_name, fromlist=[attr])
             fn = getattr(module, attr)
             if callable(fn):
+                selection_kind = (
+                    "interactive_first_call_runtime"
+                    if module_name == _INTERACTIVE_FIRST_CALL_MODULE
+                    else "canonical_or_legacy_runtime"
+                )
                 record_manual_harness_trace(
                     "manual_harness_selected_apply_turn",
                     module_name=module_name,
                     attr=attr,
+                    selection_kind=selection_kind,
+                    interactive_first_call_enabled=module_name == _INTERACTIVE_FIRST_CALL_MODULE,
                     callable_module=getattr(fn, "__module__", ""),
                     callable_name=getattr(fn, "__name__", ""),
                     callable_qualname=getattr(fn, "__qualname__", ""),
@@ -73,6 +91,24 @@ def _extract_player_input_from_turn(turn: Any) -> str:
         or turn_dict.get("input")
         or turn_dict.get("player_input")
     ).strip()
+
+
+def _extract_first_call_grounding_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    diagnostics = (
+        _safe_dict(result.get("first_call_grounding_diagnostics"))
+        or _safe_dict(result_sub.get("first_call_grounding_diagnostics"))
+        or _safe_dict(_safe_dict(result.get("first_call_visible_response")).get("first_call_grounding_diagnostics"))
+        or _safe_dict(_safe_dict(result_sub.get("first_call_visible_response")).get("first_call_grounding_diagnostics"))
+    )
+    if diagnostics:
+        return diagnostics
+    for key in ("first_call_semantic_advisory", "first_call_action_advisory"):
+        diagnostics = _safe_dict(_safe_dict(result.get(key)).get("first_call_grounding_diagnostics"))
+        if diagnostics:
+            return diagnostics
+    return {}
 
 
 def _run_one_manual_turn(
@@ -137,6 +173,15 @@ def _run_one_manual_turn(
                     _safe_dict(result).get("llm_called")
                     or _safe_dict(_safe_dict(result).get("result")).get("llm_called")
                 ),
+                first_call_grounding_diagnostics_present=bool(
+                    _extract_first_call_grounding_diagnostics(result)
+                ),
+                first_call_action_advisory_present=bool(
+                    _safe_dict(result).get("first_call_action_advisory")
+                ),
+                first_call_semantic_advisory_present=bool(
+                    _safe_dict(result).get("first_call_semantic_advisory")
+                ),
                 narration_source=_safe_dict(
                     _safe_dict(result).get("narration_payload")
                     or _safe_dict(result).get("structured_narration")
@@ -145,12 +190,12 @@ def _run_one_manual_turn(
 
             with traced_manual_stage("manual_harness_record_token_usage"):
                 _record_token_usage(
-                scope="service_scenario",
-                label=scenario_name,
-                turn=turn_index,
-                player_input=player_input,
-                result=result,
-            )
+                    scope="service_scenario",
+                    label=scenario_name,
+                    turn=turn_index,
+                    player_input=player_input,
+                    result=result,
+                )
 
             # Log to console if requested
             if console_llm:
@@ -175,7 +220,6 @@ def _run_one_manual_turn(
                 output_artifacts._emit("RAW RESULT KEYS:", channel=target_channel)
                 output_artifacts._emit(", ".join(sorted(result.keys())), channel=target_channel)
 
-                # Run story event queue checks if provided
             story_event_queue_check_results = []
             if story_event_queue_checks:
                 with traced_manual_stage("manual_harness_story_event_queue_checks"):
@@ -228,6 +272,9 @@ def _run_one_manual_turn(
                         or _safe_dict(result.get("session")).get("last_narration_payload")
                         or _safe_dict(result.get("session")).get("narration_payload")
                     )
+                    turn_summary["first_call_grounding_diagnostics"] = _extract_first_call_grounding_diagnostics(result)
+                    turn_summary["first_call_action_advisory"] = _safe_dict(result.get("first_call_action_advisory"))
+                    turn_summary["first_call_semantic_advisory"] = _safe_dict(result.get("first_call_semantic_advisory"))
                     turn_summary["llm_called"] = bool(
                         result.get("llm_called")
                         or _safe_dict(result.get("result")).get("llm_called")
@@ -237,7 +284,7 @@ def _run_one_manual_turn(
                         _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
                     )
 
-                # Apply sanitization for summary output
+            # Apply sanitization for summary output
             with traced_manual_stage("manual_harness_sanitize_turn_for_summary"):
                 turn_summary = sanitize_turn_for_summary(
                     turn_summary,
@@ -269,6 +316,9 @@ def _run_one_manual_turn(
                         or _safe_dict(result.get("session")).get("last_narration_payload")
                         or _safe_dict(result.get("session")).get("narration_payload")
                     )
+                    turn_summary["first_call_grounding_diagnostics"] = _extract_first_call_grounding_diagnostics(result)
+                    turn_summary["first_call_action_advisory"] = _safe_dict(result.get("first_call_action_advisory"))
+                    turn_summary["first_call_semantic_advisory"] = _safe_dict(result.get("first_call_semantic_advisory"))
                     turn_summary["llm_called"] = bool(
                         result.get("llm_called")
                         or _safe_dict(result.get("result")).get("llm_called")
@@ -376,11 +426,15 @@ def _one_line_text(value: Any, *, max_chars: int = 1200) -> str:
 def _extract_raw_llm_text(result: Dict[str, Any]) -> str:
     result_sub = _safe_dict(_safe_dict(result).get("result"))
     raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    first_call_semantic = _safe_dict(result.get("first_call_semantic_advisory"))
+    first_call_action = _safe_dict(result.get("first_call_action_advisory"))
     raw_text = (
         raw_payload.get("raw_llm_narrative")
         or raw_payload.get("raw_llm_text")
         or result_sub.get("raw_llm_narrative")
         or result_sub.get("raw_llm_text")
+        or _safe_dict(first_call_semantic.get("first_call_grounding_diagnostics")).get("raw_text")
+        or _safe_dict(first_call_action.get("first_call_grounding_diagnostics")).get("raw_text")
     )
     if isinstance(raw_text, dict):
         return _compact_json(raw_text)
@@ -390,9 +444,12 @@ def _extract_raw_llm_text(result: Dict[str, Any]) -> str:
 def _extract_raw_llm_request(result: Dict[str, Any]) -> str:
     result_sub = _safe_dict(_safe_dict(result).get("result"))
     raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    diagnostics = _extract_first_call_grounding_diagnostics(result)
     raw_request = (
         raw_payload.get("raw_llm_request")
         or result_sub.get("raw_llm_request")
+        or diagnostics.get("prompt")
+        or diagnostics.get("prompt_preview")
     )
     if isinstance(raw_request, dict):
         return _compact_json(raw_request)
@@ -410,6 +467,16 @@ def _extract_llm_console_response(result: Dict[str, Any]) -> Dict[str, Any]:
     json_action = _safe_str(narration_json.get("action"))
     npc_speaker = _safe_str(npc.get("speaker"))
     npc_line = _safe_str(npc.get("line"))
+
+    first_call_visible = _safe_dict(result.get("first_call_visible_response"))
+    first_call_npc = _safe_dict(first_call_visible.get("npc") or result.get("npc"))
+    if not json_narration:
+        json_narration = _safe_str(first_call_visible.get("narration"))
+    if not npc_speaker:
+        npc_speaker = _safe_str(first_call_npc.get("speaker"))
+    if not npc_line:
+        npc_line = _safe_str(first_call_npc.get("line"))
+
     raw_text = _extract_raw_llm_text(result)
     raw_request = _extract_raw_llm_request(result)
 
@@ -421,8 +488,8 @@ def _extract_llm_console_response(result: Dict[str, Any]) -> Dict[str, Any]:
         "npc_line": npc_line,
         "raw": raw_text,
         "raw_request": raw_request,
-        "used_llm": result_sub.get("used_llm"),
-        "narration_status": result_sub.get("narration_status"),
+        "used_llm": result_sub.get("used_llm") or result.get("llm_called"),
+        "narration_status": result_sub.get("narration_status") or result.get("llm_purpose"),
     }
 
 
