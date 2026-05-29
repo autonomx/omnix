@@ -1,17 +1,8 @@
-"""CD/CE/CE.1/CE.2.1 — interactive intent matrix regression suite.
+"""CD/CE/CF — interactive intent matrix regression suite.
 
-This is the realistic test layer that was missing: short player-facing scripts
-that exercise the same interactive CLI path a human/Cline/Codex agent uses.
-
-Manual/live-provider usage from repo root:
-
-    python src/tests/rpg/interactive_intent_matrix.py --live-provider
-    python src/tests/rpg/interactive_intent_matrix.py --live-provider --scenario commerce_food_purchase
-
-Pytest can import and run the same scenario definitions with fake provider/runtime
-for stable offline regression coverage. CE.1 makes text expectations inspect
-visible output only. CE.2.1 adds explicit NPC-line expectations so generic
-narration cannot hide blank NPC responses.
+Realistic player-facing scripts for the interactive CLI path. CF adds matrix-level
+performance rollups so slow live-provider runs are visible in the top-level
+summary without opening every per-scenario artifact.
 """
 from __future__ import annotations
 
@@ -32,7 +23,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 
 from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 
-MATRIX_VERSION = "interactive_intent_matrix_v1"
+MATRIX_VERSION = "interactive_intent_matrix_v2"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-intent-matrix"
 
 
@@ -76,7 +67,6 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
         IntentMatrixScenario(
             scenario_id="quest_no_backed_state",
             title="Quest: ask Bran for work when no backed quest exists",
-            description="Quest requests must not return blank text or hallucinated quests.",
             commands=("I'm looking for a quest.", "What do you say, Bran? Have any quests for me?"),
             expectations=(
                 TurnExpectation(1, contains_any=("no backed quest", "do not have a confirmed job or quest"), final_action_type="quest_inquiry", narration_source_any=("quest_repaired",)),
@@ -86,7 +76,6 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
         IntentMatrixScenario(
             scenario_id="rumor_news_no_backed_state",
             title="Rumor/news: ask Bran for rumors or news",
-            description="Rumor/news intent must be recognized and grounded instead of blank fallback or quest repair copy.",
             commands=("Any rumors around here?", "Any news lately, Bran?"),
             expectations=(
                 TurnExpectation(1, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest", "speaker\": \"self"), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
@@ -96,7 +85,6 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
         IntentMatrixScenario(
             scenario_id="survival_food_and_water",
             title="Survival: ask about hunger/thirst and use provisions",
-            description="Survival commands should keep visible output grounded and never become service or quest repairs.",
             commands=("I check how hungry and thirsty I am.", "I drink water from my waterskin.", "I eat a ration."),
             expectations=(
                 TurnExpectation(1, contains_any=("hunger", "thirst", "survival", "state"), forbids=("confirmed job or quest",), final_service_kind="unknown", provider_called=True),
@@ -107,7 +95,6 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
         IntentMatrixScenario(
             scenario_id="npc_dialogue_persona",
             title="NPC dialogue: ask Bran who he is and what he knows",
-            description="General dialogue should call provider intent router and avoid blank NPC responses.",
             commands=("Bran, who are you?", "What do you know about this place?"),
             expectations=(
                 TurnExpectation(1, contains_any=("Bran", "tavern", "inn", "keeper"), npc_line_contains_any=("Bran", "tavern", "inn", "keeper"), require_npc_line=True, forbids=("confirmed job or quest", "confirmed rumors", "speaker\": \"self"), provider_called=True),
@@ -123,6 +110,26 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _percentile(values: Sequence[float], percentile: float) -> float:
+    values = sorted(float(v) for v in values)
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return round(values[0], 4)
+    position = (len(values) - 1) * (percentile / 100.0)
+    lower = int(position)
+    upper = min(lower + 1, len(values) - 1)
+    weight = position - lower
+    return round(values[lower] * (1.0 - weight) + values[upper] * weight, 4)
 
 
 def _visible_npc_line(turn: Mapping[str, Any]) -> str:
@@ -146,10 +153,6 @@ def _visible_turn_blob(turn: Mapping[str, Any]) -> str:
     return json.dumps(visible_payload, ensure_ascii=False, default=str)
 
 
-def _turn_blob(turn: Mapping[str, Any]) -> str:
-    return _visible_turn_blob(turn)
-
-
 def _final_classification(turn: Mapping[str, Any]) -> Dict[str, Any]:
     diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
     return _safe_dict(diagnostics.get("final_classification"))
@@ -164,7 +167,7 @@ def validate_matrix_run(scenario: IntentMatrixScenario, result: Mapping[str, Any
             failures.append(f"turn {expectation.turn_index}: missing turn result")
             continue
         turn = _safe_dict(turns[index])
-        blob = _turn_blob(turn).lower()
+        blob = _visible_turn_blob(turn).lower()
         npc_line = _visible_npc_line(turn).lower()
         if expectation.contains_all:
             for text in expectation.contains_all:
@@ -196,17 +199,56 @@ def validate_matrix_run(scenario: IntentMatrixScenario, result: Mapping[str, Any
     return {"ok": not failures, "scenario_id": scenario.scenario_id, "title": scenario.title, "failures": failures, "summary": summary, "artifact_paths": _safe_dict(result.get("artifacts")), "source": MATRIX_VERSION}
 
 
-def run_matrix_scenario(
-    scenario: IntentMatrixScenario,
-    *,
-    output_root: Path | None = None,
-    provider_factory: Callable[[], Any] | None = None,
-    turn_executor_patch: Callable[..., Dict[str, Any]] | None = None,
-    ensure_session_patch: Callable[[str], Any] | None = None,
-    reset_session_patch: Callable[[str], Any] | None = None,
-    live_provider: bool = True,
-    seed_live_survival: bool = True,
-) -> Dict[str, Any]:
+def _scenario_performance(result: Mapping[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(result.get("summary"))
+    perf = _safe_dict(summary.get("performance"))
+    return {
+        "elapsed_seconds": round(_safe_float(summary.get("elapsed_seconds")), 4),
+        "completed_turns": int(summary.get("completed_turns") or 0),
+        "avg_turn_seconds": round(_safe_float(summary.get("avg_turn_seconds") or perf.get("avg_turn_seconds")), 4),
+        "p95_turn_seconds": round(_safe_float(summary.get("p95_turn_seconds") or perf.get("p95_turn_seconds")), 4),
+        "max_turn_seconds": round(_safe_float(summary.get("max_turn_seconds") or perf.get("max_turn_seconds")), 4),
+        "slow_turn_count": int(summary.get("slow_turn_count") or perf.get("slow_turn_count") or 0),
+        "phase_totals_seconds": _safe_dict(perf.get("phase_totals_seconds")),
+        "phase_avg_seconds": _safe_dict(perf.get("phase_avg_seconds")),
+        "slow_turns": list(perf.get("slow_turns") or [])[:10],
+    }
+
+
+def _matrix_performance(results: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    scenarios = []
+    all_turn_totals: List[float] = []
+    total_elapsed = 0.0
+    phase_totals: Dict[str, float] = {}
+    for item in results:
+        scenario = item["scenario"]
+        result = _safe_dict(item.get("result"))
+        perf = _scenario_performance(result)
+        perf["scenario_id"] = scenario.scenario_id
+        scenarios.append(perf)
+        total_elapsed += _safe_float(perf.get("elapsed_seconds"))
+        for turn in result.get("turns") or []:
+            turn_perf = _safe_dict(_safe_dict(turn).get("interactive_cli_performance"))
+            total = _safe_float(turn_perf.get("turn_total_seconds"))
+            if total > 0:
+                all_turn_totals.append(total)
+            for key, value in _safe_dict(perf.get("phase_totals_seconds")).items():
+                phase_totals[key] = phase_totals.get(key, 0.0) + _safe_float(value)
+    slowest = sorted(scenarios, key=lambda item: _safe_float(item.get("avg_turn_seconds")), reverse=True)
+    return {
+        "format_version": "interactive_intent_matrix_performance_v1",
+        "scenario_count": len(scenarios),
+        "total_elapsed_seconds": round(total_elapsed, 4),
+        "avg_turn_seconds": round(sum(all_turn_totals) / len(all_turn_totals), 4) if all_turn_totals else 0.0,
+        "p95_turn_seconds": _percentile(all_turn_totals, 95),
+        "max_turn_seconds": round(max(all_turn_totals), 4) if all_turn_totals else 0.0,
+        "phase_totals_seconds": {key: round(value, 4) for key, value in sorted(phase_totals.items())},
+        "slowest_scenarios": slowest[:10],
+        "scenarios": sorted(scenarios, key=lambda item: _safe_str(item.get("scenario_id"))),
+    }
+
+
+def run_matrix_scenario(scenario: IntentMatrixScenario, *, output_root: Path | None = None, provider_factory: Callable[[], Any] | None = None, turn_executor_patch: Callable[..., Dict[str, Any]] | None = None, ensure_session_patch: Callable[[str], Any] | None = None, reset_session_patch: Callable[[str], Any] | None = None, live_provider: bool = True, seed_live_survival: bool = True) -> Dict[str, Any]:
     output_root = output_root or DEFAULT_OUTPUT_ROOT
     output_dir = output_root / scenario.scenario_id
     original_turn_executor = cli._run_one_manual_turn
@@ -219,16 +261,7 @@ def run_matrix_scenario(
             cli._ensure_manual_session = ensure_session_patch  # type: ignore[method-assign]
         if reset_session_patch is not None:
             cli._reset_manual_session_artifacts = reset_session_patch  # type: ignore[method-assign]
-        result = cli.run_interactive_campaign(
-            turns=len(scenario.commands),
-            session_id=f"intent_matrix_{scenario.scenario_id}",
-            output_dir=output_dir,
-            scripted_commands=list(scenario.commands),
-            console_llm=False,
-            provider_factory=provider_factory,
-            enable_llm_intent_fallback=live_provider,
-            seed_live_survival=seed_live_survival,
-        )
+        result = cli.run_interactive_campaign(turns=len(scenario.commands), session_id=f"intent_matrix_{scenario.scenario_id}", output_dir=output_dir, scripted_commands=list(scenario.commands), console_llm=False, provider_factory=provider_factory, enable_llm_intent_fallback=live_provider, seed_live_survival=seed_live_survival)
     finally:
         cli._run_one_manual_turn = original_turn_executor  # type: ignore[method-assign]
         cli._ensure_manual_session = original_ensure  # type: ignore[method-assign]
@@ -237,23 +270,22 @@ def run_matrix_scenario(
     return {"scenario": scenario, "result": result, "validation": validation}
 
 
-def run_intent_matrix(
-    *,
-    scenarios: Sequence[IntentMatrixScenario] | None = None,
-    output_root: Path | None = None,
-    provider_factory: Callable[[], Any] | None = None,
-    turn_executor_patch: Callable[..., Dict[str, Any]] | None = None,
-    ensure_session_patch: Callable[[str], Any] | None = None,
-    reset_session_patch: Callable[[str], Any] | None = None,
-    live_provider: bool = True,
-    seed_live_survival: bool = True,
-) -> Dict[str, Any]:
+def run_intent_matrix(*, scenarios: Sequence[IntentMatrixScenario] | None = None, output_root: Path | None = None, provider_factory: Callable[[], Any] | None = None, turn_executor_patch: Callable[..., Dict[str, Any]] | None = None, ensure_session_patch: Callable[[str], Any] | None = None, reset_session_patch: Callable[[str], Any] | None = None, live_provider: bool = True, seed_live_survival: bool = True) -> Dict[str, Any]:
     scenarios = list(scenarios or default_intent_matrix_scenarios())
     output_root = output_root or DEFAULT_OUTPUT_ROOT
     output_root.mkdir(parents=True, exist_ok=True)
     results = [run_matrix_scenario(scenario, output_root=output_root, provider_factory=provider_factory, turn_executor_patch=turn_executor_patch, ensure_session_patch=ensure_session_patch, reset_session_patch=reset_session_patch, live_provider=live_provider, seed_live_survival=seed_live_survival) for scenario in scenarios]
-    summary = {"format_version": MATRIX_VERSION, "scenario_count": len(results), "passed": sum(1 for item in results if item["validation"]["ok"]), "failed": [item["validation"] for item in results if not item["validation"]["ok"]], "output_root": str(output_root)}
+    performance = _matrix_performance(results)
+    summary = {
+        "format_version": MATRIX_VERSION,
+        "scenario_count": len(results),
+        "passed": sum(1 for item in results if item["validation"]["ok"]),
+        "failed": [item["validation"] for item in results if not item["validation"]["ok"]],
+        "output_root": str(output_root),
+        "performance": performance,
+    }
     (output_root / "interactive-intent-matrix-summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+    (output_root / "interactive-intent-matrix-performance.json").write_text(json.dumps(performance, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
     return {"summary": summary, "results": results}
 
 
