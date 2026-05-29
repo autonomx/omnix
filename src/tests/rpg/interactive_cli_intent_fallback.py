@@ -233,7 +233,12 @@ def narration_source_for_turn(turn_summary: Mapping[str, Any]) -> str:
         return "repaired"
     quest_followup = _safe_dict(turn_summary.get("interactive_cli_quest_followup"))
     if quest_followup.get("applied"):
-        return "rumor_repaired" if _safe_str(quest_followup.get("inquiry_kind")) == "rumor" else "quest_repaired"
+        kind = _safe_str(quest_followup.get("inquiry_kind"))
+        if kind == "rumor":
+            return "rumor_repaired"
+        if kind == "dialogue":
+            return "dialogue_repaired"
+        return "quest_repaired"
     diagnostics = _safe_dict(turn_summary.get("interactive_cli_intent_diagnostics"))
     if diagnostics.get("provider_called"):
         return "provider_intent_classifier"
