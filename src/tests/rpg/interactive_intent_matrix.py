@@ -1,4 +1,4 @@
-"""CD/CE — interactive intent matrix regression suite.
+"""CD/CE/CE.1 — interactive intent matrix regression suite.
 
 This is the realistic test layer that was missing: short player-facing scripts
 that exercise the same interactive CLI path a human/Cline/Codex agent uses.
@@ -11,6 +11,7 @@ Manual/live-provider usage from repo root:
 Pytest can import and run the same scenario definitions with fake provider/runtime
 for stable offline regression coverage. CE tightens visible-output expectations
 so quest repair cannot swallow dialogue, rumor/news, or survival/self-use turns.
+CE.1 makes text expectations inspect visible output only, never the player input.
 """
 from __future__ import annotations
 
@@ -97,8 +98,8 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
                 "Any news lately, Bran?",
             ),
             expectations=(
-                TurnExpectation(1, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest",), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
-                TurnExpectation(2, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest",), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
+                TurnExpectation(1, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest", "speaker\": \"self"), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
+                TurnExpectation(2, contains_any=("confirmed rumors", "confirmed rumor", "confirmed news", "no backed rumor"), forbids=("confirmed job or quest", "speaker\": \"self"), final_action_type="rumor_inquiry", narration_source_any=("rumor_repaired",)),
             ),
         ),
         IntentMatrixScenario(
@@ -119,14 +120,14 @@ def default_intent_matrix_scenarios() -> List[IntentMatrixScenario]:
         IntentMatrixScenario(
             scenario_id="npc_dialogue_persona",
             title="NPC dialogue: ask Bran who he is and what he knows",
-            description="General dialogue should call provider intent router and avoid quest repair swallowing persona answers.",
+            description="General dialogue should call provider intent router and avoid quest/rumor repair swallowing persona answers.",
             commands=(
                 "Bran, who are you?",
                 "What do you know about this place?",
             ),
             expectations=(
-                TurnExpectation(1, contains_any=("Bran", "tavern", "inn", "keeper"), forbids=("confirmed job or quest",), provider_called=True),
-                TurnExpectation(2, contains_any=("place", "tavern", "road", "town"), forbids=("confirmed job or quest",), provider_called=True),
+                TurnExpectation(1, contains_any=("Bran", "tavern", "inn", "keeper"), forbids=("confirmed job or quest", "confirmed rumors", "speaker\": \"self"), provider_called=True),
+                TurnExpectation(2, contains_any=("place", "tavern", "road", "town"), forbids=("confirmed job or quest", "confirmed rumors", "confirmed news", "speaker\": \"self"), provider_called=True),
             ),
         ),
     ]
@@ -140,18 +141,25 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def _turn_blob(turn: Mapping[str, Any]) -> str:
+def _visible_turn_blob(turn: Mapping[str, Any]) -> str:
     raw = _safe_dict(turn.get("raw_result") or turn.get("result"))
-    pieces = [
-        _safe_str(turn.get("player_input")),
-        _safe_str(turn.get("raw_narration")),
-        _safe_str(_safe_dict(turn.get("raw_npc")).get("speaker")),
-        _safe_str(_safe_dict(turn.get("raw_npc")).get("line")),
-        _safe_str(raw.get("narration")),
-        _safe_str(_safe_dict(raw.get("npc")).get("line")),
-        json.dumps(raw, ensure_ascii=False, default=str),
-    ]
-    return "\n".join(pieces)
+    raw_npc = _safe_dict(turn.get("raw_npc"))
+    result_npc = _safe_dict(raw.get("npc"))
+    visible_payload = {
+        "raw_narration": _safe_str(turn.get("raw_narration")),
+        "raw_npc": {"speaker": _safe_str(raw_npc.get("speaker")), "line": _safe_str(raw_npc.get("line"))},
+        "result_narration": _safe_str(raw.get("narration")),
+        "result_npc": {"speaker": _safe_str(result_npc.get("speaker")), "line": _safe_str(result_npc.get("line"))},
+        "narration_preview": _safe_str(turn.get("narration_preview")),
+    }
+    return json.dumps(visible_payload, ensure_ascii=False, default=str)
+
+
+def _turn_blob(turn: Mapping[str, Any]) -> str:
+    # CE.1: visible-output expectations intentionally exclude player_input and
+    # full raw JSON diagnostics so tests cannot pass because the user typed the
+    # expected word or because a hidden diagnostic echoed it.
+    return _visible_turn_blob(turn)
 
 
 def _final_classification(turn: Mapping[str, Any]) -> Dict[str, Any]:
@@ -172,12 +180,12 @@ def validate_matrix_run(scenario: IntentMatrixScenario, result: Mapping[str, Any
         if expectation.contains_all:
             for text in expectation.contains_all:
                 if text.lower() not in blob:
-                    failures.append(f"turn {expectation.turn_index}: expected text not found: {text!r}")
+                    failures.append(f"turn {expectation.turn_index}: expected visible text not found: {text!r}")
         if expectation.contains_any and not any(text.lower() in blob for text in expectation.contains_any):
-            failures.append(f"turn {expectation.turn_index}: none of expected texts found: {list(expectation.contains_any)!r}")
+            failures.append(f"turn {expectation.turn_index}: none of expected visible texts found: {list(expectation.contains_any)!r}")
         for text in expectation.forbids:
             if text.lower() in blob:
-                failures.append(f"turn {expectation.turn_index}: forbidden text found: {text!r}")
+                failures.append(f"turn {expectation.turn_index}: forbidden visible text found: {text!r}")
         final = _final_classification(turn)
         if expectation.final_action_type and _safe_str(final.get("action_type")) != expectation.final_action_type:
             failures.append(f"turn {expectation.turn_index}: final action_type {_safe_str(final.get('action_type'))!r} != {expectation.final_action_type!r}")
