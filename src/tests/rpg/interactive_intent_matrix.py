@@ -31,7 +31,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 
 from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 
-MATRIX_VERSION = "interactive_intent_matrix_v2"
+MATRIX_VERSION = "interactive_intent_matrix_v1"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-intent-matrix"
 
 
