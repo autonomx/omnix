@@ -1,17 +1,18 @@
-"""CB.5/CE/CE.1/CE.2 — grounded interactive presentation repairs.
+"""CB.5/CE/CE.1/CE.2/CE.2.1 — grounded interactive presentation repairs.
 
 This module repairs only player-facing presentation for interactive CLI turns. It
 never invents quest rewards, rumors, prices, inventory, success, failure, or
 simulation state. Quest/work and rumor/news repairs answer from deterministic
 context. CE.2 adds a narrow dialogue/context repair for broad persona/location
-questions when the runtime returns blank/no-op visible text.
+questions. CE.2.1 applies that dialogue repair whenever the NPC response is
+blank, even if the runtime produced generic narration.
 """
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-QUEST_FOLLOWUP_SOURCE = "interactive_cli_quest_followup_v4"
+QUEST_FOLLOWUP_SOURCE = "interactive_cli_quest_followup_v5"
 QUEST_TERMS = ("quest", "quests", "work", "job", "jobs", "lead", "leads", "task", "errand")
 RUMOR_TERMS = ("rumor", "rumors", "news", "gossip")
 DIALOGUE_CONTEXT_TERMS = (
@@ -29,6 +30,7 @@ NOOP_VISIBLE_MARKERS = (
     "no_supported_semantic_action_detected",
 )
 INVALID_VISIBLE_SPEAKERS = {"", "self", "player", "me", "you", "unknown", "narrator"}
+BROAD_CONTEXT_TERMS = {"this place", "place", "tavern", "road", "town"}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -62,7 +64,7 @@ def _final_intent(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
     return _safe_dict(diagnostics.get("final_classification"))
 
 
-def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+def _contains_any(text: str, terms: tuple[str, ...] | set[str]) -> bool:
     return any(term in text for term in terms)
 
 
@@ -90,15 +92,27 @@ def _visible_blob(turn_summary: Mapping[str, Any]) -> str:
     ).lower()
 
 
-def _visible_is_blank_or_noop(turn_summary: Mapping[str, Any]) -> bool:
-    blob = _visible_blob(turn_summary)
+def _npc_line(turn_summary: Mapping[str, Any]) -> str:
     raw = _safe_dict(_safe_dict(turn_summary).get("raw_result") or _safe_dict(turn_summary).get("result"))
     npc = _safe_dict(raw.get("npc"))
     raw_npc = _safe_dict(_safe_dict(turn_summary).get("raw_npc"))
-    npc_line = _safe_str(raw_npc.get("line") or npc.get("line")).strip()
-    if npc_line:
+    return _safe_str(raw_npc.get("line") or npc.get("line")).strip()
+
+
+def _npc_line_blank(turn_summary: Mapping[str, Any]) -> bool:
+    return not _npc_line(turn_summary)
+
+
+def _visible_is_blank_or_noop(turn_summary: Mapping[str, Any]) -> bool:
+    blob = _visible_blob(turn_summary)
+    if _npc_line(turn_summary):
         return False
     return not blob.strip() or any(marker in blob for marker in NOOP_VISIBLE_MARKERS)
+
+
+def _broad_context_requested(text: str, terms: str) -> bool:
+    combined = " ".join([text, terms])
+    return _contains_any(text, DIALOGUE_CONTEXT_TERMS) or _contains_any(combined, BROAD_CONTEXT_TERMS)
 
 
 def inquiry_kind(player_input: str, turn_summary: Mapping[str, Any] | None = None) -> str:
@@ -115,12 +129,14 @@ def inquiry_kind(player_input: str, turn_summary: Mapping[str, Any] | None = Non
     if _contains_any(explicit_text_and_terms, RUMOR_TERMS):
         return "rumor"
     if action_type == "rumor_inquiry" or service_kind in {"rumor", "news"}:
-        if _visible_is_blank_or_noop(turn_summary) and _contains_any(text, DIALOGUE_CONTEXT_TERMS):
+        # CE.2.1: broad context questions misclassified as rumor still need an
+        # NPC answer when the NPC line is blank, even if narration is generic.
+        if _npc_line_blank(turn_summary) and _broad_context_requested(text, terms):
             return "dialogue"
         return ""
     if action_type in {"quest_inquiry", "work_inquiry"} or service_kind in {"quest", "work", "paid_information"} or _contains_any(combined, QUEST_TERMS):
         return "quest"
-    if _visible_is_blank_or_noop(turn_summary) and _contains_any(text, DIALOGUE_CONTEXT_TERMS):
+    if (_visible_is_blank_or_noop(turn_summary) or _npc_line_blank(turn_summary)) and _contains_any(text, DIALOGUE_CONTEXT_TERMS):
         return "dialogue"
     return ""
 
