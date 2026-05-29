@@ -144,3 +144,82 @@ RICH_NPC_CE_SCENARIOS: Dict[str, Dict[str, Any]] = {
         ],
     }
 }
+
+RICH_NPC_CE_SCENARIOS["bran_hot_stew_purchase_runtime_first_deferred_narration"] = {
+    "description": (
+        "CE.1.9: A stateful Bran commerce turn must be classified by the grounded first call, "
+        "resolved by deterministic runtime, and returned with a deferred narration contract. "
+        "The first LLM must not decide price, inventory, or purchase success."
+    ),
+    "currency": {"gold": 0, "silver": 3, "copper": 0},
+    "conversation_settings": {
+        "enabled": True,
+        "autonomous_ticks_enabled": False,
+        "frequency": "never",
+        "conversation_chance_percent": 0,
+    },
+    "setup_scene": _SCENE,
+    "setup_present_npc_state": {
+        "present_npc_ids": ["npc:bran"],
+        "nearby_npc_ids": ["npc:bran"],
+        "npc_index": {"npc:bran": _BRAN_RICH_PROFILE},
+    },
+    "setup_social_state": {
+        "relationships": {
+            "npc:bran": dict(_REL),
+            "Bran": dict(_REL),
+        }
+    },
+    "setup_social_profiles": {"npc:bran": _BRAN_RICH_PROFILE},
+    "setup_interaction_state": {
+        "player_location_id": "loc_rusty_flagon",
+        "player_hp": 20,
+        "player_max_hp": 20,
+        "present_npc_ids": ["npc:bran"],
+        "nearby_npc_ids": ["npc:bran"],
+        "relationships": {
+            "npc:bran": dict(_REL),
+            "Bran": dict(_REL),
+        },
+        "relationship_state": {
+            "npc:bran": dict(_REL),
+            "Bran": dict(_REL),
+        },
+        "social_state": {
+            "relationships": {
+                "npc:bran": dict(_REL),
+                "Bran": dict(_REL),
+            },
+            "profiles": {"npc:bran": _BRAN_RICH_PROFILE},
+        },
+        "service_state": {"paid_services": []},
+        "merchant_state": {"merchants": {}},
+        "npc_memories": [],
+    },
+    "checks": [
+        {
+            "type": "stateful_runtime_narration_contract",
+            "expected_turn": 1,
+            "expected_narration_mode": "deferred",
+            "expected_narration_status": "queued",
+            "require_runtime_authoritative": True,
+            "require_runtime_before_narration": True,
+            "require_provider_stateful": True,
+            "require_provider_needs_runtime": True,
+            "require_diagnostics": True,
+            "forbidden_visible_terms": ["free stew", "free bread", "no charge"],
+        }
+    ],
+    "turns": [
+        {
+            "player_input": "I buy Hot stew from Bran.",
+            "expect": {
+                "grounding_expected": True,
+                "must_not_grant_currency": True,
+                "must_not_grant_reward": True,
+            },
+        },
+    ],
+    "allows_seeded_world_events": True,
+    "allows_seeded_journal_entries": True,
+}

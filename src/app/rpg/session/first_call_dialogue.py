@@ -252,6 +252,8 @@ def _first_call_grounding_validation(selected: Dict[str, Any]) -> Dict[str, Any]
         "primary_violations": [],
         "first_call_grounding_packet_version": _s(packet.get("format_version")),
         "first_call_addressed_npc_ids": addressed,
+        "first_call_grounding_diagnostics": deepcopy(diagnostics),
+        "turn_grounding_packet": deepcopy(packet),
         "source": "first_call_dialogue_v1",
     }
 

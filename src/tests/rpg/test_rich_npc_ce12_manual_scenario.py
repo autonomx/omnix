@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from tests.rpg.manual.dialogue_m16_m18_checks import run_dialogue_m16_m18_check
+from tests.rpg.manual.scenario_setup import _apply_manual_scenario_setup
 from tests.rpg.manual.scenarios.registry import build_service_scenarios
+from tests.rpg.manual.stateful_runtime_checks import run_stateful_runtime_check
 
 
 def test_bran_rich_profile_manual_scenario_is_registered():
@@ -11,6 +13,27 @@ def test_bran_rich_profile_manual_scenario_is_registered():
     assert scenario is not None
     assert scenario["turns"][0]["player_input"] == "Bran, what do you think about sword combat styles?"
     assert scenario["checks"][0]["type"] == "dialogue_first_call_grounding"
+
+
+def test_bran_stateful_purchase_manual_scenario_is_registered():
+    scenarios = build_service_scenarios()
+    scenario = scenarios.get("bran_hot_stew_purchase_runtime_first_deferred_narration")
+
+    assert scenario is not None
+    assert scenario["turns"][0]["player_input"] == "I buy Hot stew from Bran."
+    assert scenario["checks"][0]["type"] == "stateful_runtime_narration_contract"
+    assert scenario["checks"][0]["expected_turn"] == 1
+
+
+def test_bran_stateful_purchase_setup_seeds_authoritative_wallet():
+    scenario = build_service_scenarios()["bran_hot_stew_purchase_runtime_first_deferred_narration"]
+    session = {"simulation_state": {}, "runtime_state": {}, "setup_payload": {"metadata": {"simulation_state": {}}}}
+
+    _apply_manual_scenario_setup(session, scenario)
+
+    player_state = session["simulation_state"]["player_state"]
+    assert player_state["currency"] == {"gold": 0, "silver": 3, "copper": 0}
+    assert player_state["inventory_state"]["currency"] == {"gold": 0, "silver": 3, "copper": 0}
 
 
 def test_bran_rich_profile_scenario_seeds_profile_in_supported_setup_paths():
@@ -105,3 +128,65 @@ def test_dialogue_first_call_grounding_check_rejects_private_leak():
 
     assert check_result["ok"] is False
     assert any(str(f).startswith("private_term_leaked:") for f in check_result["failures"])
+
+
+def test_stateful_runtime_contract_check_accepts_deferred_purchase_contract():
+    scenario = build_service_scenarios()["bran_hot_stew_purchase_runtime_first_deferred_narration"]
+    result = {
+        "turn_index": 1,
+        "narration_preview": "Bran names the price and the transaction resolves.",
+        "stateful_runtime_narration_contract": {
+            "format_version": "stateful_runtime_narration_contract_v1",
+            "narration_mode": "deferred",
+            "stateful_runtime_authoritative": True,
+            "first_call_may_resolve_state": False,
+            "runtime_resolved_before_narration": True,
+            "narration_may_mutate_state": False,
+            "narration_status": "queued",
+            "first_call_grounding_diagnostics": {
+                "normalized_result": {
+                    "stateful": True,
+                    "needs_runtime_resolution": True,
+                }
+            },
+        },
+    }
+
+    check_result = run_stateful_runtime_check(
+        check=scenario["checks"][0],
+        result=result,
+        session={},
+    )
+
+    assert check_result["ok"] is True
+    assert check_result["failures"] == []
+
+
+def test_stateful_runtime_contract_check_rejects_first_call_state_resolution():
+    scenario = build_service_scenarios()["bran_hot_stew_purchase_runtime_first_deferred_narration"]
+    result = {
+        "turn_index": 1,
+        "stateful_runtime_narration_contract": {
+            "narration_mode": "deferred",
+            "stateful_runtime_authoritative": True,
+            "first_call_may_resolve_state": True,
+            "runtime_resolved_before_narration": True,
+            "narration_may_mutate_state": False,
+            "narration_status": "queued",
+            "first_call_grounding_diagnostics": {
+                "normalized_result": {
+                    "stateful": True,
+                    "needs_runtime_resolution": True,
+                }
+            },
+        },
+    }
+
+    check_result = run_stateful_runtime_check(
+        check=scenario["checks"][0],
+        result=result,
+        session={},
+    )
+
+    assert check_result["ok"] is False
+    assert "first_call_allowed_to_resolve_state" in check_result["failures"]

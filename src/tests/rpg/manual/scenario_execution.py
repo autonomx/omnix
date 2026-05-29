@@ -56,6 +56,7 @@ from tests.rpg.manual.session_helpers import (
 )
 from tests.rpg.manual.social_checks import run_social_checks
 from tests.rpg.manual.spatial_checks import run_spatial_checks
+from tests.rpg.manual.stateful_runtime_checks import run_stateful_runtime_checks
 from tests.rpg.manual.story_arc_milestones_m46_m48_checks import (
     run_story_arc_milestones_m46_m48_checks,
 )
@@ -308,7 +309,7 @@ def _n101_stabilization_gate_warnings(
     selected = _safe_str(grounding.get("selected_candidate"))
     fallback_source = _safe_str(grounding.get("fallback_source"))
 
-    if selected not in {"primary", "safe_fallback", "deterministic_fallback"}:
+    if selected not in {"primary", "safe_fallback", "deterministic_fallback", "first_call_visible_response"}:
         warnings.append(f"n101_invalid_selected_candidate:{selected or 'missing'}")
 
     # Candidate JSON/provider health.
@@ -1011,6 +1012,33 @@ def _run_one_service_scenario(
                 if not check_result.get("ok"):
                     turn_record.setdefault("scenario_warnings", []).append(
                         f"dialogue_m16_m18_check_failed:{scenario_name}:turn_{turn_index}:"
+                        + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
+                    )
+
+        stateful_runtime_checks = [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and str(check.get("type") or "").startswith("stateful_runtime_")
+        ]
+        if stateful_runtime_checks:
+            current_session = {}
+            try:
+                current_session = _ensure_manual_session(session_id)
+            except Exception:
+                current_session = session
+            stateful_runtime_check_results = run_stateful_runtime_checks(
+                checks=stateful_runtime_checks,
+                result=turn_record,
+                session=current_session,
+            )
+            turn_record["stateful_runtime_check_results"] = stateful_runtime_check_results
+            for check_result in stateful_runtime_check_results:
+                if check_result.get("skipped"):
+                    continue
+                if not check_result.get("ok"):
+                    turn_record.setdefault("scenario_warnings", []).append(
+                        f"stateful_runtime_check_failed:{scenario_name}:turn_{turn_index}:"
                         + str(check_result.get("check_type")) + ":" + str(check_result.get("error") or "")
                     )
 

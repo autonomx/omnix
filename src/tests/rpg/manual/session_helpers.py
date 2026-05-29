@@ -212,6 +212,9 @@ def _load_manual_session_for_test(session_id: str) -> Dict[str, Any]:
                 try:
                     loaded = json.loads(candidate.read_text(encoding="utf-8"))
                     if isinstance(loaded, dict):
+                        wrapped_session = loaded.get("session")
+                        if isinstance(wrapped_session, dict):
+                            return wrapped_session
                         return loaded
                 except Exception:
                     continue

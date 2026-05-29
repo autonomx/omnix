@@ -215,8 +215,13 @@ def _run_one_manual_turn(
                 output_artifacts._emit(f"TURN {turn_index}", channel=target_channel)
                 output_artifacts._emit(f"PLAYER: {player_input}", channel=target_channel)
                 narration = _extract_narration(result)
+                console_payload = _extract_llm_console_response(result)
+                npc_speaker = _safe_str(console_payload.get("npc_speaker"))
+                npc_line = _safe_str(console_payload.get("npc_line"))
                 output_artifacts._emit("NARRATION:", channel=target_channel)
                 output_artifacts._emit(narration or "[no narration found]", channel=target_channel)
+                if npc_speaker and npc_line and npc_line not in narration:
+                    output_artifacts._emit(f'{npc_speaker}: "{npc_line}"', channel=target_channel)
                 output_artifacts._emit("RAW RESULT KEYS:", channel=target_channel)
                 output_artifacts._emit(", ".join(sorted(result.keys())), channel=target_channel)
 
@@ -468,7 +473,12 @@ def _extract_llm_console_response(result: Dict[str, Any]) -> Dict[str, Any]:
     npc_speaker = _safe_str(npc.get("speaker"))
     npc_line = _safe_str(npc.get("line"))
 
-    first_call_visible = _safe_dict(result.get("first_call_visible_response"))
+    first_call_visible = _safe_dict(
+        result.get("first_call_visible_response")
+        or result_sub.get("first_call_visible_response")
+        or result.get("visible_response")
+        or result_sub.get("visible_response")
+    )
     first_call_npc = _safe_dict(first_call_visible.get("npc") or result.get("npc"))
     if not json_narration:
         json_narration = _safe_str(first_call_visible.get("narration"))
@@ -545,6 +555,8 @@ def _log_llm_response(
     if final_text:
         _timestamped_print(f"{prefix} FINAL RESPONSE:", flush=True)
         _timestamped_print(final_text, flush=True)
+        if npc_speaker and npc_line and npc_line not in final_text:
+            _timestamped_print(f'{npc_speaker}: "{npc_line}"', flush=True)
     elif json_narration or json_action or npc_line:
         _timestamped_print(f"{prefix} STRUCTURED RESPONSE:", flush=True)
         if json_narration:

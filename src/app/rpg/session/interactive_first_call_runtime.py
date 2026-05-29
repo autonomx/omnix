@@ -113,6 +113,137 @@ def _disable_duplicate_runtime_first_call(performance_override: Dict[str, Any] |
     return merged
 
 
+def _narration_mode(performance_override: Dict[str, Any] | None, runtime_state: Dict[str, Any]) -> str:
+    perf = _d(performance_override)
+    runtime_state = _d(runtime_state)
+    settings = _d(runtime_state.get("runtime_settings") or runtime_state.get("settings"))
+    mode = _s(
+        perf.get("narration_mode")
+        or runtime_state.get("narration_mode")
+        or settings.get("narration_mode")
+        or "deferred"
+    ).strip().lower()
+    return mode if mode in {"deferred", "blocking", "deterministic", "disabled"} else "deferred"
+
+
+def _prepare_stateful_runtime_session(
+    session_id: str,
+    session: Dict[str, Any],
+    *,
+    narration_mode: str,
+) -> None:
+    runtime_state = _d(session.get("runtime_state"))
+    runtime_state["narration_mode"] = narration_mode
+    runtime_state["force_sync_narration"] = narration_mode == "blocking"
+    if narration_mode in {"deferred", "deterministic", "disabled"}:
+        runtime_state["deferred_runtime_narration"] = True
+    session["runtime_state"] = runtime_state
+    try:
+        session_to_save = deepcopy(session)
+        manifest = _d(session_to_save.get("manifest"))
+        manifest["session_id"] = session_id
+        manifest.setdefault("id", session_id)
+        session_to_save["manifest"] = manifest
+        canonical_runtime.save_runtime_session(session_to_save)
+        loaded = canonical_runtime.load_runtime_session(session_id)
+        if isinstance(loaded, dict):
+            loaded_runtime = _d(loaded.get("runtime_state"))
+            loaded_runtime["narration_mode"] = narration_mode
+            loaded_runtime["force_sync_narration"] = narration_mode == "blocking"
+            if narration_mode in {"deferred", "deterministic", "disabled"}:
+                loaded_runtime["deferred_runtime_narration"] = True
+            loaded["runtime_state"] = loaded_runtime
+            canonical_runtime.save_runtime_session(loaded)
+    except Exception:
+        return
+
+
+def _stateful_runtime_performance_override(
+    performance_override: Dict[str, Any] | None,
+    *,
+    narration_mode: str,
+) -> Dict[str, Any]:
+    merged = _disable_duplicate_runtime_first_call(performance_override)
+    merged["narration_mode"] = narration_mode
+    if narration_mode in {"deterministic", "disabled"}:
+        merged["enable_live_narration_llm"] = False
+    return merged
+
+
+def _deterministic_narration_from_result(result: Dict[str, Any]) -> str:
+    result = _d(result)
+    nested = _d(result.get("result"))
+    authoritative = _d(result.get("authoritative"))
+    for source in (result, nested, authoritative):
+        for key in ("deterministic_fallback_narration", "narration", "final_narration", "summary"):
+            value = source.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, list):
+                text = "\n\n".join(_s(item).strip() for item in value if _s(item).strip()).strip()
+                if text:
+                    return text
+    return ""
+
+
+def _apply_stateful_narration_contract(
+    result: Dict[str, Any],
+    *,
+    narration_mode: str,
+    action_advisory: Dict[str, Any],
+    semantic_advisory: Dict[str, Any],
+    selection: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not isinstance(result, dict):
+        return result
+    nested = _d(result.get("result"))
+    deterministic = _deterministic_narration_from_result(result)
+
+    if narration_mode == "disabled":
+        narration_status = "disabled"
+        narration = ""
+    elif narration_mode == "deterministic":
+        narration_status = "deterministic"
+        narration = deterministic
+    elif narration_mode == "blocking":
+        narration_status = _s(nested.get("narration_status") or result.get("narration_status") or "completed")
+        narration = _s(nested.get("narration") or result.get("narration") or deterministic)
+    else:
+        narration_status = _s(nested.get("narration_status") or result.get("narration_status") or "queued")
+        narration = _s(nested.get("narration") or result.get("narration") or deterministic)
+
+    contract = {
+        "format_version": "stateful_runtime_narration_contract_v1",
+        "narration_mode": narration_mode,
+        "stateful_runtime_authoritative": True,
+        "first_call_may_resolve_state": False,
+        "runtime_resolved_before_narration": True,
+        "narration_may_mutate_state": False,
+        "narration_status": narration_status,
+        "first_call_visible_response_ignored_for_stateful": bool(
+            _d(semantic_advisory).get("visible_response") or _d(action_advisory).get("visible_response")
+        ),
+        "first_call_selection_reason": _s(_d(selection).get("reason")),
+        "first_call_grounding_diagnostics": _first_call_diagnostics(action_advisory, semantic_advisory),
+    }
+
+    result["stateful_runtime_narration_contract"] = deepcopy(contract)
+    result["narration_mode"] = narration_mode
+    result["narration_status"] = narration_status
+    if narration_mode in {"disabled", "deterministic"}:
+        result["narration"] = narration
+        result["final_narration"] = narration
+    if nested:
+        nested["stateful_runtime_narration_contract"] = deepcopy(contract)
+        nested["narration_status"] = narration_status
+        if narration_mode in {"disabled", "deterministic"}:
+            nested["narration"] = narration
+            nested["raw_llm_narrative"] = ""
+            nested["used_llm"] = False
+        result["result"] = nested
+    return result
+
+
 def _is_nonstateful_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
     advisory = _d(advisory)
     if not advisory:
@@ -178,8 +309,16 @@ def _is_direct_npc_question_from_packet(
     )
     stateful_terms = (
         "buy ",
-        "sell ",
+        "sell my",
+        "sell this",
+        "sell the",
+        "sell a ",
+        "sell an ",
+        "sell you",
         "give me",
+        "give ",
+        "lend ",
+        "borrow",
         "attack",
         "hit ",
         "stab",
@@ -191,7 +330,12 @@ def _is_direct_npc_question_from_packet(
         "go to",
         "hire",
         "join me",
+        "come with me",
+        "follow me",
         "pay ",
+        "discount",
+        "cheaper",
+        "lower the price",
         "room",
         "bread",
         "ration",
@@ -223,6 +367,135 @@ def _should_safe_fallback_nonstateful_dialogue(
     return _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory)
 
 
+def _direct_dialogue_fallback_topic(player_input: str) -> str:
+    text = _s(player_input).lower()
+    topic_terms = (
+        (
+            "commerce_inquiry",
+            (
+                "food",
+                "eat",
+                "meal",
+                "stew",
+                "drink",
+                "ale",
+                "menu",
+                "wares",
+                "stock",
+                "offer",
+                "sell",
+                "price",
+                "cost",
+                "lodging",
+                "room",
+            ),
+        ),
+        (
+            "rumor_inquiry",
+            (
+                "rumor",
+                "rumour",
+                "heard",
+                "news",
+                "gossip",
+                "talk around",
+                "word is",
+            ),
+        ),
+        (
+            "combat_advice",
+            (
+                "sword",
+                "blade",
+                "combat",
+                "fight",
+                "fighting",
+                "guard",
+                "stance",
+                "style",
+                "shield",
+                "parry",
+            ),
+        ),
+        (
+            "local_knowledge",
+            (
+                "road",
+                "roads",
+                "bandit",
+                "bandits",
+                "caravan",
+                "caravans",
+                "where",
+                "who",
+                "what can you tell",
+                "tell me about",
+            ),
+        ),
+    )
+    for topic, terms in topic_terms:
+        if any(term in text for term in terms):
+            return topic
+    return "general_dialogue"
+
+
+def _safe_dialogue_fallback_line(
+    *,
+    speaker: str,
+    profile: Dict[str, Any],
+    player_input: str,
+) -> tuple[str, str]:
+    topic = _direct_dialogue_fallback_topic(player_input)
+    personality = _d(profile.get("personality_profile"))
+    examples = _l(personality.get("speech_examples"))
+    speaker_is_bran = speaker.lower() == "bran"
+
+    if topic == "commerce_inquiry":
+        if speaker_is_bran:
+            return (
+                "commerce_inquiry",
+                "Food and drink here are simple traveler fare. I can talk through what is usually on hand, "
+                "but exact stock and prices need checking at the bar.",
+            )
+        return (
+            "commerce_inquiry",
+            "I can talk through what is usually available, but exact stock and prices need checking first.",
+        )
+
+    if topic == "rumor_inquiry":
+        if speaker_is_bran:
+            return (
+                "rumor_inquiry",
+                "Rumors come in with road dust and thirsty travelers. Ask plain what kind you want, "
+                "and I will tell you what I have heard.",
+            )
+        return (
+            "rumor_inquiry",
+            "I hear pieces of news, but ask plainly what kind of rumor you want.",
+        )
+
+    if topic == "combat_advice" and speaker_is_bran:
+        return (
+            "combat_advice",
+            "Styles have their place, but keep your feet under you and your guard honest. "
+            "Mud and panic teach faster than fancy forms.",
+        )
+
+    if topic == "local_knowledge" and speaker_is_bran:
+        return (
+            "local_knowledge",
+            "I know the old road, caravan habits, and the kind of trouble that waits where the lamps run out. "
+            "Ask me something I have seen, and I will answer straight.",
+        )
+
+    if examples and topic in {"combat_advice", "general_dialogue", "local_knowledge"}:
+        example = _s(examples[0]).strip()
+        if example:
+            return (topic, example)
+
+    return (topic, "Ask that plainly again, and I will answer as best I can.")
+
+
 def _safe_dialogue_fallback_result(
     *,
     session: Dict[str, Any],
@@ -237,18 +510,16 @@ def _safe_dialogue_fallback_result(
     packet = _packet_from_diagnostics(diagnostics)
     profile = _addressed_profile(packet)
     speaker = _s(profile.get("name") or _d(semantic_advisory).get("target_name") or "NPC").strip() or "NPC"
-    personality = _d(profile.get("personality_profile"))
-    examples = _l(personality.get("speech_examples"))
-    if speaker.lower() == "bran":
-        line = "Styles have their place, but keep your feet under you and your guard honest. Mud and panic teach faster than fancy forms."
-    elif examples:
-        line = _s(examples[0])
-    else:
-        line = "Ask that plainly again, and I will answer as best I can."
+    fallback_topic, line = _safe_dialogue_fallback_line(
+        speaker=speaker,
+        profile=profile,
+        player_input=player_input,
+    )
     narration = f"{speaker} answers carefully."
     grounding_validation = {
         "ok": True,
         "selected_candidate": "primary",
+        "fallback_topic": fallback_topic,
         "fallback_used": False,
         "fallback_source": "",
         "violations": [],
@@ -272,6 +543,7 @@ def _safe_dialogue_fallback_result(
         "summary": narration,
         "npc": deepcopy(visible_response["npc"]),
         "visible_response": deepcopy(visible_response),
+        "fallback_topic": fallback_topic,
         "first_call_visible_response_selection": deepcopy(selection),
         "first_call_grounding_diagnostics": deepcopy(diagnostics),
         "grounding_validation": deepcopy(grounding_validation),
@@ -400,15 +672,28 @@ def apply_turn(
     if not first_call_action:
         first_call_action = candidate_action
 
+    narration_mode = _narration_mode(performance_override, runtime_state)
+    _prepare_stateful_runtime_session(session_id, session, narration_mode=narration_mode)
+
     result = canonical_runtime.apply_turn(
         session_id=session_id,
         player_input=_s(player_input),
         action=first_call_action,
-        performance_override=_disable_duplicate_runtime_first_call(performance_override),
+        performance_override=_stateful_runtime_performance_override(
+            performance_override,
+            narration_mode=narration_mode,
+        ),
     )
     if isinstance(result, dict):
         result["first_call_action_advisory"] = action_advisory
         result["first_call_semantic_advisory"] = semantic_advisory
         result["first_call_visible_response_selection"] = selection
         result["first_call_grounding_diagnostics"] = _first_call_diagnostics(action_advisory, semantic_advisory)
+        result = _apply_stateful_narration_contract(
+            result,
+            narration_mode=narration_mode,
+            action_advisory=action_advisory,
+            semantic_advisory=semantic_advisory,
+            selection=selection,
+        )
     return result

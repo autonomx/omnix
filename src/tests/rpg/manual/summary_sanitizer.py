@@ -81,6 +81,8 @@ PRESERVE_TURN_KEYS_SUMMARY = {
     "grounding_fallback",
     "grounding_selected_candidate",
     "grounding_fallback_source",
+    "stateful_runtime_narration_contract",
+    "stateful_runtime_check_results",
 }
 
 # Additional keys for debug level
@@ -311,12 +313,18 @@ def _extract_narration_payload(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _extract_narration_json(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _extract_result_sub(result)
     payload = _extract_narration_payload(result)
     return _first_dict(
         payload.get("narration_json"),
         payload.get("structured_narration"),
         payload.get("payload"),
         payload,
+        result.get("visible_response"),
+        result_sub.get("visible_response"),
+        result.get("first_call_visible_response"),
+        result_sub.get("first_call_visible_response"),
     )
 
 
@@ -578,6 +586,12 @@ def sanitize_turn_for_summary(
             grounding_validation.get("primary_violations")
         )
         sanitized.update(_extract_deterministic_contract(result, limits))
+        stateful_contract = _safe_dict(
+            result.get("stateful_runtime_narration_contract")
+            or _safe_dict(result.get("result")).get("stateful_runtime_narration_contract")
+        )
+        if stateful_contract:
+            sanitized["stateful_runtime_narration_contract"] = stateful_contract
         sanitized["compact_state_deltas"] = _extract_compact_state_deltas(result)
     elif result:
         grounding_validation = _extract_grounding_validation(result)

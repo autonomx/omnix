@@ -81,6 +81,7 @@ def apply_manual_scenario_setup_by_session_id(
 
 def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, Any], *, scenario_name: str = "") -> bool:
     simulation_state = _ensure_manual_simulation_roots(session)
+    setup_session_id = str(session.get("session_id") or session.get("id") or scenario_name or "manual")
 
     setup_spatial_graph = scenario.get("setup_spatial_graph")
     if setup_spatial_graph:
@@ -595,7 +596,7 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
         events = _safe_list(world_event_state.get("events"))
         for index, event in enumerate(setup_world_events, start=1):
             event = _safe_dict(event)
-            event.setdefault("event_id", f"manual:world_event:{session_id}:{index}")
+            event.setdefault("event_id", f"manual:world_event:{setup_session_id}:{index}")
             event.setdefault("tick", index)
             events.append(event)
         world_event_state["events"] = events
@@ -607,7 +608,7 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
         entries = _safe_list(journal_state.get("entries"))
         for index, entry in enumerate(setup_journal_entries, start=1):
             entry = _safe_dict(entry)
-            entry.setdefault("entry_id", f"manual:journal:{session_id}:{index}")
+            entry.setdefault("entry_id", f"manual:journal:{setup_session_id}:{index}")
             entries.append(entry)
         journal_state["entries"] = entries
         simulation_state["journal_state"] = journal_state
@@ -672,11 +673,17 @@ def _apply_manual_scenario_setup(session: Dict[str, Any], scenario: Dict[str, An
 
         scenario_currency = _safe_dict(scenario.get("currency"))
         if scenario_currency:
-            player_state["currency"] = {
+            normalized_currency = {
                 "gold": int(scenario_currency.get("gold") or 0),
                 "silver": int(scenario_currency.get("silver") or 0),
                 "copper": int(scenario_currency.get("copper") or 0),
             }
+            player_state["currency"] = dict(normalized_currency)
+            inventory_state = _safe_dict(player_state.get("inventory_state"))
+            if not inventory_state:
+                inventory_state = {}
+            inventory_state["currency"] = dict(normalized_currency)
+            player_state["inventory_state"] = inventory_state
 
         if isinstance(setup_interaction_state.get("player_inventory"), dict):
             player_state["inventory"] = _safe_dict(setup_interaction_state.get("player_inventory"))
