@@ -13,7 +13,8 @@ Examples from repo root:
 A coding agent such as Cline/Codex can drive stdin live, while the runtime still
 uses the normal deterministic apply_turn path.  CB adds provider/narrator
 classification diagnostics so the report explains whether the central provider
-was actually called for ambiguous service/commerce intent parsing.
+was actually called.  CB.5 adds grounded quest/rumor inquiry repair when the LLM
+recognizes the intent but deterministic quest state has no backed quest to return.
 """
 from __future__ import annotations
 
@@ -45,6 +46,7 @@ from rpg.interactive_cli_intent_fallback import (  # noqa: E402
     classify_service_intent_with_fallback,
     narration_source_for_turn,
 )
+from rpg.interactive_cli_quest_followup import apply_quest_followup_repair  # noqa: E402
 from tests.rpg.manual.session_helpers import (  # noqa: E402
     _ensure_manual_session,
     _reset_manual_session_artifacts,
@@ -125,6 +127,7 @@ def _turn_report_row(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
         "scenario_warnings": _safe_list(turn_summary.get("scenario_warnings")),
         "regression_warnings": _safe_list(turn_summary.get("regression_warnings")),
         "interactive_cli_intent_diagnostics": _safe_dict(turn_summary.get("interactive_cli_intent_diagnostics")),
+        "interactive_cli_quest_followup": _safe_dict(turn_summary.get("interactive_cli_quest_followup")),
         "narration_source": _safe_str(turn_summary.get("narration_source")),
     }
 
@@ -143,6 +146,7 @@ def build_interactive_campaign_summary(
     errors = 0
     llm_turns = 0
     commerce_repairs = 0
+    quest_repairs = 0
     provider_requested = 0
     provider_called = 0
     narration_sources: Dict[str, int] = {}
@@ -155,6 +159,8 @@ def build_interactive_campaign_summary(
             llm_turns += 1
         if _safe_dict(turn.get("interactive_cli_commerce_followup")).get("applied"):
             commerce_repairs += 1
+        if _safe_dict(turn.get("interactive_cli_quest_followup")).get("applied"):
+            quest_repairs += 1
         diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
         if diagnostics.get("provider_requested"):
             provider_requested += 1
@@ -178,6 +184,7 @@ def build_interactive_campaign_summary(
         "provider_requested_count": provider_requested,
         "provider_called_count": provider_called,
         "commerce_followup_repair_count": commerce_repairs,
+        "quest_followup_repair_count": quest_repairs,
         "narration_sources": narration_sources,
         "warnings": sorted(set(_safe_str(w) for w in warnings if _safe_str(w)))[:100],
     }
@@ -199,11 +206,16 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
                 if k in {"hunger", "thirst", "fatigue"}
             )
         commerce = _safe_dict(turn.get("interactive_cli_commerce_followup"))
+        quest = _safe_dict(turn.get("interactive_cli_quest_followup"))
         diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
         narration_source = _safe_str(turn.get("narration_source") or narration_source_for_turn(turn))
         commerce_html = ""
         if commerce.get("applied"):
             commerce_html = "<p><strong>Commerce follow-up:</strong> answered from authoritative service offers.</p>"
+        quest_html = ""
+        if quest.get("applied"):
+            has_backed = _safe_dict(quest.get("quest_context")).get("has_backed_quest")
+            quest_html = f"<p><strong>Quest inquiry:</strong> answered from authoritative quest context. backed quest: {escape(_safe_str(has_backed))}</p>"
         diagnostics_html = "\n".join([
             "<details><summary>Provider / intent diagnostics</summary>",
             "<ul>",
@@ -229,6 +241,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
                 f"<p><strong>Survival:</strong> {survival_text or 'n/a'}</p>",
                 f"<p><strong>Narration source:</strong> {escape(narration_source)}</p>",
                 commerce_html,
+                quest_html,
                 diagnostics_html,
                 "<details><summary>Warnings</summary><ul>",
                 warning_html,
@@ -257,6 +270,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
         f"<div class='metric'><strong>Provider requested</strong><br>{escape(_safe_str(summary.get('provider_requested_count')))}</div>",
         f"<div class='metric'><strong>Provider called</strong><br>{escape(_safe_str(summary.get('provider_called_count')))}</div>",
         f"<div class='metric'><strong>Commerce repairs</strong><br>{escape(_safe_str(summary.get('commerce_followup_repair_count')))}</div>",
+        f"<div class='metric'><strong>Quest repairs</strong><br>{escape(_safe_str(summary.get('quest_followup_repair_count')))}</div>",
         "</div>",
         "<p>Open survival artifact index if present: <a href='survival/survival-index.html'>survival/survival-index.html</a></p>",
         "</section>",
@@ -276,20 +290,13 @@ def write_interactive_campaign_artifacts(
     summary_path = output_dir / "interactive-summary.json"
     html_path = output_dir / "interactive-report.html"
     zip_path = output_dir / "interactive-campaign-results.zip"
-
-    transcript_payload = {
-        "format_version": INTERACTIVE_CLI_CAMPAIGN_VERSION,
-        "summary": dict(summary),
-        "turns": list(turns),
-    }
+    transcript_payload = {"format_version": INTERACTIVE_CLI_CAMPAIGN_VERSION, "summary": dict(summary), "turns": list(turns)}
     transcript_path.write_text(_json_dumps(transcript_payload), encoding="utf-8")
     summary_path.write_text(_json_dumps(summary), encoding="utf-8")
     html_path.write_text(render_interactive_campaign_html(summary, turns), encoding="utf-8")
-
     survival_rows = [_turn_report_row(turn) for turn in turns]
     survival_dir = output_dir / "survival"
     survival_result = write_survival_report_artifacts(survival_dir, survival_rows)
-
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(summary_path, "interactive-summary.json")
         zf.write(transcript_path, "interactive-transcript.json")
@@ -297,7 +304,6 @@ def write_interactive_campaign_artifacts(
         for path in sorted(survival_dir.glob("*")):
             if path.is_file():
                 zf.write(path, f"survival/{path.name}")
-
     return {
         "ok": True,
         "output_dir": str(output_dir),
@@ -343,7 +349,6 @@ def run_interactive_campaign(
     last_service_offer_context: Dict[str, Any] = {}
     started_at = time.time()
     stop_reason = "turn_limit"
-
     print(f"Interactive RPG campaign session: {session_id}", flush=True)
     print(f"Target turns: {turns}", flush=True)
     print("Type /quit, /exit, or /stop to finish early.", flush=True)
@@ -392,6 +397,7 @@ def run_interactive_campaign(
             last_offer_context=last_service_offer_context,
             persist_session_id=session_id,
         )
+        turn_summary = apply_quest_followup_repair(turn_summary, player_input=player_input)
         raw_after_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
         repaired_context = extract_service_offer_context(raw_after_repair)
         if repaired_context:
@@ -424,11 +430,7 @@ def run_interactive_campaign(
         ended_at=ended_at,
         stop_reason=stop_reason,
     )
-    artifacts = write_interactive_campaign_artifacts(
-        output_dir=output_dir,
-        summary=summary,
-        turns=turn_summaries,
-    )
+    artifacts = write_interactive_campaign_artifacts(output_dir=output_dir, summary=summary, turns=turn_summaries)
     print("\nInteractive campaign complete.", flush=True)
     print(f"Report: {artifacts['html_path']}", flush=True)
     print(f"ZIP: {artifacts['zip_path']}", flush=True)
