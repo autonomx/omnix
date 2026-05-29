@@ -13,6 +13,11 @@ from rpg.interactive_cli_intent_fallback import (
     narration_source_for_turn,
     validate_llm_intent_against_context,
 )
+from rpg.interactive_cli_quest_followup import (
+    apply_quest_followup_repair,
+    extract_quest_context,
+    is_quest_inquiry,
+)
 from rpg.test_bundle_ca_interactive_cli_campaign import (  # type: ignore
     _drink_offer_result,
     _fake_turn,
@@ -47,6 +52,36 @@ class _FakeProvider:
         return ChatResponse(content=self.content, model=self.config.model)
 
 
+def _empty_quest_turn(*, session_id, turn, turn_index, scenario_name, target_channel, **kwargs):
+    player_input = turn.get("player") if isinstance(turn, dict) else str(turn)
+    raw_result = {
+        "ok": True,
+        "narration": "The moment responds without producing a major new consequence.",
+        "npc": {"speaker": "", "line": ""},
+        "visible_interaction_reason": "no_supported_semantic_action_detected",
+        "turn_contract": {
+            "action": {"action_type": "observe", "metadata": {"intent_tags": ["quest_seeking"]}},
+            "survival": {"hunger": 10, "thirst": 20, "fatigue": 5},
+        },
+        "companion_quest_summary": {"by_npc": {}, "by_quest": {}, "events": [], "source": "deterministic_companion_quest_runtime"},
+        "companion_quest_progress_result": {
+            "progressed": False,
+            "reason": "no_backed_companion_quest_progress_signal",
+            "source": "deterministic_companion_quest_runtime",
+        },
+    }
+    return {
+        "turn_index": turn_index,
+        "player_input": player_input,
+        "raw_result": raw_result,
+        "raw_narration": raw_result["narration"],
+        "raw_npc": raw_result["npc"],
+        "llm_called": False,
+        "scenario_warnings": [],
+        "regression_warnings": [],
+    }
+
+
 def test_bundle_cb_deterministic_classifier_still_records_mismatch_diagnostics() -> None:
     current = extract_service_offer_context(_drink_offer_result())
     last = extract_service_offer_context(_service_offer_result())
@@ -75,7 +110,7 @@ def test_bundle_cb3_always_on_router_calls_provider_even_for_clear_meal_context(
     )
 
     assert len(provider.calls) == 1
-    assert diagnostics["format_version"] == "interactive_cli_intent_diagnostics_v2"
+    assert diagnostics["format_version"] == "interactive_cli_intent_diagnostics_v3"
     assert diagnostics["intent_router_mode"] == "always"
     assert diagnostics["provider_requested"] is True
     assert diagnostics["provider_called"] is True
@@ -142,6 +177,63 @@ def test_bundle_cb_classify_with_router_records_provider_diagnostics_for_purchas
     assert diagnostics["final_classification"]["service_kind"] == "meal"
 
 
+def test_bundle_cb5_router_preserves_quest_and_rumor_intents_from_provider_json() -> None:
+    provider = _FakeProvider("""```json
+{
+  "action_type": "service_inquiry",
+  "service_kind": "paid_information",
+  "target_npc": "Bran",
+  "requested_terms": ["quests"],
+  "confidence": 0.95
+}
+```""")
+
+    diagnostics = classify_service_intent_with_fallback(
+        player_input="well bran, do you have any quests I can do?",
+        current_offer_context={},
+        last_offer_context={},
+        provider_factory=lambda: provider,
+    )
+
+    assert diagnostics["format_version"] == "interactive_cli_intent_diagnostics_v3"
+    assert diagnostics["provider_called"] is True
+    assert diagnostics["llm_classification"]["action_type"] == "quest_inquiry"
+    assert diagnostics["llm_classification"]["service_kind"] == "quest"
+    assert diagnostics["final_classification"]["requested_terms"] == ["quests"]
+
+
+def test_bundle_cb5_quest_followup_repair_answers_no_backed_quest_instead_of_blank() -> None:
+    provider = _FakeProvider(json.dumps({
+        "action_type": "quest_inquiry",
+        "service_kind": "quest",
+        "target_npc": "Bran",
+        "requested_terms": ["quests"],
+        "confidence": 0.95,
+    }))
+    turn = _empty_quest_turn(
+        session_id="s",
+        turn={"player": "what do you say, bran? have any quests for me?"},
+        turn_index=1,
+        scenario_name="x",
+        target_channel="x",
+    )
+    turn["interactive_cli_intent_diagnostics"] = classify_service_intent_with_fallback(
+        player_input=turn["player_input"],
+        current_offer_context={},
+        last_offer_context={},
+        provider_factory=lambda: provider,
+    )
+
+    repaired = apply_quest_followup_repair(turn, player_input=turn["player_input"])
+
+    assert is_quest_inquiry(turn["player_input"], repaired) is True
+    assert extract_quest_context(repaired["raw_result"])["has_backed_quest"] is False
+    assert repaired["interactive_cli_quest_followup"]["applied"] is True
+    assert repaired["raw_npc"]["speaker"] == "Bran"
+    assert "do not have a confirmed job or quest" in repaired["raw_npc"]["line"]
+    assert "no backed quest" in repaired["raw_narration"].lower()
+
+
 def test_bundle_cb_validate_llm_intent_is_advisory_not_authoritative_inventory() -> None:
     validation = validate_llm_intent_against_context(
         {"action_type": "service_inquiry", "service_kind": "meal", "confidence": 0.9},
@@ -189,7 +281,44 @@ def test_bundle_cb1_interactive_runner_embeds_provider_diagnostics_every_turn(mo
     assert "provider called" in html
 
 
+def test_bundle_cb5_interactive_runner_repairs_bran_quest_request(monkeypatch, tmp_path) -> None:
+    provider = _FakeProvider(json.dumps({
+        "action_type": "quest_inquiry",
+        "service_kind": "quest",
+        "target_npc": "Bran",
+        "requested_terms": ["quests"],
+        "confidence": 0.95,
+    }))
+    monkeypatch.setattr(cli, "_run_one_manual_turn", _empty_quest_turn)
+    monkeypatch.setattr(cli, "_ensure_manual_session", lambda session_id: {"session_id": session_id})
+    monkeypatch.setattr(cli, "_reset_manual_session_artifacts", lambda session_id: None)
+
+    result = cli.run_interactive_campaign(
+        turns=2,
+        session_id="interactive_quest_test_session",
+        output_dir=tmp_path,
+        scripted_commands=[
+            "im looking for a quest",
+            "what do you say, bran? have any quests for me?",
+        ],
+        console_llm=False,
+        provider_factory=lambda: provider,
+    )
+
+    assert result["summary"]["provider_called_count"] == 2
+    assert result["summary"]["quest_followup_repair_count"] == 2
+    for turn in result["turns"]:
+        assert turn["interactive_cli_quest_followup"]["applied"] is True
+        assert turn["narration_source"] == "quest_repaired"
+        assert "do not have a confirmed job or quest" in turn["raw_npc"]["line"]
+    transcript = json.loads((tmp_path / "interactive-transcript.json").read_text(encoding="utf-8"))
+    assert transcript["summary"]["quest_followup_repair_count"] == 2
+    html = (tmp_path / "interactive-report.html").read_text(encoding="utf-8")
+    assert "Quest inquiry" in html
+
+
 def test_bundle_cb1_narration_source_helper_reports_repaired_provider_and_deterministic() -> None:
     assert narration_source_for_turn({"interactive_cli_commerce_followup": {"applied": True}}) == "repaired"
+    assert narration_source_for_turn({"interactive_cli_quest_followup": {"applied": True}}) == "quest_repaired"
     assert narration_source_for_turn({"interactive_cli_intent_diagnostics": {"provider_called": True}}) == "provider_intent_classifier"
     assert narration_source_for_turn({"raw_result": {"narration": "hello"}}) == "deterministic_or_runtime"
