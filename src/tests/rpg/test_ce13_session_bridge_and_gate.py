@@ -201,6 +201,49 @@ def test_interactive_wrapper_safe_fallback_blocks_canonical_combat_fallback(monk
     assert result["grounding_validation"]["first_call_grounding_packet_version"] == "turn_grounding_packet_v1"
 
 
+def test_direct_npc_question_packet_blocks_canonical_runtime_even_when_advisory_defaults_stateful(monkeypatch):
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "resolve_service_turn", lambda **kwargs: {"matched": False})
+    monkeypatch.setattr(interactive_runtime, "build_app_llm_gateway", lambda: object())
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "_build_turn_id", lambda runtime_state: "turn:test")
+    monkeypatch.setattr(
+        interactive_runtime,
+        "get_action_advisory",
+        lambda **kwargs: {
+            "action_type": "investigate",
+            "stateful": True,
+            "needs_runtime_resolution": True,
+            "first_call_grounding_diagnostics": _bran_diagnostics(),
+        },
+    )
+    monkeypatch.setattr(
+        interactive_runtime,
+        "get_semantic_action_advisory",
+        lambda **kwargs: {
+            "action_type": "investigate",
+            "semantic_family": "observation",
+            "stateful": True,
+            "needs_runtime_resolution": True,
+            "first_call_grounding_diagnostics": _bran_diagnostics(),
+        },
+    )
+
+    def fail_if_called(**kwargs):
+        raise AssertionError("canonical runtime should not handle grounded direct NPC question")
+
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "apply_turn", fail_if_called)
+
+    result = interactive_runtime.apply_turn(
+        session_id="manual_service_bran_test",
+        player_input="Bran, what do you think about sword combat styles?",
+        session_override={"session_id": "manual_service_bran_test", "simulation_state": {}, "runtime_state": {}},
+    )
+
+    assert result["consumed"] is True
+    assert result["llm_purpose"] == "first_call_safe_dialogue_fallback"
+    assert result["npc"]["speaker"] == "Bran"
+    assert result["visible_interaction_reason"] if "visible_interaction_reason" in result else result["result"]["visible_interaction_reason"] == "first_call_safe_dialogue_fallback"
+
+
 def test_dialogue_grounding_check_accepts_compact_grounding_validation_bridge():
     result = {
         "stateful": False,
