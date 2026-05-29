@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
@@ -27,7 +28,18 @@ class _MatrixFakeProvider:
         self.calls.append({"messages": messages, "model": model, "stream": stream, "kwargs": kwargs})
         assert all(isinstance(message, ChatMessage) for message in messages)
         text = "\n".join(message.content for message in messages).lower()
-        if "what do you know about this place" in text:
+        match = re.search(r'"player_input":\s*"([^"]+)"', messages[-1].content if messages else "")
+        if match:
+            text = match.group(1).lower()
+        if "road bandit" in text or "attack" in text:
+            payload = {"action_type": "combat", "service_kind": "unknown", "target_npc": "road bandit", "requested_terms": ["attack"], "confidence": 0.95}
+        elif "old mill" in text or "travel north" in text:
+            payload = {"action_type": "travel", "service_kind": "unknown", "target_npc": "", "requested_terms": ["old mill", "north", "road"], "confidence": 0.95}
+        elif "join my party" in text or "companion" in text:
+            payload = {"action_type": "talk", "service_kind": "unknown", "target_npc": "Bran", "requested_terms": ["join party", "companion"], "confidence": 0.95}
+        elif "travelled with me" in text or "traveled with me" in text or "what role" in text:
+            payload = {"action_type": "talk", "service_kind": "unknown", "target_npc": "Bran", "requested_terms": ["role", "travel"], "confidence": 0.91}
+        elif "what do you know about this place" in text:
             payload = {"action_type": "rumor_inquiry", "service_kind": "rumor", "target_npc": "self", "requested_terms": ["this place"], "confidence": 0.91}
         elif "who are you" in text:
             payload = {"action_type": "talk", "service_kind": "unknown", "target_npc": "Bran", "requested_terms": ["who are you"], "confidence": 0.88}
@@ -84,11 +96,29 @@ def _survival_result(player_input: str, turn_index: int) -> Dict[str, Any]:
     lowered = player_input.lower()
     if "drink" in lowered or "water" in lowered:
         narration = "You drink water from your waterskin and your thirst eases."
+        survival_action = {
+            "action": "drink_waterskin",
+            "applied": True,
+            "before": {"hunger": 20, "thirst": 30, "fatigue": 5},
+            "after": {"hunger": 20, "thirst": 5, "fatigue": 5},
+            "need": "thirst",
+            "inventory_consumed": [{"item_id": "waterskin", "name": "Waterskin", "quantity_before": 1, "quantity_after": 0}],
+        }
     elif "ration" in lowered or "eat" in lowered:
         narration = "You eat a ration and your hunger eases."
+        survival_action = {
+            "action": "eat_trail_ration",
+            "applied": True,
+            "before": {"hunger": 20, "thirst": 30, "fatigue": 5},
+            "after": {"hunger": 5, "thirst": 30, "fatigue": 5},
+            "need": "hunger",
+            "inventory_consumed": [{"item_id": "trail_ration", "name": "Trail Ration", "quantity_before": 1, "quantity_after": 0}],
+        }
     else:
         narration = "Your survival state shows hunger and thirst are currently manageable."
-    return {"ok": True, "narration": narration, "npc": {"speaker": "", "line": ""}, "turn_contract": {"action": {"action_type": "survival"}, "survival": {"hunger": max(0, 20 - turn_index), "thirst": max(0, 30 - turn_index), "fatigue": 5}, "survival_pressure": {"hunger": "low", "thirst": "low", "fatigue": "low"}}}
+        survival_action = {}
+    survival = {"hunger": max(0, 20 - turn_index), "thirst": max(0, 30 - turn_index), "fatigue": 5}
+    return {"ok": True, "narration": narration, "npc": {"speaker": "", "line": ""}, "turn_contract": {"action": {"action_type": "survival"}, "survival": survival, "survival_action": survival_action, "survival_pressure": {"hunger": "low", "thirst": "low", "fatigue": "low"}}, "survival_action": survival_action}
 
 
 def _dialogue_result(player_input: str) -> Dict[str, Any]:
@@ -100,10 +130,102 @@ def _dialogue_result(player_input: str) -> Dict[str, Any]:
     return {"ok": True, "narration": f"Bran answers plainly. {line}", "npc": {"speaker": "Bran", "line": line}, "turn_contract": {"action": {"action_type": "talk"}, "survival": {"hunger": 10, "thirst": 20, "fatigue": 5}}}
 
 
+def _combat_result(player_input: str, turn_index: int) -> Dict[str, Any]:
+    damage = 0 if turn_index <= 1 else 1
+    hp_before = None if turn_index <= 1 else max(1, 6 - turn_index)
+    hp_after = None if hp_before is None else max(0, hp_before - damage)
+    defeated = bool(hp_after == 0)
+    combat_state = {
+        "active": not defeated,
+        "participants": {
+            "player": {"actor_id": "player", "side": "party", "name": "You", "hp": 20, "max_hp": 20, "status": "active"},
+            "enemy:bandit_1": {"actor_id": "enemy:bandit_1", "side": "enemy", "name": "Bandit", "hp": 4 if hp_after is None else hp_after, "max_hp": 4, "status": "defeated" if defeated else "active"},
+        },
+    }
+    combat_result = {
+        "reason": "combat_started" if turn_index == 1 else ("combat_defeat_resolved" if defeated else "combat_attack_resolved"),
+        "actor_id": "player" if turn_index > 1 else "",
+        "target_id": "enemy:bandit_1" if turn_index > 1 else "",
+        "damage_applied": damage,
+        "target_hp_before": hp_before,
+        "target_hp_after": hp_after,
+        "defeated": defeated,
+        "combat_ended": defeated,
+        "combat_state": combat_state,
+    }
+    narration = "You commit to the attack, keeping pressure on the road bandit."
+    if defeated:
+        narration = "You defeat the bandit and the combat ends."
+    return {"ok": True, "narration": narration, "npc": {"speaker": "", "line": ""}, "combat_result": combat_result, "combat_state": combat_state, "turn_contract": {"action": {"action_type": "combat", "target": "road bandit"}, "survival": {"hunger": 10, "thirst": 20, "fatigue": 5}}}
+
+
+def _travel_result(player_input: str) -> Dict[str, Any]:
+    return {"ok": True, "narration": "You follow the road north toward the old mill.", "npc": {"speaker": "", "line": ""}, "turn_contract": {"action": {"action_type": "travel", "destination": "old mill"}, "survival": {"hunger": 12, "thirst": 23, "fatigue": 7}}}
+
+
+def _party_result(player_input: str) -> Dict[str, Any]:
+    lowered = player_input.lower()
+    party_state = {"companions": [], "max_size": 3}
+    acceptance = {}
+    if "yes" in lowered or "let's go" in lowered or "join my party" in lowered and "yes" in lowered:
+        line = "Bran nods. Then I am with you."
+        narration = "Bran joins your party and falls in beside you."
+        party_state = {
+            "companions": [
+                {
+                    "npc_id": "npc:Bran",
+                    "name": "Bran",
+                    "role": "companion",
+                    "follow_mode": "following_player",
+                    "status": "active",
+                }
+            ],
+            "max_size": 3,
+        }
+        acceptance = {"accepted": True, "reason": "player_accepted_companion_offer", "npc_id": "npc:Bran"}
+    elif "stay close" in lowered or "companion" in lowered and "close" in lowered:
+        line = "I am with you. I'll keep close."
+        narration = "Bran remains with the party as your companion."
+        party_state = {
+            "companions": [
+                {
+                    "npc_id": "npc:Bran",
+                    "name": "Bran",
+                    "role": "companion",
+                    "follow_mode": "following_player",
+                    "status": "active",
+                }
+            ],
+            "max_size": 3,
+        }
+    elif "role" in lowered:
+        line = "If I travelled with you, I'd keep watch and talk us through trouble."
+        narration = f"Bran weighs the companion request. {line}"
+    else:
+        line = "If you truly mean it, say the word and I will walk with you."
+        narration = "Bran weighs the companion offer and says he is willing to join if you confirm it."
+    return {
+        "ok": True,
+        "narration": narration,
+        "npc": {"speaker": "Bran", "line": line},
+        "party_state": party_state,
+        "companion_acceptance_result": acceptance,
+        "party_aware_turn_context": {"requested_companion": "Bran"},
+        "simulation_state": {"player_state": {"party_state": party_state}},
+        "turn_contract": {"action": {"action_type": "talk", "target": "Bran"}, "survival": {"hunger": 10, "thirst": 20, "fatigue": 5}},
+    }
+
+
 def _matrix_fake_turn(*, session_id, turn, turn_index, scenario_name, target_channel, **kwargs):
     player_input = turn.get("player") if isinstance(turn, dict) else str(turn)
     lowered = player_input.lower()
-    if any(term in lowered for term in ("food", "bread", "stew", "how much", "buy")):
+    if "road bandit" in lowered or "attack" in lowered:
+        raw_result = _combat_result(player_input, turn_index)
+    elif "old mill" in lowered or "travel north" in lowered:
+        raw_result = _travel_result(player_input)
+    elif "join my party" in lowered or "companion" in lowered or "travelled with me" in lowered or "traveled with me" in lowered or "what role" in lowered:
+        raw_result = _party_result(player_input)
+    elif any(term in lowered for term in ("food", "bread", "stew", "how much", "buy")):
         raw_result = _service_offer_result()
     elif "what do you know about this place" in lowered:
         raw_result = _generic_place_result()
@@ -130,22 +252,48 @@ def test_bundle_cd_matrix_defines_realistic_multi_turn_scenarios() -> None:
     assert "rumor_news_no_backed_state" in ids
     assert "survival_food_and_water" in ids
     assert "npc_dialogue_persona" in ids
+    assert "combat_basic_attack" in ids
+    assert "travel_route_choice" in ids
+    assert "party_companion_recruitment" in ids
     assert all(len(scenario.commands) >= 2 for scenario in scenarios)
 
 
 def test_bundle_cd_offline_matrix_runs_all_scenarios_and_writes_artifacts(tmp_path) -> None:
     provider, result = _run_offline_matrix(tmp_path)
     summary = result["summary"]
-    assert summary["format_version"] == "interactive_intent_matrix_v1"
-    assert summary["scenario_count"] == 5
-    assert summary["passed"] == 5
+    assert summary["format_version"] == "interactive_intent_matrix_v4"
+    assert summary["scenario_count"] == 8
+    assert summary["passed"] == 8
     assert summary["failed"] == []
+    assert Path(summary["html_report_path"]).exists()
     assert len(provider.calls) == sum(len(scenario.commands) for scenario in matrix.default_intent_matrix_scenarios())
     assert (tmp_path / "interactive-intent-matrix-summary.json").exists()
+    report_html = (tmp_path / "interactive-intent-matrix-report.html").read_text(encoding="utf-8")
+    assert "combat_basic_attack" in report_html
+    assert "combat_basic_attack/interactive-report.html" in report_html
+    assert "Combat Progress" in report_html
+    assert "Party Progress" in report_html
+    assert "Final defeated" in report_html
     for scenario in matrix.default_intent_matrix_scenarios():
         assert (tmp_path / scenario.scenario_id / "interactive-report.html").exists()
         assert (tmp_path / scenario.scenario_id / "interactive-transcript.json").exists()
         assert (tmp_path / scenario.scenario_id / "interactive-campaign-results.zip").exists()
+
+
+def test_bundle_cd_matrix_clears_previous_results_before_run(tmp_path) -> None:
+    stale_file = tmp_path / "old-summary.json"
+    stale_file.write_text("stale", encoding="utf-8")
+    stale_dir = tmp_path / "old_scenario"
+    stale_dir.mkdir()
+    (stale_dir / "interactive-report.html").write_text("stale", encoding="utf-8")
+
+    scenario = [s for s in matrix.default_intent_matrix_scenarios() if s.scenario_id == "travel_route_choice"][0]
+    _, result = _run_offline_matrix(tmp_path, [scenario])
+
+    assert result["summary"]["passed"] == 1
+    assert not stale_file.exists()
+    assert not stale_dir.exists()
+    assert (tmp_path / "travel_route_choice" / "interactive-report.html").exists()
 
 
 def test_bundle_cd_commerce_visible_response_requires_offer_label_and_price(tmp_path) -> None:
@@ -217,6 +365,94 @@ def test_bundle_ce21_place_dialogue_repairs_blank_npc_even_with_generic_narratio
     assert '"speaker": "self"' not in npc_blob
 
 
+def test_bundle_cf2_survival_visible_repair_uses_authoritative_relief(tmp_path) -> None:
+    scenario = [s for s in matrix.default_intent_matrix_scenarios() if s.scenario_id == "survival_food_and_water"][0]
+    _, result = _run_offline_matrix(tmp_path, [scenario])
+    validation = result["results"][0]["validation"]
+    assert validation["ok"] is True
+    turns = result["results"][0]["result"]["turns"]
+    assert turns[0]["narration_source"] == "survival_repaired"
+    assert turns[1]["narration_source"] == "survival_repaired"
+    assert turns[2]["narration_source"] == "survival_repaired"
+    assert "hunger" in turns[0]["raw_narration"].lower()
+    assert "thirst" in turns[0]["raw_narration"].lower()
+    assert "fatigue" in turns[0]["raw_narration"].lower()
+    assert "thirst improves" in turns[1]["raw_narration"].lower()
+    assert "waterskin" in turns[1]["raw_narration"].lower()
+    assert "hunger improves" in turns[2]["raw_narration"].lower()
+    assert "ration" in turns[2]["raw_narration"].lower()
+
+
+def test_bundle_cd_combat_scenario_requires_combat_intent_and_target(tmp_path) -> None:
+    scenario = [s for s in matrix.default_intent_matrix_scenarios() if s.scenario_id == "combat_basic_attack"][0]
+    _, result = _run_offline_matrix(tmp_path, [scenario])
+    validation = result["results"][0]["validation"]
+    assert validation["ok"] is True
+    for turn in result["results"][0]["result"]["turns"]:
+        final = turn["interactive_cli_intent_diagnostics"]["final_classification"]
+        assert final["action_type"] == "combat"
+        assert "bandit" in final["target_npc"]
+        assert "attack" in " ".join(final["requested_terms"])
+    combat = result["summary"]["details"]["scenarios"]["combat_basic_attack"]["combat_progress"]
+    assert combat["damage_turn_count"] == 4
+    assert combat["total_damage"] == 4
+    assert combat["hp_after_values"] == [3, 2, 1, 0]
+    assert combat["final_defeated"] is True
+    assert combat["final_combat_ended"] is True
+    assert combat["final_enemy_hp"] == 0
+
+
+def test_bundle_cd_travel_scenario_requires_destination_terms(tmp_path) -> None:
+    scenario = [s for s in matrix.default_intent_matrix_scenarios() if s.scenario_id == "travel_route_choice"][0]
+    _, result = _run_offline_matrix(tmp_path, [scenario])
+    validation = result["results"][0]["validation"]
+    assert validation["ok"] is True
+    for turn in result["results"][0]["result"]["turns"]:
+        final = turn["interactive_cli_intent_diagnostics"]["final_classification"]
+        assert final["action_type"] == "travel"
+        assert "old mill" in " ".join(final["requested_terms"])
+
+
+def test_bundle_cd_party_scenario_stays_dialogue_not_quest_or_commerce(tmp_path) -> None:
+    scenario = [s for s in matrix.default_intent_matrix_scenarios() if s.scenario_id == "party_companion_recruitment"][0]
+    _, result = _run_offline_matrix(tmp_path, [scenario])
+    validation = result["results"][0]["validation"]
+    assert validation["ok"] is True
+    turns = result["results"][0]["result"]["turns"]
+    assert turns[0]["interactive_cli_intent_diagnostics"]["final_classification"]["action_type"] == "talk"
+    assert turns[0]["interactive_cli_intent_diagnostics"]["final_classification"]["service_kind"] == "unknown"
+    assert "confirmed job or quest" not in json.dumps(turns, ensure_ascii=False)
+    assert "Hot stew" not in json.dumps(turns, ensure_ascii=False)
+    party = result["summary"]["details"]["scenarios"]["party_companion_recruitment"]["party_progress"]
+    assert party["accepted_turns"] == [2]
+    assert party["final_bran_present"] is True
+    assert party["final_bran_role"] == "companion"
+    assert party["final_bran_follow_mode"] == "following_player"
+
+
+def test_bundle_cd_validator_catches_missing_final_requested_terms() -> None:
+    scenario = matrix.IntentMatrixScenario(
+        scenario_id="requested_terms_probe",
+        title="Requested terms probe",
+        commands=("I travel north toward the old mill.",),
+        expectations=(matrix.TurnExpectation(1, contains_any=("old mill",), final_action_type="travel", final_requested_terms_contains_any=("old mill",), provider_called=True),),
+    )
+    bad_result = {
+        "summary": {"completed_turns": 1},
+        "turns": [
+            {
+                "raw_narration": "You travel toward the old mill.",
+                "raw_npc": {"speaker": "", "line": ""},
+                "interactive_cli_intent_diagnostics": {"provider_called": True, "final_classification": {"action_type": "travel", "service_kind": "unknown", "requested_terms": []}},
+                "narration_source": "provider_intent_classifier",
+            }
+        ],
+    }
+    validation = matrix.validate_matrix_run(scenario, bad_result)
+    assert validation["ok"] is False
+    assert any("requested_terms" in failure for failure in validation["failures"])
+
+
 def test_bundle_cd_cli_requires_live_provider_flag(capsys) -> None:
     code = matrix.main([])
     captured = capsys.readouterr()
@@ -229,3 +465,6 @@ def test_bundle_cd_source_documents_live_provider_command() -> None:
     assert "--live-provider" in source
     assert "commerce_food_purchase" in source
     assert "quest_no_backed_state" in source
+    assert "combat_basic_attack" in source
+    assert "travel_route_choice" in source
+    assert "party_companion_recruitment" in source

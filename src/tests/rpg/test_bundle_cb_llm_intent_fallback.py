@@ -266,7 +266,7 @@ def test_bundle_cb1_interactive_runner_embeds_provider_diagnostics_every_turn(mo
         provider_factory=lambda: provider,
     )
 
-    assert result["summary"]["format_version"] == "interactive_cli_campaign_v2"
+    assert result["summary"]["format_version"] == "interactive_cli_campaign_v4"
     assert result["summary"]["provider_requested_count"] == 3
     assert result["summary"]["provider_called_count"] == 3
     assert len(provider.calls) == 3

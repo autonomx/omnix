@@ -169,6 +169,157 @@ def _apply_visible_interaction_reason_to_resolved_result(
     return resolved_result
 
 
+def _runtime_narration_payload_is_final(payload: Dict[str, Any]) -> bool:
+    payload = _safe_dict(payload)
+    return (
+        _safe_str(payload.get("source")) == "provider_runtime_narration"
+        and bool(_safe_str(payload.get("narration")).strip())
+        and not bool(payload.get("grounding_fallback"))
+    )
+
+
+def _normalize_visible_echo_text(value: Any) -> str:
+    return re.sub(r"\W+", " ", _safe_str(value).casefold()).strip()
+
+
+def _player_input_from_final_result(final_result: Dict[str, Any]) -> str:
+    final_result = _safe_dict(final_result)
+    nested = _safe_dict(final_result.get("result"))
+    turn_contract = (
+        _safe_dict(final_result.get("turn_contract"))
+        or _safe_dict(nested.get("turn_contract"))
+    )
+    return _safe_str(
+        final_result.get("player_input")
+        or nested.get("player_input")
+        or turn_contract.get("player_input")
+        or turn_contract.get("player_action")
+        or turn_contract.get("action")
+    )
+
+
+def _is_preservable_authoritative_narration(final_result: Dict[str, Any], narration: Any) -> bool:
+    text = _safe_str(narration).strip()
+    if not text:
+        return False
+
+    player_input = _player_input_from_final_result(final_result)
+    if player_input and _normalize_visible_echo_text(text) == _normalize_visible_echo_text(player_input):
+        return False
+
+    lowered = text.casefold()
+    blocked_fragments = (
+        "result: you cannot find that object here",
+        "no known route matches that destination",
+        "no routes are currently available",
+        "no supported semantic action",
+        "no_supported_semantic_action_detected",
+        "item_not_found",
+        "unknown_item",
+    )
+    return not any(fragment in lowered for fragment in blocked_fragments)
+
+
+def _accepted_combat_narration_payload(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    final_result = _safe_dict(final_result)
+    nested = _safe_dict(final_result.get("result"))
+    resolved = _safe_dict(final_result.get("resolved_result")) or _safe_dict(nested.get("resolved_result"))
+
+    validation = (
+        _safe_dict(final_result.get("combat_narration_validation"))
+        or _safe_dict(nested.get("combat_narration_validation"))
+        or _safe_dict(resolved.get("combat_narration_validation"))
+    )
+    payload = (
+        _safe_dict(final_result.get("combat_narration_payload"))
+        or _safe_dict(nested.get("combat_narration_payload"))
+        or _safe_dict(resolved.get("combat_narration_payload"))
+    )
+    if validation.get("ok") is True and _safe_str(payload.get("narration")).strip():
+        return payload
+    return {}
+
+
+def _accepted_direct_companion_presentation(final_result: Dict[str, Any]) -> Dict[str, Any]:
+    final_result = _safe_dict(final_result)
+    nested = _safe_dict(final_result.get("result"))
+    resolved = _safe_dict(final_result.get("resolved_result")) or _safe_dict(nested.get("resolved_result"))
+    direct = (
+        _safe_dict(final_result.get("direct_companion_turn_result"))
+        or _safe_dict(nested.get("direct_companion_turn_result"))
+        or _safe_dict(resolved.get("direct_companion_turn_result"))
+    )
+    line = _safe_str(direct.get("line")).strip()
+    if direct.get("matched") is True and line:
+        return {
+            "source": "direct_companion_response",
+            "narration": line,
+            "npc": {
+                "speaker": _safe_str(direct.get("name") or direct.get("npc_id") or "Companion"),
+                "line": line,
+            },
+        }
+    return {}
+
+
+def _select_final_visible_presentation(
+    final_result: Dict[str, Any],
+    *,
+    runtime_narration_payload: Dict[str, Any],
+    prior_narration: str,
+    prior_npc: Dict[str, Any],
+    prior_llm_called: bool,
+) -> Dict[str, Any]:
+    final_result = _safe_dict(final_result)
+    runtime_narration_payload = _safe_dict(runtime_narration_payload)
+
+    combat_payload = _accepted_combat_narration_payload(final_result)
+    if combat_payload:
+        return {
+            "source": "combat_narration",
+            "narration": _safe_str(combat_payload.get("narration")).strip(),
+            "npc": _safe_dict(combat_payload.get("npc")),
+            "llm_called": True,
+            "runtime_payload_source": _safe_str(runtime_narration_payload.get("source")),
+        }
+
+    direct_companion_payload = _accepted_direct_companion_presentation(final_result)
+    if direct_companion_payload:
+        return {
+            "source": _safe_str(direct_companion_payload.get("source")),
+            "narration": _safe_str(direct_companion_payload.get("narration")).strip(),
+            "npc": _safe_dict(direct_companion_payload.get("npc")),
+            "llm_called": False,
+            "runtime_payload_source": _safe_str(runtime_narration_payload.get("source")),
+        }
+
+    if _runtime_narration_payload_is_final(runtime_narration_payload):
+        return {
+            "source": "provider_runtime_narration",
+            "narration": _safe_str(runtime_narration_payload.get("narration")).strip(),
+            "npc": _safe_dict(runtime_narration_payload.get("npc")),
+            "llm_called": True,
+            "runtime_payload_source": _safe_str(runtime_narration_payload.get("source")),
+        }
+
+    if _is_preservable_authoritative_narration(final_result, prior_narration):
+        return {
+            "source": "authoritative_runtime_result",
+            "narration": _safe_str(prior_narration).strip(),
+            "npc": _safe_dict(prior_npc),
+            "llm_called": bool(prior_llm_called),
+            "runtime_payload_source": _safe_str(runtime_narration_payload.get("source")),
+        }
+
+    return {
+        "source": _safe_str(runtime_narration_payload.get("source")) or "runtime_narration",
+        "narration": _safe_str(runtime_narration_payload.get("narration")).strip(),
+        "npc": _safe_dict(runtime_narration_payload.get("npc")),
+        "llm_called": _safe_str(runtime_narration_payload.get("source")) == "provider_runtime_narration",
+        "runtime_payload_source": _safe_str(runtime_narration_payload.get("source")),
+    }
+
+
 def _call_combat_narration_provider_text(prompt: str) -> str:
     """Call the app's central active LLM provider for combat narration.
 
@@ -13356,7 +13507,6 @@ def apply_turn(
             "party_composition_effects": copy.deepcopy(party_composition_result),
             "session": session,
         }
-
         session = _sync_session_simulation_state_for_early_return(
             session,
             simulation_state,
@@ -13411,6 +13561,30 @@ def apply_turn(
             _safe_dict(simulation_state.get("companion_presence_projection"))
         )
         result["direct_companion_turn_result"] = copy.deepcopy(direct_companion_turn_result)
+        companion_dialogue_result = _safe_dict(
+            companion_acceptance_precheck.get("companion_dialogue_result")
+        )
+        companion_line = _safe_str(companion_dialogue_result.get("line"))
+        npc_name = _safe_str(companion_dialogue_result.get("npc_name") or acceptance.get("name") or "Bran")
+        if acceptance.get("accepted") and companion_line:
+            companion_narration = f"{npc_name} joins your party and falls in beside you."
+            companion_npc = {"speaker": npc_name, "line": companion_line}
+            resolved_result["narration"] = companion_narration
+            resolved_result["npc"] = copy.deepcopy(companion_npc)
+            turn_contract["resolved_result"] = copy.deepcopy(resolved_result)
+            result["turn_contract"] = turn_contract
+            result["narration"] = companion_narration
+            result["npc"] = copy.deepcopy(companion_npc)
+            result["presentation_narration_selection"] = {
+                "source": "companion_acceptance",
+                "runtime_payload_source": "",
+            }
+            result["result"]["narration"] = companion_narration
+            result["result"]["npc"] = copy.deepcopy(companion_npc)
+            result["result"]["resolved_result"] = copy.deepcopy(resolved_result)
+            result["result"]["presentation_narration_selection"] = copy.deepcopy(
+                result["presentation_narration_selection"]
+            )
 
         record_turn_perf_trace(
             "runtime_apply_turn_before_return",
@@ -14092,6 +14266,20 @@ def apply_turn(
     )
     setup_metadata = _safe_dict(_safe_dict(session.get("setup_payload")).get("metadata"))
     performance_settings = _safe_dict(runtime_state.get("performance"))
+    prior_visible_narration = _safe_str(
+        final_result.get("narration")
+        or _safe_dict(final_result.get("result")).get("narration")
+        or final_result.get("final_narration")
+        or _safe_dict(final_result.get("result")).get("final_narration")
+    )
+    prior_visible_npc = _safe_dict(
+        final_result.get("npc")
+        or _safe_dict(final_result.get("result")).get("npc")
+    )
+    prior_visible_llm_called = bool(
+        final_result.get("llm_called")
+        or _safe_dict(final_result.get("result")).get("llm_called")
+    )
 
     defer_runtime_narration = bool(suppress_provider_runtime_narration())
     if defer_runtime_narration:
@@ -14134,12 +14322,33 @@ def apply_turn(
         narration_payload["deferred"] = True
         narration_payload["narration_status"] = "pending"
         narration_payload["narration"] = narration_payload.get("narration") or "Narration is being prepared..."
+    selected_presentation = _select_final_visible_presentation(
+        final_result,
+        runtime_narration_payload=narration_payload,
+        prior_narration=prior_visible_narration,
+        prior_npc=prior_visible_npc,
+        prior_llm_called=prior_visible_llm_called,
+    )
     final_result["narration_payload"] = narration_payload
     final_result["structured_narration"] = narration_payload
-    final_result["npc"] = narration_payload.get("npc") or {}
-    if narration_payload.get("narration"):
-        final_result["narration"] = narration_payload["narration"]
-    final_result["llm_called"] = narration_payload.get("source") == "provider_runtime_narration"
+    final_result["presentation_narration_selection"] = {
+        "source": selected_presentation.get("source"),
+        "runtime_payload_source": selected_presentation.get("runtime_payload_source"),
+    }
+    final_result["npc"] = selected_presentation.get("npc") or {}
+    if selected_presentation.get("narration"):
+        final_result["narration"] = selected_presentation["narration"]
+    final_result["llm_called"] = bool(selected_presentation.get("llm_called"))
+    nested_result = _safe_dict(final_result.get("result"))
+    if nested_result:
+        nested_result["presentation_narration_selection"] = copy.deepcopy(
+            final_result["presentation_narration_selection"]
+        )
+        nested_result["npc"] = copy.deepcopy(final_result["npc"])
+        if final_result.get("narration"):
+            nested_result["narration"] = final_result["narration"]
+        nested_result["llm_called"] = final_result["llm_called"]
+        final_result["result"] = nested_result
     record_turn_perf_trace(
         "runtime_apply_turn_before_return",
         elapsed_seconds=round(__import__("time").perf_counter() - _apply_turn_started, 3),

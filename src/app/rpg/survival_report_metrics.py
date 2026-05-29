@@ -117,6 +117,10 @@ def _extract_pressure(row: Mapping[str, Any], survival_state: Mapping[str, Any])
 
 
 def _survival_action_results(row: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    canonical = _canonical_survival_action_result(row)
+    if canonical:
+        return [canonical]
+
     out: List[Dict[str, Any]] = []
     seen: set[str] = set()
     for item in _walk(row):
@@ -126,7 +130,7 @@ def _survival_action_results(row: Mapping[str, Any]) -> List[Dict[str, Any]]:
         action = _norm_action(candidate.get("action"))
         if not action:
             continue
-        key = f"{action}:{candidate.get('ok')}:{candidate.get('blocked_reason')}:{candidate.get('reason')}:{id(candidate)}"
+        key = f"{action}:{candidate.get('ok')}:{candidate.get('blocked_reason')}:{candidate.get('reason')}"
         if key in seen:
             continue
         seen.add(key)
@@ -164,6 +168,71 @@ def _suggested_survival_count(row: Mapping[str, Any]) -> Tuple[int, int]:
                 if action_type == "survival" or label.startswith("survival:") or _norm_action(label).startswith("survival_"):
                     survival += 1
     return survival, total
+
+
+def _survival_action_matches_input(action: Mapping[str, Any], player_input: str) -> bool:
+    action_text = _safe_str(_safe_dict(action).get("action") or _safe_dict(action).get("action_kind")).lower()
+    input_text = _safe_str(player_input).lower()
+    if ("ration" in input_text or "eat" in input_text) and ("ration" in action_text or "eat" in action_text or "food" in action_text):
+        return True
+    if ("water" in input_text or "waterskin" in input_text or "drink" in input_text) and ("water" in action_text or "waterskin" in action_text or "drink" in action_text):
+        return True
+    if ("rest" in input_text or "sleep" in input_text or "fatigue" in input_text) and ("rest" in action_text or "sleep" in action_text):
+        return True
+    return False
+
+
+def _canonical_survival_action_result(row: Mapping[str, Any]) -> Dict[str, Any]:
+    candidates: List[Dict[str, Any]] = []
+    for item in _walk(row):
+        action = _safe_dict(item.get("survival_action"))
+        if action and (
+            action.get("applied") is not None
+            or action.get("blocked") is not None
+            or action.get("blocked_reason")
+        ):
+            candidates.append(action)
+        nested = _safe_dict(_safe_dict(item.get("effect_result")).get("survival_action"))
+        if nested and (
+            nested.get("applied") is not None
+            or nested.get("blocked") is not None
+            or nested.get("blocked_reason")
+        ):
+            candidates.append(nested)
+
+    if not candidates:
+        return {}
+
+    player_input = _safe_str(row.get("player_input"))
+
+    def score(action: Mapping[str, Any]) -> Tuple[int, int, int, int]:
+        action = _safe_dict(action)
+        return (
+            1 if _survival_action_matches_input(action, player_input) else 0,
+            1 if action.get("applied") is True else 0,
+            0 if action.get("blocked") or action.get("blocked_reason") else 1,
+            1 if _safe_list(action.get("inventory_consumed")) else 0,
+        )
+
+    candidates.sort(key=score, reverse=True)
+    action = _safe_dict(candidates[0])
+    blocked = bool(action.get("blocked") or action.get("blocked_reason"))
+    applied = action.get("applied") is True
+    if not applied and not blocked:
+        return {}
+
+    action_name = _norm_action(action.get("action") or action.get("action_kind"))
+    if not action_name:
+        return {}
+    return {
+        "ok": bool(applied and not blocked),
+        "action_category": "survival",
+        "action": action_name,
+        "blocked_reason": _safe_str(action.get("blocked_reason")),
+        "reason": _safe_str(action.get("reason")),
+        "effects": _safe_dict(action.get("deltas")),
+        "source": _safe_str(action.get("source") or SURVIVAL_REPORT_SOURCE),
+    }
 
 
 def _row_timeline_entry(row: Mapping[str, Any], fallback_turn: int) -> Dict[str, Any]:

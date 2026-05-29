@@ -51,6 +51,7 @@ from rpg.interactive_cli_intent_fallback import (  # noqa: E402
     narration_source_for_turn,
 )
 from rpg.interactive_cli_quest_followup import apply_quest_followup_repair  # noqa: E402
+from rpg.interactive_cli_survival_repair import apply_survival_visible_response_repair  # noqa: E402
 from tests.rpg.manual.perf_trace import (  # noqa: E402
     clear_manual_harness_trace,
     get_manual_harness_trace,
@@ -154,6 +155,7 @@ def _performance_summary(turns: Sequence[Mapping[str, Any]], *, elapsed_seconds:
         "intent_router_seconds",
         "commerce_repair_seconds",
         "quest_dialogue_repair_seconds",
+        "survival_repair_seconds",
         "post_repair_context_seconds",
         "print_prepare_seconds",
         "turn_total_seconds",
@@ -240,6 +242,7 @@ def _turn_report_row(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
         "regression_warnings": _safe_list(turn_summary.get("regression_warnings")),
         "interactive_cli_intent_diagnostics": _safe_dict(turn_summary.get("interactive_cli_intent_diagnostics")),
         "interactive_cli_quest_followup": _safe_dict(turn_summary.get("interactive_cli_quest_followup")),
+        "interactive_cli_survival_repair": _safe_dict(turn_summary.get("interactive_cli_survival_repair")),
         "interactive_cli_performance": _safe_dict(turn_summary.get("interactive_cli_performance")),
         "narration_source": _safe_str(turn_summary.get("narration_source")),
     }
@@ -251,6 +254,7 @@ def build_interactive_campaign_summary(*, run_id: str, session_id: str, requeste
     llm_turns = 0
     commerce_repairs = 0
     quest_repairs = 0
+    survival_repairs = 0
     provider_requested = 0
     provider_called = 0
     narration_sources: Dict[str, int] = {}
@@ -265,6 +269,8 @@ def build_interactive_campaign_summary(*, run_id: str, session_id: str, requeste
             commerce_repairs += 1
         if _safe_dict(turn.get("interactive_cli_quest_followup")).get("applied"):
             quest_repairs += 1
+        if _safe_dict(turn.get("interactive_cli_survival_repair")).get("applied"):
+            survival_repairs += 1
         diagnostics = _safe_dict(turn.get("interactive_cli_intent_diagnostics"))
         if diagnostics.get("provider_requested"):
             provider_requested += 1
@@ -295,6 +301,7 @@ def build_interactive_campaign_summary(*, run_id: str, session_id: str, requeste
         "provider_called_count": provider_called,
         "commerce_followup_repair_count": commerce_repairs,
         "quest_followup_repair_count": quest_repairs,
+        "survival_visible_repair_count": survival_repairs,
         "narration_sources": narration_sources,
         "performance": performance,
         "warnings": sorted(set(_safe_str(w) for w in warnings if _safe_str(w)))[:100],
@@ -453,7 +460,7 @@ def read_scripted_commands(path: str | Path) -> List[str]:
     return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
 
 
-def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, input_func: Callable[[str], str] = input, scripted_commands: Sequence[str] | None = None, reset_session: bool = True, console_llm: bool = True, include_raw_result: bool = True, artifact_detail: str = "debug", enable_llm_intent_fallback: bool = True, provider_factory: Callable[[], Any] | None = None, seed_live_survival: bool = False, defer_runtime_narration: bool = False, runtime_performance_override: Mapping[str, Any] | None = None, force_llm_intent: bool = True) -> Dict[str, Any]:
+def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, input_func: Callable[[str], str] = input, scripted_commands: Sequence[str] | None = None, reset_session: bool = True, console_llm: bool = True, include_raw_result: bool = True, artifact_detail: str = "debug", enable_llm_intent_fallback: bool = True, provider_factory: Callable[[], Any] | None = None, seed_live_survival: bool = False, defer_runtime_narration: bool = False, runtime_performance_override: Mapping[str, Any] | None = None, force_llm_intent: bool = True, after_turn_hook: Callable[..., Any] | None = None) -> Dict[str, Any]:
     if turns <= 0:
         raise ValueError("turns_must_be_positive")
     session_id = _safe_str(session_id).strip() or f"interactive_cli_{uuid.uuid4().hex[:8]}"
@@ -529,6 +536,10 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
         perf["quest_dialogue_repair_seconds"] = _elapsed_since(phase)
 
         phase = time.perf_counter()
+        turn_summary = apply_survival_visible_response_repair(turn_summary, player_input=player_input)
+        perf["survival_repair_seconds"] = _elapsed_since(phase)
+
+        phase = time.perf_counter()
         raw_after_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
         repaired_context = extract_service_offer_context(raw_after_repair)
         if repaired_context:
@@ -537,6 +548,15 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
             last_service_offer_context = current_offer_context
         turn_summary["narration_source"] = narration_source_for_turn(turn_summary)
         perf["post_repair_context_seconds"] = _elapsed_since(phase)
+
+        if after_turn_hook is not None:
+            after_turn_hook(
+                session_id=session_id,
+                turn_summary=turn_summary,
+                turn_index=len(turn_summaries) + 1,
+                player_input=player_input,
+            )
+            turn_summary["narration_source"] = narration_source_for_turn(turn_summary)
 
         phase = time.perf_counter()
         raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))

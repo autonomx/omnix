@@ -121,25 +121,34 @@ def build_deterministic_intent_classification(*, player_input: str, current_offe
     confidence = 0.0
     reasons: list[str] = []
     if owned_survival:
-        confidence += 0.80; reasons.append("owned_survival_or_inventory_self_use")
+        confidence += 0.80
+        reasons.append("owned_survival_or_inventory_self_use")
     if quest_inquiry:
-        confidence += 0.60; reasons.append("quest_terms_detected")
+        confidence += 0.60
+        reasons.append("quest_terms_detected")
     if commerce_question:
-        confidence += 0.45; reasons.append("commerce_terms_detected")
+        confidence += 0.45
+        reasons.append("commerce_terms_detected")
     if purchase_intent:
-        confidence += 0.20; reasons.append("purchase_terms_detected")
+        confidence += 0.20
+        reasons.append("purchase_terms_detected")
     if requested_kind:
-        confidence += 0.35; reasons.append(f"requested_service_kind:{requested_kind}")
+        confidence += 0.35
+        reasons.append(f"requested_service_kind:{requested_kind}")
     if has_offer_context:
-        confidence += 0.10; reasons.append("authoritative_offer_context_available")
+        confidence += 0.10
+        reasons.append("authoritative_offer_context_available")
     if mismatch:
-        confidence = min(confidence, 0.40); reasons.append(f"service_kind_mismatch:{requested_kind}!={current_kind}")
+        confidence = min(confidence, 0.40)
+        reasons.append(f"service_kind_mismatch:{requested_kind}!={current_kind}")
     low_confidence = confidence < 0.70
     needs_llm = bool(quest_inquiry or owned_survival or ((commerce_question or purchase_intent or requested_kind) and (not requested_kind or mismatch or low_confidence)))
     if commerce_question and not has_offer_context:
-        needs_llm = True; reasons.append("no_authoritative_offer_context_yet")
+        needs_llm = True
+        reasons.append("no_authoritative_offer_context_yet")
     if purchase_intent and has_offer_context and low_confidence:
-        needs_llm = True; reasons.append("purchase_intent_low_confidence_with_offer_context")
+        needs_llm = True
+        reasons.append("purchase_intent_low_confidence_with_offer_context")
     return {"action_type": action_type, "service_kind": service_kind, "requested_service_kind": requested_kind, "current_context_service_kind": current_kind, "last_context_service_kind": last_kind, "confidence": round(min(1.0, confidence), 3), "commerce_question": commerce_question, "purchase_intent": purchase_intent, "quest_inquiry": quest_inquiry, "owned_survival_or_inventory_self_use": owned_survival, "service_kind_mismatch": mismatch, "needs_llm": needs_llm, "reasons": reasons, "source": "deterministic_interactive_intent_hints_v3"}
 
 
@@ -201,7 +210,7 @@ def validate_llm_intent_against_context(intent: Mapping[str, Any], last_offer_co
 def _normalize_final_intent_for_authority(player_input: str, final: Mapping[str, Any], deterministic: Mapping[str, Any]) -> Dict[str, Any]:
     normalized = dict(_safe_dict(final))
     if _is_owned_survival_text(player_input):
-        normalized.update({"action_type": "observe", "service_kind": "unknown", "target_npc": "", "confidence": max(_safe_float(normalized.get("confidence"), 0.0), _safe_float(deterministic.get("confidence"), 0.8)), "source": "deterministic_owned_survival_authority_override", "authority_override_reason": "owned_survival_or_inventory_self_use_not_service"})
+        normalized.update({"action_type": "observe", "service_kind": "unknown", "target_npc": "", "requested_terms": ["survival"], "confidence": max(_safe_float(normalized.get("confidence"), 0.0), _safe_float(deterministic.get("confidence"), 0.8)), "source": "deterministic_owned_survival_authority_override", "authority_override_reason": "owned_survival_or_inventory_self_use_not_service"})
     return normalized
 
 
@@ -213,7 +222,8 @@ def classify_service_intent_with_fallback(*, player_input: str, current_offer_co
     final = {"action_type": deterministic.get("action_type"), "service_kind": deterministic.get("service_kind"), "confidence": deterministic.get("confidence"), "source": deterministic.get("source")}
     if bool(enable_llm and (force_llm or deterministic.get("needs_llm"))):
         result = call_llm_intent_classifier(player_input=player_input, deterministic=deterministic, current_offer_context=current_offer_context, last_offer_context=last_offer_context, provider_factory=provider_factory)
-        llm_intent = _safe_dict(result.get("intent")); llm_diag = _safe_dict(result.get("diagnostics"))
+        llm_intent = _safe_dict(result.get("intent"))
+        llm_diag = _safe_dict(result.get("diagnostics"))
         validation = validate_llm_intent_against_context(llm_intent, last_offer_context)
         if validation.get("ok") and llm_intent:
             final = {"action_type": llm_intent.get("action_type") or deterministic.get("action_type"), "service_kind": llm_intent.get("service_kind") or deterministic.get("service_kind"), "target_npc": llm_intent.get("target_npc", ""), "requested_terms": llm_intent.get("requested_terms", []), "confidence": llm_intent.get("confidence", 0.0), "source": LLM_INTENT_SOURCE}
@@ -231,6 +241,8 @@ def narration_source_for_turn(turn_summary: Mapping[str, Any]) -> str:
     turn_summary = _safe_dict(turn_summary)
     if _safe_dict(turn_summary.get("interactive_cli_commerce_followup")).get("applied"):
         return "repaired"
+    if _safe_dict(turn_summary.get("interactive_cli_survival_repair")).get("applied"):
+        return "survival_repaired"
     quest_followup = _safe_dict(turn_summary.get("interactive_cli_quest_followup"))
     if quest_followup.get("applied"):
         kind = _safe_str(quest_followup.get("inquiry_kind"))
@@ -239,10 +251,13 @@ def narration_source_for_turn(turn_summary: Mapping[str, Any]) -> str:
         if kind == "dialogue":
             return "dialogue_repaired"
         return "quest_repaired"
+    raw = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    presentation_source = _safe_str(_safe_dict(raw.get("presentation_narration_selection")).get("source"))
+    if presentation_source:
+        return presentation_source
     diagnostics = _safe_dict(turn_summary.get("interactive_cli_intent_diagnostics"))
     if diagnostics.get("provider_called"):
         return "provider_intent_classifier"
-    raw = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
     if raw.get("grounding_fallback") or raw.get("fallback"):
         return "fallback"
     if raw.get("narration") or turn_summary.get("raw_narration"):

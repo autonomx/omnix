@@ -120,6 +120,8 @@ def inquiry_kind(player_input: str, turn_summary: Mapping[str, Any] | None = Non
     text = _safe_str(player_input).lower()
     turn_summary = _safe_dict(turn_summary)
     intent = _final_intent(turn_summary)
+    if _safe_str(intent.get("authority_override_reason")) == "owned_survival_or_inventory_self_use_not_service":
+        return ""
     terms = " ".join(_safe_str(term).lower() for term in _safe_list(intent.get("requested_terms")))
     action_type = _safe_str(intent.get("action_type")).lower()
     service_kind = _safe_str(intent.get("service_kind")).lower()

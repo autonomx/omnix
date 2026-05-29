@@ -147,6 +147,47 @@ def test_bundle_bg_extracts_nested_runtime_shapes_without_duplicates() -> None:
     assert metrics["pressure_counts"]["fatigue"]["moderate"] == 1
 
 
+def test_bundle_bg_prefers_authoritative_applied_survival_action_over_stale_blocked_nested_results() -> None:
+    row = {
+        "turn": 2,
+        "turn_contract": {
+            "survival": {"hunger": 80, "thirst": 47, "fatigue": 78},
+            "survival_action": {
+                "action": "drink_waterskin",
+                "applied": True,
+                "blocked": False,
+                "before": {"hunger": 80, "thirst": 82, "fatigue": 78},
+                "after": {"hunger": 80, "thirst": 47, "fatigue": 78},
+                "inventory_consumed": [{"item_id": "waterskin", "name": "Waterskin"}],
+            },
+            "resolved_result": {
+                "survival_result": {
+                    "ok": False,
+                    "action_category": "survival",
+                    "action": "drink_from_waterskin",
+                    "blocked_reason": "no_waterskin_available",
+                }
+            },
+        },
+        "result": {
+            "survival_result": {
+                "ok": False,
+                "action_category": "survival",
+                "action": "drink_from_waterskin",
+                "blocked_reason": "no_waterskin_available",
+            }
+        },
+    }
+
+    metrics = build_survival_report_metrics([row])
+
+    assert metrics["summary"]["direct_survival_action_count"] == 1
+    assert metrics["summary"]["blocked_survival_action_count"] == 0
+    assert metrics["action_counts"] == {"drink_waterskin": 1}
+    assert metrics["blocked_action_counts"] == {}
+    assert metrics["advisory_gates"]["gates"]["repeated_blocked_actions"]["ok"] is True
+
+
 def test_bundle_bg_merge_payload_and_render_html_section() -> None:
     rows = [
         _turn_row(
