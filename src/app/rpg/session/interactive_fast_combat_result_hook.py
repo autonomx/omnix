@@ -7,6 +7,7 @@ from functools import wraps
 from types import ModuleType
 from typing import Any, Dict
 
+from app.rpg.session.combat_lifecycle import enrich_combat_lifecycle_result
 from app.rpg.session.fast_combat_presentation import (
     deterministic_fast_combat_payload,
     repair_fast_combat_grounding_validation,
@@ -79,6 +80,7 @@ def normalize_interactive_fast_combat_result(result: Dict[str, Any]) -> Dict[str
         nested["grounding_fallback_source"] = "deterministic_combat_fast_summary"
         nested["grounding_selected_candidate"] = "deterministic_combat_fast_summary"
         result["result"] = nested
+    result = enrich_combat_lifecycle_result(result)
     return result
 
 
