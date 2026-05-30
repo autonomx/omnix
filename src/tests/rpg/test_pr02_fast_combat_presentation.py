@@ -9,6 +9,9 @@ from app.rpg.session.fast_combat_presentation import (
 from app.rpg.session.fast_combat_presentation_hook import (
     force_install_fast_combat_presentation_hook_for_tests,
 )
+from app.rpg.session.interactive_fast_combat_result_hook import (
+    normalize_interactive_fast_combat_result,
+)
 
 
 def _fast_combat_result() -> dict:
@@ -28,6 +31,29 @@ def _fast_combat_result() -> dict:
         "combat_narration_validation": {
             "ok": False,
             "warnings": ["combat_narration_skipped_for_fast_mode"],
+        },
+        "narration_payload": {
+            "source": "deferred_runtime_narration_pending",
+            "narration": "The confrontation remains tense, but no injury is resolved.",
+            "action": "No combat, damage, death, or injury is resolved by the turn contract.",
+            "grounding_validation": {
+                "ok": False,
+                "fallback_used": True,
+                "fallback_source": "deterministic_fallback",
+                "selected_candidate": "deterministic_fallback",
+                "violations": [{"code": "unsupported_combat_claim"}],
+            },
+        },
+        "structured_narration": {
+            "source": "deferred_runtime_narration_pending",
+            "narration": "The confrontation remains tense, but no injury is resolved.",
+            "grounding_validation": {
+                "ok": False,
+                "fallback_used": True,
+                "fallback_source": "deterministic_fallback",
+                "selected_candidate": "deterministic_fallback",
+                "violations": [{"code": "unsupported_combat_claim"}],
+            },
         },
         "result": {
             "narration": "The confrontation remains tense, but no injury is resolved.",
@@ -122,3 +148,16 @@ def test_pr03_runtime_selector_repairs_grounding_validation_before_final_selecti
     assert validation["ok"] is True
     assert validation["violations"] == []
     assert result["fast_combat_grounding_delta_repair"]["applied"] is True
+
+
+def test_pr034_interactive_result_normalizer_restores_transcript_facing_payloads():
+    normalized = normalize_interactive_fast_combat_result(_fast_combat_result())
+
+    for key in ("narration_payload", "structured_narration"):
+        payload = normalized[key]
+        validation = payload["grounding_validation"]
+        assert payload["source"] == "deterministic_combat_fast_summary"
+        assert payload["narration"] == "You hit the bandit for 1 damage. The bandit has 3 HP remaining."
+        assert validation["ok"] is True
+        assert validation["violations"] == []
+        assert normalized["grounding_violation_codes"] == []
