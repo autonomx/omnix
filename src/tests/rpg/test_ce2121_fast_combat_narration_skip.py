@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from app.rpg.session.fast_combat_narration_skip import (
     force_install_fast_combat_narration_skip_for_tests,
 )
@@ -39,6 +37,9 @@ def test_ce2121_non_fast_combat_narration_still_calls_original_provider(monkeypa
     force_install_fast_combat_narration_skip_for_tests()
     called = {"value": False}
 
+    def fake_requires_llm(combat_result):
+        return True
+
     def fake_provider(*args, **kwargs):
         called["value"] = True
         return {
@@ -49,6 +50,7 @@ def test_ce2121_non_fast_combat_narration_still_calls_original_provider(monkeypa
             "payload": {},
         }
 
+    monkeypatch.setattr(runtime, "combat_contract_requires_llm", fake_requires_llm)
     monkeypatch.setattr(runtime, "generate_combat_narration_sync", fake_provider)
 
     result = runtime._apply_combat_narration_if_needed(
