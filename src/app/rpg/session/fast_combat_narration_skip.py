@@ -38,6 +38,20 @@ def _safe_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _first_present_int(*values: Any) -> int | None:
+    for value in values:
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except Exception:
+                continue
+    return None
+
+
 def _contains_fast_direct_marker(value: Any, *, depth: int = 0) -> bool:
     if depth > 6:
         return False
@@ -101,8 +115,70 @@ def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
     return _contains_fast_direct_marker(payload) or _contains_fast_direct_marker(combat_state)
 
 
-def _fallback_summary(combat_result: Dict[str, Any]) -> str:
+def _combat_delta_contract(combat_result: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
     combat_result = _safe_dict(combat_result)
+    combat_state = _safe_dict(combat_state)
+    delta = {
+        "source": "deterministic_combat_delta_contract_v1",
+        "action_type": _safe_str(combat_result.get("action_type") or combat_result.get("action")),
+        "reason": _safe_str(combat_result.get("reason") or combat_result.get("result") or combat_result.get("outcome")),
+        "actor_id": _safe_str(combat_result.get("actor_id") or combat_result.get("attacker_id") or combat_state.get("actor_id")),
+        "target_id": _safe_str(combat_result.get("target_id") or combat_result.get("defender_id") or combat_state.get("target_id")),
+        "target_name": _safe_str(combat_result.get("target_name") or combat_state.get("target_name") or "bandit"),
+        "damage_applied": _first_present_int(
+            combat_result.get("damage_applied"),
+            combat_result.get("damage"),
+            combat_result.get("damage_dealt"),
+            combat_state.get("last_damage"),
+        ),
+        "target_hp_before": _first_present_int(
+            combat_result.get("target_hp_before"),
+            combat_result.get("enemy_hp_before"),
+            combat_state.get("target_hp_before"),
+            combat_state.get("enemy_hp_before"),
+        ),
+        "target_hp_after": _first_present_int(
+            combat_result.get("target_hp_after"),
+            combat_result.get("enemy_hp_after"),
+            combat_result.get("enemy_hp"),
+            combat_state.get("target_hp_after"),
+            combat_state.get("enemy_hp_after"),
+            combat_state.get("enemy_hp"),
+        ),
+        "defeated": bool(
+            combat_result.get("defeated")
+            or combat_result.get("enemy_defeated")
+            or combat_result.get("combat_ended")
+            or combat_state.get("defeated")
+            or combat_state.get("enemy_defeated")
+        ),
+        "combat_ended": bool(
+            combat_result.get("combat_ended")
+            or combat_result.get("ended")
+            or combat_state.get("combat_ended")
+            or combat_state.get("ended")
+        ),
+    }
+    return {key: value for key, value in delta.items() if value not in (None, "")}
+
+
+def _fallback_summary(combat_result: Dict[str, Any], combat_state: Dict[str, Any] | None = None) -> str:
+    combat_result = _safe_dict(combat_result)
+    combat_state = _safe_dict(combat_state)
+    delta = _combat_delta_contract(combat_result, combat_state)
+    target_name = _safe_str(delta.get("target_name") or "enemy").strip() or "enemy"
+    damage = delta.get("damage_applied")
+    hp_after = delta.get("target_hp_after")
+    defeated = bool(delta.get("defeated") or delta.get("combat_ended"))
+
+    if isinstance(damage, int) and damage > 0:
+        if defeated:
+            return f"You hit the {target_name} for {damage} damage and defeat them."
+        if isinstance(hp_after, int):
+            return f"You hit the {target_name} for {damage} damage. The {target_name} has {hp_after} HP remaining."
+        return f"You hit the {target_name} for {damage} damage."
+    if defeated:
+        return f"You defeat the {target_name}."
     for key in ("summary", "result", "outcome", "reason", "action_type"):
         text = _safe_str(combat_result.get(key)).strip()
         if text:
@@ -120,12 +196,18 @@ def _build_contract(runtime_module: Any, combat_result: Dict[str, Any], combat_s
     return {}
 
 
-def _deterministic_payload(narration: str) -> Dict[str, Any]:
+def _deterministic_payload(narration: str, combat_delta: Dict[str, Any] | None = None) -> Dict[str, Any]:
     return {
         "source": "deterministic_combat_fast_summary",
         "narration": narration,
         "npc": {},
+        "combat_delta": _safe_dict(combat_delta),
     }
+
+
+def _stale_or_empty_fast_combat_text(value: Any) -> bool:
+    text = _safe_str(value).strip().casefold()
+    return not text or "no injury is resolved" in text or "no injury was resolved" in text
 
 
 def _apply_fast_skip(
@@ -138,12 +220,14 @@ def _apply_fast_skip(
     payload = _safe_dict(payload)
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
-    narration = _fallback_summary(combat_result)
-    deterministic_payload = _deterministic_payload(narration)
+    combat_delta = _combat_delta_contract(combat_result, combat_state)
+    narration = _fallback_summary(combat_result, combat_state)
+    deterministic_payload = _deterministic_payload(narration, combat_delta)
 
     payload["combat_narration_attempted"] = False
     payload["combat_narration_skipped_for_fast_mode"] = True
     payload["combat_narration_skip_source"] = "ce212_fast_combat_narration_skip_v1"
+    payload["combat_delta_contract"] = dict(combat_delta)
     payload["llm_called"] = False
     payload["llm_purpose"] = "deterministic_combat_fast_summary"
     payload["combat_narration_error"] = ""
@@ -160,15 +244,19 @@ def _apply_fast_skip(
     payload["combat_narration_rejected"] = False
 
     for key in ("narration", "final_narration", "narration_preview", "raw_payload_narration"):
-        if not _safe_str(payload.get(key)).strip():
+        if _stale_or_empty_fast_combat_text(payload.get(key)):
             payload[key] = narration
     nested = _safe_dict(payload.get("result"))
     if nested:
         nested["combat_narration_skipped_for_fast_mode"] = True
         nested["combat_narration_skip_source"] = "ce212_fast_combat_narration_skip_v1"
+        nested["combat_delta_contract"] = dict(combat_delta)
         nested["combat_narration_payload"] = dict(deterministic_payload)
         nested["narration_payload"] = dict(deterministic_payload)
         nested["structured_narration"] = dict(deterministic_payload)
+        for key in ("narration", "final_narration", "narration_preview", "raw_payload_narration"):
+            if _stale_or_empty_fast_combat_text(nested.get(key)):
+                nested[key] = narration
         payload["result"] = nested
     return payload
 
