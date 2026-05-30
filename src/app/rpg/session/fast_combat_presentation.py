@@ -15,6 +15,12 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+_STALE_FAST_COMBAT_NARRATION = {
+    "the confrontation remains tense, but no injury is resolved.",
+    "no combat, damage, death, or injury is resolved by the turn contract.",
+}
+
+
 def _candidate_payloads(result: Dict[str, Any]) -> list[Dict[str, Any]]:
     result = _safe_dict(result)
     nested = _safe_dict(result.get("result"))
@@ -95,6 +101,53 @@ def _remove_unsupported_combat_claims(validation: Dict[str, Any]) -> Dict[str, A
     return validation
 
 
+def _normalize_grounding_mirror_payload(payload: Dict[str, Any], *, narration: str) -> Dict[str, Any]:
+    payload = _safe_dict(payload)
+    if not payload:
+        return payload
+
+    validation = _safe_dict(payload.get("grounding_validation"))
+    if validation:
+        payload["grounding_validation"] = _remove_unsupported_combat_claims(validation)
+
+    codes = [code for code in _safe_list(payload.get("grounding_violation_codes")) if code != "unsupported_combat_claim"]
+    if codes or "grounding_violation_codes" in payload:
+        payload["grounding_violation_codes"] = codes
+
+    if _safe_str(payload.get("narration")).strip().casefold() in _STALE_FAST_COMBAT_NARRATION:
+        payload["narration"] = narration
+    if _safe_str(payload.get("json_narration")).strip().casefold() in _STALE_FAST_COMBAT_NARRATION:
+        payload["json_narration"] = narration
+
+    extracted = _safe_dict(payload.get("extracted"))
+    if extracted:
+        payload["extracted"] = _normalize_grounding_mirror_payload(extracted, narration=narration)
+
+    return payload
+
+
+def _normalize_container(container: Dict[str, Any], *, narration: str) -> Dict[str, Any]:
+    container = _safe_dict(container)
+    if not container:
+        return container
+
+    container = _normalize_grounding_mirror_payload(container, narration=narration)
+    for key in (
+        "extracted",
+        "narration_debug",
+        "narration_payload_compact",
+        "raw_narration_payload",
+        "structured_narration_compact",
+        "narration_payload",
+        "structured_narration",
+    ):
+        value = _safe_dict(container.get(key))
+        if value:
+            container[key] = _normalize_grounding_mirror_payload(value, narration=narration)
+
+    return container
+
+
 def repair_fast_combat_grounding_validation(result: Dict[str, Any]) -> Dict[str, Any]:
     """Suppress false unsupported-combat-claim warnings backed by combat delta.
 
@@ -111,35 +164,13 @@ def repair_fast_combat_grounding_validation(result: Dict[str, Any]) -> Dict[str,
 
     nested = _safe_dict(result.get("result"))
     resolved = _safe_dict(result.get("resolved_result")) or _safe_dict(nested.get("resolved_result"))
-    containers = [result]
+
+    result = _normalize_container(result, narration=narration)
     if nested:
-        containers.append(nested)
-    if resolved:
-        containers.append(resolved)
-
-    for container in containers:
-        extracted = _safe_dict(container.get("extracted"))
-        if extracted:
-            validation = _safe_dict(extracted.get("grounding_validation"))
-            if validation:
-                extracted["grounding_validation"] = _remove_unsupported_combat_claims(validation)
-            if _safe_str(extracted.get("narration")).strip().casefold() in {
-                "the confrontation remains tense, but no injury is resolved.",
-                "no combat, damage, death, or injury is resolved by the turn contract.",
-            }:
-                extracted["narration"] = narration
-            container["extracted"] = extracted
-
-        validation = _safe_dict(container.get("grounding_validation"))
-        if validation:
-            container["grounding_validation"] = _remove_unsupported_combat_claims(validation)
-
-        if _safe_str(container.get("narration")).strip().casefold() == "the confrontation remains tense, but no injury is resolved.":
-            container["narration"] = narration
-
-    if nested:
+        nested = _normalize_container(nested, narration=narration)
         result["result"] = nested
-    if resolved and result.get("resolved_result") is not resolved:
+    if resolved:
+        resolved = _normalize_container(resolved, narration=narration)
         if "resolved_result" in result:
             result["resolved_result"] = resolved
         elif nested and "resolved_result" in nested:
