@@ -637,13 +637,14 @@ def apply_turn(
             runtime_state=runtime_state,
             candidate_action=candidate_action,
         )
-        semantic_advisory = get_semantic_action_advisory(
-            llm_gateway=gateway,
-            player_input=_s(player_input),
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=candidate_action or action_advisory,
-        )
+        if _b(_d(performance_override).get("enable_semantic_action_advisory"), True):
+            semantic_advisory = get_semantic_action_advisory(
+                llm_gateway=gateway,
+                player_input=_s(player_input),
+                simulation_state=simulation_state,
+                runtime_state=runtime_state,
+                candidate_action=candidate_action or action_advisory,
+            )
     except Exception as exc:
         runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
 
