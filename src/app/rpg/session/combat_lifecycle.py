@@ -61,6 +61,88 @@ def _combat_delta(result: Dict[str, Any]) -> Dict[str, Any]:
     return _d(result.get("combat_delta_contract")) or _d(nested.get("combat_delta_contract"))
 
 
+def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve the first enemy turn as deterministic metadata only.
+
+    PR.1.4 intentionally does not mutate player HP or survival state. It records
+    the enemy's turn in the combat log and marks the skeleton resolved so later
+    bundles can attach actual damage, defense, conditions, and death checks.
+    """
+
+    lifecycle = _d(lifecycle)
+    initiative = _d(lifecycle.get("initiative"))
+    enemy_turn = _d(lifecycle.get("enemy_turn"))
+    if enemy_turn.get("pending") is not True:
+        return {}
+    actor_id = _s(enemy_turn.get("actor_id") or initiative.get("next_actor_id"))
+    if not actor_id:
+        return {}
+    round_index = _i(initiative.get("round_index"), 1)
+    entry = {
+        "schema": "combat_log_entry_v1",
+        "entry_id": _stable_id(round_index, actor_id, "player", "enemy_turn_skeleton_v1"),
+        "turn_index": round_index,
+        "round_index": round_index,
+        "phase": "enemy_action",
+        "actor_id": actor_id,
+        "actor_side": "enemy",
+        "target_id": "player",
+        "target_name": "player",
+        "target_side": "player",
+        "action_type": "counterattack_skeleton",
+        "hit": False,
+        "damage_applied": 0,
+        "target_hp_before": None,
+        "target_hp_after": None,
+        "defeated": False,
+        "combat_ended": False,
+        "source": "deterministic_enemy_turn_skeleton_v1",
+    }
+    return {
+        "schema": "enemy_turn_resolution_v1",
+        "source": "pr1_4_first_enemy_turn_resolver",
+        "resolved": True,
+        "pending": False,
+        "actor_id": actor_id,
+        "target_id": "player",
+        "action_type": "counterattack_skeleton",
+        "damage_applied": 0,
+        "reason": "enemy_turn_recorded_without_player_damage_in_pr1_4",
+        "combat_log_entry": entry,
+    }
+
+
+def resolve_enemy_turn_in_lifecycle(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
+    lifecycle = _d(lifecycle)
+    resolution = build_enemy_turn_resolution(lifecycle)
+    if not resolution:
+        return lifecycle
+    log = [_d(row) for row in _l(lifecycle.get("combat_log"))]
+    log.append(_d(resolution.get("combat_log_entry")))
+    enemy_turn = _d(lifecycle.get("enemy_turn"))
+    enemy_turn.update(
+        {
+            "pending": False,
+            "resolved": True,
+            "resolution": {
+                key: value
+                for key, value in resolution.items()
+                if key != "combat_log_entry"
+            },
+            "reason": resolution.get("reason"),
+        }
+    )
+    initiative = _d(lifecycle.get("initiative"))
+    initiative["turn_phase"] = "player_turn_ready"
+    initiative["active_actor_id"] = "player"
+    initiative["next_actor_id"] = "player"
+    lifecycle["initiative"] = initiative
+    lifecycle["enemy_turn"] = enemy_turn
+    lifecycle["combat_log"] = log
+    lifecycle["enemy_turn_resolution"] = resolution
+    return lifecycle
+
+
 def build_combat_lifecycle_snapshot(result: Dict[str, Any]) -> Dict[str, Any]:
     """Build deterministic lifecycle metadata from an already-resolved combat delta.
 
@@ -108,7 +190,7 @@ def build_combat_lifecycle_snapshot(result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     next_actor_id = "" if combat_ended else target_id
-    return {
+    lifecycle = {
         "schema": "combat_lifecycle_v1",
         "source": "pr1_combat_lifecycle_foundation",
         "initiative": {
@@ -134,6 +216,9 @@ def build_combat_lifecycle_snapshot(result: Dict[str, Any]) -> Dict[str, Any]:
             "reason": "placeholder_for_phase1_xp_loot_resolution",
         },
     }
+    if not combat_ended:
+        lifecycle = resolve_enemy_turn_in_lifecycle(lifecycle)
+    return lifecycle
 
 
 def enrich_combat_lifecycle_result(result: Dict[str, Any]) -> Dict[str, Any]:
