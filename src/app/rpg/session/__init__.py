@@ -13,6 +13,19 @@ from .session_store import (
     save_session,
 )
 
+
+def _install_optional_fast_runtime_hooks() -> None:
+    try:
+        from .fast_combat_narration_skip import install_fast_combat_narration_skip
+
+        install_fast_combat_narration_skip()
+    except Exception:
+        # Runtime hook installation must never block normal session imports.
+        return
+
+
+_install_optional_fast_runtime_hooks()
+
 __all__ = [
     "archive_session",
     "ensure_session_registry",
