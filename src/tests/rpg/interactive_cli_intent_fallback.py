@@ -41,6 +41,10 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _terms_from_text(text: str, terms: tuple[str, ...]) -> list[str]:
+    return [term for term in terms if term in text]
+
+
 def set_first_call_context_for_next_intent(*, player_input: str, raw_result: Mapping[str, Any]) -> None:
     """Publish first-call runtime output so the outer CLI router can avoid a duplicate LLM call."""
     global _FIRST_CALL_CONTEXT
@@ -100,22 +104,34 @@ def _first_call_final_classification(player_input: str, raw_result: Mapping[str,
         "source": FIRST_CALL_REUSE_SOURCE,
     }
 
-    if raw.get("source") == "first_call_dialogue_safe_fallback_v1" or nested.get("source") == "first_call_dialogue_safe_fallback_v1":
+    if any(term in text for term in ("rumor", "rumors", "rumour", "rumours")):
+        final.update({"action_type": "rumor_inquiry", "service_kind": "rumor", "requested_terms": _terms_from_text(text, ("rumor", "rumors", "news")), "confidence": 0.90})
+    elif "news" in text:
+        final.update({"action_type": "rumor_inquiry", "service_kind": "news", "requested_terms": ["news"], "confidence": 0.90})
+    elif any(term in text for term in ("quest", "quests", "work", "job", "jobs", "task", "errand")):
+        service_kind = "work" if any(term in text for term in ("work", "job", "jobs", "task", "errand")) else "quest"
+        action_type = "work_inquiry" if service_kind == "work" else "quest_inquiry"
+        terms = _terms_from_text(text, ("quest", "quests", "work", "job", "jobs", "task", "errand"))
+        final.update({"action_type": action_type, "service_kind": service_kind, "requested_terms": terms, "confidence": 0.90})
+    elif any(term in text for term in ("join my party", "join party", "companion", "stay close", "close as my companion")):
+        terms = _terms_from_text(text, ("join my party", "join party", "companion", "stay close", "close"))
+        final.update({"action_type": "talk", "service_kind": "unknown", "requested_terms": terms, "confidence": 0.90})
+    elif raw.get("source") == "first_call_dialogue_safe_fallback_v1" or nested.get("source") == "first_call_dialogue_safe_fallback_v1":
         final.update({"action_type": "talk", "service_kind": "unknown", "confidence": 0.90})
     elif raw_action in {"combat", "attack_melee", "attack_ranged", "attack_unarmed"} or "attack" in text or "bandit" in text:
         final.update({"action_type": "combat", "service_kind": "unknown", "confidence": 0.90})
-    elif raw_action == "travel" or "travel" in text or "old mill" in text or "road" in text and "continue" in text:
-        terms = [term for term in ("old mill", "north", "road") if term in text]
+    elif raw_action == "travel" or "travel" in text or "old mill" in text or ("road" in text and "continue" in text):
+        terms = _terms_from_text(text, ("old mill", "north", "road"))
         final.update({"action_type": "travel", "service_kind": "unknown", "requested_terms": terms, "confidence": 0.88})
     elif raw_action in {"social_activity", "observe", "investigate", "talk"} and (
         _safe_dict(raw.get("npc") or nested.get("npc")).get("speaker") or "bran" in text
     ):
         final.update({"action_type": "talk", "service_kind": "unknown", "confidence": 0.86})
 
-    if "bran" in text and not final.get("target_npc"):
+    if "bran" in text and (not final.get("target_npc") or final.get("target_npc") in {"Local Environment/NPCs", "The Tavern"}):
         final["target_npc"] = "Bran"
     if not final.get("requested_terms"):
-        final["requested_terms"] = [term for term in ("attack", "old mill", "north", "road", "who are you", "this place", "companion", "join party") if term in text]
+        final["requested_terms"] = _terms_from_text(text, ("attack", "old mill", "north", "road", "who are you", "this place", "companion", "join party", "join my party", "stay close", "close"))
     return final
 
 
@@ -295,7 +311,10 @@ def _normalize_final_intent_for_authority(player_input: str, final: Mapping[str,
 
 
 def _diagnostics_payload(*, deterministic: Mapping[str, Any], llm_intent: Mapping[str, Any], validation: Mapping[str, Any], final: Mapping[str, Any], llm_diag: Mapping[str, Any], force_llm: bool) -> Dict[str, Any]:
-    return {"format_version": "interactive_cli_intent_diagnostics_v3", "intent_router_mode": "always" if force_llm else "fallback", "deterministic_classification": deterministic, "llm_classification": llm_intent, "llm_validation": validation, "final_classification": final, "provider_requested": bool(_safe_dict(llm_diag).get("provider_requested")), "provider_called": bool(_safe_dict(llm_diag).get("provider_called")), "provider_name": _safe_str(_safe_dict(llm_diag).get("provider_name")), "model": _safe_str(_safe_dict(llm_diag).get("model")), "base_url": _safe_str(_safe_dict(llm_diag).get("base_url")), "why_provider_not_called": _safe_str(_safe_dict(llm_diag).get("why_provider_not_called") or ("" if _safe_dict(llm_diag).get("provider_called") else _safe_dict(llm_diag).get("error"))), "provider_error": _safe_str(_safe_dict(llm_diag).get("error")), "provider_parse_ok": bool(_safe_dict(llm_diag).get("parse_ok")), "raw_text_excerpt": _safe_str(_safe_dict(llm_diag).get("raw_text_excerpt")), "source": _safe_str(_safe_dict(llm_diag).get("source") or LLM_INTENT_SOURCE)}
+    llm_diag = _safe_dict(llm_diag)
+    provider_reused = bool(llm_diag.get("provider_reused_first_call"))
+    provider_called = bool(llm_diag.get("provider_called") or provider_reused)
+    return {"format_version": "interactive_cli_intent_diagnostics_v3", "intent_router_mode": "always" if force_llm else "fallback", "deterministic_classification": deterministic, "llm_classification": llm_intent, "llm_validation": validation, "final_classification": final, "provider_requested": bool(llm_diag.get("provider_requested") or provider_reused), "provider_called": provider_called, "outer_provider_called": bool(llm_diag.get("provider_called")), "provider_reused_first_call": provider_reused, "provider_name": _safe_str(llm_diag.get("provider_name")), "model": _safe_str(llm_diag.get("model")), "base_url": _safe_str(llm_diag.get("base_url")), "why_provider_not_called": _safe_str(llm_diag.get("why_provider_not_called") or ("" if provider_called else llm_diag.get("error"))), "provider_error": _safe_str(llm_diag.get("error")), "provider_parse_ok": bool(llm_diag.get("parse_ok")), "raw_text_excerpt": _safe_str(llm_diag.get("raw_text_excerpt")), "source": _safe_str(llm_diag.get("source") or LLM_INTENT_SOURCE)}
 
 
 def classify_service_intent_with_fallback(*, player_input: str, current_offer_context: Mapping[str, Any] | None = None, last_offer_context: Mapping[str, Any] | None = None, enable_llm: bool = True, provider_factory: Callable[[], Any] | None = None, force_llm: bool = True) -> Dict[str, Any]:
@@ -314,6 +333,7 @@ def classify_service_intent_with_fallback(*, player_input: str, current_offer_co
             llm_diag={
                 "provider_requested": False,
                 "provider_called": False,
+                "provider_reused_first_call": True,
                 "why_provider_not_called": "first_call_router_already_called_provider",
                 "parse_ok": bool(first_call_diag.get("provider_parse_ok")),
                 "raw_text_excerpt": _safe_str(first_call_diag.get("raw_text"))[:600],
@@ -363,7 +383,7 @@ def narration_source_for_turn(turn_summary: Mapping[str, Any]) -> str:
     if presentation_source:
         return presentation_source
     diagnostics = _safe_dict(turn_summary.get("interactive_cli_intent_diagnostics"))
-    if diagnostics.get("source") == FIRST_CALL_REUSE_SOURCE:
+    if diagnostics.get("provider_reused_first_call"):
         return "first_call_router_reused"
     if diagnostics.get("provider_called"):
         return "provider_intent_classifier"
