@@ -75,6 +75,10 @@ def _is_combat_start_only_turn(turn: Mapping[str, Any]) -> bool:
     return _i(combat.get("damage_applied"), 0) <= 0 and not bool(combat.get("defeated") or combat.get("combat_ended"))
 
 
+def _enemy_action_rows(log: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    return [_d(row) for row in log if _d(row).get("phase") == "enemy_action"]
+
+
 def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -> List[str]:
     """Validate PR.1 lifecycle metadata on combat matrix attack/damage turns.
 
@@ -135,10 +139,20 @@ def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -
             if progression.get("loot_pending") is not True:
                 failures.append(f"combat lifecycle turn {turn_number}: defeat should mark loot_pending true")
         else:
-            if enemy_turn.get("pending") is not True:
-                failures.append(f"combat lifecycle turn {turn_number}: non-final enemy_turn.pending should be true")
-            if not _s(initiative.get("next_actor_id")):
-                failures.append(f"combat lifecycle turn {turn_number}: non-final next_actor_id should be populated")
+            resolved = enemy_turn.get("resolved") is True
+            pending = enemy_turn.get("pending") is True
+            if not (resolved or pending):
+                failures.append(f"combat lifecycle turn {turn_number}: non-final enemy_turn should be pending or resolved")
+            if resolved:
+                enemy_rows = _enemy_action_rows(log)
+                if not enemy_rows:
+                    failures.append(f"combat lifecycle turn {turn_number}: resolved enemy turn missing enemy_action log row")
+                elif enemy_rows[0].get("source") != "deterministic_enemy_turn_skeleton_v1":
+                    failures.append(f"combat lifecycle turn {turn_number}: enemy action row has unexpected source")
+                if initiative.get("turn_phase") != "player_turn_ready":
+                    failures.append(f"combat lifecycle turn {turn_number}: resolved enemy turn should return to player_turn_ready")
+            elif not _s(initiative.get("next_actor_id")):
+                failures.append(f"combat lifecycle turn {turn_number}: pending enemy turn next_actor_id should be populated")
             if progression.get("xp_pending") is True or progression.get("loot_pending") is True:
                 failures.append(f"combat lifecycle turn {turn_number}: non-final progression should not be pending")
 
