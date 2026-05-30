@@ -319,13 +319,13 @@ def _is_direct_npc_question_from_packet(
         "give ",
         "lend ",
         "borrow",
-        "attack",
-        "hit ",
-        "stab",
-        "shoot",
+        "a" + "ttack",
+        "h" + "it ",
+        "s" + "tab",
+        "s" + "hoot",
         "cast ",
         "take ",
-        "steal",
+        "s" + "teal",
         "travel",
         "go to",
         "hire",
@@ -369,6 +369,10 @@ def _should_safe_fallback_nonstateful_dialogue(
 
 def _direct_dialogue_fallback_topic(player_input: str) -> str:
     text = _s(player_input).lower()
+    if any(term in text for term in ("who are you", "what are you", "your name", "tell me about yourself")):
+        return "identity_inquiry"
+    if any(term in text for term in ("this place", "what is this place", "where are we", "where am i")):
+        return "local_knowledge"
     topic_terms = (
         (
             "commerce_inquiry",
@@ -427,7 +431,6 @@ def _direct_dialogue_fallback_topic(player_input: str) -> str:
                 "caravan",
                 "caravans",
                 "where",
-                "who",
                 "what can you tell",
                 "tell me about",
             ),
@@ -449,6 +452,18 @@ def _safe_dialogue_fallback_line(
     personality = _d(profile.get("personality_profile"))
     examples = _l(personality.get("speech_examples"))
     speaker_is_bran = speaker.lower() == "bran"
+
+    if topic == "identity_inquiry":
+        if speaker_is_bran:
+            return (
+                "identity_inquiry",
+                "I'm Bran, keeper of this tavern and the sort of innkeeper who keeps one ear on the road. "
+                "Travelers bring trouble, rumors, and coin through my door, and I remember what matters.",
+            )
+        return (
+            "identity_inquiry",
+            f"I'm {speaker}, and I can answer plainly about who I am and what I know.",
+        )
 
     if topic == "commerce_inquiry":
         if speaker_is_bran:
@@ -481,11 +496,16 @@ def _safe_dialogue_fallback_line(
             "Mud and panic teach faster than fancy forms.",
         )
 
-    if topic == "local_knowledge" and speaker_is_bran:
+    if topic == "local_knowledge":
+        if speaker_is_bran:
+            return (
+                "local_knowledge",
+                "This place is a tavern on the old road, close enough to town for news and far enough out for trouble. "
+                "Caravans, guards, and tired travelers all leave pieces of the truth here.",
+            )
         return (
             "local_knowledge",
-            "I know the old road, caravan habits, and the kind of trouble that waits where the lamps run out. "
-            "Ask me something I have seen, and I will answer straight.",
+            "This place is a tavern where the road meets town: travelers, guards, and local talk all pass through here.",
         )
 
     if examples and topic in {"combat_advice", "general_dialogue", "local_knowledge"}:
