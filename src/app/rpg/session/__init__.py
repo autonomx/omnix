@@ -23,6 +23,14 @@ def _install_optional_fast_runtime_hooks() -> None:
         # Runtime hook installation must never block normal session imports.
         return
 
+    try:
+        from .fast_combat_presentation_hook import install_fast_combat_presentation_hook
+
+        install_fast_combat_presentation_hook()
+    except Exception:
+        # Presentation hook installation must never block normal session imports.
+        return
+
 
 _install_optional_fast_runtime_hooks()
 
