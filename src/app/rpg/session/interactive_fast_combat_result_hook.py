@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.abc
 import importlib.machinery
 import sys
+from functools import wraps
 from types import ModuleType
 from typing import Any, Dict
 
@@ -88,11 +89,16 @@ def _patch_interactive_module(module: ModuleType) -> bool:
     if not callable(original):
         return False
 
+    @wraps(original)
     def _wrapped_apply_turn(*args: Any, **kwargs: Any) -> Any:
         result = original(*args, **kwargs)
         if isinstance(result, dict):
             return normalize_interactive_fast_combat_result(result)
         return result
+
+    _wrapped_apply_turn.__module__ = getattr(original, "__module__", _INTERACTIVE_MODULE)
+    _wrapped_apply_turn.__name__ = getattr(original, "__name__", "apply_turn")
+    _wrapped_apply_turn.__qualname__ = getattr(original, "__qualname__", "apply_turn")
 
     setattr(module, _ORIGINAL_APPLY_TURN_ATTR, original)
     setattr(module, "apply_turn", _wrapped_apply_turn)
