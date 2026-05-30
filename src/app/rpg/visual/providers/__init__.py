@@ -6,7 +6,6 @@ from app.shared import load_settings
 
 from .base import BaseImageProvider, ImageGenerationResult
 from .disabled_provider import DisabledImageProvider
-from .flux_klein_provider import FluxKleinImageProvider
 from .registry import (
     build_visual_provider,
     get_visual_provider_runtime_validator,
@@ -21,6 +20,14 @@ _IMAGE_PROVIDER_CACHE: Dict[str, Any] = {
     "instance": None,
     "provider_key": None,
 }
+
+
+def __getattr__(name: str) -> Any:
+    if name == "FluxKleinImageProvider":
+        from .flux_klein_provider import FluxKleinImageProvider
+
+        return FluxKleinImageProvider
+    raise AttributeError(name)
 
 
 def _visual_settings() -> Dict[str, Any]:
