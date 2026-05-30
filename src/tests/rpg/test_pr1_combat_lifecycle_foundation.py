@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.rpg.session.combat_lifecycle import (
     build_combat_lifecycle_snapshot,
+    build_enemy_turn_resolution,
     enrich_combat_lifecycle_result,
 )
 from app.rpg.session.interactive_fast_combat_result_hook import (
@@ -45,13 +46,14 @@ def test_pr1_builds_combat_lifecycle_snapshot_from_fast_combat_delta():
     assert lifecycle["source"] == "pr1_combat_lifecycle_foundation"
     assert lifecycle["initiative"]["order"] == ["player", "enemy:road_bandit"]
     assert lifecycle["initiative"]["active_actor_id"] == "player"
-    assert lifecycle["initiative"]["next_actor_id"] == "enemy:road_bandit"
-    assert lifecycle["initiative"]["turn_phase"] == "awaiting_enemy_turn"
-    assert lifecycle["enemy_turn"]["pending"] is True
+    assert lifecycle["initiative"]["next_actor_id"] == "player"
+    assert lifecycle["initiative"]["turn_phase"] == "player_turn_ready"
+    assert lifecycle["enemy_turn"]["pending"] is False
+    assert lifecycle["enemy_turn"]["resolved"] is True
     assert lifecycle["enemy_turn"]["actor_id"] == "enemy:road_bandit"
 
     log = lifecycle["combat_log"]
-    assert len(log) == 1
+    assert len(log) == 2
     assert log[0]["schema"] == "combat_log_entry_v1"
     assert log[0]["actor_id"] == "player"
     assert log[0]["target_id"] == "enemy:road_bandit"
@@ -59,8 +61,38 @@ def test_pr1_builds_combat_lifecycle_snapshot_from_fast_combat_delta():
     assert log[0]["target_hp_before"] == 4
     assert log[0]["target_hp_after"] == 3
     assert log[0]["defeated"] is False
+    assert log[1]["phase"] == "enemy_action"
+    assert log[1]["source"] == "deterministic_enemy_turn_skeleton_v1"
+    assert log[1]["actor_id"] == "enemy:road_bandit"
+    assert log[1]["target_id"] == "player"
+    assert log[1]["damage_applied"] == 0
     assert lifecycle["progression_hooks"]["xp_pending"] is False
     assert lifecycle["progression_hooks"]["loot_pending"] is False
+
+
+def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
+    lifecycle = {
+        "initiative": {
+            "schema": "combat_initiative_v1",
+            "next_actor_id": "enemy:road_bandit",
+            "round_index": 2,
+        },
+        "enemy_turn": {
+            "schema": "enemy_turn_skeleton_v1",
+            "pending": True,
+            "actor_id": "enemy:road_bandit",
+        },
+    }
+
+    resolution = build_enemy_turn_resolution(lifecycle)
+
+    assert resolution["schema"] == "enemy_turn_resolution_v1"
+    assert resolution["resolved"] is True
+    assert resolution["pending"] is False
+    assert resolution["actor_id"] == "enemy:road_bandit"
+    assert resolution["combat_log_entry"]["phase"] == "enemy_action"
+    assert resolution["combat_log_entry"]["source"] == "deterministic_enemy_turn_skeleton_v1"
+    assert resolution["combat_log_entry"]["damage_applied"] == 0
 
 
 def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
@@ -72,6 +104,7 @@ def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
     assert lifecycle["enemy_turn"]["reason"] == "combat_ended"
     assert lifecycle["combat_log"][0]["defeated"] is True
     assert lifecycle["combat_log"][0]["combat_ended"] is True
+    assert len(lifecycle["combat_log"]) == 1
     assert lifecycle["progression_hooks"]["xp_pending"] is True
     assert lifecycle["progression_hooks"]["loot_pending"] is True
     assert lifecycle["progression_hooks"]["resolved"] is False
@@ -82,7 +115,8 @@ def test_pr1_enriches_result_and_nested_payloads_with_lifecycle_metadata():
 
     assert enriched["combat_lifecycle"]["schema"] == "combat_lifecycle_v1"
     assert enriched["combat_log"][0]["damage_applied"] == 1
-    assert enriched["result"]["combat_lifecycle"]["initiative"]["next_actor_id"] == "enemy:road_bandit"
+    assert enriched["combat_log"][1]["phase"] == "enemy_action"
+    assert enriched["result"]["combat_lifecycle"]["initiative"]["turn_phase"] == "player_turn_ready"
     assert enriched["combat_narration_payload"]["combat_lifecycle"]["schema"] == "combat_lifecycle_v1"
 
 
@@ -91,6 +125,8 @@ def test_pr1_interactive_normalizer_preserves_fast_narration_and_adds_lifecycle(
 
     assert normalized["narration_payload"]["source"] == "deterministic_combat_fast_summary"
     assert normalized["narration_payload"]["narration"] == "You hit the bandit for 1 damage. The bandit has 3 HP remaining."
-    assert normalized["combat_lifecycle"]["initiative"]["turn_phase"] == "awaiting_enemy_turn"
+    assert normalized["combat_lifecycle"]["initiative"]["turn_phase"] == "player_turn_ready"
+    assert normalized["combat_lifecycle"]["enemy_turn"]["resolved"] is True
     assert normalized["combat_log"][0]["damage_applied"] == 1
+    assert normalized["combat_log"][1]["phase"] == "enemy_action"
     assert normalized["result"]["combat_log"][0]["target_hp_after"] == 3
