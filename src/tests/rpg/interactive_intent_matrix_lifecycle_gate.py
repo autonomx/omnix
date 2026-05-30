@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, Mapping, Sequence
 
@@ -20,6 +21,7 @@ from tests.rpg.combat_lifecycle_matrix_assertions import (  # noqa: E402
 )
 
 GATED_MATRIX_VERSION = "interactive_intent_matrix_lifecycle_gate_v1"
+DEFAULT_ZIP_NAME = "interactive-intent-matrix.zip"
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -37,6 +39,23 @@ def _combat_lifecycle_failures(result: Mapping[str, Any]) -> list[str]:
         turns = [_d(turn) for turn in _d(item.get("result")).get("turns") or []]
         failures.extend(validate_combat_lifecycle_matrix_turns(turns))
     return failures
+
+
+def zip_matrix_output_root(output_root: Path, *, zip_name: str = DEFAULT_ZIP_NAME) -> Path:
+    """Zip an interactive matrix output directory next to that directory."""
+
+    output_root = Path(output_root)
+    if not output_root.exists() or not output_root.is_dir():
+        raise ValueError(f"matrix_output_root_not_directory: {output_root}")
+    zip_path = output_root.with_name(zip_name)
+    if zip_path.exists():
+        zip_path.unlink()
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(output_root.rglob("*")):
+            if path == zip_path or not path.is_file():
+                continue
+            archive.write(path, path.relative_to(output_root).as_posix())
+    return zip_path
 
 
 def apply_lifecycle_gate(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,6 +115,13 @@ def run_intent_matrix_with_lifecycle_gate(
             json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True, default=str),
             encoding="utf-8",
         )
+        zip_path = zip_matrix_output_root(root)
+        summary["zip_path"] = str(zip_path)
+        (root / "interactive-intent-matrix-summary.json").write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True, default=str),
+            encoding="utf-8",
+        )
+    result["summary"] = summary
     return result
 
 
