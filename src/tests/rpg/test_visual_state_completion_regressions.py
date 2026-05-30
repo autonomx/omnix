@@ -9,6 +9,9 @@ from app.rpg.presentation.visual_state import (
 from app.rpg.visual.worker import _complete_character_portrait
 
 
+VALID_SCENE_ID = "loc:tavern"
+
+
 def test_complete_character_portrait_persists_public_url_and_local_path():
     simulation_state = ensure_visual_state({
         "presentation_state": {
@@ -47,24 +50,24 @@ def test_append_scene_illustration_replaces_matching_event_id():
     simulation_state = append_scene_illustration(
         simulation_state,
         {
-            "scene_id": "loc_tavern",
+            "scene_id": VALID_SCENE_ID,
             "event_id": "scene:req1",
             "title": "The Rusty Flagon Tavern",
             "image_url": "/generated-images/old.png",
             "local_path": "resources/data/generated_images/old.png",
-            "asset_id": "scene_illustration:loc_tavern:1:111",
+            "asset_id": f"scene_illustration:{VALID_SCENE_ID}:1:111",
             "status": "complete",
         },
     )
     simulation_state = append_scene_illustration(
         simulation_state,
         {
-            "scene_id": "loc_tavern",
+            "scene_id": VALID_SCENE_ID,
             "event_id": "scene:req1",
             "title": "The Rusty Flagon Tavern",
             "image_url": "/generated-images/new.png",
             "local_path": "resources/data/generated_images/new.png",
-            "asset_id": "scene_illustration:loc_tavern:1:111",
+            "asset_id": f"scene_illustration:{VALID_SCENE_ID}:1:111",
             "status": "complete",
         },
     )
@@ -82,7 +85,7 @@ def test_append_visual_asset_replaces_matching_asset_id():
         simulation_state,
         build_visual_asset_record(
             kind="scene_illustration",
-            target_id="loc_tavern",
+            target_id=VALID_SCENE_ID,
             version=1,
             seed=111,
             style="rpg-scene",
@@ -98,7 +101,7 @@ def test_append_visual_asset_replaces_matching_asset_id():
         simulation_state,
         build_visual_asset_record(
             kind="scene_illustration",
-            target_id="loc_tavern",
+            target_id=VALID_SCENE_ID,
             version=1,
             seed=111,
             style="rpg-scene",
