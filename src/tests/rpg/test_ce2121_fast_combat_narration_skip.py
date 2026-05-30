@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+import sys
+
 from app.rpg.session.fast_combat_narration_skip import (
     force_install_fast_combat_narration_skip_for_tests,
 )
@@ -61,6 +64,24 @@ def test_ce2122_matrix_shaped_fast_direct_marker_bypasses_provider(monkeypatch):
     assert result["combat_narration_skipped_for_fast_mode"] is True
     assert result["combat_narration_payload"]["source"] == "deterministic_combat_fast_summary"
     assert result["llm_called"] is False
+
+
+def test_ce2123_install_before_runtime_import_patches_after_runtime_load():
+    import app.rpg.session.fast_combat_narration_skip as hook
+
+    runtime_module = importlib.import_module("app.rpg.session.runtime")
+    original = getattr(runtime_module, hook._ORIGINAL_ATTR, None)
+    if callable(original):
+        setattr(runtime_module, "_apply_combat_narration_if_needed", original)
+    if hasattr(runtime_module, hook._PATCH_ATTR):
+        setattr(runtime_module, hook._PATCH_ATTR, False)
+
+    sys.modules.pop("app.rpg.session.runtime", None)
+    setattr(sys, hook._POST_IMPORT_FINDER_ATTR, False)
+    hook.install_fast_combat_narration_skip()
+
+    reloaded_runtime = importlib.import_module("app.rpg.session.runtime")
+    assert getattr(reloaded_runtime, hook._PATCH_ATTR, False) is True
 
 
 def test_ce2121_non_fast_combat_narration_still_calls_original_provider(monkeypatch):
