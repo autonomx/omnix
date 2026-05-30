@@ -143,8 +143,8 @@ def enrich_combat_lifecycle_result(result: Dict[str, Any]) -> Dict[str, Any]:
         return result
     result["combat_lifecycle"] = lifecycle
     result["combat_log"] = lifecycle.get("combat_log", [])
-    nested = _d(result.get("result"))
-    if nested:
+    if "result" in result:
+        nested = _d(result.get("result"))
         nested["combat_lifecycle"] = lifecycle
         nested["combat_log"] = lifecycle.get("combat_log", [])
         result["result"] = nested
