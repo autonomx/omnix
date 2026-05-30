@@ -76,18 +76,19 @@ def _remove_unsupported_combat_claims(validation: Dict[str, Any]) -> Dict[str, A
     validation = _safe_dict(validation)
     if not validation:
         return validation
+    original_violations = _safe_list(validation.get("violations"))
     violations = [
         violation
-        for violation in _safe_list(validation.get("violations"))
+        for violation in original_violations
         if _safe_dict(violation).get("code") != "unsupported_combat_claim"
     ]
-    if len(violations) == len(_safe_list(validation.get("violations"))):
+    if len(violations) == len(original_violations):
         return validation
     validation["violations"] = violations
     validation["fast_combat_delta_supported"] = True
     validation["fast_combat_delta_support_source"] = "deterministic_combat_fast_summary"
+    validation["ok"] = not violations
     if not violations:
-        validation["ok"] = True
         validation["fallback_used"] = False
         validation["fallback_source"] = "deterministic_combat_fast_summary"
         validation["selected_candidate"] = "deterministic_combat_fast_summary"
@@ -108,11 +109,11 @@ def repair_fast_combat_grounding_validation(result: Dict[str, Any]) -> Dict[str,
     if not narration:
         return result
 
-    containers = [result]
     nested = _safe_dict(result.get("result"))
+    resolved = _safe_dict(result.get("resolved_result")) or _safe_dict(nested.get("resolved_result"))
+    containers = [result]
     if nested:
         containers.append(nested)
-    resolved = _safe_dict(result.get("resolved_result")) or _safe_dict(nested.get("resolved_result"))
     if resolved:
         containers.append(resolved)
 
@@ -135,6 +136,15 @@ def repair_fast_combat_grounding_validation(result: Dict[str, Any]) -> Dict[str,
 
         if _safe_str(container.get("narration")).strip().casefold() == "the confrontation remains tense, but no injury is resolved.":
             container["narration"] = narration
+
+    if nested:
+        result["result"] = nested
+    if resolved and result.get("resolved_result") is not resolved:
+        if "resolved_result" in result:
+            result["resolved_result"] = resolved
+        elif nested and "resolved_result" in nested:
+            nested["resolved_result"] = resolved
+            result["result"] = nested
 
     result["fast_combat_grounding_delta_repair"] = {
         "applied": True,
