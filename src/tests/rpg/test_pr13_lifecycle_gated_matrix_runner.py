@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import zipfile
 from types import SimpleNamespace
 
 from tests.rpg import interactive_intent_matrix as matrix
-from tests.rpg.interactive_intent_matrix_lifecycle_gate import apply_lifecycle_gate
+from tests.rpg.interactive_intent_matrix_lifecycle_gate import (
+    apply_lifecycle_gate,
+    zip_matrix_output_root,
+)
 
 
 def _lifecycle_turn(*, turn: int, before: int, after: int, defeated: bool = False) -> dict:
@@ -118,3 +122,20 @@ def test_pr13_lifecycle_gate_preserves_non_combat_matrix_results():
     assert gated["summary"]["combat_lifecycle_gate"]["failures"] == []
     assert gated["summary"]["failed"] == []
     assert gated["summary"]["passed"] == 8
+
+
+def test_pr132_zips_matrix_output_root_next_to_output_directory(tmp_path):
+    output_root = tmp_path / "interactive-intent-matrix"
+    scenario_dir = output_root / "combat_basic_attack"
+    scenario_dir.mkdir(parents=True)
+    (output_root / "interactive-intent-matrix-summary.json").write_text("{}", encoding="utf-8")
+    (scenario_dir / "interactive-transcript.json").write_text("[]", encoding="utf-8")
+
+    zip_path = zip_matrix_output_root(output_root)
+
+    assert zip_path == tmp_path / "interactive-intent-matrix.zip"
+    assert zip_path.exists()
+    with zipfile.ZipFile(zip_path) as archive:
+        names = set(archive.namelist())
+    assert "interactive-intent-matrix-summary.json" in names
+    assert "combat_basic_attack/interactive-transcript.json" in names
