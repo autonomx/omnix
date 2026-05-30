@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import importlib.abc
+import importlib.machinery
+import sys
+from types import ModuleType
 from typing import Any, Dict
 
 _FAST_DIRECT_SOURCES = {
     "ce211_fast_direct_runtime_budget_v1",
     "ce212_fast_direct_runtime_budget_v1",
 }
+_RUNTIME_MODULE = "app.rpg.session.runtime"
+_POST_IMPORT_FINDER_ATTR = "_ce212_fast_combat_post_import_finder_installed"
 _PATCH_ATTR = "_ce212_fast_combat_narration_skip_installed"
 _ORIGINAL_ATTR = "_ce212_original_apply_combat_narration_if_needed"
 
@@ -122,10 +128,7 @@ def _apply_fast_skip(
     return payload
 
 
-def install_fast_combat_narration_skip() -> bool:
-    """Install a narrow runtime hook that skips blocking combat LLM narration in fast-direct mode."""
-    from app.rpg.session import runtime as runtime_module
-
+def _patch_runtime_module(runtime_module: ModuleType) -> bool:
     if getattr(runtime_module, _PATCH_ATTR, False):
         return False
 
@@ -154,13 +157,57 @@ def install_fast_combat_narration_skip() -> bool:
     return True
 
 
+class _RuntimePostImportLoader(importlib.abc.Loader):
+    def __init__(self, wrapped_loader: importlib.abc.Loader):
+        self._wrapped_loader = wrapped_loader
+
+    def create_module(self, spec):  # type: ignore[no-untyped-def]
+        create_module = getattr(self._wrapped_loader, "create_module", None)
+        if callable(create_module):
+            return create_module(spec)
+        return None
+
+    def exec_module(self, module):  # type: ignore[no-untyped-def]
+        self._wrapped_loader.exec_module(module)  # type: ignore[attr-defined]
+        if module.__name__ == _RUNTIME_MODULE:
+            _patch_runtime_module(module)
+
+
+class _RuntimePostImportFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):  # type: ignore[no-untyped-def]
+        if fullname != _RUNTIME_MODULE:
+            return None
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
+        if spec is None or spec.loader is None or isinstance(spec.loader, _RuntimePostImportLoader):
+            return spec
+        spec.loader = _RuntimePostImportLoader(spec.loader)
+        return spec
+
+
+def _install_post_import_finder() -> bool:
+    if getattr(sys, _POST_IMPORT_FINDER_ATTR, False):
+        return False
+    sys.meta_path.insert(0, _RuntimePostImportFinder())
+    setattr(sys, _POST_IMPORT_FINDER_ATTR, True)
+    return True
+
+
+def install_fast_combat_narration_skip() -> bool:
+    """Install a narrow runtime hook that skips blocking combat LLM narration in fast-direct mode."""
+    runtime_module = sys.modules.get(_RUNTIME_MODULE)
+    if isinstance(runtime_module, ModuleType) and _patch_runtime_module(runtime_module):
+        return True
+    return _install_post_import_finder()
+
+
 # Keep a direct callable for tests and explicit reinstallation.
 def force_install_fast_combat_narration_skip_for_tests() -> bool:
-    from app.rpg.session import runtime as runtime_module
-
-    original = getattr(runtime_module, _ORIGINAL_ATTR, None)
-    if callable(original):
-        setattr(runtime_module, "_apply_combat_narration_if_needed", original)
-    if hasattr(runtime_module, _PATCH_ATTR):
-        setattr(runtime_module, _PATCH_ATTR, False)
+    runtime_module = sys.modules.get(_RUNTIME_MODULE)
+    if isinstance(runtime_module, ModuleType):
+        original = getattr(runtime_module, _ORIGINAL_ATTR, None)
+        if callable(original):
+            setattr(runtime_module, "_apply_combat_narration_if_needed", original)
+        if hasattr(runtime_module, _PATCH_ATTR):
+            setattr(runtime_module, _PATCH_ATTR, False)
+        return _patch_runtime_module(runtime_module)
     return install_fast_combat_narration_skip()
