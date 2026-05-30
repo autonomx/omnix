@@ -208,7 +208,6 @@ def _run_one_manual_turn(
                     result=result,
                 )
 
-            # Log to console if requested
             if console_llm:
                 with traced_manual_stage("manual_harness_console_llm_log"):
                     _log_llm_response(
@@ -221,7 +220,6 @@ def _run_one_manual_turn(
                         max_chars=console_llm_max_chars,
                     )
 
-            # Emit to output artifacts
             with traced_manual_stage("manual_harness_emit_artifacts"):
                 output_artifacts._emit(f"TURN {turn_index}", channel=target_channel)
                 output_artifacts._emit(f"PLAYER: {player_input}", channel=target_channel)
@@ -300,7 +298,6 @@ def _run_one_manual_turn(
                         _safe_dict(turn_summary["raw_narration_payload"]).get("runtime_narration_diagnostics")
                     )
 
-            # Apply sanitization for summary output
             with traced_manual_stage("manual_harness_sanitize_turn_for_summary"):
                 turn_summary = sanitize_turn_for_summary(
                     turn_summary,
@@ -308,9 +305,6 @@ def _run_one_manual_turn(
                 )
 
             if include_raw_result:
-                # The sanitizer is designed for compact manual scenario summaries.
-                # Autoplay needs the raw apply_turn result for diagnostics and
-                # progress evaluation, so restore these fields after sanitization.
                 with traced_manual_stage("manual_harness_restore_raw_result_after_sanitize"):
                     turn_summary["raw_result"] = result
                     turn_summary["raw_narration"] = _extract_narration(result)
@@ -369,24 +363,212 @@ def _run_one_manual_turn(
 
 
 def _extract_narration(result: Dict[str, Any]) -> str:
-    # preserved legacy helpers are defined below in the existing module
-    result = _safe_dict(result)
-    for key in ("narration", "final_narration", "summary"):
-        value = _safe_str(result.get(key)).strip()
-        if value:
-            return value
-    nested = _safe_dict(result.get("result"))
-    for key in ("narration", "final_narration", "summary"):
-        value = _safe_str(nested.get(key)).strip()
-        if value:
-            return value
+    """Extract narration text from result."""
+    for key in (
+        "narration",
+        "narrative",
+        "text",
+        "message",
+        "rendered_narration",
+        "deterministic_fallback_narration",
+    ):
+        value = result.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    result_sub = _safe_dict(result.get("result"))
+    for key in (
+        "narration",
+        "narrative",
+        "text",
+        "message",
+        "rendered_narration",
+        "deterministic_fallback_narration",
+    ):
+        value = result_sub.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    session = _safe_dict(result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    for key in ("last_narration", "last_turn_narration"):
+        value = runtime_state.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    authoritative = _safe_dict(result.get("authoritative"))
+    for key in ("summary", "deterministic_fallback_narration"):
+        value = authoritative.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
     return ""
 
 
-def _extract_llm_console_response(result: Dict[str, Any]) -> Dict[str, str]:
-    result = _safe_dict(result)
-    npc = _safe_dict(result.get("npc") or _safe_dict(result.get("result")).get("npc"))
+def _compact_json(value: Any) -> str:
+    """Compact JSON representation."""
+    return json.dumps(value, indent=2, ensure_ascii=False, default=str)
+
+
+def _extract_visible_interaction_reason(result: Dict[str, Any]) -> str:
+    """Extract visible interaction reason from result."""
+    result_sub = _safe_dict(result.get("result"))
+    interaction_result = _safe_dict(result_sub.get("interaction_result"))
+    if interaction_result:
+        reason = _safe_str(interaction_result.get("reason"))
+        if reason and reason.strip() and reason not in ("", "unknown"):
+            return reason.strip()
+    return ""
+
+
+def _one_line_text(value: Any, *, max_chars: int = 1200) -> str:
+    text = "" if value is None else str(value)
+    text = "\n".join(line.rstrip() for line in text.splitlines()).strip()
+    if max_chars > 0 and len(text) > max_chars:
+        return text[:max_chars].rstrip() + "..."
+    return text
+
+
+def _extract_raw_llm_text(result: Dict[str, Any]) -> str:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    first_call_semantic = _safe_dict(result.get("first_call_semantic_advisory"))
+    first_call_action = _safe_dict(result.get("first_call_action_advisory"))
+    raw_text = (
+        raw_payload.get("raw_llm_narrative")
+        or raw_payload.get("raw_llm_text")
+        or result_sub.get("raw_llm_narrative")
+        or result_sub.get("raw_llm_text")
+        or _safe_dict(first_call_semantic.get("first_call_grounding_diagnostics")).get("raw_text")
+        or _safe_dict(first_call_action.get("first_call_grounding_diagnostics")).get("raw_text")
+    )
+    if isinstance(raw_text, dict):
+        return _compact_json(raw_text)
+    return _safe_str(raw_text)
+
+
+def _extract_raw_llm_request(result: Dict[str, Any]) -> str:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    diagnostics = _extract_first_call_grounding_diagnostics(result)
+    raw_request = (
+        raw_payload.get("raw_llm_request")
+        or result_sub.get("raw_llm_request")
+        or diagnostics.get("prompt")
+        or diagnostics.get("prompt_preview")
+    )
+    if isinstance(raw_request, dict):
+        return _compact_json(raw_request)
+    return _safe_str(raw_request)
+
+
+def _extract_llm_console_response(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    raw_payload = _safe_dict(result_sub.get("raw_llm_narrative"))
+    narration_json = _safe_dict(raw_payload.get("narration_json"))
+    npc = _safe_dict(narration_json.get("npc"))
+
+    final_narration = _extract_narration(result)
+    json_narration = _safe_str(narration_json.get("narration"))
+    json_action = _safe_str(narration_json.get("action"))
+    npc_speaker = _safe_str(npc.get("speaker"))
+    npc_line = _safe_str(npc.get("line"))
+
+    first_call_visible = _safe_dict(
+        result.get("first_call_visible_response")
+        or result_sub.get("first_call_visible_response")
+        or result.get("visible_response")
+        or result_sub.get("visible_response")
+    )
+    first_call_npc = _safe_dict(first_call_visible.get("npc") or result.get("npc"))
+    if not json_narration:
+        json_narration = _safe_str(first_call_visible.get("narration"))
+    if not npc_speaker:
+        npc_speaker = _safe_str(first_call_npc.get("speaker"))
+    if not npc_line:
+        npc_line = _safe_str(first_call_npc.get("line"))
+
+    raw_text = _extract_raw_llm_text(result)
+    raw_request = _extract_raw_llm_request(result)
+
     return {
-        "npc_speaker": _safe_str(npc.get("speaker")),
-        "npc_line": _safe_str(npc.get("line")),
+        "final": final_narration,
+        "json_narration": json_narration,
+        "json_action": json_action,
+        "npc_speaker": npc_speaker,
+        "npc_line": npc_line,
+        "raw": raw_text,
+        "raw_request": raw_request,
+        "used_llm": result_sub.get("used_llm") or result.get("llm_called"),
+        "narration_status": result_sub.get("narration_status") or result.get("llm_purpose"),
     }
+
+
+def _log_llm_response(
+    *,
+    scope: str,
+    label: str,
+    turn: int,
+    player_input: str,
+    result: Dict[str, Any],
+    raw: bool = True,
+    max_chars: int = 1200,
+) -> None:
+    """Log LLM response to console for debugging."""
+    payload = _extract_llm_console_response(result)
+    final_text = _one_line_text(payload.get("final"), max_chars=max_chars)
+    json_narration = _one_line_text(payload.get("json_narration"), max_chars=max_chars)
+    json_action = _one_line_text(payload.get("json_action"), max_chars=max_chars)
+
+    visible_interaction_reason = _extract_visible_interaction_reason(result)
+
+    if visible_interaction_reason and _safe_str(json_action) in {
+        "",
+        "unknown",
+        "unknown_item",
+        "item_not_found",
+        "Action: You act.",
+        "You act.",
+    }:
+        json_action = visible_interaction_reason
+
+    if visible_interaction_reason and (
+        _safe_str(json_action).startswith("Result: unknown_item")
+        or _safe_str(json_action).startswith("Result: item_not_found")
+    ):
+        json_action = visible_interaction_reason
+    npc_speaker = _safe_str(payload.get("npc_speaker"))
+    npc_line = _one_line_text(payload.get("npc_line"), max_chars=max_chars)
+    raw_text = _one_line_text(payload.get("raw"), max_chars=max_chars)
+    raw_request = _one_line_text(payload.get("raw_request"), max_chars=max_chars)
+
+    prefix = f"[manual][llm][{scope}:{label}][turn {turn}]"
+    _timestamped_print("", flush=True)
+    _timestamped_print(f"{prefix} PLAYER: {player_input}", flush=True)
+    _timestamped_print(
+        f"{prefix} used_llm={payload.get('used_llm')} "
+        f"narration_status={payload.get('narration_status')}",
+        flush=True,
+    )
+    if raw and raw_request:
+        _timestamped_print(f"{prefix} RAW LLM REQUEST:", flush=True)
+        _timestamped_print(raw_request, flush=True)
+    if final_text:
+        _timestamped_print(f"{prefix} FINAL RESPONSE:", flush=True)
+        _timestamped_print(final_text, flush=True)
+        if npc_speaker and npc_line and npc_line not in final_text:
+            _timestamped_print(f'{npc_speaker}: "{npc_line}"', flush=True)
+    elif json_narration or json_action or npc_line:
+        _timestamped_print(f"{prefix} STRUCTURED RESPONSE:", flush=True)
+        if json_narration:
+            _timestamped_print(json_narration, flush=True)
+        if json_action:
+            _timestamped_print(f"Result: {json_action}", flush=True)
+        if npc_speaker and npc_line:
+            _timestamped_print(f'{npc_speaker}: "{npc_line}"', flush=True)
+    else:
+        _timestamped_print(f"{prefix} FINAL RESPONSE: [no narration found]", flush=True)
+    if raw and raw_text:
+        _timestamped_print(f"{prefix} RAW LLM RESPONSE:", flush=True)
+        _timestamped_print(raw_text, flush=True)
+    _timestamped_print("", flush=True)
