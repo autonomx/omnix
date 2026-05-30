@@ -103,6 +103,7 @@ def test_ce2124_apply_turn_fast_combat_skip_context_marks_payload(monkeypatch):
         )
 
     monkeypatch.setattr(runtime, "apply_turn", fake_apply_turn)
+    monkeypatch.delattr(runtime, hook._ORIGINAL_APPLY_TURN_ATTR, raising=False)
     setattr(runtime, hook._PATCH_ATTR, False)
     hook.force_install_fast_combat_narration_skip_for_tests()
 
