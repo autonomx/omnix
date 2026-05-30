@@ -3,7 +3,10 @@ from __future__ import annotations
 from types import ModuleType
 from typing import Any, Dict
 
-from app.rpg.session.fast_combat_presentation import deterministic_fast_combat_payload
+from app.rpg.session.fast_combat_presentation import (
+    deterministic_fast_combat_payload,
+    repair_fast_combat_grounding_validation,
+)
 
 _PATCH_ATTR = "_pr02_fast_combat_presentation_hook_installed"
 _ORIGINAL_SELECTOR_ATTR = "_pr02_original_select_final_visible_presentation"
@@ -42,7 +45,8 @@ def install_fast_combat_presentation_hook(runtime_module: ModuleType | None = No
     Provider combat narration still requires validation ok=True in runtime. Fast
     combat is different: provider narration is intentionally skipped, but the
     deterministic payload is backed by a combat delta. This hook lets that backed
-    deterministic payload win over stale deferred fallback text.
+    deterministic payload win over stale deferred fallback text and cleans false
+    unsupported-combat-claim grounding validation rows for the same backed delta.
     """
 
     if runtime_module is None:
@@ -63,14 +67,15 @@ def install_fast_combat_presentation_hook(runtime_module: ModuleType | None = No
         prior_npc: Dict[str, Any],
         prior_llm_called: bool,
     ) -> Dict[str, Any]:
+        repaired_result = repair_fast_combat_grounding_validation(final_result)
         fast_combat = _fast_combat_selection(
-            final_result,
+            repaired_result,
             runtime_narration_payload=runtime_narration_payload,
         )
         if fast_combat:
             return fast_combat
         return original(
-            final_result,
+            repaired_result,
             runtime_narration_payload=runtime_narration_payload,
             prior_narration=prior_narration,
             prior_npc=prior_npc,
