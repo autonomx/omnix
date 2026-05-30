@@ -93,7 +93,7 @@ def test_ce2124_apply_turn_fast_combat_skip_context_marks_payload(monkeypatch):
     force_install_fast_combat_narration_skip_for_tests()
     captured = {}
 
-    def fake_original_apply_turn(*args, **kwargs):
+    def fake_apply_turn(*args, **kwargs):
         captured["performance_override"] = kwargs.get("performance_override")
         captured["action"] = kwargs.get("action")
         return runtime._apply_combat_narration_if_needed(
@@ -102,7 +102,8 @@ def test_ce2124_apply_turn_fast_combat_skip_context_marks_payload(monkeypatch):
             combat_state={"active": True},
         )
 
-    monkeypatch.setattr(runtime, hook._ORIGINAL_APPLY_TURN_ATTR, fake_original_apply_turn)
+    monkeypatch.setattr(runtime, "apply_turn", fake_apply_turn)
+    setattr(runtime, hook._PATCH_ATTR, False)
     hook.force_install_fast_combat_narration_skip_for_tests()
 
     result = runtime.apply_turn(
