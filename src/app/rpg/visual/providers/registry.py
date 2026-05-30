@@ -1,29 +1,32 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Callable, Dict, List, Tuple, Type
+from typing import Any, Callable, Dict, List, Tuple
 
 from .base import BaseImageProvider
 from .disabled_provider import DisabledImageProvider
-from .flux_klein_provider import FluxKleinImageProvider
 
 ProviderFactory = Callable[[Dict[str, Any]], BaseImageProvider]
 
 
-def _provider_ctor(provider_cls: Type[BaseImageProvider]) -> ProviderFactory:
-    def _factory(config: Dict[str, Any]) -> BaseImageProvider:
-        return provider_cls(config or {})
-    return _factory
+def _disabled_provider_factory(config: Dict[str, Any]) -> BaseImageProvider:
+    return DisabledImageProvider(config or {})
+
+
+def _flux_klein_provider_factory(config: Dict[str, Any]) -> BaseImageProvider:
+    from .flux_klein_provider import FluxKleinImageProvider
+
+    return FluxKleinImageProvider(config or {})
 
 
 _REGISTRY: Dict[str, Dict[str, Any]] = {
     "disabled": {
-        "factory": _provider_ctor(DisabledImageProvider),
+        "factory": _disabled_provider_factory,
         "label": "Disabled",
         "runtime_validator": None,
     },
     "flux_klein": {
-        "factory": _provider_ctor(FluxKleinImageProvider),
+        "factory": _flux_klein_provider_factory,
         "label": "FLUX.2 [klein] 4B",
         "runtime_validator": "flux_klein",
     },
