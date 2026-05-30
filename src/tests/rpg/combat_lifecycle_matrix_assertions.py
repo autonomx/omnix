@@ -59,12 +59,28 @@ def combat_log_from_matrix_turn(turn: Mapping[str, Any]) -> List[Dict[str, Any]]
     return [_d(row) for row in rows]
 
 
-def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Validate PR.1 lifecycle metadata on combat matrix turns.
+def _combat_result_from_matrix_turn(turn: Mapping[str, Any]) -> Dict[str, Any]:
+    turn = _d(turn)
+    raw = _d(turn.get("raw_result") or turn.get("result"))
+    nested = _d(raw.get("result"))
+    resolved = _d(raw.get("resolved_result") or nested.get("resolved_result"))
+    return _d(raw.get("combat_result") or nested.get("combat_result") or resolved.get("combat_result"))
 
-    This is intentionally schema-level. It does not decide combat outcomes; it
-    checks that the matrix transcript exposes lifecycle metadata consistent with
-    the already-authored combat deltas.
+
+def _is_combat_start_only_turn(turn: Mapping[str, Any]) -> bool:
+    combat = _combat_result_from_matrix_turn(turn)
+    reason = _s(combat.get("reason"))
+    if reason != "combat_started":
+        return False
+    return _i(combat.get("damage_applied"), 0) <= 0 and not bool(combat.get("defeated") or combat.get("combat_ended"))
+
+
+def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Validate PR.1 lifecycle metadata on combat matrix attack/damage turns.
+
+    The initial combat-start turn may not have a combat delta yet. PR.1 lifecycle
+    metadata is required once an attack/damage/defeat turn has a backed combat
+    delta.
     """
 
     failures: List[str] = []
@@ -75,6 +91,8 @@ def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -
         turn_number = turn.get("turn_index") or turn.get("turn")
         lifecycle = combat_lifecycle_from_matrix_turn(turn)
         if not lifecycle:
+            if _is_combat_start_only_turn(turn):
+                continue
             failures.append(f"combat lifecycle turn {turn_number}: missing combat_lifecycle_v1")
             continue
         lifecycle_turns.append(lifecycle)
