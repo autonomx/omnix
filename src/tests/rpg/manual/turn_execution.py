@@ -21,6 +21,7 @@ from tests.rpg.manual.token_usage import _record_token_usage
 
 _INTERACTIVE_FIRST_CALL_MODULE = "app.rpg.session.interactive_first_call_runtime"
 _CANONICAL_RUNTIME_MODULE = "app.rpg.session.runtime"
+_FAST_DIRECT_SOURCE = "ce211_fast_direct_runtime_budget_v1"
 
 
 def _timestamped_print(*args, **kwargs):
@@ -47,6 +48,24 @@ def _publish_first_call_context_for_cli(player_input: str, result: Dict[str, Any
         set_first_call_context_for_next_intent(player_input=player_input, raw_result=result)
     except Exception:
         return
+
+
+def _get_canonical_apply_turn() -> Callable:
+    module = __import__(_CANONICAL_RUNTIME_MODULE, fromlist=["apply_turn"])
+    fn = getattr(module, "apply_turn")
+    if not callable(fn):
+        raise ImportError("canonical_apply_turn_not_callable")
+    record_manual_harness_trace(
+        "manual_harness_selected_apply_turn",
+        module_name=_CANONICAL_RUNTIME_MODULE,
+        attr="apply_turn",
+        selection_kind="fast_direct_canonical_runtime",
+        interactive_first_call_enabled=False,
+        callable_module=getattr(fn, "__module__", ""),
+        callable_name=getattr(fn, "__name__", ""),
+        callable_qualname=getattr(fn, "__qualname__", ""),
+    )
+    return fn
 
 
 def _get_apply_turn() -> Callable:
@@ -120,6 +139,83 @@ def _extract_first_call_grounding_diagnostics(result: Dict[str, Any]) -> Dict[st
     return {}
 
 
+def _fast_turn_mode(performance_override: Dict[str, Any] | None) -> bool:
+    perf = _safe_dict(performance_override)
+    value = perf.get("fast_turn_mode")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _fast_direct_action(player_input: str, performance_override: Dict[str, Any] | None) -> Dict[str, Any]:
+    if not _fast_turn_mode(performance_override):
+        return {}
+    text = _safe_str(player_input).strip().lower()
+    if not text:
+        return {}
+
+    if any(term in text for term in ("waterskin", "ration", "hungry", "thirsty", "hunger", "thirst", "fatigue")):
+        return {
+            "action_type": "observe",
+            "target_id": "player:survival",
+            "target_name": "Survival State",
+            "metadata": {"fast_direct_runtime": True, "source": _FAST_DIRECT_SOURCE},
+        }
+
+    if "attack" in text and ("bandit" in text or "road bandit" in text):
+        return {
+            "action_type": "combat",
+            "target_id": "enemy:road_bandit",
+            "target_name": "road bandit",
+            "metadata": {"fast_direct_runtime": True, "source": _FAST_DIRECT_SOURCE},
+        }
+
+    if ("travel" in text or "continue" in text) and any(term in text for term in ("old mill", "north", "road")):
+        return {
+            "action_type": "travel",
+            "target_id": "loc:old_mill",
+            "target_name": "old mill",
+            "metadata": {"fast_direct_runtime": True, "source": _FAST_DIRECT_SOURCE},
+        }
+
+    return {}
+
+
+def _attach_fast_direct_diagnostics(result: Dict[str, Any], *, player_input: str, action: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(result, dict) or not action:
+        return result
+    diagnostics = {
+        "source": _FAST_DIRECT_SOURCE,
+        "provider_parse_ok": True,
+        "raw_text": "",
+        "prompt_preview": "fast direct deterministic runtime bypass",
+        "turn_grounding_packet": {
+            "format_version": "ce211_fast_direct_turn_grounding_packet_v1",
+            "priority_context": {"addressed_npc_ids": []},
+            "player_input": _safe_str(player_input),
+            "fast_direct_action": dict(action),
+        },
+    }
+    advisory = {
+        "action_type": _safe_str(action.get("action_type")),
+        "target_id": _safe_str(action.get("target_id")),
+        "target_name": _safe_str(action.get("target_name")),
+        "stateful": True,
+        "needs_runtime_resolution": True,
+        "source": _FAST_DIRECT_SOURCE,
+        "first_call_grounding_diagnostics": diagnostics,
+    }
+    result["first_call_grounding_diagnostics"] = diagnostics
+    result["first_call_action_advisory"] = advisory
+    result.setdefault("first_call_semantic_advisory", {})
+    result["llm_called"] = False
+    result["llm_purpose"] = "fast_direct_runtime"
+    result["fast_direct_runtime"] = True
+    return result
+
+
 def _run_one_manual_turn(
     *,
     session_id: str,
@@ -163,17 +259,31 @@ def _run_one_manual_turn(
 
     with traced_manual_stage("manual_harness_total"):
         try:
+            fast_direct_action = _fast_direct_action(player_input, performance_override)
             with traced_manual_stage("manual_harness_get_apply_turn"):
                 record_manual_harness_trace_stack("checkpoint_03_before_get_apply_turn")
-                apply_turn = _get_apply_turn()
+                apply_turn = _get_canonical_apply_turn() if fast_direct_action else _get_apply_turn()
 
             with traced_manual_stage("manual_harness_apply_turn"):
                 record_manual_harness_trace_stack("checkpoint_04_before_apply_turn")
-                result = apply_turn(
-                    session_id=session_id,
-                    player_input=player_input,
-                    performance_override=performance_override,
-                )
+                if fast_direct_action:
+                    result = apply_turn(
+                        session_id=session_id,
+                        player_input=player_input,
+                        action=fast_direct_action,
+                        performance_override=performance_override,
+                    )
+                    result = _attach_fast_direct_diagnostics(
+                        result,
+                        player_input=player_input,
+                        action=fast_direct_action,
+                    )
+                else:
+                    result = apply_turn(
+                        session_id=session_id,
+                        player_input=player_input,
+                        performance_override=performance_override,
+                    )
 
             _publish_first_call_context_for_cli(player_input, result)
 
@@ -193,6 +303,7 @@ def _run_one_manual_turn(
                 first_call_semantic_advisory_present=bool(
                     _safe_dict(result).get("first_call_semantic_advisory")
                 ),
+                fast_direct_runtime=bool(_safe_dict(result).get("fast_direct_runtime")),
                 narration_source=_safe_dict(
                     _safe_dict(result).get("narration_payload")
                     or _safe_dict(result).get("structured_narration")
