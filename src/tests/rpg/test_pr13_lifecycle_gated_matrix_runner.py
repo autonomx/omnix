@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from tests.rpg import interactive_intent_matrix as matrix
 from tests.rpg.interactive_intent_matrix_lifecycle_gate import (
     apply_lifecycle_gate,
+    matrix_output_zip_path,
     zip_matrix_output_root,
 )
 
@@ -139,3 +140,9 @@ def test_pr132_zips_matrix_output_root_next_to_output_directory(tmp_path):
         names = set(archive.namelist())
     assert "interactive-intent-matrix-summary.json" in names
     assert "combat_basic_attack/interactive-transcript.json" in names
+
+
+def test_pr133_matrix_output_zip_path_is_known_before_zip_creation(tmp_path):
+    output_root = tmp_path / "interactive-intent-matrix"
+
+    assert matrix_output_zip_path(output_root) == tmp_path / "interactive-intent-matrix.zip"
