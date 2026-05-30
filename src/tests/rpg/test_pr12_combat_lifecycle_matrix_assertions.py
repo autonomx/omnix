@@ -64,6 +64,20 @@ def _turn(*, turn: int, before: int, after: int, defeated: bool = False) -> dict
     }
 
 
+def _combat_start_turn() -> dict:
+    return {
+        "turn_index": 1,
+        "raw_result": {
+            "combat_result": {
+                "reason": "combat_started",
+                "damage_applied": 0,
+                "defeated": False,
+                "combat_ended": False,
+            }
+        },
+    }
+
+
 def test_pr12_extracts_lifecycle_from_matrix_turn():
     lifecycle = combat_lifecycle_from_matrix_turn(_turn(turn=2, before=4, after=3))
 
@@ -75,6 +89,20 @@ def test_pr12_extracts_lifecycle_from_matrix_turn():
 def test_pr12_validates_expected_lifecycle_matrix_turns():
     failures = validate_combat_lifecycle_matrix_turns(
         [
+            _turn(turn=2, before=4, after=3),
+            _turn(turn=3, before=3, after=2),
+            _turn(turn=4, before=2, after=1),
+            _turn(turn=5, before=1, after=0, defeated=True),
+        ]
+    )
+
+    assert failures == []
+
+
+def test_pr131_allows_initial_combat_started_turn_without_lifecycle():
+    failures = validate_combat_lifecycle_matrix_turns(
+        [
+            _combat_start_turn(),
             _turn(turn=2, before=4, after=3),
             _turn(turn=3, before=3, after=2),
             _turn(turn=4, before=2, after=1),
