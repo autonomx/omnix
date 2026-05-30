@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import importlib.abc
 import importlib.machinery
 import sys
@@ -14,6 +15,11 @@ _RUNTIME_MODULE = "app.rpg.session.runtime"
 _POST_IMPORT_FINDER_ATTR = "_ce212_fast_combat_post_import_finder_installed"
 _PATCH_ATTR = "_ce212_fast_combat_narration_skip_installed"
 _ORIGINAL_ATTR = "_ce212_original_apply_combat_narration_if_needed"
+_ORIGINAL_APPLY_TURN_ATTR = "_ce212_original_apply_turn_for_fast_combat_skip"
+_FAST_COMBAT_SKIP_CONTEXT: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ce212_fast_combat_skip_context",
+    default=False,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -52,7 +58,17 @@ def _contains_fast_direct_marker(value: Any, *, depth: int = 0) -> bool:
     return False
 
 
+def _action_requests_fast_combat_skip(action: Any, performance_override: Any = None) -> bool:
+    action_dict = _safe_dict(action)
+    performance = _safe_dict(performance_override)
+    if performance.get("skip_sync_combat_narration") is True or performance.get("fast_direct_runtime") is True:
+        return True
+    return _contains_fast_direct_marker(action_dict)
+
+
 def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
+    if _FAST_COMBAT_SKIP_CONTEXT.get(False):
+        return True
     payload = _safe_dict(payload)
     combat_state = _safe_dict(combat_state)
     if payload.get("skip_sync_combat_narration") or payload.get("fast_direct_runtime"):
@@ -133,6 +149,7 @@ def _patch_runtime_module(runtime_module: ModuleType) -> bool:
         return False
 
     original = getattr(runtime_module, "_apply_combat_narration_if_needed", None)
+    original_apply_turn = getattr(runtime_module, "apply_turn", None)
     if not callable(original):
         return False
 
@@ -153,6 +170,25 @@ def _patch_runtime_module(runtime_module: ModuleType) -> bool:
 
     setattr(runtime_module, _ORIGINAL_ATTR, original)
     setattr(runtime_module, "_apply_combat_narration_if_needed", _wrapped_apply_combat_narration_if_needed)
+
+    if callable(original_apply_turn):
+        def _wrapped_apply_turn(*args: Any, **kwargs: Any) -> Any:
+            action = kwargs.get("action")
+            if action is None and len(args) >= 3:
+                action = args[2]
+            performance_override = kwargs.get("performance_override")
+            should_skip = _action_requests_fast_combat_skip(action, performance_override)
+            if not should_skip:
+                return original_apply_turn(*args, **kwargs)
+            token = _FAST_COMBAT_SKIP_CONTEXT.set(True)
+            try:
+                return original_apply_turn(*args, **kwargs)
+            finally:
+                _FAST_COMBAT_SKIP_CONTEXT.reset(token)
+
+        setattr(runtime_module, _ORIGINAL_APPLY_TURN_ATTR, original_apply_turn)
+        setattr(runtime_module, "apply_turn", _wrapped_apply_turn)
+
     setattr(runtime_module, _PATCH_ATTR, True)
     return True
 
@@ -207,6 +243,9 @@ def force_install_fast_combat_narration_skip_for_tests() -> bool:
         original = getattr(runtime_module, _ORIGINAL_ATTR, None)
         if callable(original):
             setattr(runtime_module, "_apply_combat_narration_if_needed", original)
+        original_apply_turn = getattr(runtime_module, _ORIGINAL_APPLY_TURN_ATTR, None)
+        if callable(original_apply_turn):
+            setattr(runtime_module, "apply_turn", original_apply_turn)
         if hasattr(runtime_module, _PATCH_ATTR):
             setattr(runtime_module, _PATCH_ATTR, False)
         return _patch_runtime_module(runtime_module)
