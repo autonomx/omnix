@@ -7,6 +7,10 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
@@ -66,3 +70,75 @@ def prefer_fast_combat_narration(result: Dict[str, Any], fallback: Any = "") -> 
     if narration:
         return narration
     return _safe_str(fallback).strip()
+
+
+def _remove_unsupported_combat_claims(validation: Dict[str, Any]) -> Dict[str, Any]:
+    validation = _safe_dict(validation)
+    if not validation:
+        return validation
+    violations = [
+        violation
+        for violation in _safe_list(validation.get("violations"))
+        if _safe_dict(violation).get("code") != "unsupported_combat_claim"
+    ]
+    if len(violations) == len(_safe_list(validation.get("violations"))):
+        return validation
+    validation["violations"] = violations
+    validation["fast_combat_delta_supported"] = True
+    validation["fast_combat_delta_support_source"] = "deterministic_combat_fast_summary"
+    if not violations:
+        validation["ok"] = True
+        validation["fallback_used"] = False
+        validation["fallback_source"] = "deterministic_combat_fast_summary"
+        validation["selected_candidate"] = "deterministic_combat_fast_summary"
+    return validation
+
+
+def repair_fast_combat_grounding_validation(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Suppress false unsupported-combat-claim warnings backed by combat delta.
+
+    This is intentionally narrow: it only repairs grounding_validation objects
+    when the same result has deterministic_combat_fast_summary plus a valid combat
+    delta. It does not suppress unrelated grounding violations.
+    """
+
+    result = _safe_dict(result)
+    payload = deterministic_fast_combat_payload(result)
+    narration = _safe_str(payload.get("narration")).strip()
+    if not narration:
+        return result
+
+    containers = [result]
+    nested = _safe_dict(result.get("result"))
+    if nested:
+        containers.append(nested)
+    resolved = _safe_dict(result.get("resolved_result")) or _safe_dict(nested.get("resolved_result"))
+    if resolved:
+        containers.append(resolved)
+
+    for container in containers:
+        extracted = _safe_dict(container.get("extracted"))
+        if extracted:
+            validation = _safe_dict(extracted.get("grounding_validation"))
+            if validation:
+                extracted["grounding_validation"] = _remove_unsupported_combat_claims(validation)
+            if _safe_str(extracted.get("narration")).strip().casefold() in {
+                "the confrontation remains tense, but no injury is resolved.",
+                "no combat, damage, death, or injury is resolved by the turn contract.",
+            }:
+                extracted["narration"] = narration
+            container["extracted"] = extracted
+
+        validation = _safe_dict(container.get("grounding_validation"))
+        if validation:
+            container["grounding_validation"] = _remove_unsupported_combat_claims(validation)
+
+        if _safe_str(container.get("narration")).strip().casefold() == "the confrontation remains tense, but no injury is resolved.":
+            container["narration"] = narration
+
+    result["fast_combat_grounding_delta_repair"] = {
+        "applied": True,
+        "source": "deterministic_combat_fast_summary",
+        "combat_delta": _safe_dict(payload.get("combat_delta") or payload.get("combat_delta_contract")),
+    }
+    return result
