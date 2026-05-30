@@ -18,6 +18,34 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _contains_fast_direct_marker(value: Any, *, depth: int = 0) -> bool:
+    if depth > 6:
+        return False
+    if isinstance(value, dict):
+        source = _safe_str(value.get("source") or value.get("fast_direct_source"))
+        if source in _FAST_DIRECT_SOURCES:
+            return True
+        if value.get("fast_direct_runtime") is True or value.get("skip_sync_combat_narration") is True:
+            return True
+        metadata = value.get("metadata")
+        if isinstance(metadata, dict) and _contains_fast_direct_marker(metadata, depth=depth + 1):
+            return True
+        for key in (
+            "turn_contract",
+            "action",
+            "first_call_action_advisory",
+            "first_call_grounding_diagnostics",
+            "turn_grounding_packet",
+            "fast_direct_action",
+            "semantic_action",
+        ):
+            if key in value and _contains_fast_direct_marker(value.get(key), depth=depth + 1):
+                return True
+    elif isinstance(value, list):
+        return any(_contains_fast_direct_marker(item, depth=depth + 1) for item in value[:20])
+    return False
+
+
 def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
     payload = _safe_dict(payload)
     combat_state = _safe_dict(combat_state)
@@ -29,7 +57,7 @@ def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
         return True
     if _safe_str(combat_state.get("fast_direct_source")) in _FAST_DIRECT_SOURCES:
         return True
-    return False
+    return _contains_fast_direct_marker(payload) or _contains_fast_direct_marker(combat_state)
 
 
 def _fallback_summary(combat_result: Dict[str, Any]) -> str:
