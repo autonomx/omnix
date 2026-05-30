@@ -4,6 +4,7 @@ from app.rpg.session import runtime
 from app.rpg.session.fast_combat_presentation import (
     deterministic_fast_combat_payload,
     prefer_fast_combat_narration,
+    repair_fast_combat_grounding_validation,
 )
 from app.rpg.session.fast_combat_presentation_hook import (
     force_install_fast_combat_presentation_hook_for_tests,
@@ -30,6 +31,23 @@ def _fast_combat_result() -> dict:
         },
         "result": {
             "narration": "The confrontation remains tense, but no injury is resolved.",
+            "extracted": {
+                "action": "No combat, damage, death, or injury is resolved by the turn contract.",
+                "grounding_validation": {
+                    "ok": False,
+                    "fallback_used": True,
+                    "fallback_source": "deterministic_fallback",
+                    "selected_candidate": "deterministic_fallback",
+                    "violations": [
+                        {
+                            "code": "unsupported_combat_claim",
+                            "field": "narration",
+                            "message": "Narration mentions combat/death/injury/blood/damage, but the turn contract has no combat delta.",
+                        }
+                    ],
+                },
+                "narration": "The confrontation remains tense, but no injury is resolved.",
+            },
         },
     }
 
@@ -73,3 +91,34 @@ def test_pr02_runtime_final_presentation_prefers_fast_combat_delta_over_deferred
     assert selection["combat_delta"]["damage_applied"] == 1
     assert selection["narration"] == "You hit the bandit for 1 damage. The bandit has 3 HP remaining."
     assert "no injury is resolved" not in selection["narration"]
+
+
+def test_pr03_fast_combat_grounding_repair_removes_false_unsupported_combat_claim():
+    repaired = repair_fast_combat_grounding_validation(_fast_combat_result())
+    validation = repaired["result"]["extracted"]["grounding_validation"]
+
+    assert repaired["fast_combat_grounding_delta_repair"]["applied"] is True
+    assert validation["ok"] is True
+    assert validation["fallback_used"] is False
+    assert validation["violations"] == []
+    assert validation["fast_combat_delta_supported"] is True
+    assert repaired["result"]["extracted"]["narration"] == "You hit the bandit for 1 damage. The bandit has 3 HP remaining."
+
+
+def test_pr03_runtime_selector_repairs_grounding_validation_before_final_selection():
+    force_install_fast_combat_presentation_hook_for_tests(runtime)
+    result = _fast_combat_result()
+
+    selection = runtime._select_final_visible_presentation(
+        result,
+        runtime_narration_payload={"source": "deferred_runtime_narration_pending", "narration": "pending"},
+        prior_narration="The confrontation remains tense, but no injury is resolved.",
+        prior_npc={},
+        prior_llm_called=False,
+    )
+
+    validation = result["result"]["extracted"]["grounding_validation"]
+    assert selection["source"] == "deterministic_combat_fast_summary"
+    assert validation["ok"] is True
+    assert validation["violations"] == []
+    assert result["fast_combat_grounding_delta_repair"]["applied"] is True
