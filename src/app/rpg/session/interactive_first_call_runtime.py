@@ -9,6 +9,8 @@ from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
 from app.rpg.session import runtime as canonical_runtime
 
+_FAST_DIRECT_SOURCE = "ce212_fast_direct_runtime_budget_v1"
+
 
 def _d(value: Any) -> Dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
@@ -170,6 +172,133 @@ def _stateful_runtime_performance_override(
     return merged
 
 
+def _fast_turn_mode(performance_override: Dict[str, Any] | None) -> bool:
+    return _b(_d(performance_override).get("fast_turn_mode"), False)
+
+
+def _fast_direct_action(player_input: str, performance_override: Dict[str, Any] | None) -> Dict[str, Any]:
+    if not _fast_turn_mode(performance_override):
+        return {}
+    text = _s(player_input).strip().lower()
+    if not text:
+        return {}
+
+    if any(term in text for term in ("waterskin", "ration", "hungry", "thirsty", "hunger", "thirst", "fatigue")):
+        return {
+            "action_type": "observe",
+            "target_id": "player:survival",
+            "target_name": "Survival State",
+            "metadata": {"fast_direct_runtime": True, "source": _FAST_DIRECT_SOURCE},
+        }
+
+    if "attack" in text and ("bandit" in text or "road bandit" in text):
+        return {
+            "action_type": "combat",
+            "target_id": "enemy:road_bandit",
+            "target_name": "road bandit",
+            "metadata": {
+                "fast_direct_runtime": True,
+                "skip_sync_combat_narration": True,
+                "source": _FAST_DIRECT_SOURCE,
+            },
+        }
+
+    if ("travel" in text or "continue" in text) and any(term in text for term in ("old mill", "north", "road")):
+        return {
+            "action_type": "travel",
+            "target_id": "loc:old_mill",
+            "target_name": "old mill",
+            "metadata": {"fast_direct_runtime": True, "source": _FAST_DIRECT_SOURCE},
+        }
+
+    return {}
+
+
+def _fast_direct_diagnostics(player_input: str, action: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "source": _FAST_DIRECT_SOURCE,
+        "provider_parse_ok": True,
+        "raw_text": "",
+        "prompt_preview": "fast direct deterministic runtime bypass",
+        "turn_grounding_packet": {
+            "format_version": "ce212_fast_direct_turn_grounding_packet_v1",
+            "priority_context": {"addressed_npc_ids": []},
+            "player_input": _s(player_input),
+            "fast_direct_action": deepcopy(_d(action)),
+        },
+    }
+
+
+def _fast_direct_advisory(player_input: str, action: Dict[str, Any]) -> Dict[str, Any]:
+    diagnostics = _fast_direct_diagnostics(player_input, action)
+    return {
+        "action_type": _s(action.get("action_type")),
+        "target_id": _s(action.get("target_id")),
+        "target_name": _s(action.get("target_name")),
+        "stateful": True,
+        "needs_runtime_resolution": True,
+        "source": _FAST_DIRECT_SOURCE,
+        "first_call_grounding_diagnostics": diagnostics,
+    }
+
+
+def _mark_fast_direct_runtime_state(session: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+    session = _d(session)
+    runtime_state = _d(session.get("runtime_state"))
+    runtime_state["fast_direct_runtime"] = True
+    runtime_state["fast_direct_source"] = _FAST_DIRECT_SOURCE
+    metadata = _d(action.get("metadata"))
+    if metadata.get("skip_sync_combat_narration"):
+        runtime_state["skip_sync_combat_narration"] = True
+        combat_state = _d(runtime_state.get("combat_state"))
+        if combat_state:
+            combat_state["skip_sync_combat_narration"] = True
+            combat_state["fast_direct_source"] = _FAST_DIRECT_SOURCE
+            runtime_state["combat_state"] = combat_state
+    session["runtime_state"] = runtime_state
+    return session
+
+
+def _attach_fast_direct_result(
+    result: Dict[str, Any],
+    *,
+    player_input: str,
+    action: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not isinstance(result, dict):
+        return result
+    advisory = _fast_direct_advisory(player_input, action)
+    diagnostics = _d(advisory.get("first_call_grounding_diagnostics"))
+    result["first_call_action_advisory"] = deepcopy(advisory)
+    result["first_call_semantic_advisory"] = {}
+    result["first_call_visible_response_selection"] = {"reason": "fast_direct_runtime_bypass", "consumable": False}
+    result["first_call_grounding_diagnostics"] = deepcopy(diagnostics)
+    result["llm_called"] = False
+    result["llm_purpose"] = "fast_direct_runtime"
+    result["fast_direct_runtime"] = True
+    result["fast_direct_source"] = _FAST_DIRECT_SOURCE
+    nested = _d(result.get("result"))
+    if nested:
+        nested["first_call_grounding_diagnostics"] = deepcopy(diagnostics)
+        nested["fast_direct_runtime"] = True
+        nested["fast_direct_source"] = _FAST_DIRECT_SOURCE
+        result["result"] = nested
+    return result
+
+
+def _fast_direct_performance_override(
+    performance_override: Dict[str, Any] | None,
+    *,
+    narration_mode: str,
+) -> Dict[str, Any]:
+    merged = _stateful_runtime_performance_override(performance_override, narration_mode=narration_mode)
+    merged["enable_live_narration_llm"] = False
+    merged["enable_narration_retry"] = False
+    merged["skip_sync_combat_narration"] = True
+    merged["fast_direct_runtime"] = True
+    return merged
+
+
 def _deterministic_narration_from_result(result: Dict[str, Any]) -> str:
     result = _d(result)
     nested = _d(result.get("result"))
@@ -273,13 +402,7 @@ def _is_direct_npc_question_from_packet(
     action_advisory: Dict[str, Any],
     semantic_advisory: Dict[str, Any],
 ) -> bool:
-    """Heuristic safety net for malformed/default-stateful first-call outputs.
-
-    The first-call LLM can still return malformed JSON or omit stateful=false.
-    If the deterministic grounding packet clearly says the player addressed an
-    NPC and the player utterance is an opinion/question, keep the turn inside
-    non-stateful dialogue instead of letting canonical runtime invent combat.
-    """
+    """Heuristic safety net for malformed/default-stateful first-call outputs."""
     packet = _first_call_packet(action_advisory, semantic_advisory)
     priority = _d(packet.get("priority_context"))
     npc_context = _d(packet.get("npc_context"))
@@ -374,67 +497,10 @@ def _direct_dialogue_fallback_topic(player_input: str) -> str:
     if any(term in text for term in ("this place", "what is this place", "where are we", "where am i")):
         return "local_knowledge"
     topic_terms = (
-        (
-            "commerce_inquiry",
-            (
-                "food",
-                "eat",
-                "meal",
-                "stew",
-                "drink",
-                "ale",
-                "menu",
-                "wares",
-                "stock",
-                "offer",
-                "sell",
-                "price",
-                "cost",
-                "lodging",
-                "room",
-            ),
-        ),
-        (
-            "rumor_inquiry",
-            (
-                "rumor",
-                "rumour",
-                "heard",
-                "news",
-                "gossip",
-                "talk around",
-                "word is",
-            ),
-        ),
-        (
-            "combat_advice",
-            (
-                "sword",
-                "blade",
-                "combat",
-                "fight",
-                "fighting",
-                "guard",
-                "stance",
-                "style",
-                "shield",
-                "parry",
-            ),
-        ),
-        (
-            "local_knowledge",
-            (
-                "road",
-                "roads",
-                "bandit",
-                "bandits",
-                "caravan",
-                "caravans",
-                "where",
-                "what can you tell",
-                "tell me about",
-            ),
-        ),
+        ("commerce_inquiry", ("food", "eat", "meal", "stew", "drink", "ale", "menu", "wares", "stock", "offer", "sell", "price", "cost", "lodging", "room")),
+        ("rumor_inquiry", ("rumor", "rumour", "heard", "news", "gossip", "talk around", "word is")),
+        ("combat_advice", ("sword", "blade", "combat", "fight", "fighting", "guard", "stance", "style", "shield", "parry")),
+        ("local_knowledge", ("road", "roads", "bandit", "bandits", "caravan", "caravans", "where", "what can you tell", "tell me about")),
     )
     for topic, terms in topic_terms:
         if any(term in text for term in terms):
@@ -460,10 +526,7 @@ def _safe_dialogue_fallback_line(
                 "I'm Bran, keeper of this tavern and the sort of innkeeper who keeps one ear on the road. "
                 "Travelers bring trouble, rumors, and coin through my door, and I remember what matters.",
             )
-        return (
-            "identity_inquiry",
-            f"I'm {speaker}, and I can answer plainly about who I am and what I know.",
-        )
+        return ("identity_inquiry", f"I'm {speaker}, and I can answer plainly about who I am and what I know.")
 
     if topic == "commerce_inquiry":
         if speaker_is_bran:
@@ -472,10 +535,7 @@ def _safe_dialogue_fallback_line(
                 "Food and drink here are simple traveler fare. I can talk through what is usually on hand, "
                 "but exact stock and prices need checking at the bar.",
             )
-        return (
-            "commerce_inquiry",
-            "I can talk through what is usually available, but exact stock and prices need checking first.",
-        )
+        return ("commerce_inquiry", "I can talk through what is usually available, but exact stock and prices need checking first.")
 
     if topic == "rumor_inquiry":
         if speaker_is_bran:
@@ -484,10 +544,7 @@ def _safe_dialogue_fallback_line(
                 "Rumors come in with road dust and thirsty travelers. Ask plain what kind you want, "
                 "and I will tell you what I have heard.",
             )
-        return (
-            "rumor_inquiry",
-            "I hear pieces of news, but ask plainly what kind of rumor you want.",
-        )
+        return ("rumor_inquiry", "I hear pieces of news, but ask plainly what kind of rumor you want.")
 
     if topic == "combat_advice" and speaker_is_bran:
         return (
@@ -503,10 +560,7 @@ def _safe_dialogue_fallback_line(
                 "This place is a tavern on the old road, close enough to town for news and far enough out for trouble. "
                 "Caravans, guards, and tired travelers all leave pieces of the truth here.",
             )
-        return (
-            "local_knowledge",
-            "This place is a tavern where the road meets town: travelers, guards, and local talk all pass through here.",
-        )
+        return ("local_knowledge", "This place is a tavern where the road meets town: travelers, guards, and local talk all pass through here.")
 
     if examples and topic in {"combat_advice", "general_dialogue", "local_knowledge"}:
         example = _s(examples[0]).strip()
@@ -613,6 +667,36 @@ def apply_turn(
     simulation_state = _d(session.get("simulation_state"))
     runtime_state = _d(session.get("runtime_state"))
     candidate_action = _d(action)
+
+    fast_direct_action = _fast_direct_action(_s(player_input), performance_override)
+    if fast_direct_action:
+        narration_mode = _narration_mode(performance_override, runtime_state)
+        session = _mark_fast_direct_runtime_state(session, fast_direct_action)
+        _prepare_stateful_runtime_session(session_id, session, narration_mode=narration_mode)
+        result = canonical_runtime.apply_turn(
+            session_id=session_id,
+            player_input=_s(player_input),
+            action=fast_direct_action,
+            performance_override=_fast_direct_performance_override(
+                performance_override,
+                narration_mode=narration_mode,
+            ),
+        )
+        if isinstance(result, dict):
+            result = _attach_fast_direct_result(
+                result,
+                player_input=_s(player_input),
+                action=fast_direct_action,
+            )
+            advisory = _fast_direct_advisory(_s(player_input), fast_direct_action)
+            result = _apply_stateful_narration_contract(
+                result,
+                narration_mode=narration_mode,
+                action_advisory=advisory,
+                semantic_advisory={},
+                selection={"reason": "fast_direct_runtime_bypass", "consumable": False},
+            )
+        return result
 
     try:
         service_match = canonical_runtime.resolve_service_turn(
