@@ -20,6 +20,13 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _copy_repaired_result_back(final_result: Dict[str, Any], repaired_result: Dict[str, Any]) -> None:
+    if not isinstance(final_result, dict) or not isinstance(repaired_result, dict):
+        return
+    final_result.clear()
+    final_result.update(repaired_result)
+
+
 def _fast_combat_selection(
     final_result: Dict[str, Any],
     *,
@@ -68,14 +75,15 @@ def install_fast_combat_presentation_hook(runtime_module: ModuleType | None = No
         prior_llm_called: bool,
     ) -> Dict[str, Any]:
         repaired_result = repair_fast_combat_grounding_validation(final_result)
+        _copy_repaired_result_back(final_result, repaired_result)
         fast_combat = _fast_combat_selection(
-            repaired_result,
+            final_result,
             runtime_narration_payload=runtime_narration_payload,
         )
         if fast_combat:
             return fast_combat
         return original(
-            repaired_result,
+            final_result,
             runtime_narration_payload=runtime_narration_payload,
             prior_narration=prior_narration,
             prior_npc=prior_npc,
