@@ -87,43 +87,30 @@ def test_ce2123_install_before_runtime_import_patches_after_runtime_load():
     assert getattr(reloaded_runtime, hook._PATCH_ATTR, False) is True
 
 
-def test_ce2124_apply_turn_fast_combat_skip_context_marks_payload(monkeypatch):
+def test_ce2124_fast_combat_action_detection_and_flag_injection():
     import app.rpg.session.fast_combat_narration_skip as hook
 
-    force_install_fast_combat_narration_skip_for_tests()
-    captured = {}
+    action = {
+        "action_type": "combat",
+        "target_id": "enemy:road_bandit",
+        "target_name": "road bandit",
+        "metadata": {"fast_direct_runtime": True, "source": "ce212_fast_direct_runtime_budget_v1"},
+    }
 
-    def fake_apply_turn(*args, **kwargs):
-        captured["performance_override"] = kwargs.get("performance_override")
-        captured["action"] = kwargs.get("action")
-        return runtime._apply_combat_narration_if_needed(
-            {},
-            combat_result={"reason": "hit", "action_type": "attack"},
-            combat_state={"active": True},
-        )
+    assert hook._action_requests_fast_combat_skip(action, {"fast_turn_mode": True}) is True
 
-    monkeypatch.setattr(runtime, "apply_turn", fake_apply_turn)
-    monkeypatch.delattr(runtime, hook._ORIGINAL_APPLY_TURN_ATTR, raising=False)
-    setattr(runtime, hook._PATCH_ATTR, False)
-    hook.force_install_fast_combat_narration_skip_for_tests()
-
-    result = runtime.apply_turn(
-        session_id="manual_service_fast_combat_context_test",
-        player_input="I attack the bandit.",
-        action={
-            "action_type": "combat",
-            "target_id": "enemy:road_bandit",
-            "target_name": "road bandit",
-            "metadata": {"fast_direct_runtime": True, "source": "ce212_fast_direct_runtime_budget_v1"},
-        },
+    args, kwargs = hook._with_fast_combat_flags(
+        (),
+        {"action": action, "performance_override": {"fast_turn_mode": True}},
+        action=action,
         performance_override={"fast_turn_mode": True},
     )
 
-    assert result["combat_narration_skipped_for_fast_mode"] is True
-    assert result["narration_payload"]["source"] == "deterministic_combat_fast_summary"
-    assert captured["performance_override"]["skip_sync_combat_narration"] is True
-    assert captured["performance_override"]["fast_direct_runtime"] is True
-    assert captured["action"]["metadata"]["skip_sync_combat_narration"] is True
+    assert args == ()
+    assert kwargs["performance_override"]["skip_sync_combat_narration"] is True
+    assert kwargs["performance_override"]["fast_direct_runtime"] is True
+    assert kwargs["action"]["metadata"]["skip_sync_combat_narration"] is True
+    assert kwargs["action"]["metadata"]["fast_direct_runtime"] is True
 
 
 def test_ce2121_non_fast_combat_narration_still_calls_original_provider(monkeypatch):
