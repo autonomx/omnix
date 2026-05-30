@@ -41,13 +41,17 @@ def _combat_lifecycle_failures(result: Mapping[str, Any]) -> list[str]:
     return failures
 
 
+def matrix_output_zip_path(output_root: Path, *, zip_name: str = DEFAULT_ZIP_NAME) -> Path:
+    return Path(output_root).with_name(zip_name)
+
+
 def zip_matrix_output_root(output_root: Path, *, zip_name: str = DEFAULT_ZIP_NAME) -> Path:
     """Zip an interactive matrix output directory next to that directory."""
 
     output_root = Path(output_root)
     if not output_root.exists() or not output_root.is_dir():
         raise ValueError(f"matrix_output_root_not_directory: {output_root}")
-    zip_path = output_root.with_name(zip_name)
+    zip_path = matrix_output_zip_path(output_root, zip_name=zip_name)
     if zip_path.exists():
         zip_path.unlink()
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -107,6 +111,7 @@ def run_intent_matrix_with_lifecycle_gate(
     if output_root_value:
         root = Path(str(output_root_value))
         root.mkdir(parents=True, exist_ok=True)
+        summary["zip_path"] = str(matrix_output_zip_path(root))
         (root / "interactive-intent-matrix-lifecycle-gate.json").write_text(
             json.dumps(summary.get("combat_lifecycle_gate"), indent=2, ensure_ascii=False, sort_keys=True, default=str),
             encoding="utf-8",
