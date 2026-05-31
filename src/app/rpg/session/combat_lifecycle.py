@@ -6,6 +6,8 @@ from typing import Any, Dict, List
 PLAYER_COMBAT_HP_BASELINE = 10
 ENEMY_DAMAGE_BASELINE = 1
 ENEMY_HP_BASELINE_FOR_FAST_COMBAT = 4
+BANDIT_DEFEAT_XP_REWARD = 25
+BANDIT_DEFEAT_COPPER_REWARD = 7
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -66,13 +68,7 @@ def _combat_delta(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def player_hp_before_for_enemy_turn(*, turn_index: int, enemy_hp_before: Any = None) -> int:
-    """Return deterministic authoritative combat HP before an enemy turn.
-
-    Prefer the authoritative player attack row's enemy HP before value. Runtime
-    fast-combat results do not always expose the outer transcript turn index at
-    lifecycle-build time, but the enemy HP sequence is stable: 4, 3, 2 before the
-    three non-final enemy turns. Fall back to turn index for unit-level callers.
-    """
+    """Return deterministic authoritative combat HP before an enemy turn."""
 
     enemy_hp = _i(enemy_hp_before, -1)
     if enemy_hp >= 0:
@@ -87,11 +83,7 @@ def build_enemy_damage_contract(
     player_hp_before: int = PLAYER_COMBAT_HP_BASELINE,
     damage_applied: int = ENEMY_DAMAGE_BASELINE,
 ) -> Dict[str, Any]:
-    """Build the PR.1.6 enemy damage contract.
-
-    This is now authoritative for combat HP metadata and still guarded as
-    non-lethal. It does not yet mutate broader survival state.
-    """
+    """Build the PR.1.6 enemy damage contract."""
 
     player_hp_before = max(1, _i(player_hp_before, PLAYER_COMBAT_HP_BASELINE))
     damage_applied = max(0, _i(damage_applied, ENEMY_DAMAGE_BASELINE))
@@ -110,6 +102,32 @@ def build_enemy_damage_contract(
         "nonlethal_guard": True,
         "authoritative_player_combat_hp": True,
         "survival_state_mutated": False,
+    }
+
+
+def build_combat_reward_result(*, target_id: str, target_name: str, turn_index: int) -> Dict[str, Any]:
+    """Build deterministic PR.1.8 reward resolution for combat completion."""
+
+    return {
+        "schema": "combat_reward_result_v1",
+        "source": "deterministic_combat_reward_v1",
+        "target_id": target_id,
+        "target_name": target_name,
+        "turn_index": turn_index,
+        "resolved": True,
+        "xp_awarded": BANDIT_DEFEAT_XP_REWARD,
+        "loot_awarded": {
+            "currency": {"copper": BANDIT_DEFEAT_COPPER_REWARD},
+            "items": [],
+        },
+        "reward_lines": [
+            f"Gained {BANDIT_DEFEAT_XP_REWARD} XP.",
+            f"Looted {BANDIT_DEFEAT_COPPER_REWARD} copper.",
+        ],
+        "player_state_mutated": False,
+        "inventory_state_mutated": False,
+        "promotion_pending": True,
+        "reason": "deterministic_bandit_defeat_reward_recorded_for_pr1_8",
     }
 
 
@@ -264,6 +282,13 @@ def build_combat_lifecycle_snapshot(result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     next_actor_id = "" if combat_ended else target_id
+    progression_hooks = {
+        "schema": "combat_progression_hooks_v1",
+        "xp_pending": defeated,
+        "loot_pending": defeated,
+        "resolved": False,
+        "reason": "placeholder_for_phase1_xp_loot_resolution",
+    }
     lifecycle = {
         "schema": "combat_lifecycle_v1",
         "source": "pr1_combat_lifecycle_foundation",
@@ -282,15 +307,24 @@ def build_combat_lifecycle_snapshot(result: Dict[str, Any]) -> Dict[str, Any]:
             "reason": "enemy_turn_not_yet_resolved_in_pr1_foundation" if not combat_ended else "combat_ended",
         },
         "combat_log": [entry],
-        "progression_hooks": {
-            "schema": "combat_progression_hooks_v1",
-            "xp_pending": defeated,
-            "loot_pending": defeated,
-            "resolved": False,
-            "reason": "placeholder_for_phase1_xp_loot_resolution",
-        },
+        "progression_hooks": progression_hooks,
     }
-    if not combat_ended:
+    if combat_ended:
+        reward = build_combat_reward_result(target_id=target_id, target_name=target_name, turn_index=max(1, turn_index))
+        progression_hooks.update(
+            {
+                "xp_pending": False,
+                "loot_pending": False,
+                "resolved": True,
+                "source": "deterministic_combat_reward_v1",
+                "xp_awarded": reward["xp_awarded"],
+                "loot_awarded": reward["loot_awarded"],
+                "reward_result": reward,
+                "reason": "combat_rewards_resolved_in_pr1_8",
+            }
+        )
+        lifecycle["combat_reward_result"] = reward
+    else:
         lifecycle = resolve_enemy_turn_in_lifecycle(lifecycle)
     return lifecycle
 
