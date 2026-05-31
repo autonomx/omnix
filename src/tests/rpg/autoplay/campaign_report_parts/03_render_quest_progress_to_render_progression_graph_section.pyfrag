@@ -1,0 +1,474 @@
+
+
+def _render_quest_progress(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    quests = summary.get("quests") if isinstance(summary.get("quests"), list) else []
+    if not quests:
+        return '<section id="quest-progress"><h2>Quest Progress</h2><p>No quest records found in this run.</p></section>'
+    rows = "".join(
+        _render_quest_row(_safe_dict(quest))
+        for quest in quests
+    )
+    return f"""
+    <section class="rpg-promoted-section" id="quest-progress">
+      <h2>Quest Progress</h2>
+      <p>Active: {_esc(str(summary.get('active_count') or 0))} ·
+         Completed: {_esc(str(summary.get('completed_count') or 0))} ·
+         Failed: {_esc(str(summary.get('failed_count') or 0))} ·
+         Unknown: {_esc(str(summary.get('unknown_count') or 0))}</p>
+      <table>
+        <thead><tr><th>Quest</th><th>Status</th><th>Progress</th><th>Giver</th><th>Location</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_quest_row(quest: Dict[str, Any]) -> str:
+    objectives = quest.get("objectives") if isinstance(quest.get("objectives"), list) else []
+    objective_html = ""
+    if objectives:
+        objective_html = "<ul>" + "".join(
+            "<li>"
+            + _esc(
+                f"{'✓' if _safe_dict(obj).get('completed') else '•'} "
+                f"{_safe_dict(obj).get('summary') or _safe_dict(obj).get('title') or _safe_dict(obj).get('name')}"
+            )
+            + "</li>"
+            for obj in objectives[:8]
+        ) + "</ul>"
+    progress = _esc(str(quest.get("progress") or ""))
+    if objective_html:
+        progress = progress + objective_html
+    return (
+        "<tr>"
+        f"<td>{_esc(str(quest.get('title') or quest.get('quest_id')))}</td>"
+        f"<td>{_esc(str(quest.get('status') or 'unknown'))}</td>"
+        f"<td>{progress}</td>"
+        f"<td>{_esc(str(quest.get('giver') or ''))}</td>"
+        f"<td>{_esc(str(quest.get('location') or ''))}</td>"
+        "</tr>"
+    )
+
+
+def _render_console_log_summary(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    if not summary:
+        return """
+        <section id="console-log">
+          <h2>Console Log</h2>
+          <p>No captured console log was found for this run.</p>
+        </section>
+        """
+    turn_errors = summary.get("turn_errors") if isinstance(summary.get("turn_errors"), list) else []
+    errors = summary.get("errors") if isinstance(summary.get("errors"), list) else []
+    warnings = summary.get("warnings") if isinstance(summary.get("warnings"), list) else []
+    ignored = summary.get("ignored_error_key_lines") if isinstance(summary.get("ignored_error_key_lines"), list) else []
+    tail = summary.get("tail") if isinstance(summary.get("tail"), list) else []
+
+    turn_error_html = "".join(f"<li>{_esc(str(line))}</li>" for line in turn_errors[:20])
+    error_html = "".join(f"<li>{_esc(str(line))}</li>" for line in errors[:20])
+    warning_html = "".join(f"<li>{_esc(str(line))}</li>" for line in warnings[:20])
+    ignored_text = "\n".join(str(line) for line in ignored[:40])
+    tail_text = "\n".join(str(line) for line in tail[-80:])
+    return f"""
+    <section class="rpg-promoted-section" id="console-log">
+      <h2>Console Log</h2>
+      <p><strong>Captured file:</strong> {_esc(str(summary.get("path") or "console-log.txt"))}</p>
+      <p>
+        Lines: {_esc(str(summary.get("line_count") or 0))} ·
+        Errors: {_esc(str(summary.get("error_count") or 0))} ·
+        Turn errors: {_esc(str(summary.get("turn_error_count") or 0))} ·
+        Warnings: {_esc(str(summary.get("warning_count") or 0))} ·
+        Ignored key/debug error fields: {_esc(str(summary.get("ignored_error_key_line_count") or 0))}
+      </p>
+      <h3>Turn Errors</h3>
+      <ul>{turn_error_html or "<li>None.</li>"}</ul>
+      <h3>Errors</h3>
+      <ul>{error_html or "<li>None.</li>"}</ul>
+      <h3>Warnings</h3>
+      <ul>{warning_html or "<li>None.</li>"}</ul>
+      <details>
+        <summary>Ignored debug/key lines containing "error"</summary>
+        <pre>{_esc(ignored_text or "None.")}</pre>
+      </details>
+      <details>
+        <summary>Console tail</summary>
+        <pre>{_esc(tail_text)}</pre>
+      </details>
+    </section>
+    """
+
+
+def _render_hundred_turn_eval(model: Dict[str, Any]) -> str:
+    eval_summary = _safe_dict(model.get("hundred_turn_eval_summary"))
+
+    action = _safe_dict(model.get("action_diversity_summary") or eval_summary.get("action_diversity_summary"))
+    progress = _safe_dict(model.get("progress_timeline_summary") or eval_summary.get("progress_timeline_summary"))
+    warnings = _safe_dict(model.get("long_run_warning_summary") or eval_summary.get("long_run_warning_summary"))
+
+    warning_rows = ""
+    for warning in warnings.get("warnings") if isinstance(warnings.get("warnings"), list) else []:
+        warning = _safe_dict(warning)
+        warning_rows += (
+            "<tr>"
+            f"<td>{html.escape(str(warning.get('severity') or 'warning'))}</td>"
+            f"<td>{html.escape(str(warning.get('code') or ''))}</td>"
+            f"<td>{html.escape(str(warning.get('message') or ''))}</td>"
+            "</tr>"
+        )
+    if not warning_rows:
+        warning_rows = "<tr><td colspan='3'>No long-run warnings.</td></tr>"
+
+    return f"""
+    <section class="rpg-promoted-section" id="hundred-turn-eval">
+      <h2>100-Turn Evaluation</h2>
+      <p><strong>Mode:</strong> {html.escape(str(eval_summary.get("readiness") or "smoke"))}
+         · <strong>Turns:</strong> {html.escape(str(eval_summary.get("turn_count") or progress.get("turns") or 0))}
+         · <strong>OK:</strong> {html.escape(str(eval_summary.get("ok", True)))}</p>
+      <div class="metric-grid">
+        <div class="metric-card"><strong>Meaningful progress rate</strong><br>{html.escape(str(progress.get("meaningful_progress_rate") or 0))}</div>
+        <div class="metric-card"><strong>Story beat rate</strong><br>{html.escape(str(progress.get("story_beat_rate") or 0))}</div>
+        <div class="metric-card"><strong>Max no-progress streak</strong><br>{html.escape(str(progress.get("max_no_progress_streak") or 0))}</div>
+        <div class="metric-card"><strong>Max semantic-target repeat</strong><br>{html.escape(str(_safe_dict(action.get("max_same_semantic_target_streak")).get("streak") or 0))}</div>
+      </div>
+      <h3>Long-Run Warnings</h3>
+      <table>
+        <thead><tr><th>Severity</th><th>Code</th><th>Message</th></tr></thead>
+        <tbody>{warning_rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_action_diversity(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+
+    def rows(items: Any) -> str:
+        out = ""
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                label, count = item[0], item[1]
+            else:
+                continue
+            out += f"<tr><td>{html.escape(str(label))}</td><td>{html.escape(str(count))}</td></tr>"
+        return out or "<tr><td colspan='2'>No data.</td></tr>"
+
+    return f"""
+    <section class="rpg-promoted-section" id="action-diversity">
+      <h2>Action Diversity</h2>
+      <p>
+        Unique actions: {html.escape(str(summary.get("unique_action_count") or 0))} ·
+        Unique semantic actions: {html.escape(str(summary.get("unique_semantic_action_count") or 0))} ·
+        Unique targets: {html.escape(str(summary.get("unique_target_count") or 0))} ·
+        Unknown semantic rate: {html.escape(str(summary.get("unknown_semantic_rate") or 0))} ·
+        Missing target rate: {html.escape(str(summary.get("missing_target_rate") or 0))}
+      </p>
+      <h3>Top Semantic Actions</h3>
+      <table><thead><tr><th>Semantic Action</th><th>Count</th></tr></thead><tbody>{rows(summary.get("top_semantic_actions"))}</tbody></table>
+      <h3>Top Semantic Targets</h3>
+      <table><thead><tr><th>Semantic Target</th><th>Count</th></tr></thead><tbody>{rows(summary.get("top_semantic_targets"))}</tbody></table>
+    </section>
+    """
+
+
+def _node_ids_from_progression_log(summary: Dict[str, Any]) -> List[str]:
+    progression_log = _safe_list(_safe_dict(summary).get("scenario_progression_log"))
+    rows: List[tuple[int, int, str]] = []
+
+    for row_index, row in enumerate(progression_log):
+        row = _safe_dict(row)
+        turn_index = int(row.get("turn_index") or 0)
+
+        node_ids: List[str] = []
+        for node_id in _safe_list(row.get("matched_node_ids")):
+            node_id = _safe_str(node_id)
+            if node_id:
+                node_ids.append(node_id)
+
+        for node in _safe_list(row.get("matched_nodes")):
+            node_id = _safe_str(_safe_dict(node).get("node_id"))
+            if node_id:
+                node_ids.append(node_id)
+
+        for local_index, node_id in enumerate(node_ids):
+            rows.append((turn_index, row_index * 1000 + local_index, node_id))
+
+    ordered: List[str] = []
+    seen = set()
+    for _turn_index, _row_order, node_id in sorted(rows, key=lambda item: (item[0], item[1])):
+        if node_id and node_id not in seen:
+            ordered.append(node_id)
+            seen.add(node_id)
+    return ordered
+
+
+def _turn_index_by_progression_node(summary: Dict[str, Any]) -> Dict[str, int]:
+    progression_log = _safe_list(_safe_dict(summary).get("scenario_progression_log"))
+    out: Dict[str, int] = {}
+
+    for row in progression_log:
+        row = _safe_dict(row)
+        turn_index = int(row.get("turn_index") or 0)
+        if turn_index <= 0:
+            continue
+
+        matched_ids: List[str] = []
+        for node_id in _safe_list(row.get("matched_node_ids")):
+            node_id = _safe_str(node_id)
+            if node_id:
+                matched_ids.append(node_id)
+
+        for node in _safe_list(row.get("matched_nodes")):
+            node_id = _safe_str(_safe_dict(node).get("node_id"))
+            if node_id:
+                matched_ids.append(node_id)
+
+        for node_id in matched_ids:
+            out.setdefault(node_id, turn_index)
+
+    return out
+
+
+def _graph_registry_node_order(summary: Dict[str, Any]) -> List[str]:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    scenario_seed = _safe_str(
+        summary.get("scenario_seed")
+        or arc.get("scenario_seed")
+        or "tavern_story_seed"
+    )
+
+    try:
+        from app.rpg.progression.graph_registry import get_progression_graph_for_seed
+
+        graph = get_progression_graph_for_seed(scenario_seed)
+        if graph:
+            return [_safe_str(node.node_id) for node in graph.nodes if _safe_str(node.node_id)]
+    except Exception:
+        return []
+
+    return []
+
+
+def _ordered_progression_graph_node_ids(summary: Dict[str, Any]) -> List[str]:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    completed_nodes = _safe_dict(summary.get("progression_completed_nodes"))
+
+    chronological = _node_ids_from_progression_log(summary)
+    registry_order = _graph_registry_node_order(summary)
+
+    # Arc summaries may store completed node ids as sorted lists. They are useful
+    # as a membership source, but should not define visual order.
+    arc_completed = [
+        _safe_str(node_id)
+        for node_id in _safe_list(arc.get("completed_node_ids"))
+        if _safe_str(node_id)
+    ]
+    arc_remaining = [
+        _safe_str(node_id)
+        for node_id in _safe_list(arc.get("remaining_node_ids"))
+        if _safe_str(node_id)
+    ]
+    completed_fallback = [
+        _safe_str(node_id)
+        for node_id in completed_nodes.keys()
+        if _safe_str(node_id)
+    ]
+
+    ordered: List[str] = []
+    seen = set()
+
+    def add_many(values: List[str]) -> None:
+        for value in values:
+            value = _safe_str(value)
+            if value and value not in seen:
+                ordered.append(value)
+                seen.add(value)
+
+    # 1. Actual turn order for completed/reached nodes.
+    add_many(chronological)
+
+    # 2. Registry order for known nodes not yet reached. This keeps pending nodes
+    # after completed nodes without alphabetizing the graph.
+    completed_membership = set(chronological) | set(arc_completed) | set(completed_fallback)
+    pending_registry = [node_id for node_id in registry_order if node_id not in completed_membership]
+    add_many(pending_registry)
+
+    # 3. Append any completed nodes absent from log, preserving registry order if possible.
+    completed_missing_from_log = [
+        node_id for node_id in registry_order
+        if node_id in completed_membership and node_id not in seen
+    ]
+    add_many(completed_missing_from_log)
+
+    # 4. Last-resort fallback: use arc/completed lists as-is, not sorted.
+    add_many(arc_completed)
+    add_many(arc_remaining)
+    add_many(completed_fallback)
+
+    return ordered
+
+
+def _progression_graph_report_data(summary: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    arc = _safe_dict(summary.get("scenario_progression_arc_summary"))
+    completed_nodes = _safe_dict(summary.get("progression_completed_nodes"))
+    ordered_node_ids = _ordered_progression_graph_node_ids(summary)
+    turn_by_node_id = _turn_index_by_progression_node(summary)
+    completed_from_log = set(_node_ids_from_progression_log(summary))
+    completed_from_arc = {
+        _safe_str(node_id)
+        for node_id in _safe_list(arc.get("completed_node_ids"))
+        if _safe_str(node_id)
+    }
+
+    nodes: List[Dict[str, Any]] = []
+    for index, node_id in enumerate(ordered_node_ids, start=1):
+        node_id = _safe_str(node_id)
+        status = (
+            "completed"
+            if node_id in completed_nodes
+            or node_id in completed_from_log
+            or node_id in completed_from_arc
+            else "pending"
+        )
+        turn_index = int(turn_by_node_id.get(node_id) or 0)
+        nodes.append(
+            {
+                "node_id": node_id,
+                "label": node_id.replace("_", " "),
+                "status": status,
+                "turn_index": turn_index,
+                "order": index,
+            }
+        )
+
+    edges = [
+        {
+            "from": nodes[i]["node_id"],
+            "to": nodes[i + 1]["node_id"],
+        }
+        for i in range(len(nodes) - 1)
+    ]
+
+    return {
+        "ok": bool(nodes),
+        "graph_id": _safe_str(arc.get("graph_id")),
+        "arc_complete": bool(arc.get("arc_complete")),
+        "expected_node_count": int(arc.get("expected_node_count") or len(nodes)),
+        "completed_node_count": int(arc.get("completed_node_count") or len(completed_from_log)),
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def _render_progress_timeline(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    timeline = summary.get("timeline") if isinstance(summary.get("timeline"), list) else []
+    rows = ""
+    for item in timeline[-40:]:
+        item = _safe_dict(item)
+        rows += (
+            "<tr>"
+            f"<td>{html.escape(str(item.get('turn_index') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('semantic_action') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('target') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('location') or ''))}</td>"
+            f"<td>{html.escape(str(item.get('meaningful_progress')))}</td>"
+            f"<td>{html.escape(str(item.get('story_beat')))}</td>"
+            f"<td>{html.escape(str(item.get('noop')))}</td>"
+            f"<td>{html.escape(str(item.get('reason') or ''))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='8'>No progress timeline data.</td></tr>"
+
+    return f"""
+    <section class="rpg-promoted-section" id="progress-timeline">
+      <h2>Progress Timeline</h2>
+      <p>
+        Meaningful progress turns: {html.escape(str(summary.get("meaningful_progress_turns") or 0))} ·
+        Story beat turns: {html.escape(str(summary.get("story_beat_turns") or 0))} ·
+        No-op turns: {html.escape(str(summary.get("noop_turns") or 0))}
+      </p>
+      <table>
+        <thead>
+          <tr><th>Turn</th><th>Action</th><th>Target</th><th>Location</th><th>Progress</th><th>Story</th><th>No-op</th><th>Reason</th></tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_progression_graph_section(summary: Dict[str, Any]) -> str:
+    data = _progression_graph_report_data(summary)
+    if not data.get("ok"):
+        return """
+        <section class="card">
+          <h2>Scenario Progression Graph</h2>
+          <p class="muted">No progression graph data was captured for this run.</p>
+        </section>
+        """
+
+    nodes_html = []
+    for node in _safe_list(data.get("nodes")):
+        node = _safe_dict(node)
+        status = _safe_str(node.get("status")) or "pending"
+        turn = int(node.get("turn_index") or 0)
+        turn_label = f"Turn {turn}" if turn else "Not reached"
+        nodes_html.append(
+            f"""
+            <div class="graph-node graph-node-{html.escape(status)}">
+              <div class="graph-node-index">{int(node.get("order") or 0)}</div>
+              <div class="graph-node-body">
+                <div class="graph-node-title">{html.escape(_safe_str(node.get("label")))}</div>
+                <div class="graph-node-meta">{html.escape(turn_label)} · {html.escape(status)} · {html.escape(_safe_str(node.get("node_id")))}</div>
+              </div>
+            </div>
+            """
+        )
+
+    edges_html = "".join('<div class="graph-edge">↓</div>' for _ in _safe_list(data.get("edges")))
+    interleaved = []
+    for index, node_html in enumerate(nodes_html):
+        interleaved.append(node_html)
+        if index < len(nodes_html) - 1:
+            interleaved.append('<div class="graph-edge">↓</div>')
+
+    mermaid_lines = ["graph TD"]
+    for node in _safe_list(data.get("nodes")):
+        node = _safe_dict(node)
+        node_id = _safe_str(node.get("node_id"))
+        label = _safe_str(node.get("label"))
+        safe_id = "n_" + "".join(ch if ch.isalnum() else "_" for ch in node_id)
+        mermaid_lines.append(f'  {safe_id}["{label}"]')
+    for edge in _safe_list(data.get("edges")):
+        edge = _safe_dict(edge)
+        src = "n_" + "".join(ch if ch.isalnum() else "_" for ch in _safe_str(edge.get("from")))
+        dst = "n_" + "".join(ch if ch.isalnum() else "_" for ch in _safe_str(edge.get("to")))
+        mermaid_lines.append(f"  {src} --> {dst}")
+    mermaid_source = "\n".join(mermaid_lines)
+
+    return f"""
+    <section class="card" id="scenario-progression-graph">
+      <h2>Scenario Progression Graph</h2>
+      <p class="muted">
+        Graph: {html.escape(_safe_str(data.get("graph_id")))}
+        · Completed {int(data.get("completed_node_count") or 0)} / {int(data.get("expected_node_count") or 0)}
+        · Arc complete: {html.escape(str(bool(data.get("arc_complete"))))}
+      </p>
+      <p class="muted small">
+        Nodes are ordered by first matched turn, with unreached graph nodes appended afterward.
+      </p>
+      <div class="progression-graph">
+        {''.join(interleaved)}
+      </div>
+      <details class="debug-details">
+        <summary>Mermaid graph source</summary>
+        <pre>{html.escape(mermaid_source)}</pre>
+      </details>
+    </section>
+    """

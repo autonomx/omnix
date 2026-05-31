@@ -1,0 +1,420 @@
+
+
+def _extract_narration_debug(result: Dict[str, Any], limits: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract LLM/narration debug info."""
+    result_sub = _safe_dict(result.get("result"))
+    raw_payload = _extract_narration_payload(result)
+    narration_json = _extract_narration_json(result)
+    grounding_validation = _extract_grounding_validation(result)
+    npc = _safe_dict(narration_json.get("npc"))
+    provider_call_diagnostics = _extract_provider_call_diagnostics(result)
+
+    # Cap raw LLM text
+    raw_text = raw_payload.get("raw_llm_narration") or raw_payload.get("raw_llm_text")
+    raw_request = raw_payload.get("raw_llm_request")
+
+    return {
+        "llm_called": (
+            result.get("llm_called")
+            or result_sub.get("llm_called")
+            or result_sub.get("used_llm")
+            or raw_payload.get("used_llm")
+        ),
+        "llm_purpose": result_sub.get("llm_purpose") or raw_payload.get("llm_purpose"),
+        "narration_status": result_sub.get("narration_status") or raw_payload.get("narration_status"),
+        "final_narration": _preview(_extract_narration_preview(result, limits["max_text"]), limits["max_text"]),
+        "json_narration": _preview(_safe_str(narration_json.get("narration")), limits["max_text"]),
+        "json_action": _preview(_safe_str(narration_json.get("action")), limits["max_text"]),
+        "npc_speaker": _safe_str(npc.get("speaker")),
+        "npc_line": _preview(_safe_str(npc.get("line")), limits["max_text"]),
+        "reward": narration_json.get("reward"),
+        "followup_hooks": _cap_list(_safe_list(narration_json.get("followup_hooks")), limits["max_list"]),
+        "grounding_validation": grounding_validation,
+        "grounding_selected_candidate": _safe_str(grounding_validation.get("selected_candidate")),
+        "grounding_fallback_used": bool(grounding_validation.get("fallback_used")),
+        "grounding_fallback_source": _safe_str(grounding_validation.get("fallback_source")),
+        "grounding_violation_codes": _extract_grounding_violation_codes(grounding_validation),
+        "provider_call_diagnostics": _compact_payload(provider_call_diagnostics, limits),
+        "provider_valid": provider_call_diagnostics.get("provider_valid"),
+        "provider_errors": provider_call_diagnostics.get("provider_errors"),
+        "raw_llm_narration_capped": _preview(_safe_str(raw_text), limits["max_text"]),
+        "raw_llm_request_capped": _preview(_safe_str(raw_request), limits["max_text"]),
+    }
+
+
+def _extract_extracted_fields(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract narration, action, npc fields."""
+    narration_json = _extract_narration_json(result)
+    npc = _safe_dict(narration_json.get("npc"))
+    grounding_validation = _extract_grounding_validation(result)
+
+    return {
+        "narration": _safe_str(narration_json.get("narration")),
+        "action": _safe_str(narration_json.get("action")),
+        "npc_speaker": _safe_str(npc.get("speaker")),
+        "npc_line": _safe_str(npc.get("line")),
+        "reward": narration_json.get("reward"),
+        "followup_hooks": _safe_list(narration_json.get("followup_hooks")),
+        "grounding_validation": grounding_validation,
+    }
+
+
+def _extract_deterministic_contract(result: Dict[str, Any], limits: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract compact turn_contract and resolved_result."""
+    result_sub = _safe_dict(result.get("result"))
+    narration_payload = _extract_narration_payload(result)
+
+    turn_contract = _first_dict(
+        result.get("turn_contract"),
+        result_sub.get("turn_contract"),
+        narration_payload.get("turn_contract"),
+        _safe_dict(narration_payload.get("narration_context")).get("turn_contract"),
+        result.get("turn_contract_compact"),
+    )
+    resolved_result = _first_dict(
+        result.get("resolved_result"),
+        result_sub.get("resolved_result"),
+        result_sub.get("interaction_result"),
+        result_sub.get("conversation_result"),
+        result.get("resolved_result_compact"),
+    )
+
+    return {
+        "action_type": _safe_str(turn_contract.get("action_type") or resolved_result.get("action_type")),
+        "semantic_action_type": _safe_str(
+            turn_contract.get("semantic_action_type") or resolved_result.get("semantic_action_type")
+        ),
+        "visible_interaction_reason": _safe_str(
+            result.get("visible_interaction_reason")
+            or result_sub.get("visible_interaction_reason")
+            or resolved_result.get("reason")
+        ),
+        "turn_contract_compact": _cap_dict_keys(turn_contract, limits["max_dict_keys"]),
+        "resolved_result_compact": _cap_dict_keys(resolved_result, limits["max_dict_keys"]),
+    }
+
+
+def _extract_compact_state_deltas(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract compact state changes (currency, inventory, etc.)."""
+    # This is a placeholder - actual implementation would extract deltas
+    return {
+        "note": "State delta extraction not yet implemented",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Turn sanitization based on detail level
+# ---------------------------------------------------------------------------
+
+def sanitize_turn_for_summary(
+    turn: Dict[str, Any],
+    detail: str = "summary",
+) -> Dict[str, Any]:
+    """
+    Sanitize a single turn for global summary output.
+
+    Keeps only essential diagnostic fields and strips large state blobs.
+    """
+    if not isinstance(turn, dict):
+        return turn
+
+    limits = _get_limits(detail)
+    preserve_keys = PRESERVE_TURN_KEYS_SUMMARY.copy()
+
+    if detail in ("debug", "full"):
+        preserve_keys = PRESERVE_TURN_KEYS_DEBUG.copy()
+    if detail == "full":
+        preserve_keys = PRESERVE_TURN_KEYS_FULL.copy()
+
+    sanitized = {}
+    result = _safe_dict(turn.get("result"))
+
+    # Always-preserved fields
+    for key in preserve_keys:
+        if key in turn:
+            sanitized[key] = turn[key]
+
+    if result:
+        sanitized.setdefault("raw_result_keys", sorted([str(k) for k in result.keys()]))
+        sanitized.setdefault("narration_preview", _extract_narration_preview(result, limits["max_text"]))
+
+    if detail in ("debug", "full") and result:
+        narration_payload = _extract_narration_payload(result)
+        narration_json = _extract_narration_json(result)
+        grounding_validation = _extract_grounding_validation(result)
+
+        sanitized["extracted"] = _extract_extracted_fields(result)
+        sanitized["narration_debug"] = _extract_narration_debug(result, limits)
+        sanitized["narration_payload_compact"] = _compact_payload(narration_payload, limits)
+        sanitized["structured_narration_compact"] = _compact_payload(narration_json, limits)
+        sanitized["grounding_validation"] = grounding_validation
+        sanitized["grounding_fallback"] = bool(
+            grounding_validation.get("fallback_used")
+            or narration_json.get("grounding_fallback")
+            or narration_payload.get("grounding_fallback")
+        )
+        sanitized["grounding_selected_candidate"] = _safe_str(
+            grounding_validation.get("selected_candidate")
+        )
+        sanitized["grounding_fallback_source"] = _safe_str(
+            grounding_validation.get("fallback_source")
+        )
+        sanitized["grounding_violation_codes"] = _extract_grounding_violation_codes(
+            grounding_validation
+        )
+        sanitized["grounding_primary_violations"] = _safe_list(
+            grounding_validation.get("primary_violations")
+        )
+        sanitized.update(_extract_deterministic_contract(result, limits))
+        stateful_contract = _safe_dict(
+            result.get("stateful_runtime_narration_contract")
+            or _safe_dict(result.get("result")).get("stateful_runtime_narration_contract")
+        )
+        if stateful_contract:
+            sanitized["stateful_runtime_narration_contract"] = stateful_contract
+        sanitized["compact_state_deltas"] = _extract_compact_state_deltas(result)
+    elif result:
+        grounding_validation = _extract_grounding_validation(result)
+        if grounding_validation:
+            sanitized["grounding_validation"] = grounding_validation
+            sanitized["grounding_fallback"] = bool(grounding_validation.get("fallback_used"))
+            sanitized["grounding_selected_candidate"] = _safe_str(
+                grounding_validation.get("selected_candidate")
+            )
+            sanitized["grounding_fallback_source"] = _safe_str(
+                grounding_validation.get("fallback_source")
+            )
+
+    spatial_check_results = turn.get("spatial_check_results")
+    if isinstance(spatial_check_results, list):
+        if detail in ("debug", "full"):
+            sanitized["spatial_check_results"] = [
+                {
+                    "check_type": item.get("check_type"),
+                    "ok": item.get("ok"),
+                    "expected_ok": item.get("expected_ok"),
+                    "actual_ok": item.get("actual_ok"),
+                    "expected_reason": item.get("expected_reason"),
+                    "actual_reason": item.get("actual_reason"),
+                    "expected_area_id": item.get("expected_area_id"),
+                    "actual_area_id": item.get("actual_area_id"),
+                    "expected_entity_ids": item.get("expected_entity_ids"),
+                    "actual_entity_ids": item.get("actual_entity_ids"),
+                    "error": item.get("error"),
+                }
+                for item in spatial_check_results[:50]
+                if isinstance(item, dict)
+            ]
+        else:
+            sanitized["spatial_check_results"] = [
+                {
+                    "check_type": item.get("check_type"),
+                    "ok": item.get("ok"),
+                    "actual_reason": item.get("actual_reason"),
+                    "error": item.get("error"),
+                }
+                for item in turn.get("spatial_check_results", [])[:20]
+                if isinstance(item, dict)
+            ]
+
+    memory_check_results = turn.get("memory_check_results")
+    if isinstance(memory_check_results, list):
+        sanitized["memory_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "subject_id": item.get("subject_id"),
+                "expected_event_ids": item.get("expected_event_ids"),
+                "forbidden_event_ids": item.get("forbidden_event_ids"),
+                "actual_event_ids": item.get("actual_event_ids"),
+                "error": item.get("error"),
+            }
+            for item in memory_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    social_check_results = turn.get("social_check_results")
+    if isinstance(social_check_results, list):
+        sanitized["social_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "npc_id": item.get("npc_id"),
+                "actor_id": item.get("actor_id"),
+                "result_key": item.get("result_key"),
+                "expected_ok": item.get("expected_ok"),
+                "expected_stance": item.get("expected_stance"),
+                "expected_escalation": item.get("expected_escalation"),
+                "actual_stance": item.get("actual_stance"),
+                "relationship": item.get("relationship"),
+                "actual": item.get("actual"),
+                "validation": item.get("validation"),
+                "failures": item.get("failures"),
+                "available_result_keys": item.get("available_result_keys"),
+                "error": item.get("error"),
+            }
+            for item in social_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    quest_puzzle_check_results = turn.get("quest_puzzle_check_results")
+    if isinstance(quest_puzzle_check_results, list):
+        sanitized["quest_puzzle_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "quest_id": item.get("quest_id"),
+                "puzzle_id": item.get("puzzle_id"),
+                "expected_stage": item.get("expected_stage"),
+                "actual_stage": item.get("actual_stage"),
+                "expected_state": item.get("expected_state"),
+                "actual_state": item.get("actual_state"),
+                "expected_status": item.get("expected_status"),
+                "actual_status": item.get("actual_status"),
+                "objective_id": item.get("objective_id"),
+                "expected_count": item.get("expected_count"),
+                "actual_count": item.get("actual_count"),
+                "expected": item.get("expected"),
+                "actual": item.get("actual"),
+                "condition_result": item.get("condition_result"),
+                "rewards": item.get("rewards"),
+                "error": item.get("error"),
+            }
+            for item in quest_puzzle_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    story_m1_m3_check_results = turn.get("story_m1_m3_check_results")
+    if isinstance(story_m1_m3_check_results, list):
+        sanitized["story_m1_m3_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "lore_id": item.get("lore_id"),
+                "arc_id": item.get("arc_id"),
+                "entry": item.get("entry"),
+                "arc": item.get("arc"),
+                "expected_ok": item.get("expected_ok"),
+                "actual_ok": item.get("actual_ok"),
+                "condition_result": item.get("condition_result"),
+                "failures": item.get("failures"),
+                "link_count": item.get("link_count"),
+                "max_link_count": item.get("max_link_count"),
+                "error": item.get("error"),
+            }
+            for item in story_m1_m3_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    story_event_m4_m6_check_results = turn.get("story_event_m4_m6_check_results")
+    if isinstance(story_event_m4_m6_check_results, list):
+        sanitized["story_event_m4_m6_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "event_id": item.get("event_id"),
+                "arc_id": item.get("arc_id"),
+                "lore_id": item.get("lore_id"),
+                "quest_id": item.get("quest_id"),
+                "npc_id": item.get("npc_id"),
+                "subject_id": item.get("subject_id"),
+                "source_story_event_id": item.get("source_story_event_id"),
+                "expected_event_id": item.get("expected_event_id"),
+                "actual_event_ids": item.get("actual_event_ids"),
+                "applied": item.get("applied"),
+                "validation": item.get("validation"),
+                "arc": item.get("arc"),
+                "entry": item.get("entry"),
+                "quest": item.get("quest"),
+                "relationship": item.get("relationship"),
+                "rows": item.get("rows"),
+                "retrieved": item.get("retrieved"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in story_event_m4_m6_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    escalation_m7_m9_check_results = turn.get("escalation_m7_m9_check_results")
+    if isinstance(escalation_m7_m9_check_results, list):
+        sanitized["escalation_m7_m9_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "rule_id": item.get("rule_id"),
+                "arc_id": item.get("arc_id"),
+                "event_id": item.get("event_id"),
+                "expected_eligible": item.get("expected_eligible"),
+                "actual_eligible": item.get("actual_eligible"),
+                "expected_eligible_count": item.get("expected_eligible_count"),
+                "expected_first_rule_id": item.get("expected_first_rule_id"),
+                "expected_count": item.get("expected_count"),
+                "actual_count": item.get("actual_count"),
+                "expected_first_event_id": item.get("expected_first_event_id"),
+                "evaluation": item.get("evaluation"),
+                "pressure": item.get("pressure"),
+                "application": item.get("application"),
+                "arc": item.get("arc"),
+                "applied": item.get("applied"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in escalation_m7_m9_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    story_proposal_m10_m12_check_results = turn.get("story_proposal_m10_m12_check_results")
+    if isinstance(story_proposal_m10_m12_check_results, list):
+        sanitized["story_proposal_m10_m12_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "expected_ok": item.get("expected_ok"),
+                "actual_ok": item.get("actual_ok"),
+                "required_error": item.get("required_error"),
+                "validation": item.get("validation"),
+                "counts": item.get("counts"),
+                "failures": item.get("failures"),
+                "error": item.get("error"),
+            }
+            for item in story_proposal_m10_m12_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    story_pack_m13_m15_check_results = turn.get("story_pack_m13_m15_check_results")
+    if isinstance(story_pack_m13_m15_check_results, list):
+        sanitized["story_pack_m13_m15_check_results"] = [
+            {
+                "check_type": item.get("check_type"),
+                "ok": item.get("ok"),
+                "expected_ok": item.get("expected_ok"),
+                "actual_ok": item.get("actual_ok"),
+                "required_reason": item.get("required_reason"),
+                "pack_id": item.get("pack_id"),
+                "lore_id": item.get("lore_id"),
+                "arc_id": item.get("arc_id"),
+                "event_id": item.get("event_id"),
+                "rule_id": item.get("rule_id"),
+                "quest_id": item.get("quest_id"),
+                "import_result": item.get("import_result"),
+                "imported": item.get("imported"),
+                "entry": item.get("entry"),
+                "arc": item.get("arc"),
+                "event": item.get("event"),
+                "rule": item.get("rule"),
+                "quest": item.get("quest"),
+                "failures": item.get("failures"),
+                "imported_pack_count": item.get("imported_pack_count"),
+                "event_definition_count": item.get("event_definition_count"),
+                "rule_definition_count": item.get("rule_definition_count"),
+                "error": item.get("error"),
+            }
+            for item in story_pack_m13_m15_check_results[:50]
+            if isinstance(item, dict)
+        ]
+
+    dialogue_m16_m18_check_results = turn.get("dialogue_m16_m18_check_results")
+    if isinstance(dialogue_m16_m18_check_results, list):
+        sanitized["dialogue_m16_m18_check_results"] = [
+            {

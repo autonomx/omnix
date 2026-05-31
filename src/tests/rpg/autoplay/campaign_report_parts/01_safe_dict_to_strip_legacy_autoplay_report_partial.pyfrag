@@ -1,0 +1,409 @@
+from __future__ import annotations
+
+import html
+import json
+import re
+from collections import Counter, defaultdict
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _html_escape(value: Any) -> str:
+    import html
+
+    return html.escape(_safe_str(value), quote=True)
+
+
+def _format_seconds(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f"{float(value):.2f}s"
+    try:
+        return f"{float(value):.2f}s"
+    except Exception:
+        return "—"
+
+
+def _format_percent(value: Any) -> str:
+    try:
+        return f"{float(value) * 100.0:.1f}%"
+    except Exception:
+        return "—"
+
+
+def _render_gate_table(evaluation: Dict[str, Any]) -> str:
+    gates = _safe_dict(_safe_dict(evaluation).get("gates"))
+    rows = []
+    for name, gate in gates.items():
+        gate = _safe_dict(gate)
+        ok = bool(gate.get("ok"))
+        badge = "PASS" if ok else "FAIL"
+        badge_class = "badge-pass" if ok else "badge-fail"
+        rows.append(
+            "<tr>"
+            f"<td><code>{_html_escape(name)}</code></td>"
+            f"<td><span class='{badge_class}'>{badge}</span></td>"
+            f"<td>{_html_escape(gate.get('message'))}</td>"
+            f"<td><pre>{_html_escape(json.dumps(gate.get('value'), ensure_ascii=False, indent=2, default=str))}</pre></td>"
+            f"<td><pre>{_html_escape(json.dumps(gate.get('expected'), ensure_ascii=False, indent=2, default=str))}</pre></td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='evaluation-gates'>"
+        "<h2>100-Turn Evaluation Gates</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Gate</th><th>Status</th><th>Message</th><th>Value</th><th>Expected</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_hundred_turn_evaluation_gates(evaluation: Dict[str, Any]) -> str:
+    gates = _safe_dict(_safe_dict(evaluation).get("gates"))
+    overall_ok = bool(evaluation.get("ok", True))
+
+    gate_rows = ""
+    for name, gate in gates.items():
+        gate = _safe_dict(gate)
+        ok = bool(gate.get("ok"))
+        gate_rows += (
+            "<tr>"
+            f"<td>{html.escape(str(name))}</td>"
+            f'<td><span class="rpg-badge {_status_badge_class(ok)}">{html.escape(_yes_no(ok))}</span></td>'
+            "</tr>"
+        )
+    if not gate_rows:
+        gate_rows = "<tr><td colspan='2'>No gate details available.</td></tr>"
+
+    return f"""
+    <section class="rpg-card span-12" id="hundred-turn-evaluation-gates">
+      <div class="rpg-section-title">
+        <h2>100-Turn Evaluation Gates</h2>
+        <span class="rpg-badge {_status_badge_class(overall_ok)}">{html.escape(_yes_no(overall_ok))}</span>
+      </div>
+      <table class="rpg-table">
+        <thead><tr><th>Gate</th><th>Status</th></tr></thead>
+        <tbody>{gate_rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_grounding_summary(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    return (
+        "<section class='card' id='grounding-summary'>"
+        "<h2>Narration Grounding</h2>"
+        "<div class='metric-grid'>"
+        f"<div><strong>Checked</strong><span>{int(summary.get('checked_count') or 0)}</span></div>"
+        f"<div><strong>Invalid</strong><span>{int(summary.get('invalid_count') or 0)}</span></div>"
+        f"<div><strong>Fallback Used</strong><span>{int(summary.get('fallback_used_count') or 0)}</span></div>"
+        f"<div><strong>OK</strong><span>{_html_escape(summary.get('ok'))}</span></div>"
+        "</div>"
+        "<h3>Selected Candidates</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('selected_candidate_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "<h3>Fallback Sources</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('fallback_source_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "</section>"
+    )
+
+
+def _render_progress_quality(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    return (
+        "<section class='card' id='progress-quality'>"
+        "<h2>Progress Quality</h2>"
+        "<div class='metric-grid'>"
+        f"<div><strong>Meaningful Progress</strong><span>{_format_percent(summary.get('meaningful_progress_rate'))}</span></div>"
+        f"<div><strong>Fallback Action Rate</strong><span>{_format_percent(summary.get('fallback_player_action_rate'))}</span></div>"
+        f"<div><strong>No-Change Turns</strong><span>{int(summary.get('no_change_turns') or 0)}</span></div>"
+        f"<div><strong>Unique Locations</strong><span>{int(summary.get('unique_location_count') or 0)}</span></div>"
+        "</div>"
+        "<h3>Action Types</h3>"
+        f"<pre>{_html_escape(json.dumps(summary.get('action_type_counts', {}), ensure_ascii=False, indent=2, default=str))}</pre>"
+        "<h3>Story/World Signals</h3>"
+        "<table class='mini-table'>"
+        f"<tr><td>Quest events</td><td>{int(summary.get('quest_event_count') or 0)}</td></tr>"
+        f"<tr><td>NPC interactions</td><td>{int(summary.get('npc_interaction_count') or 0)}</td></tr>"
+        f"<tr><td>Service events</td><td>{int(summary.get('service_event_count') or 0)}</td></tr>"
+        f"<tr><td>Travel events</td><td>{int(summary.get('travel_event_count') or 0)}</td></tr>"
+        f"<tr><td>Combat events</td><td>{int(summary.get('combat_event_count') or 0)}</td></tr>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_performance_seconds(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    turn = _safe_dict(summary.get("turn"))
+    blocking = _safe_dict(summary.get("blocking"))
+    narration = _safe_dict(summary.get("narration"))
+
+    def row(label: str, data: Dict[str, Any]) -> str:
+        return (
+            "<tr>"
+            f"<td>{_html_escape(label)}</td>"
+            f"<td>{int(data.get('count') or 0)}</td>"
+            f"<td>{_format_seconds(data.get('avg_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('p50_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('p95_seconds'))}</td>"
+            f"<td>{_format_seconds(data.get('max_seconds'))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='performance'>"
+        "<h2>Performance Metrics</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Metric</th><th>Count</th><th>Avg</th><th>P50</th><th>P95</th><th>Max</th></tr></thead>"
+        "<tbody>"
+        f"{row('Turn', turn)}"
+        f"{row('Blocking', blocking)}"
+        f"{row('Narration', narration)}"
+        "</tbody></table>"
+        "</section>"
+    )
+
+
+def _cap_text(value: Any, limit: int) -> str:
+    text = _safe_str(value)
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)] + "…"
+
+
+def _extract_report_entities(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    npcs: Dict[str, Dict[str, Any]] = {}
+    locations: Dict[str, Dict[str, Any]] = {}
+    quests: Dict[str, Dict[str, Any]] = {}
+    timeline: List[Dict[str, Any]] = []
+
+    for index, row in enumerate(transcript, start=1):
+        row = _safe_dict(row)
+        blob = json.dumps(row, ensure_ascii=False, default=str)
+
+        location = _safe_str(
+            row.get("location")
+            or row.get("current_location")
+            or row.get("location_id")
+            or _safe_dict(row.get("state")).get("current_location")
+            or _safe_dict(row.get("turn_contract")).get("current_location")
+        )
+        if location:
+            item = locations.setdefault(
+                location,
+                {
+                    "id": location,
+                    "turns": [],
+                    "summary": "",
+                    "event_count": 0,
+                },
+            )
+            item["turns"].append(index)
+            item["event_count"] += 1
+
+        npc_name = _safe_str(
+            row.get("npc")
+            or row.get("npc_name")
+            or _safe_dict(row.get("npc")).get("speaker")
+            or _safe_dict(row.get("narration_json")).get("npc", {}).get("speaker")
+        )
+        if npc_name:
+            item = npcs.setdefault(
+                npc_name,
+                {
+                    "name": npc_name,
+                    "turns": [],
+                    "interaction_count": 0,
+                    "latest_line": "",
+                },
+            )
+            item["turns"].append(index)
+            item["interaction_count"] += 1
+
+        narration = _safe_str(
+            row.get("narration")
+            or row.get("narration_preview")
+            or _safe_dict(row.get("narration_json")).get("narration")
+        )
+        if narration:
+            timeline.append(
+                {
+                    "turn": index,
+                    "title": _cap_text(narration, 90),
+                    "narration": _cap_text(narration, 500),
+                    "location": location,
+                    "npc": npc_name,
+                }
+            )
+
+        if "quest" in blob.lower() or "objective" in blob.lower():
+            quest_id = _safe_str(row.get("quest_id") or row.get("objective_id") or "quest_activity")
+            item = quests.setdefault(
+                quest_id,
+                {
+                    "id": quest_id,
+                    "turns": [],
+                    "event_count": 0,
+                },
+            )
+            item["turns"].append(index)
+            item["event_count"] += 1
+
+    return {
+        "npcs": list(npcs.values()),
+        "locations": list(locations.values()),
+        "quests": list(quests.values()),
+        "timeline": timeline,
+    }
+
+
+def _render_locations_section(entities: Dict[str, Any]) -> str:
+    locations = _safe_list(_safe_dict(entities).get("locations"))
+    rows = []
+    for loc in locations:
+        loc = _safe_dict(loc)
+        turns = _safe_list(loc.get("turns"))
+        rows.append(
+            "<tr>"
+            f"<td>{_html_escape(loc.get('id'))}</td>"
+            f"<td>{len(turns)}</td>"
+            f"<td>{_html_escape(', '.join(str(t) for t in turns[:12]))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='locations'>"
+        "<h2>Locations Visited</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Location</th><th>Events</th><th>Turns</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _render_timeline_section(entities: Dict[str, Any]) -> str:
+    timeline = _safe_list(_safe_dict(entities).get("timeline"))
+    rows = []
+    for item in timeline[:120]:
+        item = _safe_dict(item)
+        rows.append(
+            "<tr>"
+            f"<td>{int(item.get('turn') or 0)}</td>"
+            f"<td>{_html_escape(item.get('location'))}</td>"
+            f"<td>{_html_escape(item.get('npc'))}</td>"
+            f"<td>{_html_escape(item.get('narration'))}</td>"
+            "</tr>"
+        )
+
+    return (
+        "<section class='card' id='timeline'>"
+        "<h2>Adventure Timeline</h2>"
+        "<table class='wide-table'>"
+        "<thead><tr><th>Turn</th><th>Location</th><th>NPC</th><th>Beat</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+_HTML_ID_RE = re.compile(r'\bid="([^"]+)"')
+_HTML_HREF_RE = re.compile(r'href=(["\'])#([^"\']+)\1')
+
+
+def _prefix_legacy_section_ids(html: str, *, prefix: str = "legacy-") -> str:
+    """Prefix IDs and same-document hrefs inside legacy/debug HTML.
+
+    N82 moved old report sections into the Technical Debug wrapper, but those
+    sections kept IDs like campaign-journal, quest-progress, quality, debug.
+    The new RPG shell also has top-level anchors. Duplicate IDs make browser
+    anchor navigation unreliable and can send nav clicks to the wrong section.
+    """
+    text = _safe_str(html)
+    if not text:
+        return ""
+
+    id_map: Dict[str, str] = {}
+
+    def replace_id(match: re.Match[str]) -> str:
+        old = match.group(1)
+        if old.startswith(prefix):
+            new = old
+        else:
+            new = f"{prefix}{old}"
+        id_map[old] = new
+        return f'id="{new}"'
+
+    text = _HTML_ID_RE.sub(replace_id, text)
+
+    def replace_href(match: re.Match[str]) -> str:
+        quote = match.group(1)
+        old = match.group(2)
+        new = id_map.get(old)
+        if not new:
+            return match.group(0)
+        return f'href={quote}#{new}{quote}'
+
+    text = _HTML_HREF_RE.sub(replace_href, text)
+    return text
+
+
+def _strip_legacy_autoplay_report_partial(html: str) -> str:
+    """Remove the old standalone Autoplay Campaign Report shell.
+
+    The RPG report now has a unified hero that contains the campaign chronicle
+    and run-report stats. The legacy HTML still contains an older standalone
+    report header/nav and old Executive Summary hero. If preserved verbatim, it
+    appears as a second report with a different visual theme.
+
+    Keep the useful detailed legacy sections, but strip the duplicate shell:
+    - <header>Autoplay Campaign Report ... old nav ...</header>
+    - old <section class="hero">Executive Summary ...</section>
+    """
+    text = _safe_str(html)
+    if not text:
+        return ""
+
+    # Remove the old report header/nav block when it is the legacy report header.
+    text = re.sub(
+        r"<header\b[^>]*>\s*.*?Autoplay Campaign Report.*?\bstatus-pill\b.*?</header>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    # Remove the old blue/purple Executive Summary hero block. This content is
+    # now represented by the unified RPG hero + Validation Snapshot.
+    text = re.sub(
+        r"<section\b(?=[^>]*\bclass=\"[^\"]*\bhero\b[^\"]*\")[^>]*>\s*.*?<h2>\s*Executive Summary\s*</h2>.*?</section>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    # Some generated variants use single quotes for class.
+    text = re.sub(
+        r"<section\b(?=[^>]*\bclass='[^']*\bhero\b[^']*')[^>]*>\s*.*?<h2>\s*Executive Summary\s*</h2>.*?</section>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    return _strip_legacy_autoplay_report_tail(text)

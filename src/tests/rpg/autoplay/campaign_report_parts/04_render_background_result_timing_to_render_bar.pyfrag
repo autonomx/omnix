@@ -1,0 +1,520 @@
+def _render_background_result_timing(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    events = summary.get("attachment_events") if isinstance(summary.get("attachment_events"), list) else []
+    rows = ""
+    for event in events[-40:]:
+        event = _safe_dict(event)
+        rows += (
+            "<tr>"
+            f"<td>{html.escape(str(event.get('source_turn') or ''))}</td>"
+            f"<td>{html.escape(str(event.get('attach_turn') or ''))}</td>"
+            f"<td>{html.escape(str(event.get('phase') or ''))}</td>"
+            f"<td>{html.escape(str(event.get('lag_turns') or 0))}</td>"
+            f"<td>{html.escape(str(event.get('job_id') or ''))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='5'>No background attachment timing data.</td></tr>"
+
+    warnings = ""
+    for warning in summary.get("warnings") if isinstance(summary.get("warnings"), list) else []:
+        warning = _safe_dict(warning)
+        warnings += (
+            "<li>"
+            f"<strong>{html.escape(str(warning.get('severity') or 'warning'))}</strong> "
+            f"{html.escape(str(warning.get('code') or ''))}: "
+            f"{html.escape(str(warning.get('message') or ''))}"
+            "</li>"
+        )
+
+    return f"""
+    <section class="rpg-promoted-section" id="background-result-timing">
+      <h2>Background Result Timing</h2>
+      <p>
+        Submitted: {html.escape(str(summary.get('jobs_submitted') or 0))} ·
+        Attached: {html.escape(str(summary.get('jobs_attached_total') or 0))} ·
+        Pre-turn attached: {html.escape(str(summary.get('jobs_attached_pre_turn') or 0))} ·
+        Final attached: {html.escape(str(summary.get('jobs_attached_final') or 0))} ·
+        Pre-turn attach rate: {html.escape(str(summary.get('pre_turn_attach_rate') or 0))} ·
+        Max lag turns: {html.escape(str(summary.get('max_attach_lag_turns') or 0))}
+      </p>
+      <ul>{warnings or '<li>No timing warnings.</li>'}</ul>
+      <table>
+        <thead><tr><th>Source turn</th><th>Attach turn</th><th>Phase</th><th>Lag</th><th>Job</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _render_npc_evolution_cards(summary: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    cards = summary.get("cards") if isinstance(summary.get("cards"), list) else []
+    if not cards:
+        return '<section id="npc-evolution"><h2>NPC Evolution</h2><p>No NPC evolution arcs found yet.</p></section>'
+    rows = []
+    for card_any in cards:
+        card = _safe_dict(card_any)
+        axes = _safe_dict(card.get("axes"))
+        axes_html = "".join(
+            f"<tr><td>{_esc(str(axis))}</td><td>{_esc(str(value))}</td></tr>"
+            for axis, value in sorted(axes.items())
+        )
+        memories = "".join(
+            f"<li>{_esc(str(_safe_dict(item).get('summary') or item))}</li>"
+            for item in (card.get("memories") if isinstance(card.get("memories"), list) else [])[-5:]
+        )
+        hooks = "".join(
+            f"<li>{_esc(str(_safe_dict(item).get('summary') or item))}</li>"
+            for item in (card.get("future_hooks") if isinstance(card.get("future_hooks"), list) else [])[-5:]
+        )
+        milestones = "".join(
+            "<li>"
+            + _esc(
+                f"{_safe_dict(item).get('from', '')} → {_safe_dict(item).get('to', '')}"
+                f" ({_safe_dict(item).get('reason', '')})"
+            )
+            + "</li>"
+            for item in (card.get("milestones") if isinstance(card.get("milestones"), list) else [])[-5:]
+        )
+        rows.append(
+            f"""
+            <article class="npc-card">
+              <h3>{_esc(str(card.get('npc_id') or 'Unknown NPC'))}</h3>
+              <p><strong>Arc stage:</strong> {_esc(str(card.get('arc_stage') or 'stable'))}</p>
+              <p><strong>Signals:</strong> {_esc(str(card.get('signal_count') or 0))}</p>
+              <p><strong>Profile:</strong> {_esc(str(card.get('profile_path') or 'not loaded'))}</p>
+              <h4>Axes</h4>
+              <table><tbody>{axes_html}</tbody></table>
+              <h4>Recent Memories</h4>
+              <ul>{memories or '<li>None yet.</li>'}</ul>
+              <h4>Future Hooks</h4>
+              <ul>{hooks or '<li>None yet.</li>'}</ul>
+              <h4>Milestones</h4>
+              <ul>{milestones or '<li>No stage changes yet.</li>'}</ul>
+            </article>
+            """
+        )
+    return f"""
+    <section class="rpg-promoted-section" id="npc-evolution">
+      <h2>NPC Evolution</h2>
+      <p>{_esc(str(summary.get('npc_count') or len(cards)))} NPC profile(s) tracked.</p>
+      <div class="npc-card-grid">{''.join(rows)}</div>
+    </section>
+    """
+
+
+def _first_nonempty(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _first_non_empty(*values: Any) -> str:
+    for value in values:
+        text = _safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _contains_any(text: str, words: List[str]) -> bool:
+    text_l = text.lower()
+    return any(word.lower() in text_l for word in words)
+
+
+def _title_case_from_text(text: str, *, fallback: str = "Entry") -> str:
+    """Convert text to title case, falling back if too short."""
+    text = _safe_str(text).strip()
+    if not text or len(text) < 3:
+        return fallback
+    return text.title()
+
+
+def _merge_report_contexts(
+    *,
+    summary: Dict[str, Any],
+    metrics: Dict[str, Any],
+    report_model: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Merge summary/metrics/report model into one render context.
+
+    The report shell originally read mostly from autoplay-summary.json style
+    summary/metrics. Some user-facing campaign data, especially formatted
+    inventory/currency rows, is only present in the richer campaign report model.
+    Merge those fields so top-level RPG sections do not show empty data when the
+    model already has the real values.
+    """
+    merged: Dict[str, Any] = {}
+    for source in (_safe_dict(metrics), _safe_dict(summary), _safe_dict(report_model)):
+        for key, value in source.items():
+            if key not in merged or merged.get(key) in (None, "", [], {}):
+                merged[key] = value
+
+    # Common nested model aliases seen in generated report artifacts.
+    for key in ("model", "report_model", "campaign_report_model", "data"):
+        nested = _safe_dict(merged.get(key))
+        for nested_key, nested_value in nested.items():
+            if nested_key not in merged or merged.get(nested_key) in (None, "", [], {}):
+                merged[nested_key] = nested_value
+
+    return merged
+
+
+def _report_context_value(context: Dict[str, Any], *keys: str) -> Any:
+    context = _safe_dict(context)
+    for key in keys:
+        if key in context and context.get(key) not in (None, "", [], {}):
+            return context.get(key)
+    return None
+
+
+def _as_list(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return []
+
+
+def _short_text(value: Any, limit: int = 220) -> str:
+    text = _safe_str(value).strip()
+    if len(text) <= int(limit or 220):
+        return text
+    return text[: max(0, int(limit or 220) - 1)].rstrip() + "…"
+
+
+def _dedupe_texts(values: List[Any], *, limit: int = 0) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for value in _as_list(values):
+        if isinstance(value, dict):
+            text = _first_non_empty(
+                value.get("summary"),
+                value.get("text"),
+                value.get("description"),
+                value.get("message"),
+                value.get("memory"),
+                value.get("hook"),
+                value.get("intent"),
+                value.get("label"),
+            )
+        else:
+            text = _safe_str(value)
+        text = " ".join(text.strip().split())
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if int(limit or 0) > 0 and len(result) >= int(limit or 0):
+            break
+    return result
+
+
+def _dedupe_memory_key(text: str) -> str:
+    key = _safe_str(text).lower()
+    key = re.sub(r"\(turn\s+\d+\)", "", key, flags=re.IGNORECASE)
+    key = re.sub(r"\bturn\s+\d+\b", "", key, flags=re.IGNORECASE)
+    key = re.sub(r"\b\d{4}-\d{2}-\d{2}[^\s]*", "", key)
+    key = re.sub(r"[^a-z0-9]+", " ", key)
+    key = " ".join(key.split())
+    return key[:180]
+
+
+def _dedupe_texts_fuzzy(values: List[Any], *, limit: int = 0) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for text in _dedupe_texts(values, limit=0):
+        key = _dedupe_memory_key(text)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if int(limit or 0) > 0 and len(result) >= int(limit or 0):
+            break
+    return result
+
+
+def _normalize_report_target(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if text.startswith("npc:") and len(text) > 4:
+        return text[4:]
+    return text
+
+
+def _turn_int(row: Dict[str, Any]) -> int:
+    row = _safe_dict(row)
+    return _num(row.get("turn_index") or row.get("turn") or row.get("source_turn"))
+
+
+def _status_class(value: Any) -> str:
+    text = _safe_str(value).lower()
+    if text in {"pass", "passed", "good", "ok", "true", "healthy"}:
+        return "good"
+    if text in {"warn", "warning", "partial", "caution"}:
+        return "warn"
+    if text in {"fail", "failed", "bad", "false", "error"}:
+        return "bad"
+    return ""
+
+
+def _status_badge_class(value: Any) -> str:
+    text = str(value).strip().lower()
+    if text in ("true", "ok", "pass", "passed", "success", "green"):
+        return "pass"
+    if text in ("false", "fail", "failed", "error", "red"):
+        return "fail"
+    if text in ("warn", "warning", "partial", "yellow"):
+        return "warn"
+    return "neutral"
+
+
+def _yes_no(value: Any) -> str:
+    return "PASS" if bool(value) else "FAIL"
+
+
+def _pct(value: Any) -> str:
+    try:
+        value = float(value)
+    except Exception:
+        return "0%"
+    if value <= 1.0:
+        value *= 100.0
+    return f"{max(0.0, min(100.0, value)):.0f}%"
+
+
+def _num(value: Any, default: int = 0) -> int:
+    try:
+        return int(value or default)
+    except Exception:
+        return default
+
+
+def _seconds_from_ms(value: Any) -> str:
+    try:
+        return f"{float(value) / 1000.0:.2f}s"
+    except Exception:
+        return "0.00s"
+
+
+def _number(value: Any, digits: int = 2) -> str:
+    try:
+        return f"{float(value):.{digits}f}"
+    except Exception:
+        return "0"
+
+
+def _format_item_name(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    item = _safe_dict(item)
+    name = _first_non_empty(item.get("name"), item.get("item_id"), item.get("id"), item.get("type"))
+    qty = item.get("qty") or item.get("quantity") or item.get("count") or item.get("amount")
+    if qty:
+        return f"{name} ×{qty}"
+    return name
+
+
+def _format_currency(currency: Any) -> str:
+    currency = _safe_dict(currency)
+    parts = []
+    for key, value in currency.items():
+        if isinstance(value, (int, float)) and value > 0:
+            parts.append(f"{int(value)} {key}")
+    return ", ".join(parts)
+
+
+def _html_list(items: List[Any], *, empty: str = "None", limit: int = 10) -> str:
+    items = [str(item) for item in _as_list(items) if item][:limit]
+    if not items:
+        return f"<p>{html.escape(empty)}</p>"
+    return "<ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in items) + "</ul>"
+
+
+def _infer_rpg_title_from_text(text: str, *, fallback: str = "Story Beat") -> str:
+    text = _safe_str(text).strip()
+    if not text:
+        return fallback
+
+    import re
+
+    # Clean up the text for analysis
+    text_lower = text.lower()
+    if text_lower.startswith("player:"):
+        lower_action = text_lower.split("player:", 1)[1].strip()
+    else:
+        lower_action = text_lower
+
+    if any(term in lower_action for term in ("listen intently", "listen closely", "listen to bran")):
+        return "Listen to Bran"
+    if "bran" in lower_action and any(term in lower_action for term in ("lean in", "lower your voice", "quietly", "discreetly", "private")):
+        return "Speak Privately with Bran"
+    if "bran" in lower_action and any(term in lower_action for term in ("elaboration", "explain", "details", "more about", "follow up")):
+        return "Press Bran for Details"
+    if "bran" in lower_action and any(term in lower_action for term in ("unusual activity", "rumor", "rumors", "town")):
+        return "Ask Bran About Rumors"
+    if any(term in lower_action for term in ("ask bran", "question bran")):
+        return "Question Bran"
+    if any(term in lower_action for term in ("ask", "question", "inquire")) and "rumor" in lower_action:
+        return "Ask About Rumors"
+    if any(term in lower_action for term in ("lean in", "lower your voice", "whisper")):
+        return "Speak Quietly"
+    if any(term in lower_action for term in ("listen", "wait for", "hear him out")):
+        return "Listen Carefully"
+    if "traveler" in lower_action:
+        return "Engage the Traveler"
+    return _title_case_from_text(text, fallback=fallback)
+
+    # Look for key RPG elements that would make good titles
+
+    # Character conversations: "Bran says...", "The innkeeper tells..."
+    char_speak_match = re.match(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+says?\b', text, re.IGNORECASE)
+    if char_speak_match:
+        name = char_speak_match.group(1).strip()
+        if len(name) > 2 and name not in {"The", "They", "You", "We", "I"}:
+            # Try to extract what they're saying
+            remaining = text[len(char_speak_match.group(0)):].strip()
+            if remaining:
+                # Look for key topics
+                if re.search(r'\bwitness\b|\bevidence\b|\bclue\b', remaining, re.IGNORECASE):
+                    return f"{name}: Witness Info"
+                elif re.search(r'\bbandit\b|\bthief\b|\brobber\b|\bcriminal\b', remaining, re.IGNORECASE):
+                    return f"{name}: Bandit Report"
+                elif re.search(r'\broad\b|\bpath\b|\btrail\b|\bdestination\b', remaining, re.IGNORECASE):
+                    return f"{name}: Travel Info"
+                elif re.search(r'\binn\b|\btavern\b|\bshop\b|\bstore\b|\bmerchant\b', remaining, re.IGNORECASE):
+                    return f"{name}: Local Info"
+                else:
+                    return f"{name} Speaks"
+
+    # Location arrivals: "The party arrives at the Rusty Flagon"
+    location_match = re.search(r'\b(?:arrives?|enters?|reaches?|finds?|discovers?|visits?)\s+(?:at|in|the)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', text, re.IGNORECASE)
+    if location_match:
+        location = location_match.group(1).strip()
+        if len(location) > 3:
+            return f"At {location}"
+
+    # Discoveries and findings
+    discovery_match = re.search(r'\b(?:discovers?|finds?|learns?|realizes?|sees?|notices?|observes?)\s+(?:that|about|of)\s+(.+?)(?:\s*[.,;]|$)', text, re.IGNORECASE)
+    if discovery_match:
+        discovery = discovery_match.group(1).strip()
+        if len(discovery) > 8:
+            # Shorten and capitalize
+            short_discovery = discovery[:30] + "..." if len(discovery) > 30 else discovery
+            return f"Discovery: {short_discovery.title()}"
+
+    # Quest or mission related
+    quest_match = re.search(r'\b(?:quest|mission|task|objective|goal|job)\b.*?\b(?:is|was|becomes?|continues?|progresses?|advances?)\s+(.+?)(?:\s*[.,;]|$)', text, re.IGNORECASE)
+    if quest_match:
+        quest_info = quest_match.group(1).strip()
+        if len(quest_info) > 5:
+            return "Quest Progress"
+
+    # Combat or confrontation
+    combat_match = re.search(r'\b(?:fights?|battles?|confronts?|attacks?|defends?)\s+(?:against|with)\s+(.+?)(?:\s*[.,;]|$)', text, re.IGNORECASE)
+    if combat_match:
+        opponent = combat_match.group(1).strip()
+        if len(opponent) > 3:
+            return f"Confrontation: {opponent.title()}"
+
+    # NPC encounters
+    npc_match = re.search(r'\b(?:meets?|encounters?|talks?\s+to|speaks?\s+to)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', text, re.IGNORECASE)
+    if npc_match:
+        npc_name = npc_match.group(1).strip()
+        if len(npc_name) > 2 and npc_name not in {"The", "They", "You", "We", "I"}:
+            return f"Meeting {npc_name}"
+
+    # If we can't find a specific pattern, try to extract meaningful phrases
+    # Look for sentences that seem like key plot points
+    sentences = re.split(r'[.!?]+', text)
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if len(sentence) < 10 or len(sentence) > 60:
+            continue
+
+        # Skip sentences that are too generic
+        if re.match(r'^(The\s+party|They|You|We|I)\s+(?:goes?|moves?|walks?|travels?|continues?|proceeds?)\b', sentence, re.IGNORECASE):
+            continue
+
+        # Look for sentences with proper names or specific nouns
+        if re.search(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', sentence):
+            # Capitalize first letter and add ellipsis if it's a fragment
+            title = sentence[0].upper() + sentence[1:]
+            if not title.endswith('.') and not title.endswith('!') and not title.endswith('?'):
+                title += "..."
+            return title
+
+    # As a last resort, return the fallback
+    return fallback
+
+
+def _is_generic_timeline_title(value: Any) -> bool:
+    text = _safe_str(value).strip().lower()
+    return text in {
+        "",
+        "story beat",
+        "campaign event",
+        "campaign beat",
+        "player action",
+        "turn event",
+    }
+
+
+def _timeline_title_from_body(body: Any, *, fallback: str = "Story Beat") -> str:
+    text = _safe_str(body).strip()
+    if not text:
+        return fallback
+
+    # Many story summaries are shaped like:
+    # "Player: Ask Bran about any unusual activity or rumors in town. Result: ..."
+    # Use the player-action prefix as the title source when present.
+    player_match = re.search(
+        r"\bPlayer:\s*(.+?)(?:\n|\. Result:| Result:|\. Outcome:| Outcome:|$)",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if player_match:
+        candidate = player_match.group(1).strip()
+        inferred = _infer_rpg_title_from_text(candidate, fallback=fallback)
+        if not _is_generic_timeline_title(inferred):
+            return inferred
+
+    action_match = re.search(
+        r"\b(?:Action|Player Action):\s*(.+?)(?:\n|\. Result:| Result:|\. Outcome:| Outcome:|$)",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if action_match:
+        candidate = action_match.group(1).strip()
+        inferred = _infer_rpg_title_from_text(candidate, fallback=fallback)
+        if not _is_generic_timeline_title(inferred):
+            return inferred
+
+    inferred = _infer_rpg_title_from_text(text, fallback=fallback)
+    if not _is_generic_timeline_title(inferred):
+        return inferred
+
+    return fallback
+
+
+def _render_bar(label: str, value: Any, *, max_value: float | None = None, suffix: str = "") -> str:
+    try:
+        raw = float(value)
+    except Exception:
+        raw = 0.0
+    width_str = _pct(raw if max_value is None else (raw / max_value if max_value else 0.0))
+    width = float(width_str.rstrip('%')) if '%' in width_str else 0.0
+    display = f"{raw:.2f}{suffix}" if isinstance(raw, float) else f"{raw}{suffix}"
+    return (
+        '<div class="bar-row">'
+        f'<div class="bar-label">{_esc(label)}</div>'
+        '<div class="bar-track">'
+        f'<div class="bar-fill" style="width:{width:.1f}%"></div>'
+        '</div>'
+        f'<div class="bar-value">{_esc(display)}</div>'
+        '</div>'
+    )

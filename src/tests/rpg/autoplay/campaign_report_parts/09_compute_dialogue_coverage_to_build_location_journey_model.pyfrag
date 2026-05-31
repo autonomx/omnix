@@ -1,0 +1,490 @@
+def compute_dialogue_coverage(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
+    total_turns = len(timeline)
+    social_turns = [row for row in timeline if row.get("social_action")]
+    npc_response_turns = [
+        row
+        for row in timeline
+        if _safe_dict(row.get("npc")).get("line")
+    ]
+    missing_social_turns = [
+        row
+        for row in social_turns
+        if row.get("missing_npc_response")
+    ]
+    echoed_narration_turns = [
+        row
+        for row in timeline
+        if row.get("echoed_narration")
+    ]
+    source_counts = Counter(
+        _safe_str(row.get("dialogue_source") or "none")
+        for row in timeline
+    )
+    hook_dialogue_turns = [
+        row for row in timeline if row.get("dialogue_source") == "story_hook_display"
+    ]
+    base_dialogue_turns = [
+        row
+        for row in timeline
+        if row.get("dialogue_source")
+        in {
+            "raw_ai_payload",
+            "raw_npc",
+            "conversation_beat",
+            "real_runtime_provider",
+            "real_runtime_fallback",
+            "base_runtime_deterministic",
+            "base_runtime_provider",
+        }
+    ]
+    return {
+        "total_turns": total_turns,
+        "social_turn_count": len(social_turns),
+        "npc_response_turn_count": len(npc_response_turns),
+        "npc_response_rate": (len(npc_response_turns) / total_turns) if total_turns else 0.0,
+        "social_turn_missing_npc_response_count": len(missing_social_turns),
+        "social_turn_missing_npc_response_rate": (
+            len(missing_social_turns) / len(social_turns) if social_turns else 0.0
+        ),
+        "echoed_narration_turn_count": len(echoed_narration_turns),
+        "echoed_narration_rate": (
+            len(echoed_narration_turns) / total_turns if total_turns else 0.0
+        ),
+        "dialogue_source_counts": dict(source_counts),
+        "hook_dialogue_turn_count": len(hook_dialogue_turns),
+        "base_runtime_dialogue_turn_count": len(base_dialogue_turns),
+        "real_runtime_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0)
+        + int(source_counts.get("real_runtime_fallback") or 0),
+        "real_runtime_provider_dialogue_turn_count": int(source_counts.get("real_runtime_provider") or 0),
+        "real_runtime_fallback_dialogue_turn_count": int(source_counts.get("real_runtime_fallback") or 0),
+        "missing_social_turns": [
+            {
+                "turn_index": row.get("turn_index"),
+                "player_action": row.get("player_action"),
+            }
+            for row in missing_social_turns[:25]
+        ],
+        "echoed_narration_turns": [
+            {
+                "turn_index": row.get("turn_index"),
+                "player_action": row.get("player_action"),
+                "narration": row.get("narration"),
+            }
+            for row in echoed_narration_turns[:25]
+        ],
+    }
+
+
+def compute_runtime_narration_diagnostics(timeline: List[Dict[str, Any]]) -> Dict[str, Any]:
+    provider_present = 0
+    provider_attempted = 0
+    provider_valid = 0
+    provider_repaired = 0
+    fallback_used = 0
+    provider_errors = Counter()
+    provider_original_errors = Counter()
+    provider_repair_actions = Counter()
+    provider_shapes = Counter()
+    selected_methods = Counter()
+    retry_count = 0
+    attempt_count = 0
+    for row in timeline:
+        diag = _safe_dict(row.get("runtime_narration_diagnostics"))
+        if not diag:
+            continue
+        if diag.get("provider_present"):
+            provider_present += 1
+        if diag.get("provider_attempted"):
+            provider_attempted += 1
+        if diag.get("provider_valid"):
+            provider_valid += 1
+        if diag.get("provider_repaired"):
+            provider_repaired += 1
+        if diag.get("fallback_used"):
+            fallback_used += 1
+        retry_count += int(diag.get("provider_retry_count") or 0)
+        attempt_count += int(diag.get("provider_attempt_count") or 0)
+        for err in _safe_list(diag.get("provider_errors")):
+            provider_errors[str(err)] += 1
+        for err in _safe_list(diag.get("provider_original_errors")):
+            provider_original_errors[str(err)] += 1
+        for action in _safe_list(diag.get("provider_repair_actions")):
+            provider_repair_actions[str(action)] += 1
+        shape = _safe_dict(diag.get("provider_shape"))
+        if shape:
+            provider_shapes[json.dumps(shape, sort_keys=True, default=str)] += 1
+        call_diag = _safe_dict(diag.get("provider_call_diagnostics"))
+        if call_diag.get("selected_method"):
+            selected_methods[str(call_diag.get("selected_method"))] += 1
+    return {
+        "provider_present_turns": provider_present,
+        "provider_attempted_turns": provider_attempted,
+        "provider_valid_turns": provider_valid,
+        "provider_repaired_turns": provider_repaired,
+        "provider_attempt_count": attempt_count,
+        "provider_retry_count": retry_count,
+        "fallback_used_turns": fallback_used,
+        "provider_error_counts": dict(provider_errors),
+        "provider_original_error_counts": dict(provider_original_errors),
+        "provider_repair_action_counts": dict(provider_repair_actions),
+        "provider_shape_counts": dict(provider_shapes),
+        "provider_selected_method_counts": dict(selected_methods),
+    }
+
+
+def build_story_so_far_paragraph(model: Dict[str, Any]) -> str:
+    timeline = _safe_list(model.get("timeline"))
+    milestones = _safe_list(model.get("milestones"))
+
+    completed = [
+        row
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    ]
+    active = [
+        row
+        for row in milestones
+        if _safe_str(row.get("status")) not in {"completed", "failed", "cancelled"}
+    ]
+    completed_titles = [
+        _safe_str(row.get("title") or row.get("milestone_id"))
+        for row in completed
+        if _safe_str(row.get("title") or row.get("milestone_id"))
+    ]
+    active_titles = [
+        _safe_str(row.get("title") or row.get("milestone_id"))
+        for row in active
+        if _safe_str(row.get("title") or row.get("milestone_id"))
+    ]
+
+    if not timeline:
+        return "No campaign turns have been recorded yet."
+
+    story_beats = []
+    for row in timeline:
+        for hook in _safe_list(row.get("fired_hooks")):
+            hook = _safe_dict(hook)
+            summary = _safe_str(hook.get("story_summary"))
+            if summary:
+                story_beats.append(summary)
+
+    setup = (
+        f"Across {len(timeline)} turns, the campaign followed an investigation that began inside "
+        "the Rusty Flagon Tavern and gradually widened toward trouble on the road."
+    )
+    investigation = ""
+    if story_beats:
+        investigation = " ".join(story_beats[:6])
+    else:
+        fallback_beats = _safe_list(_safe_dict(model.get("story_beat_summary")).get("beats"))
+        if fallback_beats:
+            investigation = "Major story beats were reconstructed from turn activity:"
+            for beat in fallback_beats[:5]:
+                investigation += f"\n- Turn {beat.get('turn_index')}: {beat.get('summary')}"
+        else:
+            investigation = "The run recorded player activity, but no major story beats were captured."
+
+    outcome_parts = []
+    if completed_titles:
+        outcome_parts.append("Completed objectives: " + ", ".join(completed_titles) + ".")
+    if active_titles:
+        outcome_parts.append("Active unresolved objectives: " + ", ".join(active_titles) + ".")
+    if not outcome_parts:
+        outcome_parts.append("By the end of the run, the campaign had no active objective, so the director should either declare a chapter boundary or seed the next branch.")
+
+    return "\n\n".join([setup, investigation, " ".join(outcome_parts)])
+
+
+def build_lore_setting_paragraph(state: Dict[str, Any]) -> str:
+    director = _safe_dict(state.get("campaign_director_state"))
+    lore_rows = _lore_rows(state)
+    premise = _safe_str(director.get("premise"))
+    dramatic_question = _safe_str(director.get("dramatic_question"))
+    opening_tension = _safe_str(director.get("opening_tension"))
+    lore_bits = []
+    for row in lore_rows[:4]:
+        title = _safe_str(row.get("title") or row.get("name"))
+        text = _safe_str(row.get("text") or row.get("description") or row.get("summary"))
+        if title and text:
+            lore_bits.append(f"{title}: {text}")
+        elif text:
+            lore_bits.append(text)
+        elif title:
+            lore_bits.append(title)
+
+    parts = []
+    if premise:
+        parts.append(premise)
+    if opening_tension:
+        parts.append(opening_tension)
+    if dramatic_question:
+        parts.append("The director's dramatic question is: " + dramatic_question)
+    if lore_bits:
+        parts.append("Setting details: " + " ".join(lore_bits))
+    if not parts:
+        return "No lore or director setup has been captured yet; the campaign seed should define premise, stakes, and setting context."
+    return " ".join(parts)
+
+
+def build_character_progression_paragraph(state: Dict[str, Any]) -> str:
+    player = _player_progression(state)
+    npc_progression = _safe_dict(_safe_dict(state.get("npc_progression_state")).get("npcs"))
+    parts = []
+    if player:
+        stats = _safe_dict(player.get("stats"))
+        stat_text = ""
+        if stats:
+            stat_text = (
+                " Starting stats were "
+                + ", ".join(f"{key} {value}" for key, value in sorted(stats.items()))
+                + "."
+            )
+        parts.append(
+            f"The player is level {player.get('level', 1)} with "
+            f"{player.get('experience', 0)}/{player.get('experience_to_next_level', 100)} XP toward the next level."
+            + stat_text
+        )
+        log = _safe_list(player.get("progression_log"))
+        if log:
+            readable = []
+            for row in log[-5:]:
+                row = _safe_dict(row)
+                reason = _safe_str(row.get("summary") or row.get("reason"))
+                amount = row.get("amount")
+                if reason and amount:
+                    readable.append(f"{reason} (+{amount} XP)")
+                elif reason:
+                    readable.append(reason)
+            if readable:
+                parts.append("Recent player progression: " + "; ".join(readable) + ".")
+    else:
+        parts.append("No player progression state is currently captured.")
+
+    if npc_progression:
+        npc_bits = []
+        for npc_name, npc in npc_progression.items():
+            npc = _safe_dict(npc)
+            latest_log = _safe_list(npc.get("progression_log"))
+            latest_summary = ""
+            if latest_log:
+                latest_summary = _safe_str(_safe_dict(latest_log[-1]).get("summary"))
+            npc_bits.append(
+                f"{npc_name} is at growth stage {npc.get('growth_stage', 'unknown')} with trust {npc.get('trust', 0)}"
+                + (f" ({latest_summary})" if latest_summary else "")
+            )
+        parts.append("NPC progression: " + "; ".join(npc_bits) + ".")
+    else:
+        parts.append("No NPC progression state is currently captured.")
+    return " ".join(part for part in parts if part.strip())
+
+
+def build_chapter_status(state: Dict[str, Any], model_like: Dict[str, Any]) -> Dict[str, Any]:
+    director = _safe_dict(state.get("campaign_director_state"))
+    milestones = _safe_list(model_like.get("milestones"))
+    completed = [
+        row for row in milestones if _safe_str(row.get("status")) == "completed"
+    ]
+    active = [
+        row
+        for row in milestones
+        if _safe_str(row.get("status")) not in {"completed", "failed", "cancelled"}
+    ]
+    arcs = _story_arc_rows(state)
+    current_stage = ""
+    if arcs:
+        current_stage = _safe_str(arcs[0].get("stage"))
+    chapter_complete = bool(completed and not active)
+    recommendation = ""
+    if chapter_complete:
+        recommendation = (
+            "The current chapter appears complete. The director should either declare a chapter boundary "
+            "or seed a follow-up objective so long autoplay runs do not drift."
+        )
+    elif active:
+        recommendation = "The campaign has active objectives and can continue from the current branch."
+    else:
+        recommendation = "No active objective was found; the director should seed the next actionable goal."
+    return {
+        "campaign_title": director.get("campaign_title") or "Untitled Campaign",
+        "current_stage": current_stage,
+        "completed_objective_count": len(completed),
+        "active_objective_count": len(active),
+        "completed_objectives": [
+            row.get("title") or row.get("milestone_id") for row in completed
+        ],
+        "active_objectives": [
+            row.get("title") or row.get("milestone_id") for row in active
+        ],
+        "chapter_complete": chapter_complete,
+        "recommendation": recommendation,
+    }
+
+
+def build_player_progression_rows(state: Dict[str, Any]) -> Dict[str, Any]:
+    player = _player_progression(state)
+    stats = _safe_dict(player.get("stats"))
+    log = _safe_list(player.get("progression_log"))
+    return {
+        "summary_rows": [
+            ("Name", player.get("name") or "The Player"),
+            ("Level", player.get("level", 1)),
+            ("XP", f"{player.get('experience', 0)} / {player.get('experience_to_next_level', 100)}"),
+            ("Progress Log Entries", len(log)),
+        ],
+        "stats_rows": [(str(k).title(), v) for k, v in sorted(stats.items())],
+        "recent_progression_rows": [
+            [
+                row.get("turn_index", ""),
+                row.get("type", ""),
+                row.get("amount", ""),
+                row.get("reason") or row.get("summary") or "",
+                f"{row.get('level_before', '')} → {row.get('level_after', '')}" if row.get("level_after") is not None else "",
+            ]
+            for row in log[-8:]
+            if isinstance(row, dict)
+        ],
+    }
+
+
+def build_story_arc_report_rows(model: Dict[str, Any]) -> Dict[str, Any]:
+    arcs = _safe_list(model.get("story_arcs"))
+    milestones = _safe_list(model.get("milestones"))
+    by_arc: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for milestone in milestones:
+        milestone = _safe_dict(milestone)
+        by_arc[_safe_str(milestone.get("arc_id"))].append(milestone)
+    rows = []
+    for arc in arcs:
+        arc = _safe_dict(arc)
+        arc_id = _safe_str(arc.get("arc_id"))
+        arc_milestones = by_arc.get(arc_id, [])
+        completed = [m for m in arc_milestones if _safe_str(m.get("status")) == "completed"]
+        active = [m for m in arc_milestones if _safe_str(m.get("status")) not in {"completed", "failed", "cancelled"}]
+        rows.append(
+            {
+                "arc_id": arc_id,
+                "title": arc.get("title") or arc_id,
+                "stage": arc.get("stage"),
+                "status": arc.get("status"),
+                "pressure": arc.get("pressure", 0),
+                "completed_count": len(completed),
+                "active_count": len(active),
+                "milestones": arc_milestones,
+            }
+        )
+    return {
+        "arcs": rows,
+        "total_arcs": len(rows),
+        "total_milestones": len(milestones),
+    }
+
+
+def build_inventory_rows(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    currency = _safe_dict(snapshot.get("currency"))
+    items = _safe_list(snapshot.get("items"))
+    return {
+        "currency_rows": [[k, v] for k, v in sorted(currency.items())],
+        "item_rows": [
+            [
+                _safe_dict(item).get("name") or _safe_dict(item).get("item_id") or "",
+                _safe_dict(item).get("quantity", 1),
+                _safe_dict(item).get("type", ""),
+                _safe_dict(item).get("description", ""),
+            ]
+            for item in items
+            if isinstance(item, dict)
+        ],
+    }
+
+
+def build_location_journey_model(
+    *,
+    timeline: List[Dict[str, Any]],
+    state: Dict[str, Any],
+) -> Dict[str, Any]:
+    director = _safe_dict(state.get("campaign_director_state"))
+    location_rows: Dict[str, Dict[str, Any]] = {}
+
+    def ensure_location(name: str) -> Dict[str, Any]:
+        key = name or "Unknown Location"
+        location_rows.setdefault(
+            key,
+            {
+                "name": key,
+                "turns": [],
+                "summary_bits": [],
+                "npcs": set(),
+                "objectives": set(),
+                "events": [],
+            },
+        )
+        return location_rows[key]
+
+    # Seed known setting locations from lore/director.
+    ensure_location("The Rusty Flagon Tavern")["summary_bits"].append(
+        "The social hub where the witness investigation begins."
+    )
+    ensure_location("The Bandit Road")["summary_bits"].append(
+        "The external danger path revealed after the witness report."
+    )
+
+    for row in timeline:
+        action = _norm_text(row.get("player_action"))
+        if "road" in action or "bandit" in action or "outside" in action:
+            loc = ensure_location("The Bandit Road")
+        else:
+            loc = ensure_location("The Rusty Flagon Tavern")
+        loc["turns"].append(row.get("turn_index"))
+        narration = _safe_str(row.get("narration"))
+        if narration:
+            loc["summary_bits"].append(narration)
+        npc = _safe_dict(row.get("npc"))
+        if npc.get("speaker"):
+            loc["npcs"].add(str(npc.get("speaker")))
+        for hook in _safe_list(row.get("fired_hooks")):
+            hook = _safe_dict(hook)
+            if hook.get("story_label"):
+                loc["events"].append(hook.get("story_label"))
+
+    for milestone in _milestone_rows(state):
+        title = _safe_str(milestone.get("title") or milestone.get("milestone_id"))
+        if not title:
+            continue
+        text = _norm_text(title + " " + _safe_str(milestone.get("objective_text")))
+        if "road" in text or "bandit" in text:
+            ensure_location("The Bandit Road")["objectives"].add(title)
+        else:
+            ensure_location("The Rusty Flagon Tavern")["objectives"].add(title)
+
+    locations = []
+    for loc in location_rows.values():
+        bits = []
+        seen_bits = set()
+        for bit in loc["summary_bits"]:
+            bit = _safe_str(bit)
+            if not bit or bit in seen_bits:
+                continue
+            seen_bits.add(bit)
+            bits.append(bit)
+            if len(bits) >= 4:
+                break
+        locations.append(
+            {
+                "name": loc["name"],
+                "turn_range": (
+                    f"{min(loc['turns'])}–{max(loc['turns'])}" if loc["turns"] else "setup"
+                ),
+                "turn_count": len(loc["turns"]),
+                "summary": " ".join(bits) if bits else "No summary captured.",
+                "npcs": sorted(loc["npcs"]),
+                "objectives": sorted(loc["objectives"]),
+                "events": loc["events"][:8],
+            }
+        )
+    return {
+        "locations": locations,
+        "director_context": {
+            "premise": director.get("premise"),
+            "stakes": director.get("stakes"),
+        },
+    }

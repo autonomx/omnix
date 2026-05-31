@@ -20,16 +20,34 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.rpg.ai.semantic_state_change_capture import (
     capture_semantic_state_change_proposals_for_session,
 )
-from app.rpg.economy.action_generator import build_menu_action
-from app.rpg.profiles.character_cards import (
-    approve_character_card_draft,
-    draft_character_card,
-    generate_character_card_portrait_prompt,
-    generate_character_card_profile,
-    get_character_card,
-    list_character_cards_for_simulation_state,
-    reject_character_card_draft,
-    update_character_card,
+from app.rpg.api.rpg_profile_routes import (
+    api_approve_rpg_npc_profile_draft as api_approve_rpg_npc_profile_draft,
+    api_draft_rpg_npc_profile as api_draft_rpg_npc_profile,
+    api_generate_rpg_npc_profile as api_generate_rpg_npc_profile,
+    api_generate_rpg_npc_profile_portrait_prompt as api_generate_rpg_npc_profile_portrait_prompt,
+    api_get_rpg_npc_profile as api_get_rpg_npc_profile,
+    api_get_rpg_session_character_cards as api_get_rpg_session_character_cards,
+    api_reject_rpg_npc_profile_draft as api_reject_rpg_npc_profile_draft,
+    api_update_rpg_npc_profile as api_update_rpg_npc_profile,
+    list_rpg_npc_biographies as list_rpg_npc_biographies,
+    register_rpg_profile_routes,
+)
+from app.rpg.api.rpg_session_management_routes import (
+    delete_rpg_session as delete_rpg_session,
+    idle_tick_rpg_session as idle_tick_rpg_session,
+    list_rpg_sessions as list_rpg_sessions,
+    post_rpg_menu_action as post_rpg_menu_action,
+    register_rpg_session_management_routes,
+    update_rpg_session as update_rpg_session,
+    update_rpg_session_settings as update_rpg_session_settings,
+)
+from app.rpg.api.rpg_session_payloads import (
+    _build_turn_payload,
+    _deep_merge_dict,
+    _normalize_turn_request,
+    _safe_dict,
+    _safe_list,
+    _safe_str,
 )
 from app.rpg.session.ambient_builder import (
     get_pending_ambient_updates,
@@ -47,7 +65,6 @@ from app.rpg.session.runtime import (
     _enqueue_narration_request,
     _generate_turn_narration_artifact,
     _normalize_runtime_settings,
-    apply_idle_ticks,
     apply_resume_catchup,
     apply_turn,
     build_frontend_bootstrap_payload,
@@ -57,28 +74,15 @@ from app.rpg.session.runtime import (
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention
-from app.rpg.world.npc_biography_registry import list_npc_biographies
+from app.rpg.api.rpg_world_routes import (
+    get_rpg_session_world_events as get_rpg_session_world_events,
+    get_world_behavior as get_world_behavior,
+    register_rpg_world_routes,
+    update_world_behavior as update_world_behavior,
+)
 
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
-
-
-
-
-def _safe_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> list:
-    return value if isinstance(value, list) else []
-
-
-def _safe_str(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
 
 
 def _sse(data: dict) -> str:
@@ -171,57 +175,6 @@ def _enqueue_and_signal_narration_job(
 ensure_narration_worker_running()
 
 
-def _normalize_turn_request(data: Dict[str, Any]) -> Dict[str, Any]:
-    data = _safe_dict(data)
-    player_input = _safe_str(data.get("input") or data.get("player_input")).strip()
-    action = _safe_dict(data.get("action"))
-
-    if not action and player_input.startswith("{"):
-        try:
-            parsed = json.loads(player_input)
-            action = _safe_dict(parsed)
-        except Exception:
-            action = {}
-
-    if action and not player_input:
-        action_type = _safe_str(action.get("action_type") or action.get("action")).strip().lower()
-        npc_name = _safe_str(action.get("npc_name")).strip()
-        npc_id = _safe_str(action.get("npc_id") or action.get("target_id")).strip()
-        label = npc_name or npc_id or "them"
-        if action_type == "talk":
-            player_input = f"Talk to {label}"
-        elif action_type == "threaten":
-            player_input = f"Threaten {label}"
-        elif action_type == "persuade":
-            player_input = f"Talk to {label}"
-        elif action_type == "intimidate":
-            player_input = f"Threaten {label}"
-        else:
-            player_input = action_type.replace("_", " ").strip()
-
-    # Optional performance overrides from the request payload
-    performance = _safe_dict(data.get("performance"))
-    runtime_settings = _safe_dict(data.get("runtime_settings"))
-
-    return {
-        "session_id": _safe_str(data.get("session_id")).strip(),
-        "player_input": player_input,
-        "action": action,
-        "performance": performance,
-        "runtime_settings": runtime_settings,
-    }
-
-
-def _deep_merge_dict(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
-    merged = dict(_safe_dict(base))
-    for key, value in _safe_dict(updates).items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _deep_merge_dict(_safe_dict(merged.get(key)), value)
-        else:
-            merged[key] = value
-    return merged
-
-
 def _merge_request_runtime_settings(
     session_id: str,
     runtime_settings: Dict[str, Any],
@@ -247,140 +200,9 @@ def _merge_request_runtime_settings(
     }
 
 
-def _build_turn_payload(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Build the canonical turn response payload from an apply_turn result."""
-    raw_payload = _safe_dict(result.get("payload"))
-    session = _safe_dict(result.get("session"))
-    sim = _safe_dict(session.get("simulation_state"))
-    player_state = _safe_dict(sim.get("player_state"))
-    stats = _safe_dict(player_state.get("stats"))
-    skills = _safe_dict(player_state.get("skills"))
-    inventory_state = _safe_dict(player_state.get("inventory_state"))
-    equipment = _safe_dict(inventory_state.get("equipment"))
-
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    scene_state = _safe_dict(runtime_state.get("current_scene")) or _safe_dict(sim.get("current_scene"))
-    memory = _safe_dict(sim.get("memory"))
-
-    payload: Dict[str, Any] = {
-        "success": True,
-        "session_id": _safe_str(raw_payload.get("session_id") or session.get("session_id")),
-        "title": _safe_str(raw_payload.get("title")),
-        "opening": _safe_str(raw_payload.get("opening")),
-        "narration": _safe_str(raw_payload.get("narration")),
-        "choices": _safe_list(raw_payload.get("choices")),
-        # Player block
-        "player": {
-            "stats": stats,
-            "skills": skills,
-            "level": int(player_state.get("level", 1) or 1),
-            "xp": int(player_state.get("xp", 0) or 0),
-            "xp_to_next": int(player_state.get("xp_to_next", 0) or 0),
-            "inventory_state": inventory_state,
-            "equipment": equipment,
-            "currency": _safe_dict(inventory_state.get("currency")),
-            "inventory_items": _safe_list(inventory_state.get("items")),
-            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids")),
-            "available_checks": _safe_list(player_state.get("available_checks")),
-        },
-        # NPC blocks
-        "nearby_npcs": _safe_list(raw_payload.get("nearby_npcs") or sim.get("nearby_npcs")),
-        "known_npcs": _safe_list(raw_payload.get("known_npcs") or sim.get("known_npcs")),
-        # Scene block
-        "scene": {
-            "scene_id": _safe_str(scene_state.get("scene_id")),
-            "items": _safe_list(scene_state.get("items")),
-            "available_checks": _safe_list(scene_state.get("available_checks")),
-            "present_npc_ids": _safe_list(scene_state.get("present_npc_ids")),
-        },
-        # Memory block
-        "memory_summary": {
-            "important_memory": _safe_list(memory.get("important_memory")),
-            "recent_memory": _safe_list(memory.get("recent_memory")),
-            "recent_world_events": _safe_list(memory.get("recent_world_events")),
-        },
-        # Progression
-        "combat_result": raw_payload.get("combat_result"),
-        "xp_result": raw_payload.get("xp_result"),
-        "skill_xp_result": raw_payload.get("skill_xp_result"),
-        "level_up": _safe_list(raw_payload.get("level_up")),
-        "skill_level_ups": _safe_list(raw_payload.get("skill_level_ups")),
-        "resource_changes": _safe_dict(raw_payload.get("resource_changes")),
-        "player_resources": _safe_dict(raw_payload.get("player_resources")),
-        "effect_result": _safe_dict(raw_payload.get("effect_result")),
-        "action_metadata": _safe_dict(raw_payload.get("action_metadata")),
-        "structured_narration": _safe_dict(raw_payload.get("structured_narration")),
-        "speaker_turns": _safe_list(raw_payload.get("speaker_turns")),
-        "narration": _safe_str(raw_payload.get("narration")),
-        "used_app_llm": bool(raw_payload.get("used_app_llm")),
-        "gateway_available": bool(raw_payload.get("gateway_available")),
-        "raw_llm_narrative": _safe_str(raw_payload.get("raw_llm_narrative")),
-        "grounding_validation": _safe_dict(raw_payload.get("grounding_validation")),
-        "grounding_fallback": bool(raw_payload.get("grounding_fallback")),
-        "settings": _safe_dict(
-            raw_payload.get("settings")
-            or runtime_state.get("runtime_settings")
-            or runtime_state.get("settings")
-        ),
-        "response_length": _safe_str(raw_payload.get("response_length", "short")),
-        # Presentation
-        "presentation": _safe_dict(raw_payload.get("presentation")),
-        "transaction_menus": _safe_list(raw_payload.get("transaction_menus")),
-        # Living-world ambient metadata (Phase 7.4)
-        "ambient_updates": _safe_list(
-            get_pending_ambient_updates(session, after_seq=0, limit=8)
-        ),
-        "latest_ambient_seq": int(runtime_state.get("ambient_seq", 0) or 0),
-        "unread_ambient_count": max(
-            0,
-            int(runtime_state.get("ambient_seq", 0) or 0)
-            - int(_safe_dict(runtime_state.get("subscription_state")).get("last_polled_seq", 0) or 0),
-        ),
-    }
-    # Conversation system payload
-    location_id = _safe_str(
-        runtime_state.get("current_location_id")
-        or _safe_dict(sim.get("player_state")).get("location_id")
-    )
-    conversation_payload = build_conversation_payload(sim, runtime_state, location_id=location_id)
-    payload["active_conversations"] = conversation_payload.get("active_conversations", [])
-    payload["recent_conversations"] = conversation_payload.get("recent_conversations", [])
-    return payload
-
-
-@rpg_session_bp.post("/api/rpg/session/menu_action")
-async def post_rpg_menu_action(request: Request):
-    payload = await request.json() or {}
-    session_id = _safe_str(payload.get("session_id"))
-    action_payload = _safe_dict(payload.get("action"))
-
-    if not session_id:
-        return JSONResponse({"success": False, "error": "missing_session_id"}, status_code=400)
-    if not action_payload:
-        return JSONResponse({"success": False, "error": "missing_action"}, status_code=400)
-
-    action = build_menu_action(action_payload)
-
-    result = apply_turn(
-        session_id=session_id,
-        player_input="",
-        action=action,
-    )
-    if not result.get("ok"):
-        if result.get("error") == "session_not_found":
-            return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-        return JSONResponse({"ok": False, "error": "turn_failed", "details": result}, status_code=500)
-
-    return _build_turn_payload(result)
-
-
-@rpg_session_bp.post("/api/rpg/session/list")
-def list_rpg_sessions():
-    """List all RPG sessions for the settings panel."""
-    from app.rpg.session.service import list_sessions
-
-    sessions = list_sessions() or []
-    return {"ok": True, "sessions": sessions}
+register_rpg_session_management_routes(rpg_session_bp)
+register_rpg_profile_routes(rpg_session_bp)
+register_rpg_world_routes(rpg_session_bp)
 
 
 @rpg_session_bp.post("/api/rpg/session/get")
@@ -405,70 +227,6 @@ async def get_rpg_session(request: Request):
         game["session_id"] = session_id
 
     return {"ok": True, "game": game}
-
-
-@rpg_session_bp.post("/api/rpg/session/update")
-async def update_rpg_session(request: Request):
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    session = load_runtime_session(session_id)
-    if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-
-    manifest = _safe_dict(session.get("manifest"))
-    runtime_state = _safe_dict(session.get("runtime_state"))
-
-    title = _safe_str(data.get("title")).strip()
-    if title:
-        manifest["title"] = title
-
-    voice_assignments = data.get("voice_assignments")
-    if isinstance(voice_assignments, dict):
-        runtime_state["voice_assignments"] = dict(voice_assignments)
-
-    session["manifest"] = manifest
-    session["runtime_state"] = runtime_state
-    session = save_runtime_session(session)
-    payload = build_frontend_bootstrap_payload(session)
-    payload["ok"] = True
-
-    return payload
-
-
-@rpg_session_bp.post("/api/rpg/session/settings")
-async def update_rpg_session_settings(request: Request):
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    settings = _safe_dict(data.get("settings"))
-
-    session = load_runtime_session(session_id)
-    if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    existing = _safe_dict(runtime_state.get("runtime_settings"))
-    merged = _deep_merge_dict(existing, settings)
-    runtime_state["runtime_settings"] = _normalize_runtime_settings(merged)
-    session["runtime_state"] = runtime_state
-    session = save_runtime_session(session)
-
-    return {"ok": True, "settings": runtime_state["runtime_settings"]}
-
-
-@rpg_session_bp.post("/api/rpg/session/delete")
-async def delete_rpg_session(request: Request):
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    session = load_runtime_session(session_id)
-    if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-    manifest = _safe_dict(session.get("manifest"))
-    manifest["archived"] = True
-    manifest["status"] = "archived"
-    session["manifest"] = manifest
-    save_runtime_session(session)
-
-    return {"ok": True}
 
 
 @rpg_session_bp.post("/api/rpg/session/turn")
@@ -712,110 +470,7 @@ async def execute_rpg_session_turn_stream(request: Request):
 
 # Debug/manual trigger endpoint.
 # Normal gameplay should rely on the background worker manager instead.
-@rpg_session_bp.get("/api/rpg/npc_biographies")
-async def list_rpg_npc_biographies():
-    return JSONResponse({
-        "ok": True,
-        "biographies": list_npc_biographies(),
-        "source": "deterministic_npc_biography_registry",
-    })
-
-
 # ── Character Card API routes (Bundle BJ-BK-BL) ──────────────────────────────
-
-@rpg_session_bp.get("/api/rpg/npc_profiles/{npc_id:path}")
-async def api_get_rpg_npc_profile(npc_id: str):
-    return JSONResponse(get_character_card(npc_id))
-
-
-@rpg_session_bp.post("/api/rpg/npc_profiles/{npc_id:path}/update")
-async def api_update_rpg_npc_profile(npc_id: str, request: Request):
-    payload = await request.json()
-    return JSONResponse(update_character_card(
-        npc_id,
-        _safe_dict(payload.get("updates") or payload),
-        edited_by=_safe_str(payload.get("edited_by") or "user"),
-        tick=int(payload.get("tick") or 0),
-    ))
-
-
-@rpg_session_bp.post("/api/rpg/npc_profiles/{npc_id:path}/draft")
-async def api_draft_rpg_npc_profile(npc_id: str, request: Request):
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-    return JSONResponse(draft_character_card(
-        npc_id,
-        tick=int((payload or {}).get("tick") or 0),
-    ))
-
-
-@rpg_session_bp.post("/api/rpg/npc_profiles/{npc_id:path}/approve_draft")
-async def api_approve_rpg_npc_profile_draft(npc_id: str, request: Request):
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-    return JSONResponse(approve_character_card_draft(
-        npc_id,
-        tick=int((payload or {}).get("tick") or 0),
-    ))
-
-
-@rpg_session_bp.post("/api/rpg/npc_profiles/{npc_id:path}/reject_draft")
-async def api_reject_rpg_npc_profile_draft(npc_id: str, request: Request):
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-    return JSONResponse(reject_character_card_draft(
-        npc_id,
-        tick=int((payload or {}).get("tick") or 0),
-    ))
-
-
-@rpg_session_bp.post("/api/rpg/npc_profiles/{npc_id:path}/portrait_prompt")
-async def api_generate_rpg_npc_profile_portrait_prompt(npc_id: str, request: Request):
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-    return JSONResponse(generate_character_card_portrait_prompt(
-        npc_id,
-        tick=int((payload or {}).get("tick") or 0),
-    ))
-
-
-@rpg_session_bp.post("/api/rpg/npc_profiles/{npc_id:path}/generate")
-async def api_generate_rpg_npc_profile(npc_id: str, request: Request):
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-    payload = payload or {}
-    return JSONResponse(generate_character_card_profile(
-        npc_id=npc_id,
-        name=str(payload.get("name") or ""),
-        identity_arc=str(payload.get("identity_arc") or ""),
-        current_role=str(payload.get("current_role") or ""),
-        active_motivations=payload.get("active_motivations") or [],
-        location_id=str(payload.get("location_id") or ""),
-        source_event=str(payload.get("source_event") or "manual_profile_generation"),
-        context_summary=str(payload.get("context_summary") or ""),
-        tick=int(payload.get("tick") or 0),
-    ))
-
-
-@rpg_session_bp.get("/api/rpg/session/character_cards")
-async def api_get_rpg_session_character_cards(session_id: str = ""):
-    session = load_runtime_session(session_id) if session_id else None
-    sim = _safe_dict(
-        _safe_dict(session).get("simulation_state")
-        if session else None
-    )
-    return JSONResponse(list_character_cards_for_simulation_state(sim))
-
 
 @rpg_session_bp.post("/api/rpg/session/process_narration")
 async def process_rpg_session_narration(request: Request):
@@ -836,7 +491,7 @@ async def get_rpg_session_narration_status(request: Request):
 
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
-    
+
     if not turn_id:
         return JSONResponse({
             "ok": True,
@@ -978,74 +633,6 @@ async def get_rpg_session_narration_status(request: Request):
 
 
 # ── Living-world endpoints (Phase 7) ──────────────────────────────────────
-
-
-@rpg_session_bp.post("/api/rpg/session/idle_tick")
-async def idle_tick_rpg_session(request: Request):
-    """Advance world simulation by idle ticks without player action."""
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    count = int(data.get("count", 1) or 1)
-    reason = _safe_str(data.get("reason") or "heartbeat").strip()
-
-    if not session_id:
-        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
-
-    # Upstream recorded LLM semantic proposal capture.
-    session = load_runtime_session(session_id)
-    if session:
-        rt = _safe_dict(session.get("runtime_state"))
-        print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
-        print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
-        print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
-        session = capture_semantic_state_change_proposals_for_session(session)
-        try:
-            save_runtime_session(session)
-        except Exception:
-            # Capture is best-effort; authoritative runtime validation still
-            # guards all proposals before state mutation.
-            pass
-
-    result = apply_idle_ticks(session_id, count, reason=reason)
-    if not result.get("ok"):
-        err = _safe_str(result.get("error") or "idle_tick_failed")
-        status = 404 if err == "session_not_found" else 500
-        return JSONResponse({"ok": False, "error": err}, status_code=status)
-
-    # Debug: verify the saved session exposes the advanced authoritative tick.
-    session = load_runtime_session(session_id)
-    if session:
-        sim = _safe_dict(session.get("simulation_state"))
-        rt = _safe_dict(session.get("runtime_state"))
-        print("POST-IDLE SIM TICK =", sim.get("tick"), sim.get("current_tick"))
-        print("POST-IDLE RUNTIME TICK =", rt.get("tick"))
-
-    # Post-advance capture: lets the LLM observe newly advanced state so the
-    # next cycle has fresh recorded proposals grounded in what just changed.
-    session = load_runtime_session(session_id)
-    if session:
-        runtime_state = _safe_dict(session.get("runtime_state"))
-        if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
-            rt = _safe_dict(session.get("runtime_state"))
-            print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
-            print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
-            print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
-            session = capture_semantic_state_change_proposals_for_session(session)
-            try:
-                save_runtime_session(session)
-            except Exception:
-                pass
-
-    return {
-        "ok": True,
-        "updates": _safe_list(result.get("updates")),
-        "latest_seq": int(result.get("latest_seq", 0) or 0),
-        "ticks_applied": int(result.get("ticks_applied", 0) or 0),
-        "idle_debug_trace": result.get("idle_debug_trace", {}),
-        "idle_seconds": result.get("idle_seconds", 0),
-        "idle_gate_open": result.get("idle_gate_open", False),
-        "settings": result.get("settings", {}),
-    }
 
 
 @rpg_session_bp.post("/api/rpg/session/poll")
@@ -1294,114 +881,6 @@ async def resume_rpg_session(request: Request):
 
 
 # ── World Events endpoint ────────────────────────────────────────────────
-
-
-@rpg_session_bp.post("/api/rpg/session/world_events")
-async def get_rpg_session_world_events(request: Request):
-    """Return cached recent world event rows from runtime state."""
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    if not session_id:
-        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
-
-    session = load_runtime_session(session_id)
-    if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-
-    simulation_state = _safe_dict(session.get("simulation_state"))
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    recent_rows = _safe_list(runtime_state.get("recent_world_event_rows"))[-48:]
-
-    from app.rpg.analytics.world_events import (
-        build_player_global_world_view_rows,
-        build_player_local_world_view_rows,
-        build_player_world_view_rows,
-    )
-    player_world_view_rows = build_player_world_view_rows(simulation_state, runtime_state)
-    player_local_world_view_rows = build_player_local_world_view_rows(simulation_state, runtime_state)
-    player_global_world_view_rows = build_player_global_world_view_rows(simulation_state, runtime_state)
-
-    return {
-        "ok": True,
-        "recent_world_event_rows": recent_rows,
-        "player_world_view_rows": player_world_view_rows,
-        "player_local_world_view_rows": player_local_world_view_rows,
-        "player_global_world_view_rows": player_global_world_view_rows,
-        "debug_world_events": {
-            "recent_world_event_rows_count": len(recent_rows),
-            "player_world_view_rows_count": len(player_world_view_rows),
-            "player_local_world_view_rows_count": len(player_local_world_view_rows),
-            "player_global_world_view_rows_count": len(player_global_world_view_rows),
-            "recent_world_event_row_ids": [_safe_str(r.get("event_id")) for r in recent_rows],
-        },
-    }
-
-
-@rpg_session_bp.post("/api/rpg/session/world_behavior")
-async def get_world_behavior(request: Request):
-    """Return effective world behavior config for a session."""
-    from app.rpg.session.runtime import get_effective_world_behavior
-
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    if not session_id:
-        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
-
-    session = load_runtime_session(session_id)
-    if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-
-    effective = get_effective_world_behavior(session)
-    setup_config = _safe_dict(_safe_dict(session.get("setup_payload")).get("world_behavior"))
-    override = _safe_dict(_safe_dict(session.get("runtime_state")).get("world_behavior_override"))
-
-    return {
-        "ok": True,
-        "effective": effective,
-        "setup_config": setup_config,
-        "override": override,
-    }
-
-
-@rpg_session_bp.post("/api/rpg/session/world_behavior/update")
-async def update_world_behavior(request: Request):
-    """Update in-game world behavior overrides."""
-    from app.rpg.creator.schema import (
-        _WORLD_BEHAVIOR_ENUMS,
-    )
-    from app.rpg.session.runtime import get_effective_world_behavior
-
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    changes = _safe_dict(data.get("changes"))
-
-    if not session_id:
-        return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
-
-    session = load_runtime_session(session_id)
-    if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
-
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    override = dict(_safe_dict(runtime_state.get("world_behavior_override")))
-
-    # Apply only valid changes
-    for key, allowed in _WORLD_BEHAVIOR_ENUMS.items():
-        val = changes.get(key)
-        if isinstance(val, str) and val.strip().lower() in allowed:
-            override[key] = val.strip().lower()
-
-    runtime_state["world_behavior_override"] = override
-    session["runtime_state"] = runtime_state
-    session = save_runtime_session(session)
-
-    effective = get_effective_world_behavior(session)
-
-    return {
-        "ok": True,
-        "effective": effective,
-        "override": override,
-    }
 
 
 @rpg_session_bp.post("/api/rpg/session/conversation/intervene")

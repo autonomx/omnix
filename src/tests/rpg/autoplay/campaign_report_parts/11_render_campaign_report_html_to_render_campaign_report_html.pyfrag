@@ -1,0 +1,1700 @@
+def render_campaign_report_html(
+    model: Optional[Dict[str, Any]] = None,
+    *,
+    summary: Optional[Dict[str, Any]] = None,
+    metrics: Optional[Dict[str, Any]] = None,
+    transcript: Optional[List[Dict[str, Any]]] = None,
+    report_model: Optional[Dict[str, Any]] = None,
+) -> str:
+    # Handle backward compatibility: if called with single model parameter
+    if model is not None and summary is None and metrics is None and transcript is None:
+        summary = _safe_dict(model.get("summary"))
+        metrics = _safe_dict(model.get("metrics"))
+        transcript = _as_list(model.get("transcript"))
+        # report_model is the same as model for backward compatibility
+        if report_model is None:
+            report_model = model
+
+    report_context = _merge_report_contexts(
+        summary=summary,
+        metrics=metrics,
+        report_model=report_model,
+    )
+    summary = report_context
+    metrics = report_context
+    # Reconstruct model dict for backward compatibility
+    model = {
+        "summary": summary,
+        "metrics": metrics,
+        "transcript": transcript,
+        "timeline": _as_list(report_context.get("timeline")),
+        **report_context,  # Include all merged context
+    }
+    health = _safe_dict(model.get("health"))
+    progress_quality = _safe_dict(metrics.get("progress_quality"))
+    performance = _safe_dict(metrics.get("performance"))
+    story_variety = _safe_dict(metrics.get("story_variety"))
+    latest_state = _safe_dict(model.get("latest_state"))
+    chapter_status = _safe_dict(model.get("chapter_status"))
+    pm_summary = _safe_dict(model.get("pm_summary"))
+    pm_status = _status_class(pm_summary.get("overall_status"))
+    chronicle_model = _build_campaign_chronicle_model(report_context, report_context)
+    entities = _extract_report_entities(_as_list(transcript))
+
+    timeline_html = []
+    for row in _as_list(report_context.get("timeline")):
+        npc = _safe_dict(row.get("npc"))
+        fired_hooks = _safe_list(row.get("fired_hooks"))
+        hook_badges = " ".join(_render_badge(_safe_dict(h).get("hook_id"), "hook") for h in fired_hooks)
+        categories = " ".join(
+            _render_badge(category, "category")
+            for category in _safe_list(_safe_dict(row.get("progress_delta")).get("categories"))
+        )
+        quality = _safe_str(_safe_dict(row.get("progress_quality")).get("quality"))
+        timeline_html.append(
+            f"""
+            <article class="turn-card">
+               <div class="turn-header">
+                 <h3>Turn {_esc(row.get("turn_index"))}</h3>
+                 <div>
+                   {_render_badge(quality or "unknown", "quality")}
+                   {_render_badge(str(_safe_dict(row.get("performance")).get("turn_total_ms", "")) + " ms", "category")}
+                 </div>
+               </div>
+              <div class="player-action"><strong>Player:</strong> {_esc(row.get("player_action"))}</div>
+              <div class="narration"><strong>Narration:</strong> {_esc(row.get("narration") or "[no narration extracted]")}</div>
+              <div class="npc-line"><strong>NPC:</strong> {_esc(npc.get("speaker") or "[none]")} — {_esc(npc.get("line") or "[no NPC line extracted]")}</div>
+              <div class="badges">
+                {_render_badge("dialogue:" + _safe_str(row.get("dialogue_source") or "none"), "category")}
+                {categories} {hook_badges}
+                {_render_badge("missing_npc_response", "quality") if row.get("missing_npc_response") else ""}
+                {_render_badge("echoed_narration", "quality") if row.get("echoed_narration") else ""}
+              </div>
+              <details>
+                <summary>Turn debug</summary>
+                <pre>{_json(row)}</pre>
+              </details>
+            </article>
+            """
+        )
+
+    npc_rows = [
+        [
+            row.get("name") or row.get("npc_id"),
+            row.get("role") or row.get("occupation"),
+            row.get("dialogue_turns", 0),
+            row.get("history") or row.get("backstory") or "",
+            row.get("biography") or row.get("bio") or "",
+            row.get("growth") or row.get("arc") or "",
+        ]
+        for row in _safe_list(model.get("npcs"))
+    ]
+
+    css = """
+   :root {
+      --bg: #0b1020;
+      --panel: #ffffff;
+      --panel2: #f6f8fc;
+      --ink: #172033;
+      --text: #172033;
+      --muted: #64748b;
+      --accent: #315efb;
+      --accent2: #7c3aed;
+      --good: #12805c;
+      --warn: #b7791f;
+      --bad: #c2410c;
+      --border: #d9e1f2;
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+      --rpg-bg: #15110d;
+      --rpg-panel: #211a14;
+      --rpg-panel-2: #2a2119;
+      --rpg-parchment: #f1e3c8;
+      --rpg-parchment-2: #e6d0aa;
+      --rpg-ink: #24170d;
+      --rpg-muted: #7d6b55;
+      --rpg-gold: #c79a3b;
+      --rpg-gold-2: #e2bf6d;
+      --rpg-red: #a64235;
+      --rpg-green: #4d8a54;
+      --rpg-blue: #4b6f8f;
+      --rpg-shadow: rgba(0, 0, 0, 0.35);
+    }
+   body {
+     margin: 0;
+     font-family: Inter, Segoe UI, Arial, sans-serif;
+     background: linear-gradient(135deg, #edf3ff 0%, #f8fafc 45%, #f5f3ff 100%);
+     color: var(--text);
+     line-height: 1.5;
+   }
+   header {
+     padding: 34px 42px;
+     border-bottom: 1px solid var(--border);
+     background: rgba(255,255,255,0.88);
+     position: sticky;
+     top: 0;
+     z-index: 3;
+     backdrop-filter: blur(16px);
+     box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+   }
+   h1, h2, h3 { margin: 0 0 12px; }
+   h1 { font-size: 30px; letter-spacing: -0.03em; }
+   h2 { font-size: 22px; letter-spacing: -0.02em; }
+   h3 { font-size: 16px; color: var(--ink); }
+   main { padding: 30px; max-width: 1500px; margin: 0 auto; }
+   section {
+     background: rgba(255,255,255,0.94);
+     border: 1px solid var(--border);
+     border-radius: 24px;
+     padding: 24px;
+     margin-bottom: 24px;
+     box-shadow: var(--shadow);
+   }
+   .grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+     gap: 16px;
+   }
+   .metric {
+     background: var(--panel2);
+     border: 1px solid var(--border);
+     border-radius: 18px;
+     padding: 16px;
+   }
+    .metric .value { font-size: 28px; font-weight: 850; color: var(--accent); letter-spacing: -0.03em; }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 220px minmax(160px, 1fr) 90px;
+      gap: 12px;
+      align-items: center;
+      margin: 10px 0;
+    }
+    .bar-label { font-weight: 700; color: #334155; }
+    .bar-track {
+      height: 12px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #dbe3ef;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 999px;
+    }
+    .bar-value { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+    .section-lede {
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 980px;
+      margin-top: -4px;
+    }
+    .card-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .story-card {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+    }
+    .story-card h3 { margin-bottom: 6px; }
+    .kv-table th { width: 220px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.85rem; }
+   .good { color: var(--good); }
+   .warn { color: var(--warn); }
+   .bad { color: var(--bad); }
+   .hero {
+     background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+     color: white;
+     border: 0;
+   }
+   .hero .muted { color: rgba(255,255,255,0.78); }
+   .hero .metric { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.22); color: white; }
+   .hero .metric .value { color: white; }
+   .status-pill {
+     display: inline-block;
+     padding: 6px 11px;
+     border-radius: 999px;
+     font-weight: 700;
+     font-size: 12px;
+     background: #e0e7ff;
+     color: #3730a3;
+     margin-left: 6px;
+   }
+   .status-pill.good { background: #dcfce7; color: #166534; }
+   .status-pill.warn { background: #fef3c7; color: #92400e; }
+   .status-pill.bad { background: #fee2e2; color: #991b1b; }
+   table {
+     width: 100%;
+     border-collapse: collapse;
+     overflow: hidden;
+     border-radius: 14px;
+   }
+   th, td {
+     border-bottom: 1px solid var(--border);
+     padding: 10px 12px;
+     text-align: left;
+     vertical-align: top;
+   }
+    th { color: #334155; background: #eef2ff; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .npc-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .npc-card, .journal-entry { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 8px 0; background: #fafafa; }
+    .npc-card h3 { margin-top: 0; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 10px 0; }
+    .metric-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: #fafafa; }
+    .report-quick-links {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 12px;
+      margin: 16px 0;
+      background: #f8fafc;
+    }
+    .report-quick-links nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .report-quick-links a {
+      display: inline-block;
+      padding: 6px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      background: white;
+      text-decoration: none;
+    }
+    #campaign-journal, #quest-progress, #npc-evolution {
+      scroll-margin-top: 20px;
+    }
+    .header-journal-link {
+      font-weight: 700;
+    }
+    .turn-card {
+     background: var(--panel2);
+     border: 1px solid var(--border);
+     border-radius: 18px;
+     padding: 16px;
+     margin-bottom: 14px;
+   }
+   .turn-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+   .player-action, .narration, .npc-line { margin: 10px 0; }
+   .badge {
+     display: inline-block;
+     padding: 4px 9px;
+     border-radius: 999px;
+     background: #e2e8f0;
+     color: #334155;
+     font-size: 12px;
+     margin: 2px;
+     border: 1px solid var(--border);
+   }
+   .badge.hook { background: #dcfce7; color: #166534; }
+   .badge.category { background: #dbeafe; color: #1d4ed8; }
+   .badge.quality { background: #fef3c7; color: #92400e; }
+   pre {
+     white-space: pre-wrap;
+     overflow-x: auto;
+     background: #0f172a;
+     border: 1px solid var(--border);
+     border-radius: 14px;
+     padding: 12px;
+     color: #d7ddff;
+   }
+   details { margin-top: 10px; }
+   summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+   nav a { color: var(--accent); margin-right: 16px; text-decoration: none; }
+   .tech-details {
+     background: #f8fafc;
+     border: 1px solid var(--border);
+     border-radius: 16px;
+     padding: 12px 14px;
+     margin-top: 12px;
+   }
+   .two-col {
+     display: grid;
+     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+     gap: 18px;
+   }
+    @media (max-width: 900px) {
+      .two-col { grid-template-columns: 1fr; }
+      header { position: static; }
+    }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(199, 154, 59, 0.16), transparent 28rem),
+          linear-gradient(180deg, #120d09 0%, #1c150f 45%, #100c09 100%);
+        color: var(--rpg-parchment);
+        font-family: Georgia, "Times New Roman", serif;
+      }
+
+      .rpg-shell {
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+
+      .rpg-hero {
+        border: 1px solid rgba(226, 191, 109, 0.55);
+        background:
+          linear-gradient(135deg, rgba(33, 26, 20, 0.96), rgba(42, 33, 25, 0.9)),
+          radial-gradient(circle at 80% 10%, rgba(199, 154, 59, 0.18), transparent 24rem);
+        box-shadow: 0 18px 50px var(--rpg-shadow);
+        border-radius: 22px;
+        padding: 30px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .rpg-hero::after {
+        content: "";
+        position: absolute;
+        inset: 12px;
+        border: 1px solid rgba(226, 191, 109, 0.22);
+        border-radius: 16px;
+        pointer-events: none;
+      }
+
+      .rpg-kicker {
+        color: var(--rpg-gold-2);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-size: 0.78rem;
+        margin-bottom: 8px;
+      }
+
+      .rpg-title {
+        margin: 0;
+        font-size: clamp(2.2rem, 4vw, 4.2rem);
+        line-height: 0.95;
+        color: #fff6df;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.5);
+      }
+
+      .rpg-subtitle {
+        margin-top: 12px;
+        color: var(--rpg-parchment-2);
+        font-size: 1.05rem;
+        max-width: 900px;
+      }
+
+      .rpg-hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .rpg-hero-report {
+        position: relative;
+        z-index: 1;
+        margin-top: 24px;
+        padding: 18px;
+        border: 1px solid rgba(226, 191, 109, 0.28);
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.10)),
+          rgba(255, 255, 255, 0.035);
+      }
+
+      .rpg-hero-report-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .rpg-hero-report-header h2 {
+        margin: 0;
+        color: #fff6df;
+        font-size: 1.55rem;
+      }
+
+      .rpg-hero-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+        gap: 10px;
+      }
+
+      .rpg-hero-stat {
+        border: 1px solid rgba(226, 191, 109, 0.18);
+        background: rgba(0, 0, 0, 0.22);
+        border-radius: 14px;
+        padding: 12px;
+      }
+
+      .rpg-hero-stat .rpg-stat-label {
+        color: rgba(241, 227, 200, 0.72);
+      }
+
+      .rpg-hero-stat .rpg-stat-value {
+        color: #fff6df;
+      }
+
+      .rpg-hero-stat .rpg-muted-line {
+        color: rgba(241, 227, 200, 0.72);
+      }
+
+      .rpg-pill {
+        border: 1px solid rgba(226, 191, 109, 0.35);
+        background: rgba(0,0,0,0.22);
+        color: #fff1d0;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 0.9rem;
+      }
+
+      .rpg-nav {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        margin: 18px 0 24px;
+        padding: 10px;
+        border: 1px solid rgba(226, 191, 109, 0.22);
+        border-radius: 16px;
+        background: rgba(21, 17, 13, 0.92);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+      }
+
+      .rpg-nav a {
+        display: inline-block;
+        color: var(--rpg-parchment);
+        text-decoration: none;
+        padding: 8px 10px;
+        margin: 2px;
+        border-radius: 10px;
+        font-size: 0.92rem;
+      }
+
+      .rpg-nav a:hover {
+        background: rgba(199, 154, 59, 0.18);
+        color: #fff6df;
+      }
+
+      .rpg-nav {
+        display: block;
+      }
+
+      .rpg-nav-primary,
+      .rpg-nav-appendix-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .rpg-nav-primary {
+        padding-bottom: 6px;
+      }
+
+      .rpg-nav-appendix {
+        margin-top: 6px;
+        border-top: 1px solid rgba(226, 191, 109, 0.16);
+        padding-top: 8px;
+      }
+
+      .rpg-nav-appendix > summary {
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #fff1d0;
+        border: 1px solid rgba(226, 191, 109, 0.22);
+        background: rgba(255,255,255,0.035);
+        border-radius: 999px;
+        padding: 7px 11px;
+        font-weight: 700;
+        list-style: none;
+      }
+
+      .rpg-nav-appendix > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .rpg-nav-appendix > summary::before {
+        content: "▸";
+        color: var(--rpg-gold);
+        font-size: 0.8rem;
+      }
+
+      .rpg-nav-appendix[open] > summary::before {
+        content: "▾";
+      }
+
+      .rpg-nav-appendix-links {
+        margin-top: 9px;
+      }
+
+      .rpg-nav-appendix-links a {
+        font-size: 0.84rem;
+        opacity: 0.92;
+      }
+
+      .rpg-nav-primary a {
+        font-size: 0.94rem;
+      }
+
+      .rpg-nav a {
+        border: 1px solid rgba(226, 191, 109, 0.18);
+        background: rgba(255,255,255,0.02);
+        font-weight: 600;
+      }
+
+      .rpg-promoted-section {
+        background:
+          linear-gradient(180deg, rgba(241, 227, 200, 0.99), rgba(233, 214, 180, 0.985));
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section h2,
+      .rpg-promoted-section h3,
+      .rpg-promoted-section h4,
+      .rpg-promoted-section strong,
+      .rpg-promoted-section li,
+      .rpg-promoted-section p,
+      .rpg-promoted-section td,
+      .rpg-promoted-section th,
+      .rpg-promoted-section code {
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section .rpg-promoted-body {
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section .journal-entry,
+      .rpg-promoted-section .npc-card,
+      .rpg-promoted-section .metric-card {
+        background: rgba(255, 249, 238, 0.92);
+        color: var(--rpg-ink);
+        border: 1px solid rgba(120, 83, 30, 0.22);
+        border-radius: 14px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+      }
+
+      .rpg-promoted-section table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        background: rgba(255, 250, 242, 0.88);
+        color: var(--rpg-ink);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .rpg-promoted-section th,
+      .rpg-promoted-section td {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(120, 83, 30, 0.18);
+        text-align: left;
+      }
+
+      .rpg-promoted-section a {
+        color: #6b3f0b;
+        font-weight: 700;
+      }
+
+      .rpg-promoted-section a:hover {
+        color: #8a5315;
+      }
+
+      .rpg-promoted-section summary {
+        color: var(--rpg-ink);
+      }
+
+      .rpg-promoted-section pre {
+        background: rgba(33, 26, 20, 0.94);
+        color: var(--rpg-parchment);
+        border: 1px solid rgba(226, 191, 109, 0.2);
+      }
+
+      .report-quick-links {
+        display: none !important;
+      }
+
+      .rpg-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .rpg-card {
+        grid-column: span 12;
+        background:
+          linear-gradient(180deg, rgba(241, 227, 200, 0.98), rgba(230, 208, 170, 0.98));
+        color: var(--rpg-ink);
+        border: 1px solid rgba(120, 83, 30, 0.35);
+        border-radius: 18px;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.28);
+        padding: 20px;
+      }
+
+      .rpg-card.dark {
+        background: linear-gradient(180deg, rgba(42, 33, 25, 0.98), rgba(33, 26, 20, 0.98));
+        color: var(--rpg-parchment);
+        border-color: rgba(226, 191, 109, 0.28);
+      }
+
+      .rpg-card h2,
+      .rpg-card h3 {
+        margin-top: 0;
+      }
+
+      .rpg-section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid rgba(120, 83, 30, 0.25);
+        padding-bottom: 10px;
+        margin-bottom: 16px;
+      }
+
+      .rpg-section-title h2 {
+        margin: 0;
+        font-size: 1.45rem;
+      }
+
+      .rpg-stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 12px;
+      }
+
+      .rpg-stat {
+        background: rgba(255,255,255,0.36);
+        border: 1px solid rgba(120, 83, 30, 0.18);
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      .rpg-stat.dark {
+        background: rgba(0,0,0,0.18);
+        border-color: rgba(226, 191, 109, 0.18);
+      }
+
+      .rpg-stat-label {
+        color: var(--rpg-muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .rpg-stat-value {
+        font-size: 1.45rem;
+        font-weight: 700;
+        margin-top: 4px;
+      }
+
+      .rpg-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .rpg-badge.pass { background: rgba(77, 138, 84, 0.18); color: #184f23; border: 1px solid rgba(77, 138, 84, 0.45); }
+      .rpg-badge.warn { background: rgba(199, 154, 59, 0.22); color: #68480e; border: 1px solid rgba(199, 154, 59, 0.55); }
+      .rpg-badge.fail { background: rgba(166, 66, 53, 0.18); color: #7b2018; border: 1px solid rgba(166, 66, 53, 0.45); }
+      .rpg-badge.neutral { background: rgba(75, 111, 143, 0.14); color: #284b68; border: 1px solid rgba(75, 111, 143, 0.35); }
+
+      .rpg-card.dark .rpg-badge.pass { color: #d8f1d9; }
+      .rpg-card.dark .rpg-badge.warn { color: #ffe4a1; }
+      .rpg-card.dark .rpg-badge.fail { color: #ffd5cf; }
+      .rpg-card.dark .rpg-badge.neutral { color: #d8e8f6; }
+
+      .rpg-timeline {
+        position: relative;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .rpg-timeline li {
+        position: relative;
+        margin: 0 0 14px 0;
+        padding: 0 0 0 34px;
+      }
+
+      .rpg-timeline li::before {
+        content: "";
+        position: absolute;
+        left: 8px;
+        top: 4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--rpg-gold);
+        box-shadow: 0 0 0 4px rgba(199,154,59,0.18);
+      }
+
+      .rpg-timeline li::after {
+        content: "";
+        position: absolute;
+        left: 13px;
+        top: 20px;
+        width: 2px;
+        height: calc(100% + 4px);
+        background: rgba(120, 83, 30, 0.25);
+      }
+
+      .rpg-timeline li:last-child::after {
+        display: none;
+      }
+
+      .rpg-turn-label {
+        color: var(--rpg-muted);
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .rpg-turn-title {
+        font-weight: 700;
+        margin-top: 2px;
+      }
+
+      .rpg-turn-body {
+        margin-top: 4px;
+        color: #3b2a1d;
+      }
+
+      .rpg-two-col {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 16px;
+      }
+
+      .rpg-mini-card {
+        background: rgba(255,255,255,0.34);
+        border: 1px solid rgba(120, 83, 30, 0.18);
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      .rpg-mini-card h3 {
+        margin: 0 0 8px;
+      }
+
+      .rpg-table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 12px;
+      }
+
+      .rpg-table th,
+      .rpg-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(120, 83, 30, 0.18);
+        vertical-align: top;
+      }
+
+      .rpg-table th {
+        text-align: left;
+        color: #5a3b16;
+        background: rgba(199,154,59,0.18);
+        font-size: 0.84rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      details.rpg-debug {
+        background: rgba(0,0,0,0.18);
+        border: 1px solid rgba(226,191,109,0.2);
+        border-radius: 14px;
+        margin: 12px 0;
+        padding: 12px 14px;
+      }
+
+      details.rpg-debug > summary {
+        cursor: pointer;
+        color: #fff1d0;
+        font-weight: 700;
+      }
+
+      .rpg-debug-body {
+        margin-top: 12px;
+      }
+
+      pre, code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      @media (min-width: 980px) {
+        .rpg-card.span-4 { grid-column: span 4; }
+        .rpg-card.span-6 { grid-column: span 6; }
+        .rpg-card.span-8 { grid-column: span 8; }
+        .rpg-card.span-12 { grid-column: span 12; }
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      .rpg-shell [id] {
+        scroll-margin-top: 94px;
+      }
+
+      .rpg-nav {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .rpg-nav a {
+        border: 1px solid rgba(226, 191, 109, 0.18);
+        background: rgba(255, 255, 255, 0.04);
+        white-space: nowrap;
+      }
+
+      .rpg-nav a::before {
+        content: "◆";
+        color: var(--rpg-gold);
+        font-size: 0.65rem;
+        margin-right: 7px;
+      }
+
+      .rpg-nav a:hover,
+      .rpg-nav a:focus {
+        outline: none;
+        border-color: rgba(226, 191, 109, 0.48);
+        background: rgba(199, 154, 59, 0.22);
+      }
+
+      .rpg-card.dark .rpg-section-title {
+        border-bottom-color: rgba(226, 191, 109, 0.24);
+      }
+
+      .rpg-card.dark .rpg-section-title h2,
+      .rpg-card.dark h2,
+      .rpg-card.dark h3 {
+        color: #fff6df;
+      }
+
+      .rpg-debug-body {
+        color: var(--rpg-ink);
+      }
+
+      .rpg-debug-body section,
+      .rpg-debug-body article,
+      .rpg-debug-body .turn-card,
+      .rpg-debug-body .metric,
+      .rpg-debug-body .card,
+      .rpg-debug-body .panel {
+        background: rgba(241, 227, 200, 0.98) !important;
+        color: var(--rpg-ink) !important;
+        border-color: rgba(120, 83, 30, 0.28) !important;
+      }
+
+      .rpg-debug-body h1,
+      .rpg-debug-body h2,
+      .rpg-debug-body h3,
+      .rpg-debug-body h4,
+      .rpg-debug-body h5,
+      .rpg-debug-body p,
+      .rpg-debug-body li,
+      .rpg-debug-body td,
+      .rpg-debug-body th,
+      .rpg-debug-body div,
+      .rpg-debug-body span {
+        color: inherit;
+      }
+
+      .rpg-debug-body h2,
+      .rpg-debug-body h3,
+      .rpg-debug-body h4 {
+        color: #3a240f !important;
+      }
+
+      .rpg-debug-body a {
+        color: #5b3a0b !important;
+        font-weight: 700;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .rpg-debug-body table {
+        background: rgba(255,255,255,0.38);
+        color: var(--rpg-ink);
+      }
+
+      .rpg-debug-body pre,
+      .rpg-debug-body code {
+        background: rgba(36, 23, 13, 0.08);
+        color: #24170d;
+      }
+
+      .rpg-debug-body .muted,
+      .rpg-debug-body .small,
+      .rpg-debug-body .subtle {
+        color: #6c5136 !important;
+      }
+
+      .rpg-debug-body details {
+        background: rgba(255,255,255,0.22);
+        color: var(--rpg-ink);
+      }
+
+      .rpg-debug-note {
+        background: rgba(199, 154, 59, 0.16);
+        border: 1px solid rgba(120, 83, 30, 0.22);
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin: 0 0 14px;
+        color: #3a240f !important;
+      }
+
+      .rpg-muted-line {
+        color: #6c5136;
+        font-size: 0.92rem;
+      }
+
+      .rpg-compact-list {
+        margin: 8px 0 0;
+        padding-left: 20px;
+      }
+
+      .rpg-compact-list li {
+        margin: 4px 0;
+      }
+
+      .rpg-tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .rpg-tag {
+        display: inline-flex;
+        border: 1px solid rgba(120, 83, 30, 0.25);
+        background: rgba(255, 255, 255, 0.35);
+        color: #4b331d;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      .rpg-card.dark .rpg-tag {
+        color: #fff1d0;
+        border-color: rgba(226, 191, 109, 0.25);
+        background: rgba(0, 0, 0, 0.18);
+      }
+
+      .rpg-npc-grid,
+      .rpg-location-grid,
+      .rpg-quest-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 14px;
+      }
+
+      .rpg-character-card,
+      .rpg-location-card,
+      .rpg-quest-card {
+        background: rgba(255, 255, 255, 0.34);
+        border: 1px solid rgba(120, 83, 30, 0.2);
+        border-radius: 16px;
+        padding: 15px;
+      }
+
+      .rpg-character-card h3,
+      .rpg-location-card h3,
+      .rpg-quest-card h3 {
+        margin: 0 0 6px;
+      }
+
+      .rpg-kv-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .rpg-kv {
+        background: rgba(255, 255, 255, 0.28);
+        border-radius: 10px;
+        padding: 8px;
+      }
+
+      .rpg-kv-label {
+        color: #755c3f;
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .rpg-kv-value {
+        margin-top: 3px;
+        font-weight: 700;
+      }
+
+      .rpg-debug-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+        gap: 12px;
+      }
+
+      details.rpg-debug-group {
+        background: rgba(241, 227, 200, 0.98);
+        color: var(--rpg-ink);
+        border: 1px solid rgba(120, 83, 30, 0.28);
+        border-radius: 14px;
+        padding: 12px 14px;
+      }
+
+      details.rpg-debug-group > summary {
+        cursor: pointer;
+        font-weight: 800;
+        color: #3a240f;
+      }
+
+      .rpg-debug-group-body {
+        margin-top: 12px;
+      }
+
+      .rpg-story-beat-source {
+        font-size: 0.8rem;
+        color: #765c3c;
+        margin-top: 3px;
+      }
+
+      /*
+       * Safety net: old legacy report shells should not appear as standalone
+       * report headers inside the RPG report. The Python sanitizer removes
+       * them; these rules prevent visual theme leakage if one slips through.
+       */
+      .rpg-debug-body > header,
+      .rpg-debug-group-body > header,
+      .rpg-debug-body section.hero,
+      .rpg-debug-group-body section.hero {
+        display: none !important;
+      }
+
+.progression-graph {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+.graph-node {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0.9rem;
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.graph-node-index {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+}
+
+.graph-node-title {
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.graph-node-meta {
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.graph-node-completed {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.20), rgba(15, 23, 42, 0.60));
+}
+
+.graph-node-pending {
+  border-color: rgba(234, 179, 8, 0.40);
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(15, 23, 42, 0.60));
+}
+
+.graph-edge {
+  text-align: center;
+  opacity: 0.5;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+body {
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+  background: #0f1117;
+  color: #e8eaf0;
+  margin: 0;
+  padding: 24px;
+}
+
+.report-shell {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.card {
+  background: #171a23;
+  border: 1px solid #282d3a;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin: 18px 0;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+}
+
+.card h2 {
+  margin-top: 0;
+  color: #ffffff;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.metric-grid div {
+  background: #10131b;
+  border: 1px solid #262b38;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.metric-grid strong {
+  display: block;
+  color: #aeb6c8;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.metric-grid span {
+  display: block;
+  font-size: 22px;
+  margin-top: 6px;
+}
+
+.badge-pass,
+.badge-fail {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.badge-pass {
+  background: #153f2b;
+  color: #8ff0b2;
+  border: 1px solid #2b7a4c;
+}
+
+.badge-fail {
+  background: #4a1c1c;
+  color: #ff9a9a;
+  border: 1px solid #8a3333;
+}
+
+.wide-table,
+.mini-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.wide-table th,
+.wide-table td,
+.mini-table td {
+  border-bottom: 1px solid #2a2f3d;
+  padding: 10px;
+  vertical-align: top;
+}
+
+.wide-table th {
+  color: #b8c0d4;
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0d1017;
+  border: 1px solid #242a37;
+  border-radius: 10px;
+  padding: 10px;
+  color: #d7dbea;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 22px;
+}
+
+.nav a {
+  color: #c8d6ff;
+  background: #151a27;
+  border: 1px solid #2b3347;
+  border-radius: 999px;
+  padding: 7px 11px;
+  text-decoration: none;
+}
+    """
+    arc_cards_html = "".join(
+        '<div class="story-card">'
+        f'<h3>{_esc(arc.get("title"))}</h3>'
+        f'<p><strong>Stage:</strong> {_esc(arc.get("stage"))} · <strong>Status:</strong> {_esc(arc.get("status"))}</p>'
+        f'<p><strong>Completed Objectives:</strong> {_esc(arc.get("completed_count"))} · <strong>Active Objectives:</strong> {_esc(arc.get("active_count"))}</p>'
+        f'{_render_bar("Arc Pressure", arc.get("pressure", 0), max_value=100)}'
+        '</div>'
+        for arc in _safe_list(_safe_dict(model.get("story_arc_view")).get("arcs"))
+    )
+    milestone_pm_rows = [
+        [
+            row.get("arc_id"),
+            row.get("title"),
+            row.get("status"),
+            row.get("priority"),
+            row.get("completed_turn_index"),
+        ]
+        for row in _safe_list(model.get("milestones"))
+    ]
+    player_view = _safe_dict(model.get("player_progression_view"))
+    inventory_start_view = _safe_dict(model.get("inventory_start_view"))
+    inventory_end_view = _safe_dict(model.get("inventory_end_view"))
+    location_cards_html = "".join(
+        '<div class="story-card">'
+        f'<h3>{_esc(loc.get("name"))}</h3>'
+        f'<p><strong>Turns:</strong> {_esc(loc.get("turn_range"))} · <strong>Turn Count:</strong> {_esc(loc.get("turn_count"))}</p>'
+        f'<p>{_esc(loc.get("summary"))}</p>'
+        f'<p><strong>NPCs:</strong> {_esc(", ".join(_safe_list(loc.get("npcs"))) or "None captured")}</p>'
+        f'<p><strong>Objectives:</strong> {_esc(", ".join(_safe_list(loc.get("objectives"))) or "None captured")}</p>'
+        f'{_render_json_details("Location events", loc.get("events"))}'
+        '</div>'
+        for loc in _safe_list(_safe_dict(model.get("location_journey")).get("locations"))
+    )
+    progress_quality_bars = "\n".join(
+        [
+            _render_progress_bar("Meaningful Progress Rate", progress_quality.get("meaningful_progress_rate")),
+            _render_progress_bar("Churn-only Rate", progress_quality.get("churn_only_rate")),
+            _render_progress_bar("Weak Progress Rate", progress_quality.get("weak_progress_rate")),
+            _render_progress_bar("No-change Rate", progress_quality.get("no_change_rate")),
+        ]
+    )
+    stage_values = [
+        _safe_dict(v).get("total_ms", 0) / 1000.0
+        for v in _safe_dict(performance.get("stage_summary")).values()
+    ]
+    max_stage_seconds = max(stage_values or [1.0])
+    performance_stage_bars = "\n".join(
+        _render_bar(
+            key.replace("_ms", "").replace("_", " ").title(),
+            _safe_dict(value).get("total_ms", 0) / 1000.0,
+            max_value=max_stage_seconds,
+            suffix="s",
+        )
+        for key, value in _safe_dict(performance.get("stage_summary")).items()
+    )
+    legacy_report_sections = f"""
+      {_render_calendar_and_journal(model.get("campaign_calendar_summary") or {}, model.get("player_journal_summary") or {})}
+      {_render_quest_progress(_quest_summary_from_latest_state(model) or _safe_dict(model.get("quest_progress_summary")) or {})}
+      {_render_npc_evolution_cards(model.get("npc_evolution_report_summary") or {})}
+      {_render_hundred_turn_eval(model)}
+      {_render_action_diversity(model.get("action_diversity_summary") or {})}
+      {_render_progress_timeline(model.get("progress_timeline_summary") or {})}
+      {_render_background_result_timing(model.get("background_result_timing_summary") or {})}
+
+
+    <section class="rpg-promoted-section" id="story-so-far">
+    <h2>Story So Far</h2>
+    <p class="section-lede">A readable summary of what happened in the campaign before the technical diagnostics.</p>
+    {_render_paragraphs(model.get("story_so_far_paragraph"))}
+    {_render_json_details("Story timeline summary inputs", {"milestones": model.get("milestones"), "journal_entries": model.get("journal_entries"), "hook_counts": model.get("hook_counts")})}
+  </section>
+
+  <section class="rpg-promoted-section" id="setting">
+    <h2>Lore, Setting, and Director Setup</h2>
+    <p class="section-lede">The premise, stakes, and setting context that frame the campaign run.</p>
+    {_render_paragraphs(model.get("lore_setting_paragraph"))}
+    <div class="card-list">
+      {''.join(
+        f'<div class="story-card"><h3>{_esc(row.get("title") or row.get("name") or row.get("id"))}</h3><p>{_esc(row.get("text") or row.get("description") or row.get("summary"))}</p></div>'
+        for row in _safe_list(model.get("lore"))
+      )}
+    </div>
+    {_render_json_details("Director state JSON", _safe_dict(latest_state.get("campaign_director_state")))}
+  </section>
+
+  <section class="rpg-promoted-section" id="arcs">
+    <h2>Story Arc Status</h2>
+    <p class="section-lede">A product/story view of campaign branches, active objectives, and completed beats.</p>
+    <div class="card-list">
+      {arc_cards_html}
+    </div>
+    <h3>Objectives / Milestones</h3>
+    {_render_table(["Arc", "Objective", "Status", "Priority", "Completed Turn"], milestone_pm_rows)}
+    {_render_json_details("Story arcs JSON", model.get("story_arcs"))}
+    {_render_json_details("Milestones JSON", model.get("milestones"))}
+   </section>
+
+  {_render_progression_graph_section(summary)}
+
+  <section class="rpg-promoted-section" id="locations">
+    <h2>Location Journey</h2>
+    <p class="section-lede">Where the run traveled, what happened there, who was involved, and what objectives were tied to each place.</p>
+    <div class="card-list">
+      {location_cards_html}
+    </div>
+    {_render_json_details("Location journey JSON", model.get("location_journey"))}
+  </section>
+
+  <section class="rpg-promoted-section" id="variety">
+    <h2>Story Variety</h2>
+    <p class="section-lede">Identifies which campaign seed ran and gives stable signatures for comparing story setups across multiple autoplay runs.</p>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(story_variety.get("resolved_seed"))}</div><div>Resolved Seed</div></div>
+      <div class="metric"><div class="value">{_esc(story_variety.get("randomized"))}</div><div>Randomized</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(story_variety.get("story_signature")).get("signature_hash"))}</div><div>Story Signature</div></div>
+      <div class="metric"><div class="value">{_esc(story_variety.get("branch_signature_hash"))}</div><div>Branch Signature</div></div>
+    </div>
+    {_render_json_details("Story variety JSON", story_variety)}
+  </section>
+
+    <section class="rpg-promoted-section" id="run-validity">
+    <h2>Run Validity</h2>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(metrics.get("player_agent_exception_count"))}</div><div>Player-Agent Exceptions</div></div>
+      <div class="metric"><div class="value">{_esc(metrics.get("fallback_player_actions"))}</div><div>Fallback Player Actions</div></div>
+      <div class="metric"><div class="value">{_esc(metrics.get("fallback_player_action_rate"))}</div><div>Fallback Action Rate</div></div>
+    </div>
+    <p class="muted">A high fallback rate means this campaign reflects deterministic fallback action selection more than true LLM-player behavior.</p>
+  </section>
+
+  <section class="rpg-promoted-section" id="chapter-status">
+    <h2>Chapter Status</h2>
+    <p class="section-lede">Current campaign chapter, active story goals, completed goals, and recommended next direction.</p>
+    {_render_chapter_status_cards(chapter_status)}
+  </section>
+
+  <section class="rpg-promoted-section" id="product-evaluation">
+    <h2>Product Evaluation</h2>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(pm_summary.get("story_status"))}</div><div>Story Continuity</div></div>
+      <div class="metric"><div class="value">{_esc(pm_summary.get("dialogue_status"))}</div><div>Dialogue Coverage</div></div>
+      <div class="metric"><div class="value">{_esc(pm_summary.get("provider_status"))}</div><div>Provider Narration</div></div>
+      <div class="metric"><div class="value">{_esc(pm_summary.get("performance_status"))}</div><div>Performance</div></div>
+    </div>
+    <h3>Top Risks / Follow-ups</h3>
+    {("<ul>" + "".join(f"<li>{_esc(item)}</li>" for item in _safe_list(pm_summary.get("top_risks"))) + "</ul>") if _safe_list(pm_summary.get("top_risks")) else '<p class="good">No major PM-level risks detected.</p>'}
+  </section>
+  """
+
+    character_inventory = _safe_dict(model.get("character_inventory_progression"))
+    currency_delta = _safe_dict(character_inventory.get("currency_delta"))
+    inventory_delta = _safe_list(character_inventory.get("inventory_delta"))
+    xp_events = _safe_list(character_inventory.get("xp_events"))
+    level_events = _safe_list(character_inventory.get("level_events"))
+
+    body_sections = f"""
+  <section class="rpg-promoted-section" id="player">
+    <h2>Player Character Progression / Stats</h2>
+    <p class="section-lede">A readable snapshot of level, XP, core stats, and progression events.</p>
+    {_render_paragraphs(model.get("character_progression_paragraph"))}
+    <div class="two-col">
+      <div>
+        <h3>Character Summary</h3>
+        {_render_key_value_table(_safe_list(player_view.get("summary_rows")))}
+      </div>
+      <div>
+        <h3>Starting Stats</h3>
+        {_render_table(["Stat", "Value"], _safe_list(player_view.get("stats_rows")))}
+      </div>
+    </div>
+    <h3>Recent Progression Events</h3>
+    {_render_table(["Turn", "Type", "Amount", "Reason", "Level"], _safe_list(player_view.get("recent_progression_rows")))}
+    {_render_json_details("Player progression JSON", model.get("player_progression"))}
+  </section>
+
+  <section class="rpg-promoted-section" id="inventory">
+    <h2>Inventory: Start vs End</h2>
+    <p class="muted">Shows whether the campaign changed carried items, currency, or inventory-like state during the run.</p>
+    <div class="two-col">
+      <div>
+        <h3>Starting Inventory</h3>
+        <h4>Currency</h4>
+        {_render_table(["Currency", "Amount"], _safe_list(inventory_start_view.get("currency_rows")))}
+        <h4>Items</h4>
+        {_render_table(["Item", "Qty", "Type", "Description"], _safe_list(inventory_start_view.get("item_rows")))}
+      </div>
+      <div>
+        <h3>Ending Inventory</h3>
+        <h4>Currency</h4>
+        {_render_table(["Currency", "Amount"], _safe_list(inventory_end_view.get("currency_rows")))}
+        <h4>Items</h4>
+        {_render_table(["Item", "Qty", "Type", "Description"], _safe_list(inventory_end_view.get("item_rows")))}
+      </div>
+    </div>
+    {_render_json_details("Raw inventory start/end JSON", {"start": model.get("inventory_start"), "end": model.get("inventory_end")})}
+
+    <h3>Progression Deltas</h3>
+    <div class="two-col">
+      <div>
+        <h4>Currency Delta</h4>
+        <pre>{_esc(json.dumps(currency_delta, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+      <div>
+        <h4>Inventory Delta</h4>
+        <pre>{_esc(json.dumps(inventory_delta, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+    </div>
+    <div class="two-col">
+      <div>
+        <h4>XP Events</h4>
+        <pre>{_esc(json.dumps(xp_events, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+      <div>
+        <h4>Level Events</h4>
+        <pre>{_esc(json.dumps(level_events, ensure_ascii=False, indent=2, default=str))}</pre>
+      </div>
+    </div>
+   </section>
+
+  <section class="rpg-promoted-section" id="npcs">
+    <h2>NPC Cast, Biography, and Growth</h2>
+    <p class="muted">A product/story view of who appeared, why they matter, and how their relationship or role changed.</p>
+    {_render_table(["Name", "Role", "Dialogue Turns", "History", "Biography", "Growth / Arc"], npc_rows)}
+    {_render_json_details("NPC dialogue counts", model.get("npc_dialogue_counts"))}
+    {_render_json_details("NPC progression state", _safe_dict(_safe_dict(latest_state.get("npc_progression_state")).get("npcs")))}
+  </section>
+
+  <section class="rpg-promoted-section" id="dialogue-coverage">
+    <h2>Dialogue Coverage</h2>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("npc_response_turn_count"))}</div><div>Turns with NPC Response</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("social_turn_missing_npc_response_count"))}</div><div>Social Turns Missing NPC Response</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("hook_dialogue_turn_count"))}</div><div>Hook Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("base_runtime_dialogue_turn_count"))}</div><div>Base Runtime Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_dialogue_turn_count"))}</div><div>Real Runtime Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("real_runtime_provider_dialogue_turn_count"))}</div><div>Provider Runtime Dialogue Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("dialogue_coverage")).get("echoed_narration_turn_count"))}</div><div>Echoed Narration Turns</div></div>
+    </div>
+    <details>
+      <summary>Dialogue coverage debug</summary>
+      <pre>{_json(model.get("dialogue_coverage"))}</pre>
+      </details>
+    </section>
+
+  <section class="rpg-promoted-section" id="performance">
+    <h2>Performance Metrics</h2>
+    <p class="section-lede">Runtime speed and where time is spent. Playability latency separates the blocking turn path from background narration/checkpoint/report work.</p>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(_number(performance.get("campaign_wall_seconds"), 2))}s</div><div>Campaign Wall Time</div></div>
+      <div class="metric"><div class="value">{_esc(performance.get("turns_per_second"))}</div><div>Turns / Second</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_turn_ms")))}</div><div>Average Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_turn_ms")))}</div><div>p95 Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_turn_ms")))}</div><div>Max Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("artifact_write_ms")))}</div><div>Report Write Time</div></div>
+    </div>
+    <h3>Playability Latency</h3>
+    <p class="muted">
+      Autoplay blocking includes the LLM player-agent. Human-equivalent blocking excludes the player-agent because a real player supplies the action.
+    </p>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_human_playable_blocking_ms")))}</div><div>Avg Human-Equivalent Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_human_playable_blocking_ms")))}</div><div>p95 Human-Equivalent Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_human_playable_blocking_ms")))}</div><div>Max Human-Equivalent Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("avg_playable_blocking_ms")))}</div><div>Avg Autoplay Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("p95_playable_blocking_ms")))}</div><div>p95 Autoplay Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_seconds_from_ms(performance.get("max_playable_blocking_ms")))}</div><div>Max Autoplay Blocking Turn</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("background_jobs")).get("total_jobs"))}</div><div>Background Jobs</div></div>
+      <div class="metric"><div class="value">{_esc(_number(_safe_dict(model.get("background_jobs")).get("background_job_seconds"), 2))}s</div><div>Background Worker Time</div></div>
+    </div>
+    <h3>Evaluation Wall Time</h3>
+    {performance_stage_bars}
+    {_render_json_details("Stage summary JSON", performance.get("stage_summary") or {})}
+    {_render_json_details("Provider trace summary JSON", model.get("provider_trace_summary") or {})}
+    {_render_json_details("Manual harness trace summary JSON", model.get("manual_harness_trace_summary") or {})}
+    {_render_json_details("Session turn trace summary JSON", model.get("turn_perf_trace_summary") or {})}
+    {_render_json_details("Player-agent trace summary JSON", model.get("player_agent_trace_summary") or {})}
+    {_render_json_details("Deferred narration trace summary JSON", model.get("deferred_narration_trace_summary") or {})}
+    {_render_json_details("Deferred advisory trace summary JSON", model.get("deferred_advisory_trace_summary") or {})}
+    {_render_json_details("Performance budget summary JSON", model.get("performance_budget_summary") or {})}
+    {_render_json_details("Background prompt budget summary JSON", model.get("background_prompt_budget_summary") or {})}
+    {_render_json_details("Combined quality shape summary JSON", model.get("combined_quality_shape_summary") or {})}
+    {_render_json_details("Player-agent prompt budget summary JSON", model.get("player_agent_prompt_budget_summary") or {})}
+    {_render_json_details("Player-agent cache summary JSON", model.get("player_agent_cache_summary") or {})}
+    {_render_json_details("Deferred advisory promotion summary JSON", model.get("deferred_advisory_promotion_summary") or {})}
+    {_render_json_details("NPC evolution summary JSON", model.get("npc_evolution_summary") or {})}
+    {_render_json_details("NPC evolution profile persistence summary JSON", model.get("npc_evolution_profile_persistence_summary") or {})}
+    {_render_json_details("NPC profile load summary JSON", model.get("npc_profile_load_summary") or {})}
+    {_render_json_details("Profile-grounded output summary JSON", model.get("profile_grounded_output_summary") or {})}
+    {_render_json_details("NPC arc progression summary JSON", model.get("npc_arc_progression_summary") or {})}
+    {_render_json_details("Promotion target grounding summary JSON", model.get("promotion_target_grounding_summary") or {})}
+    {_render_json_details("Quality gate summary JSON", model.get("quality_gate_summary") or {})}
+    {_render_json_details("Scenario progression summary JSON", model.get("scenario_progression_summary") or {})}
+    {_render_json_details("Behavioral autoplay eval summary JSON", model.get("behavioral_autoplay_eval_summary") or {})}
+    {_render_json_details("Slowest turns JSON", performance.get("slowest_turns") or [])}
+     {_render_json_details("Background job summary JSON", model.get("background_jobs") or {})}
+  </section>
+
+  <section class="rpg-promoted-section" id="quality">
+    <h2>Progress Quality & Action Diversity</h2>
+    <p class="section-lede">How often the campaign produced meaningful story/game progress versus weak progress, churn, or no visible change.</p>
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(progress_quality.get("churn_only_turns"))}</div><div>Churn-only Turns</div></div>
+      <div class="metric"><div class="value">{_esc(progress_quality.get("weak_progress_turns"))}</div><div>Weak Progress Turns</div></div>
+      <div class="metric"><div class="value">{_esc(progress_quality.get("no_change_turns"))}</div><div>No-change Turns</div></div>
+      <div class="metric"><div class="value">{_esc(_safe_dict(model.get("action_diversity")).get("action_diversity_rate"))}</div><div>Action Diversity Rate</div></div>
+    </div>
+    <h3>Progress Distribution</h3>
+    {progress_quality_bars}
+    {_render_json_details("Progress category counts", model.get("category_counts"))}
+    <h3>Hook Counts</h3>
+    {_render_json_details("Hook counts", model.get("hook_counts"))}
+  </section>
+
+    {_render_qa_dashboard(summary, metrics)}
+
+  <section class="rpg-promoted-section" id="runtime-narration-diagnostics">
+    <h2>Runtime Narration Diagnostics</h2>
+    <p class="muted">Provider validity, repair, fallback, and method-call diagnostics.</p>
+    {_render_json_details("Runtime narration diagnostics JSON", model.get("runtime_narration_diagnostics"))}
+   </section>
+
+    <section class="rpg-promoted-section" id="timeline">
+    <h2>Turn-by-Turn Story Timeline with AI/NPC Responses</h2>
+    {''.join(timeline_html)}
+   </section>
+
+    {_render_console_log_summary(model.get("console_log_summary") or {})}
+    {_render_json_details("Console log summary JSON", model.get("console_log_summary") or {})}
+
+    <section class="rpg-promoted-section" id="debug">
+      <h2>Raw Debug Appendix</h2>
+      <p><strong>Latest state source:</strong> {_esc(model.get("latest_state_source"))}</p>
+      {_render_json_details("Story beat fallback summary JSON", model.get("story_beat_summary") or {})}
+      {_render_json_details("Player journal quality summary JSON", model.get("player_journal_quality_summary") or {})}
+      {_render_json_details("Manual turn error summary JSON", model.get("manual_turn_error_summary") or {})}
+      {_render_json_details("100-turn eval summary JSON", model.get("hundred_turn_eval_summary") or {})}
+      {_render_json_details("Action diversity summary JSON", model.get("action_diversity_summary") or {})}
+      {_render_json_details("Progress timeline summary JSON", model.get("progress_timeline_summary") or {})}
+      {_render_json_details("Long-run warning summary JSON", model.get("long_run_warning_summary") or {})}
+{_render_json_details("Background result timing summary JSON", model.get("background_result_timing_summary") or {})}
+{_render_json_details("Background drain events JSON", {"events": model.get("background_drain_events") or []})}
+      {_render_json_details("Latest Simulation State", latest_state)}
+      {_render_json_details("Summary JSON", summary)}
+      {_render_json_details("Metrics JSON", metrics)}
+    </section>"""
+
+    primary_links = [
+        ("campaign-overview", "Overview"),
+        ("verdict-cards", "Validation"),
+        ("autoplay-campaign-report", "Run Report"),
+        ("story-so-far", "Story"),
+        ("chapter-status", "Chapter"),
+        ("performance", "Performance"),
+        ("timeline", "Timeline"),
+    ]
+    appendix_links = [
+        ("campaign-journal", "Journal"),
+        ("quest-progress", "Quests"),
+        ("npc-evolution", "NPC Evolution"),
+        ("hundred-turn-eval", "100-Turn Eval"),
+        ("action-diversity", "Action Diversity"),
+        ("progress-timeline", "Progress Timeline"),
+        ("background-result-timing", "Background Timing"),
+        ("story-so-far", "Story So Far"),
+        ("setting", "Setting"),
+        ("arcs", "Story Arcs"),
+        ("locations", "Locations"),
+        ("variety", "Variety"),
+        ("run-validity", "Run Validity"),
+        ("chapter-status", "Chapter Status"),
+        ("product-evaluation", "Product Evaluation"),
+        ("player", "Player"),
+        ("inventory", "Inventory"),
+        ("npcs", "NPC Cast"),
+        ("dialogue-coverage", "Dialogue Coverage"),
+        ("adventure-timeline", "Adventure Timeline"),
+        ("quest-board", "Quest Board"),
+        ("npc-chronicle", "NPC Chronicle"),
+        ("console-log", "Console Log"),
+        ("runtime-narration-diagnostics", "Runtime Diagnostics"),
+        ("debug", "Debug"),
+    ]
+    evaluation_html = _render_hundred_turn_evaluation_gates(_safe_dict(summary.get("hundred_turn_evaluation")))
+    grounding_html = _render_grounding_summary(_safe_dict(summary.get("narration_grounding_summary")))
+    progress_html = _render_progress_quality(_safe_dict(summary.get("canonical_progress_quality")))
+    performance_html = _render_performance_seconds(_safe_dict(summary.get("performance_seconds_summary")))
+    timeline_html = _render_timeline_section(entities)
+    locations_html = _render_locations_section(entities)
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{_esc(_safe_str(chronicle_model.get("title")) or "Autoplay Campaign Report")}</title>
+    <style>
+{css}
+    </style>
+</head>
+<body>
+    <div class="report-shell">
+        {_render_rpg_hero(chronicle_model)}
+        {_render_rpg_nav_links(primary_links, appendix_links)}
+        <nav class="nav">
+          <a href="#evaluation-gates">Evaluation Gates</a>
+          <a href="#grounding-summary">Grounding</a>
+          <a href="#progress-quality">Progress Quality</a>
+          <a href="#performance">Performance</a>
+          <a href="#timeline">Timeline</a>
+          <a href="#chronicle">Chronicle</a>
+          <a href="#debug">Debug</a>
+        </nav>
+        {evaluation_html}
+        {grounding_html}
+        {progress_html}
+        {performance_html}
+        {timeline_html}
+        {locations_html}
+        {_render_rpg_verdict_cards(chronicle_model)}
+        {_render_autoplay_campaign_report_partial(summary, metrics)}
+        {legacy_report_sections}
+        {body_sections}
+    </div>
+</body>
+</html>"""
+    return _finalize_campaign_report_html(html_doc)

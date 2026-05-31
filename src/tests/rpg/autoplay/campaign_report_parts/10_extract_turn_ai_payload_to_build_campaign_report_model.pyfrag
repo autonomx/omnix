@@ -1,0 +1,513 @@
+def extract_turn_ai_payload(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Best-effort extraction of the raw/structured narration payload.
+
+    This intentionally reads many shapes because narration output has evolved
+    across bundles.
+    """
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    raw_result = _safe_dict(manual_summary.get("raw_result"))
+    result = _safe_dict(turn_result.get("result"))
+
+    candidates = [
+        raw_result.get("narration_result"),
+        raw_result.get("narration_payload"),
+        raw_result.get("narration_json"),
+        raw_result.get("structured_narration"),
+        raw_result.get("llm_narration"),
+        _nested_get(raw_result, "result", "narration_result"),
+        _nested_get(raw_result, "result", "narration_payload"),
+        _nested_get(raw_result, "session", "runtime_state", "last_narration_payload"),
+        _nested_get(raw_result, "session", "runtime_state", "last_structured_narration"),
+        manual_summary.get("raw_narration_payload"),
+        result.get("narration_payload"),
+        _nested_get(turn_result, "deferred_narration_result", "narration_payload"),
+        _nested_get(turn_result, "combined_background_llm_result", "narration_payload"),
+        row.get("deferred_narration_result", {}).get("narration_payload") if isinstance(row.get("deferred_narration_result"), dict) else {},
+        row.get("combined_background_llm_result", {}).get("narration_payload") if isinstance(row.get("combined_background_llm_result"), dict) else {},
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate:
+            return candidate
+        if isinstance(candidate, str) and candidate.strip():
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                continue
+    return {}
+
+
+def extract_story_hook_display(row: Dict[str, Any]) -> Dict[str, Any]:
+    hook_result = _safe_dict(row.get("story_hook_result"))
+    display = _safe_dict(hook_result.get("display"))
+    if display:
+        return display
+    fired_hooks = _safe_list(hook_result.get("fired_hooks"))
+    for fired in reversed(fired_hooks):
+        display = _safe_dict(_safe_dict(fired).get("display"))
+        if display:
+            return display
+    return {}
+
+
+def extract_base_response_payload(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _safe_dict(row.get("base_response_payload"))
+    if payload:
+        return payload
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    payload = _safe_dict(manual_summary.get("base_response_payload"))
+    if payload:
+        return payload
+    return {}
+
+
+def extract_conversation_beat(row: Dict[str, Any]) -> Dict[str, str]:
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    raw_result = _safe_dict(manual_summary.get("raw_result"))
+    conversation_result = _safe_dict(
+        raw_result.get("conversation_result")
+        or _nested_get(raw_result, "result", "conversation_result")
+    )
+    beat = _safe_dict(conversation_result.get("beat"))
+    if beat:
+        return {
+            "speaker": _first_nonempty(beat.get("speaker_name"), beat.get("speaker_id")),
+            "line": _safe_str(beat.get("line")),
+        }
+    beats = _safe_list(conversation_result.get("beats"))
+    for item in beats:
+        beat = _safe_dict(item)
+        if beat.get("line"):
+            return {
+                "speaker": _first_nonempty(beat.get("speaker_name"), beat.get("speaker_id")),
+                "line": _safe_str(beat.get("line")),
+            }
+    return {}
+
+
+def classify_dialogue_source(row: Dict[str, Any]) -> str:
+    """Classify where the visible NPC dialogue came from."""
+    ai_payload = extract_turn_ai_payload(row)
+    if _safe_dict(ai_payload.get("npc")).get("line") and _safe_str(ai_payload.get("source")) == "provider_runtime_narration":
+        return "real_runtime_provider"
+
+    hook_display = extract_story_hook_display(row)
+    if _safe_dict(hook_display.get("npc")).get("line"):
+        return "story_hook_display"
+
+    if _safe_dict(ai_payload.get("npc")).get("line"):
+        if _safe_str(ai_payload.get("source")) == "deterministic_runtime_narration_fallback":
+            return "real_runtime_fallback"
+        return "raw_ai_payload"
+
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    if _safe_dict(manual_summary.get("raw_npc")).get("line"):
+        return "raw_npc"
+
+    if extract_conversation_beat(row).get("line"):
+        return "conversation_beat"
+
+    base_response = extract_base_response_payload(row)
+    if _safe_dict(base_response.get("npc")).get("line"):
+        source = _safe_str(base_response.get("source"))
+        if source == "provider_base_runtime_response":
+            return "base_runtime_provider"
+        return "base_runtime_deterministic"
+
+    return "none"
+
+
+def extract_dialogue(row: Dict[str, Any]) -> Dict[str, str]:
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    raw_result = _safe_dict(manual_summary.get("raw_result"))
+    ai_payload = extract_turn_ai_payload(row)
+    hook_display = extract_story_hook_display(row)
+    base_response = extract_base_response_payload(row)
+    npc_payload = _safe_dict(ai_payload.get("npc"))
+    hook_npc = _safe_dict(hook_display.get("npc"))
+    base_npc = _safe_dict(base_response.get("npc"))
+    raw_npc = _safe_dict(manual_summary.get("raw_npc"))
+    conversation_beat = extract_conversation_beat(row)
+
+    speaker = _first_nonempty(
+        npc_payload.get("speaker") if _safe_str(ai_payload.get("source")) == "provider_runtime_narration" else "",
+        hook_npc.get("speaker"),
+        npc_payload.get("speaker"),
+        base_npc.get("speaker"),
+        raw_npc.get("speaker"),
+        conversation_beat.get("speaker"),
+        raw_result.get("npc_speaker"),
+        _nested_get(raw_result, "npc", "speaker"),
+        _nested_get(raw_result, "result", "npc", "speaker"),
+        _nested_get(raw_result, "turn_contract", "npc", "speaker"),
+        _nested_get(turn_result, "turn_contract", "npc", "speaker"),
+    )
+    line = _first_nonempty(
+        npc_payload.get("line") if _safe_str(ai_payload.get("source")) == "provider_runtime_narration" else "",
+        hook_npc.get("line"),
+        npc_payload.get("line"),
+        base_npc.get("line"),
+        raw_npc.get("line"),
+        conversation_beat.get("line"),
+        raw_result.get("npc_line"),
+        _nested_get(raw_result, "npc", "line"),
+        _nested_get(raw_result, "result", "npc", "line"),
+        _nested_get(raw_result, "turn_contract", "npc", "line"),
+        _nested_get(turn_result, "turn_contract", "npc", "line"),
+    )
+    return {
+        "speaker": speaker,
+        "line": line,
+    }
+
+
+def extract_narration(row: Dict[str, Any]) -> str:
+    turn_result = _safe_dict(row.get("turn_result"))
+    manual_summary = _safe_dict(turn_result.get("manual_turn_summary"))
+    ai_payload = extract_turn_ai_payload(row)
+    hook_display = extract_story_hook_display(row)
+    base_response = extract_base_response_payload(row)
+    raw_result = _safe_dict(manual_summary.get("raw_result"))
+    return _first_nonempty(
+        ai_payload.get("narration") if _safe_str(ai_payload.get("source")) == "provider_runtime_narration" else "",
+        hook_display.get("narration"),
+        ai_payload.get("narration"),
+        base_response.get("narration"),
+        turn_result.get("narration"),
+        manual_summary.get("raw_narration"),
+        raw_result.get("narration"),
+        _nested_get(raw_result, "result", "narration"),
+    )
+
+
+def is_social_player_action(player_action: Any) -> bool:
+    text = _norm_text(player_action)
+    return any(word in text for word in SOCIAL_ACTION_WORDS)
+
+
+def is_echoed_narration(*, player_action: Any, narration: Any) -> bool:
+    player = _norm_text(player_action)
+    narr = _norm_text(narration)
+    if not player or not narr:
+        return False
+    return player == narr or narr in {player.rstrip("."), player + "."}
+
+
+def build_campaign_report_model(
+    *,
+    transcript: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    metrics: Dict[str, Any],
+    health: Dict[str, Any],
+) -> Dict[str, Any]:
+    latest_state = _safe_dict(summary.get("latest_state") or metrics.get("latest_state"))
+    latest_state_source = "summary.latest_state" if latest_state else ""
+    if not latest_state:
+        latest_state = _latest_state_from_transcript(transcript)
+        latest_state_source = _latest_state_source(transcript)
+    initial_state = _initial_state_from_transcript(transcript)
+    quality = _safe_dict(metrics.get("progress_quality"))
+    turn_count_for_rates = max(1, len(transcript))
+    quality.setdefault("weak_progress_rate", float(quality.get("weak_progress_turns") or 0) / turn_count_for_rates)
+    quality.setdefault("no_change_rate", float(quality.get("no_change_turns") or 0) / turn_count_for_rates)
+    quality.setdefault("churn_only_rate", float(quality.get("churn_only_turns") or 0) / turn_count_for_rates)
+    action_diversity = _safe_dict(metrics.get("action_diversity"))
+    category_counts = Counter()
+    hook_counts = Counter()
+    npc_dialogue_counts = Counter()
+
+    timeline = []
+    for row in transcript:
+        dialogue = extract_dialogue(row)
+        narration = extract_narration(row)
+        dialogue_source = classify_dialogue_source(row)
+        player_action = _safe_str(row.get("player_action"))
+        social_action = is_social_player_action(player_action)
+        missing_npc_response = bool(social_action and not dialogue.get("line"))
+        echoed_narration = is_echoed_narration(
+            player_action=player_action,
+            narration=narration,
+        )
+        progress_delta = _safe_dict(row.get("progress_delta"))
+        progress_quality = _safe_dict(row.get("progress_quality"))
+        hook_result = _safe_dict(row.get("story_hook_result"))
+        fired_hooks = _safe_list(hook_result.get("fired_hooks"))
+        for category in _safe_list(progress_delta.get("categories")):
+            category_counts[str(category)] += 1
+        for hook in fired_hooks:
+            hook = _safe_dict(hook)
+            if hook.get("hook_id"):
+                hook_counts[str(hook.get("hook_id"))] += 1
+        if dialogue.get("speaker"):
+            npc_dialogue_counts[dialogue["speaker"]] += 1
+        timeline.append(
+            {
+                "turn_index": row.get("turn_index"),
+                "player_action": player_action,
+                "narration": narration,
+                "npc": dialogue,
+                "dialogue_source": dialogue_source,
+                "social_action": social_action,
+                "missing_npc_response": missing_npc_response,
+                "echoed_narration": echoed_narration,
+                "progress_delta": progress_delta,
+                "progress_quality": progress_quality,
+                "fired_hooks": fired_hooks,
+                "state_preservation_debug": row.get("state_preservation_debug") or {},
+                "performance": row.get("performance") or {},
+                "base_response_payload": row.get("base_response_payload") or {},
+                "runtime_narration_diagnostics": _safe_dict(
+                    _safe_dict(extract_turn_ai_payload(row)).get("runtime_narration_diagnostics")
+                ),
+            }
+        )
+
+    dialogue_coverage = compute_dialogue_coverage(timeline)
+    runtime_narration_diagnostics = compute_runtime_narration_diagnostics(timeline)
+
+    shortcomings = []
+    if float(quality.get("meaningful_progress_rate") or 0.0) < 0.15 and transcript:
+        shortcomings.append("Low meaningful progress rate; story may be stalling or progression hooks may be too sparse.")
+    if int(quality.get("weak_progress_turns") or 0) > int(quality.get("meaningful_turns") or 0):
+        shortcomings.append("Weak/journal-only progress exceeds meaningful progress; journal churn may be too generous.")
+    if int(metrics.get("checkpoint_failure_count") or 0) > 0:
+        shortcomings.append("One or more save/load checkpoints failed.")
+    if int(metrics.get("state_bound_warning_count") or 0) > 0:
+        shortcomings.append("State bounds warnings occurred; long-run state may be growing unsafely.")
+    if not hook_counts:
+        shortcomings.append("No story hooks fired; deterministic story progression may be missing.")
+    if not npc_dialogue_counts:
+        shortcomings.append("No NPC dialogue extracted; narration payload may not expose speaker/line fields.")
+    if int(dialogue_coverage.get("social_turn_missing_npc_response_count") or 0) > 0:
+        shortcomings.append(
+            f"{dialogue_coverage.get('social_turn_missing_npc_response_count')} social turns had no extracted NPC response; "
+            "base-runtime dialogue coverage is incomplete."
+        )
+    if int(dialogue_coverage.get("echoed_narration_turn_count") or 0) > 0:
+        shortcomings.append(
+            f"{dialogue_coverage.get('echoed_narration_turn_count')} turns appear to echo the player action as narration; "
+            "the narration runtime may be falling back instead of generating scene response text."
+        )
+    source_counts = _safe_dict(dialogue_coverage.get("dialogue_source_counts"))
+    deterministic_count = int(source_counts.get("base_runtime_deterministic") or 0)
+    provider_count = int(source_counts.get("base_runtime_provider") or 0)
+    if deterministic_count > 0 and provider_count == 0:
+        shortcomings.append(
+            "Some non-hook dialogue is supplied by fallback narration rather than valid provider narration; provider-backed runtime narration should be validated next."
+        )
+    if int(runtime_narration_diagnostics.get("provider_valid_turns") or 0) == 0:
+        shortcomings.append(
+            "Real runtime narration used deterministic fallback for all turns; provider-backed runtime narration is not active or not producing valid contract JSON."
+        )
+    elif int(runtime_narration_diagnostics.get("provider_repaired_turns") or 0) > 0:
+        shortcomings.append(
+            f"Provider runtime narration required contract repair on {runtime_narration_diagnostics.get('provider_repaired_turns')} turns; "
+            "provider prompt/quality gates should be tightened."
+        )
+    if int(metrics.get("player_agent_exception_count") or 0) > 0:
+        shortcomings.append(
+            f"Player-agent exceptions occurred on {metrics.get('player_agent_exception_count')} turns; "
+            "this run may reflect fallback action logic rather than real LLM player behavior."
+        )
+    if float(metrics.get("fallback_player_action_rate") or 0.0) >= 0.5:
+        shortcomings.append(
+            f"Fallback player action rate was {metrics.get('fallback_player_action_rate')}; "
+            "storytelling evaluation should be treated cautiously until the LLM player-agent path is fixed."
+        )
+
+    model = {
+        "summary": summary,
+        "metrics": metrics,
+        "health": health,
+        "latest_state": latest_state,
+        "latest_state_source": latest_state_source,
+        "initial_state": initial_state,
+        "inventory_start": _inventory_snapshot(initial_state),
+        "inventory_end": _inventory_snapshot(latest_state),
+        "timeline": timeline,
+        "story_arcs": _story_arc_rows(latest_state),
+        "milestones": _milestone_rows(latest_state),
+        "journal_entries": _journal_entries(latest_state),
+        "story_events": _story_events(latest_state),
+        "npcs": _npc_rows(latest_state, transcript),
+        "player_progression": _player_progression(latest_state),
+        "lore": _lore_rows(latest_state),
+        "category_counts": dict(category_counts),
+        "hook_counts": dict(hook_counts),
+        "npc_dialogue_counts": dict(npc_dialogue_counts),
+        "action_diversity": action_diversity,
+        "dialogue_coverage": dialogue_coverage,
+        "runtime_narration_diagnostics": runtime_narration_diagnostics,
+        "background_jobs": _safe_dict(metrics.get("background_jobs")),
+        "provider_trace_summary": _safe_dict(metrics.get("provider_trace_summary")),
+        "manual_harness_trace_summary": _safe_dict(metrics.get("manual_harness_trace_summary")),
+        "turn_perf_trace_summary": _safe_dict(metrics.get("turn_perf_trace_summary")),
+        "player_agent_trace_summary": _safe_dict(metrics.get("player_agent_trace_summary")),
+        "deferred_narration_trace_summary": _safe_dict(metrics.get("deferred_narration_trace_summary")),
+        "deferred_advisory_trace_summary": _safe_dict(metrics.get("deferred_advisory_trace_summary")),
+        "performance_budget_summary": _safe_dict(metrics.get("performance_budget_summary")),
+        "background_prompt_budget_summary": _safe_dict(metrics.get("background_prompt_budget_summary")),
+        "combined_quality_shape_summary": _safe_dict(metrics.get("combined_quality_shape_summary")),
+        "player_agent_prompt_budget_summary": _safe_dict(summary.get("player_agent_prompt_budget_summary")),
+        "player_agent_cache_summary": _safe_dict(summary.get("player_agent_cache_summary")),
+        "deferred_advisory_promotion_summary": _safe_dict(
+            summary.get("deferred_advisory_promotion_summary")
+            or metrics.get("deferred_advisory_promotion_summary")
+        ),
+        "npc_evolution_summary": _safe_dict(summary.get("npc_evolution_summary") or metrics.get("npc_evolution_summary")),
+        "npc_evolution_profile_persistence_summary": _safe_dict(
+            summary.get("npc_evolution_profile_persistence_summary")
+            or metrics.get("npc_evolution_profile_persistence_summary")
+        ),
+        "npc_profile_load_summary": _safe_dict(
+            summary.get("npc_profile_load_summary")
+            or metrics.get("npc_profile_load_summary")
+        ),
+        "profile_grounded_output_summary": _safe_dict(
+            summary.get("profile_grounded_output_summary")
+            or metrics.get("profile_grounded_output_summary")
+        ),
+        "npc_arc_progression_summary": _safe_dict(
+            summary.get("npc_arc_progression_summary")
+            or metrics.get("npc_arc_progression_summary")
+        ),
+        "npc_evolution_report_summary": _safe_dict(
+            summary.get("npc_evolution_report_summary")
+            or metrics.get("npc_evolution_report_summary")
+        ),
+        "quest_progress_summary": _safe_dict(
+            summary.get("quest_progress_summary")
+            or metrics.get("quest_progress_summary")
+        ),
+        "quest_reconciliation_summary": _safe_dict(summary.get("quest_reconciliation_summary")),
+        "quest_handoff_summary": _safe_dict(summary.get("quest_handoff_summary")),
+        "objective_progression_summary": _safe_dict(summary.get("objective_progression_summary")),
+        "final_state_field_coverage_summary": _safe_dict(summary.get("final_state_field_coverage_summary")),
+        "strict_progress_health_summary": _safe_dict(summary.get("strict_progress_health_summary")),
+        "post_transition_action_quality_summary": _safe_dict(summary.get("post_transition_action_quality_summary")),
+        "repeated_affordance_loop_summary": _safe_dict(summary.get("repeated_affordance_loop_summary")),
+        "pre_turn_advisory_promotion_performance_summary": _safe_dict(
+            summary.get("pre_turn_advisory_promotion_performance_summary")
+        ),
+        "campaign_state_commit_summary": _safe_dict(summary.get("campaign_state_commit_summary")),
+        "campaign_stale_state_summary": _safe_dict(summary.get("campaign_stale_state_summary")),
+        "campaign_state_commit_performance_summary": _safe_dict(
+            summary.get("campaign_state_commit_performance_summary")
+        ),
+        "handoff_progress_summary": _safe_dict(summary.get("handoff_progress_summary")),
+        "scenario_progression_summary": _safe_dict(summary.get("scenario_progression_summary")),
+        "behavioral_autoplay_eval_summary": _safe_dict(summary.get("behavioral_autoplay_eval_summary")),
+        "story_beat_summary": _safe_dict(
+            summary.get("story_beat_summary")
+            or metrics.get("story_beat_summary")
+        ),
+        "manual_turn_error_summary": _safe_dict(
+            summary.get("manual_turn_error_summary")
+            or metrics.get("manual_turn_error_summary")
+        ),
+        "console_log_summary": _safe_dict(
+            summary.get("console_log_summary")
+            or metrics.get("console_log_summary")
+        ),
+        "action_diversity_summary": _safe_dict(
+            summary.get("action_diversity_summary")
+            or metrics.get("action_diversity_summary")
+        ),
+        "progress_timeline_summary": _safe_dict(
+            summary.get("progress_timeline_summary")
+            or metrics.get("progress_timeline_summary")
+        ),
+        "long_run_warning_summary": _safe_dict(
+            summary.get("long_run_warning_summary")
+            or metrics.get("long_run_warning_summary")
+        ),
+        "hundred_turn_eval_summary": _safe_dict(
+            summary.get("hundred_turn_eval_summary")
+            or metrics.get("hundred_turn_eval_summary")
+        ),
+        "background_result_timing_summary": _safe_dict(
+            summary.get("background_result_timing_summary")
+            or metrics.get("background_result_timing_summary")
+        ),
+        "background_drain_events": (
+            summary.get("background_drain_events")
+            or metrics.get("background_drain_events")
+            or []
+        ),
+        "campaign_calendar_summary": _safe_dict(
+            summary.get("campaign_calendar_summary")
+            or metrics.get("campaign_calendar_summary")
+        ),
+        "player_journal_summary": _safe_dict(
+            summary.get("player_journal_summary")
+            or metrics.get("player_journal_summary")
+        ),
+        "player_journal_quality_summary": _safe_dict(
+            summary.get("player_journal_quality_summary")
+            or metrics.get("player_journal_quality_summary")
+        ),
+        "promotion_target_grounding_summary": _safe_dict(
+            summary.get("promotion_target_grounding_summary")
+            or metrics.get("promotion_target_grounding_summary")
+        ),
+        "quality_gate_summary": _safe_dict(summary.get("quality_gate_summary")),
+        "shortcomings": shortcomings,
+    }
+    model["story_so_far_paragraph"] = build_story_so_far_paragraph(model)
+    model["lore_setting_paragraph"] = build_lore_setting_paragraph(latest_state)
+    model["character_progression_paragraph"] = build_character_progression_paragraph(latest_state)
+    model["chapter_status"] = build_chapter_status(latest_state, model)
+    model["player_progression_view"] = build_player_progression_rows(latest_state)
+    model["story_arc_view"] = build_story_arc_report_rows(model)
+    model["inventory_start_view"] = build_inventory_rows(_safe_dict(model["inventory_start"]))
+    model["inventory_end_view"] = build_inventory_rows(_safe_dict(model["inventory_end"]))
+
+    character_inventory = _safe_dict(summary.get("character_inventory_progression"))
+    if character_inventory:
+        player = _safe_dict(character_inventory.get("player"))
+
+        model["character_inventory_progression"] = character_inventory
+
+        model["player_progression_view"] = {
+            "summary_rows": [
+                ("Name", player.get("name") or "The Player"),
+                ("Level", player.get("level", 1)),
+                ("XP", f"{player.get('xp', 0)} / {player.get('xp_to_next_level', 100)}"),
+                ("Progress Log Entries", player.get("progress_log_entries", 0)),
+            ],
+            "stats_rows": [],
+            "recent_progression_rows": [
+                [
+                    row.get("turn", ""),
+                    row.get("type", ""),
+                    row.get("xp_delta") or row.get("delta") or "",
+                    row.get("summary") or row.get("mechanic") or "",
+                    "",
+                ]
+                for row in _safe_list(character_inventory.get("progression_log"))[-8:]
+                if isinstance(row, dict)
+            ],
+        }
+
+        model["inventory_start"] = {
+            "currency": character_inventory.get("starting_currency", {}),
+            "items": character_inventory.get("starting_inventory", []),
+        }
+        model["inventory_end"] = {
+            "currency": character_inventory.get("ending_currency", {}),
+            "items": character_inventory.get("ending_inventory", []),
+        }
+        model["inventory_start_view"] = build_inventory_rows(_safe_dict(model["inventory_start"]))
+        model["inventory_end_view"] = build_inventory_rows(_safe_dict(model["inventory_end"]))
+    model["location_journey"] = build_location_journey_model(
+        timeline=timeline,
+        state=latest_state,
+    )
+    model["pm_summary"] = build_pm_report_summary(model)
+    return model

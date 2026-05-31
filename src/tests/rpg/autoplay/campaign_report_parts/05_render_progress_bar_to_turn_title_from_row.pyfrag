@@ -1,0 +1,508 @@
+
+
+def _render_progress_bar(label: str, rate: Any) -> str:
+    percent_str = _pct(rate)
+    percent = float(percent_str.rstrip('%')) if '%' in percent_str else 0.0
+    return (
+        '<div class="bar-row">'
+        f'<div class="bar-label">{_esc(label)}</div>'
+        '<div class="bar-track">'
+        f'<div class="bar-fill" style="width:{percent:.1f}%"></div>'
+        '</div>'
+        f'<div class="bar-value">{percent_str}</div>'
+        '</div>'
+    )
+
+
+def _render_key_value_table(rows: List[tuple[str, Any]]) -> str:
+    return (
+        '<table class="kv-table"><tbody>'
+        + ''.join(f'<tr><th>{_esc(k)}</th><td>{_esc(v)}</td></tr>' for k, v in rows)
+        + '</tbody></table>'
+    )
+
+
+def _render_chapter_status_cards(chapter_status: Dict[str, Any]) -> str:
+    active = _safe_list(chapter_status.get("active_objectives"))
+    completed = _safe_list(chapter_status.get("completed_objectives"))
+    active_rows = [[title] for title in active]
+    completed_rows = [[title] for title in completed]
+    return f'''
+    <div class="grid">
+      <div class="metric"><div class="value">{_esc(chapter_status.get("campaign_title") or "Untitled")}</div><div>Campaign Title</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("current_stage") or "unknown")}</div><div>Current Stage</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("chapter_complete"))}</div><div>Chapter Complete</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("active_objective_count"))}</div><div>Active Objectives</div></div>
+      <div class="metric"><div class="value">{_esc(chapter_status.get("completed_objective_count"))}</div><div>Completed Objectives</div></div>
+    </div>
+    <p class="section-lede"><strong>Recommendation:</strong> {_esc(chapter_status.get("recommendation"))}</p>
+    <div class="two-col">
+      <div>
+        <h3>Active Objectives</h3>
+        {_render_table(["Objective"], active_rows)}
+      </div>
+      <div>
+        <h3>Completed Objectives</h3>
+        {_render_table(["Objective"], completed_rows)}
+      </div>
+    </div>
+    {_render_json_details("Chapter status JSON", chapter_status)}
+    '''
+
+
+def _inventory_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
+    candidates = [
+        state.get("inventory_state"),
+        state.get("player_inventory"),
+        _safe_dict(state.get("player_state")).get("inventory"),
+        _safe_dict(state.get("party_state")).get("inventory"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate:
+            return {
+                "currency": _safe_dict(candidate.get("currency")),
+                "items": _safe_list(candidate.get("items")),
+            }
+        if isinstance(candidate, list) and candidate:
+            return {"items": candidate}
+    return {"currency": {}, "items": []}
+
+
+def _initial_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    for row in transcript:
+        before = _safe_dict(row.get("before_state"))
+        if before:
+            return before
+        turn_result = _safe_dict(row.get("turn_result"))
+        state = _safe_dict(turn_result.get("initial_simulation_state"))
+        if state:
+            return state
+    return {}
+
+
+def build_pm_report_summary(model: Dict[str, Any]) -> Dict[str, Any]:
+    metrics = _safe_dict(model.get("metrics"))
+    progress = _safe_dict(metrics.get("progress_quality"))
+    dialogue = _safe_dict(model.get("dialogue_coverage"))
+    runtime_diag = _safe_dict(model.get("runtime_narration_diagnostics"))
+    chapter = _safe_dict(model.get("chapter_status"))
+    shortcomings = _safe_list(model.get("shortcomings"))
+
+    return {
+        "overall_status": "partial" if shortcomings else "good",
+        "story_status": "good" if int(chapter.get("active_objective_count") or 0) > 0 else "warn",
+        "dialogue_status": "good" if float(dialogue.get("social_turn_missing_npc_response_rate") or 0.0) == 0.0 else "warn",
+        "provider_status": "good" if int(runtime_diag.get("provider_valid_turns") or 0) > 0 else "warn",
+        "performance_status": "good",
+        "headline": "The campaign can progress through a complete tavern investigation branch and continue into the bandit-road chapter.",
+        "top_risks": shortcomings[:5],
+        "key_numbers": {
+            "turns": _safe_dict(model.get("summary")).get("turns_executed"),
+            "meaningful_turns": progress.get("meaningful_turns"),
+            "npc_response_rate": dialogue.get("npc_response_rate"),
+            "provider_valid_turns": runtime_diag.get("provider_valid_turns"),
+            "provider_repaired_turns": runtime_diag.get("provider_repaired_turns"),
+            "active_objectives": chapter.get("active_objective_count"),
+        },
+    }
+
+
+def _build_campaign_chronicle_model(summary: Dict[str, Any], metrics: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _safe_dict(summary)
+    metrics = _safe_dict(metrics)
+    quality = _safe_dict(summary.get("quality_gate_summary") or metrics.get("quality_gate_summary"))
+    background_timing = _safe_dict(
+        summary.get("background_result_timing_summary")
+        or metrics.get("background_result_timing_summary")
+    )
+    background_jobs = _safe_dict(summary.get("background_jobs") or metrics.get("background_jobs"))
+    action_diversity = _safe_dict(
+        summary.get("action_diversity_summary")
+        or metrics.get("action_diversity_summary")
+    )
+    progress = _safe_dict(
+        summary.get("progress_timeline_summary")
+        or metrics.get("progress_timeline_summary")
+    )
+    long_run = _safe_dict(
+        summary.get("long_run_warning_summary")
+        or metrics.get("long_run_warning_summary")
+    )
+    journal = _safe_dict(summary.get("player_journal_summary") or metrics.get("player_journal_summary"))
+    calendar = _safe_dict(summary.get("campaign_calendar_summary") or metrics.get("campaign_calendar_summary"))
+
+    turn_count = (
+        _num(summary.get("turn_count"))
+        or _num(metrics.get("turn_count"))
+        or _num(metrics.get("real_turn_runtime_count"))
+        or _num(summary.get("real_turn_runtime_count"))
+    )
+    session_id = _first_non_empty(
+        summary.get("session_id"),
+        metrics.get("session_id"),
+        summary.get("manual_run_id"),
+        metrics.get("manual_run_id"),
+    )
+    seed = _first_non_empty(
+        summary.get("scenario_seed"),
+        metrics.get("scenario_seed"),
+        summary.get("seed"),
+        metrics.get("seed"),
+    )
+
+    return {
+        "title": _first_non_empty(
+            summary.get("campaign_title"),
+            metrics.get("campaign_title"),
+            "The Autoplay Campaign Chronicle",
+        ),
+        "subtitle": _first_non_empty(
+            summary.get("campaign_subtitle"),
+            "A deterministic RPG autoplay run rendered as a campaign chronicle and QA report.",
+        ),
+        "session_id": session_id,
+        "seed": seed,
+        "turn_count": turn_count,
+        "quality_ok": bool(quality.get("ok", summary.get("ok", True))),
+        "summary_ok": bool(summary.get("ok", quality.get("ok", True))),
+        "warning_count": _num(long_run.get("warning_count")),
+        "quality_gate_count": _num(quality.get("gate_count") or len(_safe_dict(quality.get("gates")))),
+        "quality_failed_count": _num(quality.get("failed_count") or quality.get("failure_count")),
+        "background_jobs_submitted": _num(background_timing.get("jobs_submitted") or background_jobs.get("jobs_submitted")),
+        "background_jobs_attached_total": _num(background_timing.get("jobs_attached_total")),
+        "background_jobs_attached_pre_turn": _num(background_timing.get("jobs_attached_pre_turn")),
+        "background_jobs_attached_final": _num(background_timing.get("jobs_attached_final")),
+        "background_pre_turn_attach_rate": background_timing.get("pre_turn_attach_rate") or 0,
+        "background_missing_jobs": _num(background_timing.get("missing_job_count")),
+        "max_semantic_streak": _safe_dict(action_diversity.get("max_same_semantic_target_streak")),
+        "meaningful_progress_rate": progress.get("meaningful_progress_rate") or 0,
+        "churn_only_rate": progress.get("churn_only_rate") or 0,
+        "progress_event_count": _num(progress.get("progress_event_count")),
+        "journal_entry_count": _num(journal.get("entry_count")),
+        "calendar_turns_tracked": _num(calendar.get("turns_tracked")),
+    }
+
+
+def _render_rpg_hero(model: Dict[str, Any]) -> str:
+    model = _safe_dict(model)
+    verdict = "PASS" if bool(model.get("quality_ok")) else "FAIL"
+    verdict_class = _status_badge_class(bool(model.get("quality_ok")))
+    turn_count = _num(model.get("turn_count"))
+    seed = _safe_str(model.get("seed")) or "default"
+    session_id = _safe_str(model.get("session_id")) or "unknown"
+    max_streak = _safe_dict(model.get("max_semantic_streak"))
+    max_streak_label = _first_non_empty(max_streak.get("value"), max_streak.get("pair"), "n/a")
+    max_streak_count = _num(max_streak.get("streak"))
+    return f"""
+    <header class="rpg-hero" id="campaign-overview">
+      <div class="rpg-kicker">Campaign Chronicle · Autoplay Validation Report</div>
+      <h1 class="rpg-title">{_esc(_safe_str(model.get('title')))}</h1>
+      <div class="rpg-subtitle">{_esc(_safe_str(model.get('subtitle')))}</div>
+      <div class="rpg-hero-meta">
+        <span class="rpg-badge {verdict_class}">{_esc(verdict)}</span>
+        <span class="rpg-pill">{_esc(str(turn_count))} Turns</span>
+        <span class="rpg-pill">Seed: {_esc(seed)}</span>
+        <span class="rpg-pill">Session: {_esc(session_id)}</span>
+      </div>
+      <div class="rpg-hero-report">
+        <div class="rpg-hero-report-header">
+          <div>
+            <div class="rpg-kicker">Run Report</div>
+            <h2>Autoplay Campaign Report</h2>
+          </div>
+          <span class="rpg-badge {verdict_class}">{_esc(verdict)}</span>
+        </div>
+        <div class="rpg-hero-stat-grid">
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Quality Gates</div>
+            <div class="rpg-stat-value">{_esc(verdict)}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Background Jobs</div>
+            <div class="rpg-stat-value">{_esc(str(_num(model.get('background_jobs_submitted'))))}</div>
+            <div class="rpg-muted-line">
+              Pre-turn {_esc(str(_num(model.get('background_jobs_attached_pre_turn'))))}
+              · Final {_esc(str(_num(model.get('background_jobs_attached_final'))))}
+            </div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Pre-Turn Attach Rate</div>
+            <div class="rpg-stat-value">{_esc(_pct(model.get('background_pre_turn_attach_rate')))}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Missing BG Jobs</div>
+            <div class="rpg-stat-value">{_esc(str(_num(model.get('background_missing_jobs'))))}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Meaningful Progress</div>
+            <div class="rpg-stat-value">{_esc(_pct(model.get('meaningful_progress_rate')))}</div>
+          </div>
+          <div class="rpg-hero-stat">
+            <div class="rpg-stat-label">Max Semantic Streak</div>
+            <div class="rpg-stat-value">{_esc(str(max_streak_count))}</div>
+            <div class="rpg-muted-line">{_esc(max_streak_label)}</div>
+          </div>
+        </div>
+      </div>
+    </header>
+    """
+
+
+
+
+
+def _render_autoplay_campaign_report_partial(summary: Dict[str, Any], metrics: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    metrics = _safe_dict(metrics)
+    quality = _safe_dict(summary.get("quality_gate_summary") or metrics.get("quality_gate_summary"))
+    background = _safe_dict(summary.get("background_result_timing_summary") or metrics.get("background_result_timing_summary"))
+    perf = _safe_dict(summary.get("performance_budget_summary") or metrics.get("performance_budget_summary"))
+    bg_perf = _safe_dict(perf.get("background_llm"))
+    action = _safe_dict(summary.get("action_diversity_summary") or metrics.get("action_diversity_summary"))
+    progress = _safe_dict(summary.get("progress_timeline_summary") or metrics.get("progress_timeline_summary"))
+    max_streak = _safe_dict(action.get("max_same_semantic_target_streak"))
+
+    return f"""
+    <section class="rpg-card rpg-promoted-section span-12" id="autoplay-campaign-report">
+      <div class="rpg-section-title">
+        <h2>Autoplay Campaign Report</h2>
+        <span class="rpg-badge {_status_badge_class(quality.get('ok', True))}">
+          {_esc(_yes_no(quality.get('ok', True)))}
+        </span>
+      </div>
+      <p>
+        This is the engineering summary for the same run shown in the campaign chronicle.
+        It uses the RPG report theme but keeps the key validation numbers visible near the top.
+      </p>
+      <div class="rpg-stat-grid">
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Quality Gates</div>
+          <div class="rpg-stat-value">{_esc(_yes_no(quality.get('ok', True)))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Background Submitted</div>
+          <div class="rpg-stat-value">{_esc(str(background.get('jobs_submitted') or bg_perf.get('jobs_submitted') or 0))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Pre-Turn Attach Rate</div>
+          <div class="rpg-stat-value">{_esc(_pct(background.get('pre_turn_attach_rate') or 0))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Missing BG Jobs</div>
+          <div class="rpg-stat-value">{_esc(str(background.get('missing_job_count') or 0))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Meaningful Progress</div>
+          <div class="rpg-stat-value">{_esc(_pct(progress.get('meaningful_progress_rate') or 0))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Max Semantic Streak</div>
+          <div class="rpg-stat-value">{_esc(str(max_streak.get('streak') or 0))}</div>
+          <div>{_esc(_safe_str(max_streak.get('value') or max_streak.get('pair') or 'n/a'))}</div>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _render_rpg_verdict_cards(model: Dict[str, Any]) -> str:
+    model = _safe_dict(model)
+    quality_ok = bool(model.get("quality_ok"))
+    warnings = _num(model.get("warning_count"))
+    missing = _num(model.get("background_missing_jobs"))
+    streak = _safe_dict(model.get("max_semantic_streak"))
+    streak_value = _safe_str(streak.get("value") or streak.get("pair") or "n/a")
+    streak_count = _num(streak.get("streak"))
+    return f"""
+    <section class="rpg-card rpg-promoted-section span-12" id="verdict-cards">
+      <div class="rpg-section-title">
+        <h2>Validation Snapshot</h2>
+        <span class="rpg-badge {_status_badge_class(quality_ok)}">{html.escape(_yes_no(quality_ok))}</span>
+      </div>
+      <div class="rpg-stat-grid">
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Quality Gates</div>
+          <div class="rpg-stat-value">{html.escape(_yes_no(quality_ok))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Warnings</div>
+          <div class="rpg-stat-value">{html.escape(str(warnings))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Background Jobs</div>
+          <div class="rpg-stat-value">{html.escape(str(_num(model.get('background_jobs_submitted'))))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Pre-Turn Attach Rate</div>
+          <div class="rpg-stat-value">{html.escape(str(_pct(model.get('background_pre_turn_attach_rate'))))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Missing Background Jobs</div>
+          <div class="rpg-stat-value">{html.escape(str(missing))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Max Semantic Streak</div>
+          <div class="rpg-stat-value">{html.escape(str(streak_count))}</div>
+          <div>{html.escape(streak_value)}</div>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _nested_report_dict(root: Dict[str, Any], *path: str) -> Dict[str, Any]:
+    value: Any = root
+    for key in path:
+        if not isinstance(value, dict):
+            return {}
+        value = value.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _strip_npc_prefix(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if text.startswith("npc:") and len(text) > 4:
+        return text[4:]
+    return text
+
+
+def _semantic_mapping_from_report_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    result = _safe_dict(row.get("result") or row.get("turn_result"))
+
+    candidates = [
+        _safe_dict(row.get("semantic_action_v2")),
+        _safe_dict(row.get("semantic_action_record")),
+        _nested_report_dict(turn_contract, "action", "metadata", "semantic_action"),
+        _nested_report_dict(turn_contract, "action", "semantic_action"),
+        _nested_report_dict(turn_contract, "action"),
+        _nested_report_dict(turn_contract, "resolved_action", "semantic_action"),
+        _nested_report_dict(turn_contract, "resolved_action"),
+        _nested_report_dict(turn_contract, "resolved_result", "semantic_action"),
+        _nested_report_dict(turn_contract, "resolved_result"),
+        _nested_report_dict(result, "turn_contract", "action", "metadata", "semantic_action"),
+        _nested_report_dict(result, "turn_contract", "action"),
+    ]
+
+    for mapping in candidates:
+        if not mapping:
+            continue
+        action = _first_non_empty(
+            mapping.get("semantic_action"),
+            mapping.get("action_type"),
+            mapping.get("action"),
+            mapping.get("kind"),
+            mapping.get("type"),
+        )
+        target = _first_non_empty(
+            mapping.get("target_name"),
+            mapping.get("target"),
+            mapping.get("target_id"),
+            mapping.get("provider_name"),
+            mapping.get("provider_id"),
+            mapping.get("object"),
+        )
+        if action or target:
+            return {
+                "action": action,
+                "target": _strip_npc_prefix(target),
+                "raw": mapping,
+            }
+
+    return {}
+
+
+def _infer_timeline_action_from_text(row: Dict[str, Any]) -> Dict[str, Any]:
+    row = _safe_dict(row)
+    text = " ".join(
+        part for part in [
+            _safe_str(row.get("player_input")),
+            _safe_str(row.get("narration")),
+            _safe_str(_safe_dict(row.get("turn_contract")).get("player_input")),
+        ]
+        if part
+    )
+    lower = text.lower()
+    target = ""
+    if "bran" in lower or "innkeeper" in lower or "bartender" in lower:
+        target = "Bran"
+    elif "traveler" in lower:
+        target = "Cloaked Traveler"
+    elif "patron" in lower:
+        target = "Patron"
+    elif "tavern" in lower or "room" in lower:
+        target = "Tavern"
+
+    if "trail" in lower or "clue" in lower:
+        action = "inspect"
+    elif any(term in lower for term in ("rent", "lodging", "room", "cot", "bed")):
+        action = "rent_room"
+    elif any(term in lower for term in ("buy", "pay", "order", "drink", "meal")):
+        action = "service_inquiry"
+    elif any(term in lower for term in ("ask", "question", "inquire", "press")):
+        action = "ask"
+    elif any(term in lower for term in ("search", "inspect", "examine", "trail", "marks", "clue")):
+        action = "inspect"
+    elif any(term in lower for term in ("scan", "observe", "watch", "listen", "look")):
+        action = "observe"
+    elif any(term in lower for term in ("leave", "travel", "road", "outside", "exit")):
+        action = "travel"
+    else:
+        action = "player_action"
+
+    return {
+        "action": action,
+        "target": target,
+        "raw": {"text": text[:500]},
+    }
+
+
+def _human_timeline_action_label(action: Any, row: Dict[str, Any]) -> str:
+    action_text = _safe_str(action).strip().lower()
+    row = _safe_dict(row)
+    raw = _safe_dict(_semantic_mapping_from_report_row(row).get("raw"))
+    service_kind = _first_non_empty(
+        raw.get("service_kind"),
+        _safe_dict(raw.get("service_result")).get("service_kind"),
+    )
+    activity = _first_non_empty(raw.get("activity_label"), raw.get("summary"))
+
+    if action_text == "service_inquiry" and service_kind == "lodging":
+        return "Lodging Inquiry"
+    if action_text == "service_inquiry":
+        return "Service Inquiry"
+    if action_text == "rent_room":
+        return "Rent Room"
+    if action_text == "social_activity":
+        if activity and activity != "social_activity":
+            return activity.replace("_", " ").title()
+        return "Social Approach"
+    if action_text == "observe":
+        return "Observe the Scene"
+    if action_text == "inspect":
+        return "Inspect Clues"
+    if action_text == "travel":
+        return "Travel"
+    if action_text == "ask":
+        return "Ask a Question"
+    if action_text == "use_item":
+        return "Use Item"
+    if action_text == "combat":
+        return "Combat Action"
+    if action_text and action_text != "unknown":
+        return action_text.replace("_", " ").title()
+    return "Player Action"
+
+
+def _turn_title_from_row(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    semantic = _semantic_mapping_from_report_row(row)
+    if not semantic:
+        semantic = _infer_timeline_action_from_text(row)
+    action = _first_non_empty(semantic.get("action"), "player_action")
+    target = _first_non_empty(semantic.get("target"))
+    title = _human_timeline_action_label(action, row)
+    if target:
+        return f"{title} · {target}"
+    return title

@@ -1,0 +1,54 @@
+
+
+def write_campaign_report(
+    *,
+    output_dir: Path,
+    transcript: List[Dict[str, Any]],
+    summary: Dict[str, Any],
+    metrics: Dict[str, Any],
+    health: Dict[str, Any],
+) -> Dict[str, str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model = build_campaign_report_model(
+        transcript=transcript,
+        summary=summary,
+        metrics=metrics,
+        health=health,
+    )
+    model_path = output_dir / "autoplay-campaign-report.json"
+    html_path = output_dir / "autoplay-campaign-report.html"
+    model_path.write_text(
+        json.dumps(model, ensure_ascii=False, indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+    html = render_campaign_report_html(
+        summary=_safe_dict(model.get("summary")),
+        metrics=_safe_dict(model.get("metrics")),
+        transcript=_as_list(model.get("transcript")),
+        report_model=model if isinstance(model, dict) else None,
+    )
+    html = _finalize_campaign_report_html(html)
+    if "status-pill" in html or "<h2>Executive Summary</h2>" in html:
+        html = re.sub(
+            r"<header\b[^>]*>\s*.*?Autoplay Campaign Report.*?\bstatus-pill\b.*$",
+            "",
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    html = _finalize_campaign_report_html(html)
+    if len(_safe_str(html).strip()) < 1000:
+        raise RuntimeError(
+            "campaign_report_html_empty_or_too_small: "
+            f"bytes={len(_safe_str(html).encode('utf-8'))}"
+        )
+    if "<!doctype html>" not in html.lower():
+        raise RuntimeError("campaign_report_html_missing_doctype")
+    if "<style" not in html.lower():
+        raise RuntimeError("campaign_report_html_missing_style_block")
+    if "rpg-shell" not in html:
+        raise RuntimeError("campaign_report_html_missing_rpg_shell")
+    html_path.write_text(html, encoding="utf-8")
+    return {
+        "campaign_report_json": str(model_path),
+        "campaign_report_html": str(html_path),
+    }

@@ -1,0 +1,420 @@
+"""
+Summary sanitizer for manual RPG test artifacts.
+
+Supports three detail levels:
+- summary: Smallest, CI-friendly output
+- debug: (default) Per-scenario debug JSON with bounded useful fields
+- full: Deeper raw details but still bounded (strips pathological fields)
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+from typing import Any, Dict, Optional
+
+from tests.rpg.manual.safe import _safe_dict, _safe_list, _safe_str
+
+# ---------------------------------------------------------------------------
+# Detail level constants
+# ---------------------------------------------------------------------------
+
+# Max text lengths by detail level
+MAX_SUMMARY_TEXT_CHARS = 4_000
+MAX_DEBUG_TEXT_CHARS = 40_000
+MAX_FULL_TEXT_CHARS = 200_000
+
+# Max list items by detail level
+MAX_LIST_ITEMS_SUMMARY = 5
+MAX_LIST_ITEMS_DEBUG = 25
+MAX_LIST_ITEMS_FULL = 100
+
+# Max dict keys by detail level
+MAX_DICT_KEYS_SUMMARY = 20
+MAX_DICT_KEYS_DEBUG = 80
+MAX_DICT_KEYS_FULL = 200
+
+
+# ---------------------------------------------------------------------------
+# Constants for fields to always strip
+# ---------------------------------------------------------------------------
+
+# Fields to always strip from turn results in summary output
+STRIP_KEYS_FROM_RESULT = {
+    "session",
+    "runtime_state",
+    "simulation_state",
+    "turn_contract",
+}
+
+# Nested keys inside result.session or result.runtime_state to cap
+CAP_KEYS_IN_SESSION = {
+    "turn_timings",
+    "history",
+    "event_history",
+    "timeline",
+    "conversation_thread",
+    "thread",
+}
+
+# Keys to always preserve in sanitized turn output (summary level)
+PRESERVE_TURN_KEYS_SUMMARY = {
+    "turn_index",
+    "player_input",
+    "ok",
+    "error",
+    "llm_called",
+    "llm_purpose",
+    "action_type",
+    "semantic_action_type",
+    "visible_interaction_reason",
+    "combat_narration_attempted",
+    "combat_narration_accepted",
+    "combat_narration_error",
+    "combat_narration_validation",
+    "combat_result",
+    "regression_warnings",
+    "scenario_warnings",
+    "raw_result_keys",
+    "narration_preview",
+    "grounding_validation",
+    "grounding_fallback",
+    "grounding_selected_candidate",
+    "grounding_fallback_source",
+    "stateful_runtime_narration_contract",
+    "stateful_runtime_check_results",
+}
+
+# Additional keys for debug level
+PRESERVE_TURN_KEYS_DEBUG = PRESERVE_TURN_KEYS_SUMMARY | {
+    "extracted",
+    "narration_debug",
+    "raw_llm_narration_capped",
+    "narration_validation",
+    "narration_contract",
+    "combat_narration_payload",
+    "turn_contract_compact",
+    "resolved_result_compact",
+    "structured_narration_compact",
+    "narration_payload_compact",
+    "grounding_primary_violations",
+    "grounding_violation_codes",
+    "action_type",
+    "semantic_action_type",
+    "compact_state_deltas",
+}
+
+# Additional keys for full level
+PRESERVE_TURN_KEYS_FULL = PRESERVE_TURN_KEYS_DEBUG | {
+    "result_compact",
+    "full_state",
+}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_limits(detail: str) -> Dict[str, Any]:
+    """Get limits based on detail level."""
+    if detail == "summary":
+        return {
+            "max_text": MAX_SUMMARY_TEXT_CHARS,
+            "max_list": MAX_LIST_ITEMS_SUMMARY,
+            "max_dict_keys": MAX_DICT_KEYS_SUMMARY,
+            "strip_session": True,
+            "strip_runtime_state": True,
+            "strip_simulation_state": True,
+            "include_extracted": False,
+            "include_debug_fields": False,
+            "include_full_state": False,
+        }
+    elif detail == "full":
+        return {
+            "max_text": MAX_FULL_TEXT_CHARS,
+            "max_list": MAX_LIST_ITEMS_FULL,
+            "max_dict_keys": MAX_DICT_KEYS_FULL,
+            "strip_session": True,  # Still strip session blob
+            "strip_runtime_state": False,  # Keep but cap
+            "strip_simulation_state": False,  # Keep but cap
+            "include_extracted": True,
+            "include_debug_fields": True,
+            "include_full_state": True,
+        }
+    else:  # debug (default)
+        return {
+            "max_text": MAX_DEBUG_TEXT_CHARS,
+            "max_list": MAX_LIST_ITEMS_DEBUG,
+            "max_dict_keys": MAX_DICT_KEYS_DEBUG,
+            "strip_session": True,
+            "strip_runtime_state": True,
+            "strip_simulation_state": False,  # Keep compact version
+            "include_extracted": True,
+            "include_debug_fields": True,
+            "include_full_state": False,
+        }
+
+
+def _preview(text: Optional[str], max_len: int) -> str:
+    """Return a truncated preview of text."""
+    if text is None:
+        return ""
+    s = _safe_str(text)
+    if len(s) <= max_len:
+        return s
+    return s[:max_len] + f"... [truncated, {len(s)} chars total]"
+
+
+def _cap_list(value: Any, max_items: int) -> Any:
+    """Cap list length for summary output."""
+    if isinstance(value, list):
+        if len(value) <= max_items:
+            return value
+        return value[:max_items] + [f"... {len(value) - max_items} more items"]
+    return value
+
+
+def _cap_dict_keys(value: Dict[str, Any], max_keys: int) -> Dict[str, Any]:
+    """Cap dict to first N keys."""
+    if isinstance(value, dict):
+        if len(value) <= max_keys:
+            return value
+        keys = list(value.keys())[:max_keys]
+        capped = {k: value[k] for k in keys}
+        capped["_truncated"] = f"... {len(value) - max_keys} more keys"
+        return capped
+    return value
+
+
+def _strip_large_state(state: Optional[Dict[str, Any]], limits: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip large fields from a state dict."""
+    if not isinstance(state, dict):
+        return {}
+    stripped = copy.deepcopy(state)
+    max_keys = limits["max_dict_keys"]
+
+    # Remove or cap large fields
+    for key in list(stripped.keys()):
+        value = stripped[key]
+        if key in CAP_KEYS_IN_SESSION:
+            if isinstance(value, (list, dict)):
+                stripped[key] = f"[stripped: {type(value).__name__} with {len(value)} items]"
+        elif key in {"inventory", "world_state", "journal", "quests", "npcs"}:
+            stripped[key] = _cap_list(value, max_items=limits["max_list"])
+        elif isinstance(value, dict) and len(value) > max_keys:
+            stripped[key] = f"[stripped: dict with {len(value)} keys]"
+        elif isinstance(value, list) and len(value) > limits["max_list"]:
+            stripped[key] = f"[stripped: list with {len(value)} items]"
+
+    return stripped
+
+
+# ---------------------------------------------------------------------------
+# Result compaction based on detail level
+# ---------------------------------------------------------------------------
+
+def compact_result_for_summary(
+    result: Dict[str, Any],
+    detail: str = "summary",
+) -> Dict[str, Any]:
+    """
+    Compact a turn result for summary output based on detail level.
+
+    Removes large state blobs while preserving essential diagnostic fields.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    limits = _get_limits(detail)
+    compacted: Dict[str, Any] = {}
+
+    for key, value in result.items():
+        if detail in ("debug", "full") and key == "turn_contract":
+            compacted[f"{key}_compact"] = _cap_dict_keys(_safe_dict(value), limits["max_dict_keys"])
+        elif key in STRIP_KEYS_FROM_RESULT:
+            # Store only a marker, not the full blob
+            if key == "session":
+                session = _safe_dict(value)
+                compacted[key] = {
+                    "session_id": _safe_str(session.get("session_id")),
+                    "stripped": True,
+                }
+            else:
+                compacted[key] = f"[stripped: {key}]"
+        elif key == "result" and isinstance(value, dict):
+            # Recursively compact nested result
+            compacted[key] = compact_result_for_summary(value, detail)
+        elif key in {"authoritative", "raw_llm_narration"}:
+            # Keep these but strip their large sub-fields
+            compacted[key] = _strip_large_state(_safe_dict(value), limits)
+        elif detail == "full" and key == "simulation_state":
+            # Keep capped version for full
+            compacted[key] = _strip_large_state(_safe_dict(value), limits)
+        else:
+            compacted[key] = value
+
+    return compacted
+
+
+# ---------------------------------------------------------------------------
+# Extract useful fields for debug artifacts
+# ---------------------------------------------------------------------------
+
+def _extract_narration_preview(result: Dict[str, Any], max_len: int) -> str:
+    """Extract a short narration preview from a turn result."""
+    for key in ("narration", "narrative", "text", "rendered_narration"):
+        value = result.get(key)
+        if isinstance(value, str) and value.strip():
+            return _preview(value.strip(), max_len)
+
+    result_sub = _safe_dict(result.get("result"))
+    for key in ("narration", "narrative", "text", "rendered_narration"):
+        value = result_sub.get(key)
+        if isinstance(value, str) and value.strip():
+            return _preview(value.strip(), max_len)
+
+    return ""
+
+
+def _first_dict(*values: Any) -> Dict[str, Any]:
+    for value in values:
+        value = _safe_dict(value)
+        if value:
+            return value
+    return {}
+
+
+def _extract_result_sub(result: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(_safe_dict(result).get("result"))
+
+
+def _extract_narration_payload(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _extract_result_sub(result)
+    session = _safe_dict(result.get("session"))
+    runtime_state = _safe_dict(result.get("runtime_state"))
+
+    return _first_dict(
+        result.get("narration_payload"),
+        result.get("structured_narration"),
+        result.get("narration_result"),
+        result.get("raw_llm_narration"),
+        result.get("raw_llm_narrative"),
+        result_sub.get("narration_payload"),
+        result_sub.get("structured_narration"),
+        result_sub.get("narration_result"),
+        result_sub.get("raw_llm_narration"),
+        result_sub.get("raw_llm_narrative"),
+        session.get("last_narration_payload"),
+        session.get("narration_payload"),
+        runtime_state.get("last_narration_payload"),
+        runtime_state.get("narration_payload"),
+    )
+
+
+def _extract_narration_json(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _extract_result_sub(result)
+    payload = _extract_narration_payload(result)
+    return _first_dict(
+        payload.get("narration_json"),
+        payload.get("structured_narration"),
+        payload.get("payload"),
+        payload,
+        result.get("visible_response"),
+        result_sub.get("visible_response"),
+        result.get("first_call_visible_response"),
+        result_sub.get("first_call_visible_response"),
+    )
+
+
+def _extract_grounding_validation(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _extract_result_sub(result)
+    payload = _extract_narration_payload(result)
+    narration_json = _extract_narration_json(result)
+
+    return _first_dict(
+        result.get("grounding_validation"),
+        result_sub.get("grounding_validation"),
+        payload.get("grounding_validation"),
+        narration_json.get("grounding_validation"),
+        _safe_dict(result.get("structured_narration")).get("grounding_validation"),
+        _safe_dict(result_sub.get("structured_narration")).get("grounding_validation"),
+    )
+
+
+def _extract_grounding_violation_codes(validation: Dict[str, Any]) -> list[str]:
+    codes: list[str] = []
+    for violation in _safe_list(_safe_dict(validation).get("violations")):
+        code = _safe_str(_safe_dict(violation).get("code")).strip()
+        if code:
+            codes.append(code)
+    return codes
+
+
+def _extract_provider_call_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    payload = _extract_narration_payload(result)
+    narration_json = _extract_narration_json(result)
+
+    return _first_dict(
+        result.get("provider_call_diagnostics"),
+        result_sub.get("provider_call_diagnostics"),
+        payload.get("provider_call_diagnostics"),
+        narration_json.get("provider_call_diagnostics"),
+        _safe_dict(result_sub.get("raw_llm_narration")).get("provider_call_diagnostics"),
+        _safe_dict(result_sub.get("runtime_narration")).get("provider_call_diagnostics"),
+    )
+
+
+def _compact_payload(value: Any, limits: Dict[str, Any]) -> Dict[str, Any]:
+    value = _safe_dict(value)
+    if not value:
+        return {}
+
+    compacted: Dict[str, Any] = {}
+    for key, item in value.items():
+        if isinstance(item, str):
+            compacted[key] = _preview(item, limits["max_text"])
+        elif isinstance(item, dict):
+            compacted[key] = _cap_dict_keys(item, limits["max_dict_keys"])
+        elif isinstance(item, list):
+            compacted[key] = _cap_list(item, limits["max_list"])
+        else:
+            compacted[key] = item
+
+    return _cap_dict_keys(compacted, limits["max_dict_keys"])
+
+
+def _extract_combat_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract compact combat result fields."""
+    result_sub = _safe_dict(result.get("result"))
+    combat = _safe_dict(result_sub.get("combat_result"))
+
+    if not combat:
+        return {}
+
+    return {
+        "hit": combat.get("hit"),
+        "damage": combat.get("damage"),
+        "defeated": combat.get("defeated"),
+        "victory": combat.get("victory"),
+        "actor": _safe_str(combat.get("actor")),
+        "target": _safe_str(combat.get("target")),
+        "reason": _preview(_safe_str(combat.get("reason")), 200),
+    }
+
+
+def _extract_combat_narration_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract combat narration validation summary."""
+    result_sub = _safe_dict(result.get("result"))
+
+    return {
+        "attempted": result_sub.get("combat_narration_attempted"),
+        "accepted": result_sub.get("combat_narration_accepted"),
+        "error": _preview(_safe_str(result_sub.get("combat_narration_error")), 300),
+        "validation": _preview(_safe_str(result_sub.get("combat_narration_validation")), 500),
+        "payload": _preview(_safe_str(result_sub.get("combat_narration_payload")), 1000),
+    }

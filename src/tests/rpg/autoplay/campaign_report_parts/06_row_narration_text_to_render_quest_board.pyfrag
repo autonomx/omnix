@@ -1,0 +1,502 @@
+def _row_narration_text(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    narration = row.get("narration")
+    if isinstance(narration, dict):
+        return _first_non_empty(narration.get("narration"), narration.get("text"), narration.get("summary"))
+    return _first_non_empty(
+        narration,
+        row.get("narration_text"),
+        _safe_dict(row.get("structured_narration")).get("narration"),
+        _safe_dict(row.get("turn_contract")).get("player_input"),
+        _safe_dict(_nested_report_dict(row, "turn_contract", "action", "metadata")).get("player_input"),
+        _nested_report_dict(row, "turn_contract", "action", "metadata", "semantic_action").get("player_input"),
+        row.get("player_input"),
+    )
+
+
+def _journal_timeline_beats(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    journal = _safe_dict(_safe_dict(summary).get("player_journal_summary"))
+    beats: List[Dict[str, Any]] = []
+    for entry in _as_list(journal.get("entries")):
+        entry = _safe_dict(entry)
+        start = _num(entry.get("start_turn"))
+        end = _num(entry.get("end_turn"))
+        text = _safe_str(entry.get("text"))
+        inferred = _infer_rpg_title_from_text(text, fallback="Journal Entry")
+        if inferred == "Journal Entry":
+            title = f"Journal Entry · Turns {start}–{end}" if start or end else "Journal Entry"
+        else:
+            title = f"{inferred} · Turns {start}–{end}" if start or end else inferred
+        beats.append(
+            {
+                "turn": end or start,
+                "title": title,
+                "body": _short_text(text, 420),
+                "source": "journal",
+            }
+        )
+    return beats
+
+
+def _story_event_timeline_beats(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    story = _safe_dict(_safe_dict(summary).get("story_beat_summary"))
+    beats: List[Dict[str, Any]] = []
+    for beat in _as_list(story.get("beats")):
+        beat = _safe_dict(beat)
+        body = _first_non_empty(
+            beat.get("story_summary"),
+            beat.get("summary"),
+            beat.get("text"),
+            beat.get("description"),
+        )
+        explicit_title = _first_non_empty(
+            beat.get("story_label"),
+            beat.get("label"),
+            beat.get("title"),
+        )
+        title = explicit_title or _timeline_title_from_body(body, fallback="Story Beat")
+        if _is_generic_timeline_title(title):
+            title = _timeline_title_from_body(
+                _first_non_empty(
+                    beat.get("player_input"),
+                    beat.get("action"),
+                    beat.get("summary"),
+                    beat.get("text"),
+                    beat.get("description"),
+                    body,
+                ),
+                fallback="Story Event",
+            )
+        beats.append(
+            {
+                "turn": _num(beat.get("turn_index") or beat.get("turn")),
+                "title": title,
+                "body": _short_text(body, 360),
+                "source": "story",
+            }
+        )
+    return beats
+
+
+def _turn_row_timeline_beats(transcript: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    beats: List[Dict[str, Any]] = []
+    for row in _as_list(transcript):
+        row = _safe_dict(row)
+        turn = _turn_int(row)
+        beats.append(
+            {
+                "turn": turn,
+                "title": _turn_title_from_row(row),
+                "body": _short_text(_row_narration_text(row), 320),
+                "source": "turn",
+            }
+        )
+    return beats
+
+
+def _combined_adventure_beats(summary: Dict[str, Any], transcript: List[Dict[str, Any]], *, limit: int = 14) -> List[Dict[str, Any]]:
+    beats = _story_event_timeline_beats(summary) + _journal_timeline_beats(summary)
+    if not beats:
+        beats = _turn_row_timeline_beats(transcript)
+    finalized: List[Dict[str, Any]] = []
+    for beat in beats:
+        beat = _safe_dict(beat)
+        title = _safe_str(beat.get("title"))
+        body = _safe_str(beat.get("body"))
+        if _is_generic_timeline_title(title):
+            title = _timeline_title_from_body(body, fallback="Story Event")
+        if _is_generic_timeline_title(title):
+            title = "Story Event"
+        if title or body:
+            updated = dict(beat)
+            updated["title"] = title
+            finalized.append(updated)
+    beats = finalized
+    beats.sort(key=lambda beat: (_num(_safe_dict(beat).get("turn")), _safe_str(_safe_dict(beat).get("source"))))
+    if len(beats) > int(limit or 14):
+        return beats[:5] + [{"gap": True}] + beats[-max(0, int(limit or 14) - 5):]
+    return beats
+
+
+def _render_adventure_timeline(summary: Dict[str, Any], transcript: List[Dict[str, Any]], *, limit: int = 14) -> str:
+    beats = _combined_adventure_beats(summary, transcript, limit=limit)
+    if not beats:
+        body = "<p>No turn timeline was available.</p>"
+    else:
+        items = []
+        for beat in beats:
+            beat = _safe_dict(beat)
+            if beat.get("gap"):
+                items.append('<li><div class="rpg-turn-label">…</div><div class="rpg-turn-body">Middle chronicle beats omitted from this top-level view. See Technical Debug for full data.</div></li>')
+                continue
+            turn = _num(beat.get("turn"))
+            title = _first_non_empty(beat.get("title"), "Campaign Event")
+            detail = _first_non_empty(beat.get("body"), "No event summary recorded.")
+            source = _first_non_empty(beat.get("source"), "turn")
+            items.append(
+                "<li>"
+                f'<div class="rpg-turn-label">Turn {html.escape(str(turn or "?"))}</div>'
+                f'<div class="rpg-turn-title">{html.escape(title)}</div>'
+                f'<div class="rpg-turn-body">{html.escape(detail[:360])}</div>'
+                f'<div class="rpg-story-beat-source">Source: {html.escape(source)}</div>'
+                "</li>"
+            )
+        body = f'<ol class="rpg-timeline">{"".join(items)}</ol>'
+    return f"""
+    <section class="rpg-card rpg-promoted-section span-8" id="adventure-timeline">
+      <div class="rpg-section-title">
+        <h2>Adventure Timeline</h2>
+        <span class="rpg-badge neutral">Chronicle</span>
+      </div>
+      {body}
+    </section>
+    """
+
+
+def _quest_evidence_turns(quest: Dict[str, Any], timeline: List[Dict[str, Any]]) -> List[int]:
+    quest = _safe_dict(quest)
+    qid = _first_non_empty(quest.get("quest_id"), quest.get("id"))
+    turns: List[int] = []
+    for event in _as_list(timeline):
+        event = _safe_dict(event)
+        if qid and _safe_str(event.get("quest_id")) != qid:
+            continue
+        turn = _num(event.get("turn_index") or event.get("turn"))
+        if turn and turn not in turns:
+            turns.append(turn)
+    for key in ("evidence_turns", "turns", "updated_turns"):
+        for turn in _as_list(quest.get(key)):
+            try:
+                value = int(turn)
+            except Exception:
+                continue
+            if value and value not in turns:
+                turns.append(value)
+    return sorted(turns)
+
+
+def _quest_objective_lines(quest: Dict[str, Any]) -> List[str]:
+    quest = _safe_dict(quest)
+    values: List[str] = []
+    for key in ("objectives", "active_objectives", "current_objectives"):
+        for objective in _as_list(quest.get(key)):
+            if isinstance(objective, dict):
+                label = _first_non_empty(
+                    objective.get("title"),
+                    objective.get("label"),
+                    objective.get("objective"),
+                    objective.get("summary"),
+                    objective.get("id"),
+                )
+                status = _first_non_empty(objective.get("status"), objective.get("state"))
+                if status:
+                    label = f"{label} [{status}]"
+                if label:
+                    values.append(label)
+            else:
+                text = _safe_str(objective).strip()
+                if text:
+                    values.append(text)
+    progress = _safe_str(quest.get("progress")).strip()
+    if progress and progress not in values:
+        values.append(progress)
+    current = _first_non_empty(
+        quest.get("objective"),
+        quest.get("current_objective"),
+        quest.get("next_objective"),
+    )
+    if current and current not in values:
+        values.append(current)
+    return values
+
+
+def _quest_blocker_lines(quest: Dict[str, Any]) -> List[str]:
+    quest = _safe_dict(quest)
+    blockers: List[str] = []
+    for key in ("blockers", "blocked_reasons", "missing_requirements", "warnings"):
+        for item in _as_list(quest.get(key)):
+            if isinstance(item, dict):
+                text = _first_non_empty(item.get("summary"), item.get("message"), item.get("reason"), item.get("code"))
+            else:
+                text = _safe_str(item)
+            if text:
+                blockers.append(text)
+    blocked = _first_non_empty(quest.get("blocked_reason"), quest.get("blocker"), quest.get("reason"))
+    if blocked:
+        blockers.append(blocked)
+    return blockers
+
+
+def _infer_quest_evidence_turns_from_transcript(
+    quest: Dict[str, Any],
+    transcript: List[Dict[str, Any]],
+    *,
+    context: Optional[Dict[str, Any]] = None,
+) -> List[int]:
+    quest = _safe_dict(quest)
+    title = _safe_str(quest.get("title") or quest.get("name") or quest.get("quest_id"))
+    objective_text = " ".join(_quest_objective_lines(quest))
+    haystack_terms = []
+    for term in re.split(r"[^A-Za-z0-9']+", f"{title} {objective_text}"):
+        term = term.strip().lower()
+        if len(term) >= 4 and term not in {"quest", "active", "objective", "complete", "turn"}:
+            haystack_terms.append(term)
+    # Domain-specific terms seen in the current tavern/witness runs.
+    haystack_terms.extend(["bran", "witness", "road", "bandit", "bandits", "heirloom", "tavern"])
+    haystack_terms = sorted(set(haystack_terms))
+
+    turns: List[int] = []
+    for row in _as_list(transcript):
+        row = _safe_dict(row)
+        turn = _turn_int(row)
+        if not turn:
+            continue
+        text = " ".join(
+            [
+                _safe_str(row.get("player_input")),
+                _row_narration_text(row),
+                str(row.get("turn_contract") or ""),
+                str(row.get("runtime_state") or ""),
+            ]
+        ).lower()
+        if any(term in text for term in haystack_terms):
+            turns.append(turn)
+
+    context = _safe_dict(context)
+    for beat in _as_list(_safe_dict(context.get("story_beat_summary")).get("beats")):
+        beat = _safe_dict(beat)
+        turn = _num(beat.get("turn_index") or beat.get("turn"))
+        text = str(beat).lower()
+        if turn and any(term in text for term in haystack_terms):
+            turns.append(turn)
+
+    for entry in _as_list(_safe_dict(context.get("player_journal_summary")).get("entries")):
+        entry = _safe_dict(entry)
+        text = str(entry).lower()
+        if any(term in text for term in haystack_terms):
+            for key in ("start_turn", "end_turn", "turn", "turn_index"):
+                value = _num(entry.get(key))
+                if value:
+                    turns.append(value)
+    return sorted(set(turns))
+
+
+def _quest_summary_from_latest_state(report_model: Dict[str, Any]) -> Dict[str, Any]:
+    latest_state = _safe_dict(
+        report_model.get("latest_state")
+        or report_model.get("final_state")
+        or report_model.get("final_authoritative_state")
+    )
+    quest_progress = _safe_dict(latest_state.get("quest_progress"))
+    quests = _safe_dict(quest_progress.get("quests"))
+    if quests:
+        return _quest_summary_from_quest_mapping(quests, source="latest_state.quest_progress")
+
+    quest_log_state = _safe_dict(latest_state.get("quest_log_state"))
+    quests = _safe_dict(quest_log_state.get("quests"))
+    if quests:
+        return _quest_summary_from_quest_mapping(quests, source="latest_state.quest_log_state")
+
+    synthesized = _quest_summary_from_story_state(latest_state)
+    if synthesized.get("quest_count"):
+        return synthesized
+    return {}
+
+
+def _quest_summary_from_quest_mapping(quests: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+    quests = _safe_dict(quests)
+    rows: List[Dict[str, Any]] = []
+    active_count = 0
+    completed_count = 0
+    for quest_id, quest_raw in sorted(quests.items()):
+        quest = _safe_dict(quest_raw)
+        objectives = [_safe_dict(row) for row in _safe_list(quest.get("objectives"))]
+        objective_count = len(objectives)
+        completed_objective_count = sum(
+            1
+            for obj in objectives
+            if bool(obj.get("completed")) or _safe_str(obj.get("status")) == "completed"
+        )
+        status = _safe_str(quest.get("status") or ("completed" if objective_count and completed_objective_count >= objective_count else "active"))
+        if status == "completed":
+            completed_count += 1
+        elif status == "active":
+            active_count += 1
+        rows.append(
+            {
+                "quest_id": _safe_str(quest.get("quest_id") or quest_id),
+                "title": _safe_str(quest.get("title") or quest_id),
+                "status": status,
+                "completed": bool(quest.get("completed")) or status == "completed",
+                "objective_count": objective_count,
+                "completed_objective_count": completed_objective_count,
+                "objectives": objectives,
+            }
+        )
+    return {
+        "quest_count": len(rows),
+        "active_count": active_count,
+        "completed_count": completed_count,
+        "quests": rows,
+        "source": source,
+    }
+
+
+def _quest_summary_from_story_state(latest_state: Dict[str, Any]) -> Dict[str, Any]:
+    latest_state = _safe_dict(latest_state)
+    facts = _safe_dict(latest_state.get("witness_search_facts"))
+    arcs = _safe_dict(_safe_dict(latest_state.get("story_arc_milestone_state")).get("arcs"))
+    witness_arc = _safe_dict(arcs.get("arc:witness_search") or arcs.get("witness_search"))
+    milestones = [_safe_dict(row) for row in _safe_list(witness_arc.get("milestones"))]
+    completed_ids = {
+        _safe_str(row.get("milestone_id"))
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+    completed_titles = {
+        _safe_str(row.get("title")).lower()
+        for row in milestones
+        if _safe_str(row.get("status")) == "completed"
+    }
+    find_done = (
+        bool(facts.get("inspected_side_door"))
+        or bool(facts.get("followed_road"))
+        or "milestone:find_witness" in completed_ids
+        or "find the witness" in completed_titles
+    )
+    report_done = (
+        bool(facts.get("reported_to_bran"))
+        or "milestone:report_findings_to_bran" in completed_ids
+        or "report findings to bran" in completed_titles
+        or "milestone:pursue_bandit_trail" in completed_ids
+    )
+    if not (find_done or report_done or facts):
+        return {}
+    witness_completed = bool(find_done and report_done)
+    quests = [
+        {
+            "quest_id": "quest:witness_search",
+            "title": "Witness Search",
+            "status": "completed" if witness_completed else "active",
+            "completed": witness_completed,
+            "objective_count": 2,
+            "completed_objective_count": int(find_done) + int(report_done),
+            "objectives": [
+                {
+                    "objective_id": "objective:find_witness",
+                    "summary": "Find the witness.",
+                    "status": "completed" if find_done else "active",
+                    "completed": find_done,
+                },
+                {
+                    "objective_id": "objective:report_findings_to_bran",
+                    "summary": "Report findings to Bran.",
+                    "status": "completed" if report_done else "active",
+                    "completed": report_done,
+                },
+            ],
+        }
+    ]
+    if bool(facts.get("followed_road")) or "milestone:pursue_bandit_trail" in completed_ids:
+        quests.append(
+            {
+                "quest_id": "quest:bandit_road",
+                "title": "Bandit Road",
+                "status": "active",
+                "completed": False,
+                "objective_count": 2,
+                "completed_objective_count": 0,
+                "objectives": [
+                    {
+                        "objective_id": "objective:inspect_road_tracks",
+                        "summary": "Inspect the road for tracks or ambush signs.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                    {
+                        "objective_id": "objective:follow_bandit_road",
+                        "summary": "Follow the bandit road trail.",
+                        "status": "active",
+                        "completed": False,
+                    },
+                ],
+            }
+        )
+    return {
+        "quest_count": len(quests),
+        "active_count": sum(1 for row in quests if row["status"] == "active"),
+        "completed_count": sum(1 for row in quests if row["status"] == "completed"),
+        "quests": quests,
+        "source": "latest_state.story_arc_milestone_state+witness_search_facts",
+    }
+
+
+def _render_quest_board(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> str:
+    quest_summary = _safe_dict(
+        _safe_dict(summary).get("quest_progress_summary")
+        or _safe_dict(metrics).get("quest_progress_summary")
+    )
+    quests = _as_list(
+        quest_summary.get("quests")
+        or quest_summary.get("quest_rows")
+        or quest_summary.get("items")
+    )
+    timeline = _as_list(quest_summary.get("timeline"))
+    if quests:
+        cards = ""
+        for quest in quests[:12]:
+            quest = _safe_dict(quest)
+            title = _first_non_empty(quest.get("title"), quest.get("name"), quest.get("quest_id"), "Unknown Quest")
+            status = _first_non_empty(quest.get("status"), quest.get("state"), "active")
+            giver = _first_non_empty(quest.get("giver"), quest.get("quest_giver"), "Unknown")
+            location = _first_non_empty(quest.get("location"), quest.get("source_location"), "")
+            objectives = _quest_objective_lines(quest)
+            blockers = _quest_blocker_lines(quest)
+            evidence_turns = _quest_evidence_turns(quest, timeline)
+            evidence_turns = sorted(
+                set(evidence_turns)
+                | set(_infer_quest_evidence_turns_from_transcript(quest, transcript, context=summary))
+            )
+            tags = "".join(
+                f'<span class="rpg-tag">Turn {html.escape(str(turn))}</span>'
+                for turn in evidence_turns[:8]
+            )
+            if not tags:
+                tags = '<span class="rpg-tag">No evidence turns</span>'
+            cards += f"""
+            <article class="rpg-quest-card">
+              <h3>{html.escape(title)}</h3>
+              <div class="rpg-tag-row">
+                <span class="rpg-badge {_status_badge_class(status)}">{html.escape(status)}</span>
+                <span class="rpg-tag">Giver: {html.escape(giver)}</span>
+                {f'<span class="rpg-tag">Location: {html.escape(location)}</span>' if location else ''}
+              </div>
+              <h4>Objectives</h4>
+              {_html_list(objectives, empty="No objective details recorded.", limit=6)}
+              <h4>Evidence Turns</h4>
+              <div class="rpg-tag-row">{tags}</div>
+              <h4>Blockers / Open Questions</h4>
+              {_html_list(blockers, empty="No blockers recorded.", limit=4)}
+            </article>
+            """
+        body = f'<div class="rpg-quest-grid">{cards}</div>'
+    else:
+        quest_count = _num(quest_summary.get("quest_count"))
+        body = f"""
+        <p>No expanded quest rows were available.</p>
+        <div class="rpg-stat-grid">
+          <div class="rpg-stat"><div class="rpg-stat-label">Quest Count</div><div class="rpg-stat-value">{html.escape(str(quest_count))}</div></div>
+          <div class="rpg-stat"><div class="rpg-stat-label">Active</div><div class="rpg-stat-value">{html.escape(str(quest_summary.get('active_count') or 0))}</div></div>
+          <div class="rpg-stat"><div class="rpg-stat-label">Completed</div><div class="rpg-stat-value">{html.escape(str(quest_summary.get('completed_count') or 0))}</div></div>
+        </div>
+        """
+
+    return f"""
+    <section class="rpg-card rpg-promoted-section span-4" id="quest-board">
+      <div class="rpg-section-title">
+        <h2>Quest Board</h2>
+        <span class="rpg-badge neutral">Objectives</span>
+      </div>
+      {body}
+    </section>
+    """

@@ -1,0 +1,520 @@
+def _strip_legacy_autoplay_report_tail(html: str) -> str:
+    """Remove any standalone legacy Autoplay Campaign Report partial.
+
+    The RPG report now owns the campaign overview and run-report stats.
+    The old legacy report can still be accidentally appended in several shapes:
+
+      1. inside <body> after Technical Debug
+      2. after </main>
+      3. after </body>
+      4. inside grouped debug HTML
+
+    It is identified by the old status-pill/partial header and old nav:
+
+      <h1>Autoplay Campaign Report <span class="status-pill ...">partial</span></h1>
+      Summary Journal Quests Evolution ...
+      <section ...><h2>Executive Summary</h2>...
+
+    This sanitizer removes the duplicate legacy shell while preserving the RPG
+    hero, which also legitimately contains the text "Autoplay Campaign Report".
+    """
+    text = _safe_str(html)
+    if not text:
+        return ""
+
+    # Remove old standalone report header/nav blocks anywhere in the document.
+    # This intentionally requires status-pill/partial so we do not remove the
+    # new RPG hero's "Autoplay Campaign Report" title.
+    text = re.sub(
+        r"<header\b[^>]*>\s*.*?<h1[^>]*>\s*Autoplay Campaign Report\s*"
+        r"<span\b[^>]*\bstatus-pill\b[^>]*>.*?partial.*?</span>\s*</h1>.*?</header>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
+
+    # Remove the old Executive Summary block. In different generations it may
+    # be class="hero", id="summary", or both.
+    text = re.sub(
+        r"<section\b(?=[^>]*\bid=[\"']summary[\"'])(?=[\s\S]*?<h2[^>]*>\s*Executive Summary\s*</h2>)[\s\S]*?</section>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(
+        r"<section\b(?=[^>]*\bclass=[\"'][^\"']*\bhero\b[^\"']*[\"'])(?=[\s\S]*?<h2[^>]*>\s*Executive Summary\s*</h2>)[\s\S]*?</section>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    # If the legacy report is appended after the RPG shell as a raw tail, cut
+    # from the first remaining standalone legacy header marker to EOF. This is
+    # intentionally checked after the precise removals above.
+    legacy_tail = re.search(
+        r"<header\b[^>]*>\s*[\s\S]*?Autoplay Campaign Report[\s\S]*?\bstatus-pill\b[\s\S]*?\bpartial\b[\s\S]*?</header>",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if legacy_tail:
+        text = text[: legacy_tail.start()]
+
+    # Clean up repeated body/html endings if a legacy full document was spliced.
+    text = re.sub(r"</body>\s*</html>\s*</body>\s*</html>\s*$", "</body>\n</html>", text, flags=re.IGNORECASE)
+
+    # N83.1.6.1: remove a second standalone legacy <main> appended after the
+    # RPG shell. Artifact 161 showed this exact shape:
+    #
+    #   <main class="rpg-shell"> ... Technical Debug ... </main>
+    #   <main>
+    #     <section id="campaign-journal">...
+    #     <section id="quest-progress">...
+    #
+    # These sections are already either promoted into the RPG shell or preserved
+    # under grouped Technical Debug as legacy-* anchors. The raw second main is
+    # the source of the washed-out old theme below the real report.
+    text = re.sub(
+        r"</main>\s*<main>\s*"
+        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
+        r"[\s\S]*?</main>",
+        "</main>",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    # Defensive variant: if the second legacy main has attributes.
+    text = re.sub(
+        r"</main>\s*<main\b(?![^>]*\brpg-shell\b)[^>]*>\s*"
+        r"(?=\s*<section\b[^>]*\bid=[\"']campaign-journal[\"'])"
+        r"[\s\S]*?</main>",
+        "</main>",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    # Defensive variant: if legacy sections were appended without a wrapping main.
+    text = re.sub(
+        r"(?<=</main>)\s*"
+        r"<section\b[^>]*\bid=[\"']campaign-journal[\"'][\s\S]*?"
+        r"<section\b[^>]*\bid=[\"']debug[\"'][\s\S]*?</section>",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    return text
+
+
+SOCIAL_ACTION_WORDS = {
+    "ask",
+    "talk",
+    "tell",
+    "say",
+    "speak",
+    "question",
+    "report",
+    "explain",
+    "share",
+    "approach",
+    "convince",
+    "persuade",
+}
+
+RPG_PRIMARY_NAV_LINKS = [
+    ("campaign-overview", "Overview"),
+    ("verdict-cards", "Verdict"),
+    ("adventure-timeline", "Adventure"),
+    ("quest-board", "Quest Board"),
+    ("npc-chronicle", "NPC Chronicle"),
+    ("location-journey", "Journey"),
+    ("player-sheet", "Player Sheet"),
+    ("qa-dashboard", "QA Dashboard"),
+]
+
+RPG_EXTENDED_NAV_LINKS = [
+    ("campaign-journal", "Journal"),
+    ("quest-progress", "Quest Progress"),
+    ("npc-evolution", "NPC Evolution"),
+    ("hundred-turn-eval", "100-Turn Eval"),
+    ("action-diversity", "Actions"),
+    ("progress-timeline", "Progress"),
+    ("background-result-timing", "Background Timing"),
+    ("story-so-far", "Story"),
+    ("arcs", "Arcs"),
+    ("locations", "Locations"),
+    ("variety", "Variety"),
+    ("npcs", "NPC Cast"),
+    ("inventory", "Inventory"),
+    ("dialogue-coverage", "Dialogue"),
+    ("performance", "Performance"),
+    ("console-log", "Console"),
+    ("timeline", "Timeline"),
+    ("run-validity", "Shortcomings"),
+    ("debug", "Debug"),
+    ("technical-debug", "Technical Debug"),
+]
+
+
+def _norm_text(value: Any) -> str:
+    return " ".join(str(value or "").lower().strip().split())
+
+
+def _nested_get(value: Dict[str, Any], *path: str) -> Any:
+    current: Any = value
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _json(value: Any) -> str:
+    return html.escape(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+
+
+def _esc(value: Any) -> str:
+    return html.escape(str(value or ""))
+
+
+def _render_badge(text: Any, cls: str = "") -> str:
+    return f'<span class="badge {html.escape(cls)}">{_esc(str(text))}</span>'
+
+
+def _render_paragraphs(text: Any) -> str:
+    chunks = [chunk.strip() for chunk in str(text or "").split("\n\n") if chunk.strip()]
+    if not chunks:
+        return '<p class="muted">No narrative summary available.</p>'
+    return "\n".join(f"<p>{_esc(chunk)}</p>" for chunk in chunks)
+
+
+def _render_table(headers: List[str], rows: List[List[Any]]) -> str:
+    if not rows:
+        return '<p class="muted">No data captured.</p>'
+    head = "".join(f"<th>{_esc(h)}</th>" for h in headers)
+    body = []
+    for row in rows:
+        body.append("<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in row) + "</tr>")
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table>"
+
+
+def _render_json_details(title: str, value: Any, *, open_by_default: bool = False) -> str:
+    open_attr = " open" if open_by_default else ""
+    return (
+        f"<details class=\"tech-details\"{open_attr}>"
+        f"<summary>{_esc(title)}</summary>"
+        f"<pre>{_json(value)}</pre>"
+        f"</details>"
+    )
+
+
+def _render_report_quick_links(model: Dict[str, Any]) -> str:
+    journal = _safe_dict(model.get("player_journal_summary"))
+    quests = _safe_dict(model.get("quest_progress_summary"))
+    npc_evolution = _safe_dict(model.get("npc_evolution_report_summary"))
+    journal_count = int(journal.get("entry_count") or 0)
+    quest_count = int(quests.get("quest_count") or 0)
+    npc_count = int(npc_evolution.get("npc_count") or 0)
+    return f"""
+    <section class="report-quick-links">
+      <h2>Report Highlights</h2>
+      <nav>
+        <a href="#campaign-journal">Campaign Journal ({_esc(str(journal_count))})</a>
+        <a href="#quest-progress">Quest Progress ({_esc(str(quest_count))})</a>
+        <a href="#npc-evolution">NPC Evolution ({_esc(str(npc_count))})</a>
+      </nav>
+    </section>
+    """
+
+
+def _render_rpg_nav_links(primary_links, appendix_links=None):
+    appendix_links = appendix_links or []
+
+    def render_links(links):
+        items = []
+        for target, label in links:
+            if not target or not label:
+                continue
+            items.append(f'<button onclick="document.getElementById(\'{html.escape(target)}\').scrollIntoView()" class="nav-link">{html.escape(label)}</button>')
+        return "".join(items)
+
+    primary_html = render_links(primary_links)
+    appendix_html = render_links(appendix_links)
+
+    appendix_block = ""
+    if appendix_html:
+        appendix_block = f"""
+        <details class="rpg-nav-appendix" open>
+          <summary>Appendix Sections</summary>
+          <div class="rpg-nav-appendix-links">
+            {appendix_html}
+          </div>
+        </details>
+        """
+
+    return f"""
+    <nav class="rpg-nav" aria-label="Campaign report sections">
+      <div class="rpg-nav-primary">
+        {primary_html}
+      </div>
+      {appendix_block}
+    </nav>
+    """
+
+
+def _extract_section_by_id(html: str, section_id: str) -> str:
+    text = _safe_str(html)
+    if not text.strip():
+        return ""
+    pattern = (
+        rf'<section\b(?=[^>]*\bid=["\']{re.escape(section_id)}["\'])[^>]*>[\s\S]*?</section>'
+    )
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    return match.group(0) if match else ""
+
+
+def _strip_outer_section_heading(section_html: str) -> str:
+    text = _safe_str(section_html)
+    if not text.strip():
+        return ""
+    text = re.sub(r"^<section\b[^>]*>", "", text, count=1, flags=re.IGNORECASE)
+    text = re.sub(r"</section>\s*$", "", text, count=1, flags=re.IGNORECASE)
+    text = re.sub(r"<h2[^>]*>.*?</h2>", "", text, count=1, flags=re.IGNORECASE | re.DOTALL)
+    return text.strip()
+
+
+def _wrap_promoted_legacy_section(
+    *,
+    section_id: str,
+    title: str,
+    body_html: str,
+    badge: str = "",
+    span_class: str = "span-12",
+) -> str:
+    if not _safe_str(body_html).strip():
+        return ""
+    badge_html = (
+        f'<span class="rpg-badge neutral">{badge}</span>' if badge else ""
+    )
+    return f"""
+    <section class="rpg-card rpg-promoted-section {span_class}" id="{section_id}">
+      <div class="rpg-section-title">
+        <h2>{title}</h2>
+        {badge_html}
+      </div>
+      <div class="rpg-promoted-body">
+        {body_html}
+      </div>
+    </section>
+    """
+
+
+def _build_promoted_legacy_sections(legacy_html: str) -> str:
+    journal_html = _extract_section_by_id(legacy_html, "campaign-journal")
+    quest_html = _extract_section_by_id(legacy_html, "quest-progress")
+    evolution_html = _extract_section_by_id(legacy_html, "npc-evolution")
+
+    promoted_sections = [
+        _wrap_promoted_legacy_section(
+            section_id="campaign-journal",
+            title="Campaign Calendar & Player Journal",
+            badge="Journal",
+            body_html=_strip_outer_section_heading(journal_html),
+        ),
+        _wrap_promoted_legacy_section(
+            section_id="quest-progress",
+            title="Quest Progress",
+            badge="Quest Board",
+            body_html=_strip_outer_section_heading(quest_html),
+        ),
+        _wrap_promoted_legacy_section(
+            section_id="npc-evolution",
+            title="NPC Evolution",
+            badge="Character Growth",
+            body_html=_strip_outer_section_heading(evolution_html),
+        ),
+    ]
+    return "\n".join(part for part in promoted_sections if part.strip())
+
+
+def _strip_report_highlights_quick_links(html: str) -> str:
+    text = _safe_str(html)
+    if not text.strip():
+        return ""
+    text = re.sub(
+        r'<section\b(?=[^>]*\bclass=["\'][^"\']*\breport-quick-links\b[^"\']*["\'])[\s\S]*?</section>',
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r'<section\b[^>]*>\s*<h2>\s*Report Highlights\s*</h2>[\s\S]*?</section>',
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text
+
+
+def _strip_unsafe_file_urls_from_report_html(html_text: str) -> str:
+    """Make the report safe to open directly as a static file.
+
+    The report should not require a local HTTP server. Chrome can warn when a
+    file:// page tries to load another file:// URL, especially if it points back
+    to autoplay-campaign-report.html. Internal navigation must use hash links,
+    and artifact links should be relative filenames.
+    """
+    text = _safe_str(html_text)
+    if not text:
+        return ""
+
+    # A base file URL makes otherwise harmless relative/hash links resolve
+    # through file-origin navigation. Remove it.
+    text = re.sub(
+        r"<base\b[^>]*\bhref=[\"']file://[^\"']*[\"'][^>]*>\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove file-url meta refresh.
+    text = re.sub(
+        r"<meta\b(?=[^>]*http-equiv=[\"']refresh[\"'])(?=[^>]*file://)[^>]*>\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Rewrite self-links to this report into a normal internal top anchor.
+    text = re.sub(
+        r"href=([\"'])file://[^\"']*autoplay-campaign-report\.html(?:#[^\"']*)?\1",
+        r'href="#campaign-overview"',
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Never embed/iframe/object local file URLs from the static report.
+    text = re.sub(
+        r"<(?:iframe|embed|object)\b(?=[^>]*(?:src|data)=[\"']file://)[\s\S]*?</(?:iframe|embed|object)>",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"<(?:iframe|embed)\b(?=[^>]*src=[\"']file://)[^>]*>\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Convert local artifact file links to relative filenames.
+    def replace_file_href(match) -> str:
+        quote = match.group(1)
+        url = match.group(2)
+        filename = re.split(r"[\\/]", url)[-1]
+        filename = filename.replace("%20", " ").strip()
+        if not filename:
+            return 'href="#"'
+        # Prevent accidentally preserving report self-links after path trimming.
+        if filename.lower().split("#", 1)[0] == "autoplay-campaign-report.html":
+            return 'href="#campaign-overview"'
+        return f"href={quote}{html.escape(filename)}{quote}"
+
+    text = re.sub(
+        r"href=([\"'])file://([^\"']*)\1",
+        replace_file_href,
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Remove script-driven local file navigation.
+    text = re.sub(
+        r"(?:window\.location|location\.href|top\.location|parent\.location)\s*=\s*[\"']file://[^\"']+[\"']\s*;?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"window\.open\(\s*[\"']file://[^\"']+[\"']\s*(?:,[^)]+)?\)\s*;?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Last-resort cleanup for Windows-style escaped file paths in JS strings.
+    text = re.sub(
+        r"(?:window\.location|location\.href|top\.location|parent\.location)\s*=\s*[\"']file:\\\\[^\"']+[\"']\s*;?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    return text
+
+
+def _finalize_campaign_report_html(html_text: str) -> str:
+    """Apply final report sanitizers to a generated HTML string.
+
+    Important: this function must receive the rendered HTML string, not the
+    imported Python html module.
+    """
+    text = _safe_str(html_text)
+    text = _strip_legacy_autoplay_report_tail(text)
+    text = _strip_legacy_autoplay_report_partial(text)
+    text = _strip_report_highlights_quick_links(text)
+    text = _strip_unsafe_file_urls_from_report_html(text)
+    return text
+
+
+def _render_calendar_and_journal(calendar: Dict[str, Any], journal: Dict[str, Any]) -> str:
+    calendar = _safe_dict(calendar)
+    journal = _safe_dict(journal)
+    end = _safe_dict(calendar.get("end"))
+    entries = journal.get("entries") if isinstance(journal.get("entries"), list) else []
+    entry_html = "".join(
+        f"""
+        <article class="journal-entry">
+          <h4>{_esc(str(_safe_dict(entry).get('entry_id') or 'Journal Entry'))}</h4>
+          <p><strong>Turns:</strong> {_esc(str(_safe_dict(entry).get('start_turn')))}–{_esc(str(_safe_dict(entry).get('end_turn')))}</p>
+          {_render_journal_entry_text(str(_safe_dict(entry).get('text') or ''))}
+        </article>
+        """
+        for entry in entries[-8:]
+    )
+    return f"""
+    <section class="rpg-promoted-section" id="campaign-journal">
+      <h2>Campaign Calendar & Player Journal</h2>
+      <p><strong>Current campaign time:</strong>
+        Year {_esc(str(end.get('year') or ''))},
+        {_esc(str(end.get('season') or ''))},
+        month {_esc(str(end.get('month') or ''))},
+        day {_esc(str(end.get('day') or ''))},
+        {_esc(str(end.get('time_label') or ''))}
+        ({_esc(str(end.get('day_phase') or ''))})
+      </p>
+      <p><strong>Turns tracked:</strong> {_esc(str(calendar.get('turns_tracked') or 0))};
+         <strong>Journal entries:</strong> {_esc(str(journal.get('entry_count') or 0))}</p>
+      <div>{entry_html or '<p>No journal entries yet.</p>'}</div>
+    </section>
+    """
+
+
+def _render_journal_entry_text(text: str) -> str:
+    text = str(text or "")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return "<p></p>"
+    html_parts = []
+    for line in lines:
+        if ":" in line:
+            label, rest = line.split(":", 1)
+            html_parts.append(
+                f"<p><strong>{html.escape(label.strip())}:</strong>{html.escape(rest.strip())}</p>"
+            )
+        else:
+            html_parts.append(f"<p>{html.escape(line)}</p>")
+    return "".join(html_parts)

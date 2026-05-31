@@ -1,0 +1,455 @@
+def _items_from_rows(rows: Any) -> List[Any]:
+    items: List[Any] = []
+    for row in _as_list(rows):
+        if isinstance(row, str):
+            if row.strip():
+                items.append(row.strip())
+            continue
+        if isinstance(row, (list, tuple)):
+            name = _safe_str(row[0] if len(row) > 0 else "").strip()
+            if not name:
+                continue
+            quantity = row[1] if len(row) > 1 else None
+            category = row[2] if len(row) > 2 else ""
+            description = row[3] if len(row) > 3 else ""
+            items.append(
+                {
+                    "name": name,
+                    "quantity": quantity,
+                    "category": category,
+                    "description": description,
+                }
+            )
+            continue
+        row = _safe_dict(row)
+        name = _first_non_empty(row.get("name"), row.get("item_name"), row.get("item_id"), row.get("id"))
+        if not name:
+            continue
+        item = dict(row)
+        item["name"] = name
+        items.append(item)
+    return items
+
+
+def _player_sheet_model(summary: Dict[str, Any], metrics: Dict[str, Any]) -> Dict[str, Any]:
+    context = _merge_report_contexts(summary=summary, metrics=metrics)
+    summary = context
+    metrics = context
+    player = _safe_dict(
+        summary.get("player_character_summary")
+        or summary.get("player_progression_summary")
+        or metrics.get("player_character_summary")
+        or metrics.get("player_progression_summary")
+    )
+    progression_view = _safe_dict(
+        summary.get("player_progression_view")
+        or metrics.get("player_progression_view")
+        or player.get("view")
+    )
+    inventory_end = _safe_dict(
+        summary.get("inventory_end")
+        or metrics.get("inventory_end")
+        or player.get("inventory")
+    )
+    inventory_view = _safe_dict(
+        summary.get("inventory_end_view")
+        or metrics.get("inventory_end_view")
+    )
+    currency = (
+        _safe_dict(inventory_end.get("currency"))
+        or _safe_dict(inventory_view.get("currency"))
+        or _currency_from_rows(inventory_view.get("currency_rows"))
+        or _currency_from_rows(summary.get("currency_rows"))
+        or _currency_from_rows(metrics.get("currency_rows"))
+        or _currency_from_rows(_report_context_value(context, "inventory_currency_rows"))
+        or _safe_dict(player.get("currency"))
+    )
+    items = (
+        _as_list(inventory_end.get("items"))
+        or _as_list(inventory_view.get("items"))
+        or _items_from_rows(inventory_view.get("item_rows"))
+        or _items_from_rows(summary.get("item_rows"))
+        or _items_from_rows(metrics.get("item_rows"))
+        or _items_from_rows(_report_context_value(context, "inventory_item_rows"))
+        or _as_list(player.get("items"))
+    )
+    if not items and isinstance(inventory_end.get("items"), dict):
+        items = list(_safe_dict(inventory_end.get("items")).values())
+    latest_state = _safe_dict(summary.get("latest_state") or metrics.get("latest_state"))
+    return {
+        "name": _first_non_empty(player.get("name"), progression_view.get("name"), "Player Character"),
+        "level": _first_non_empty(player.get("level"), progression_view.get("level"), latest_state.get("level"), "1"),
+        "xp": _first_non_empty(player.get("xp"), progression_view.get("xp"), latest_state.get("xp"), "0"),
+        "currency": currency,
+        "items": items,
+        "known_leads": _as_list(player.get("known_leads") or progression_view.get("known_leads")),
+        "objectives": _as_list(player.get("objectives") or progression_view.get("objectives")),
+        "reputation": _safe_dict(player.get("reputation") or progression_view.get("reputation")),
+        "journal_entries": _num(_safe_dict(summary.get("player_journal_summary")).get("entry_count")),
+    }
+
+
+def _render_player_sheet(summary: Dict[str, Any], metrics: Dict[str, Any]) -> str:
+    player = _player_sheet_model(summary, metrics)
+    items = [_format_item_name(item) for item in _as_list(player.get("items")) if _format_item_name(item)]
+    reputation = _safe_dict(player.get("reputation"))
+    body = f"""
+      <div class="rpg-stat-grid">
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Character</div>
+          <div class="rpg-stat-value">{html.escape(_safe_str(player.get('name')))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Level</div>
+          <div class="rpg-stat-value">{html.escape(_safe_str(player.get('level')))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">XP</div>
+          <div class="rpg-stat-value">{html.escape(_safe_str(player.get('xp')))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Currency</div>
+          <div class="rpg-stat-value">{html.escape(_format_currency(player.get('currency')))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Inventory Items</div>
+          <div class="rpg-stat-value">{html.escape(str(len(items)))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Journal Entries</div>
+          <div class="rpg-stat-value">{html.escape(str(_num(player.get('journal_entries'))))}</div>
+        </div>
+      </div>
+      <div class="rpg-two-col" style="margin-top: 14px;">
+        <div class="rpg-mini-card">
+          <h3>Inventory</h3>
+          {_html_list(items, empty="Inventory is empty.", limit=12)}
+        </div>
+        <div class="rpg-mini-card">
+          <h3>Known Leads / Objectives</h3>
+          {_html_list(_as_list(player.get('known_leads')) + _as_list(player.get('objectives')), empty="No known leads recorded.", limit=10)}
+        </div>
+        <div class="rpg-mini-card">
+          <h3>Reputation</h3>
+          {_html_list([f"{key}: {value}" for key, value in reputation.items()], empty="No reputation entries recorded.", limit=8)}
+        </div>
+      </div>
+    """
+    return f"""
+    <section class="rpg-card span-6" id="player-sheet">
+      <div class="rpg-section-title">
+        <h2>Player Sheet</h2>
+        <span class="rpg-badge neutral">Character State</span>
+      </div>
+      {body}
+    </section>
+    """
+
+
+def _render_qa_dashboard(summary: Dict[str, Any], metrics: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    metrics = _safe_dict(metrics)
+    quality = _safe_dict(summary.get("quality_gate_summary") or metrics.get("quality_gate_summary"))
+    gates = _safe_dict(quality.get("gates"))
+    background = _safe_dict(summary.get("background_result_timing_summary") or metrics.get("background_result_timing_summary"))
+    perf = _safe_dict(summary.get("performance_budget_summary") or metrics.get("performance_budget_summary"))
+    live = _safe_dict(perf.get("live_blocking"))
+    reconciliation = _safe_dict(summary.get("quest_reconciliation_summary") or metrics.get("quest_reconciliation_summary"))
+
+    gate_rows = ""
+    for name, value in list(gates.items())[:40]:
+        gate_rows += (
+            "<tr>"
+            f"<td>{html.escape(str(name))}</td>"
+            f'<td><span class="rpg-badge {_status_badge_class(value)}">{html.escape(_yes_no(value))}</span></td>'
+            "</tr>"
+        )
+    if not gate_rows:
+        gate_rows = "<tr><td colspan='2'>No gate details available.</td></tr>"
+
+    return f"""
+    <section class="rpg-card span-12" id="qa-dashboard">
+      <div class="rpg-section-title">
+        <h2>QA Dashboard</h2>
+        <span class="rpg-badge {_status_badge_class(quality.get('ok', True))}">{html.escape(_yes_no(quality.get('ok', True)))}</span>
+      </div>
+      <div class="rpg-stat-grid">
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Submitted BG Jobs</div>
+          <div class="rpg-stat-value">{html.escape(str(background.get('jobs_submitted') or 0))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Pre-Turn Attach Rate</div>
+          <div class="rpg-stat-value">{html.escape(_pct(background.get('pre_turn_attach_rate') or 0))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Missing BG Jobs</div>
+          <div class="rpg-stat-value">{html.escape(str(background.get('missing_job_count') or 0))}</div>
+        </div>
+        <div class="rpg-stat">
+          <div class="rpg-stat-label">Avg Live Blocking</div>
+          <div class="rpg-stat-value">{html.escape(str(live.get('avg_human_playable_blocking_ms') or 0))}ms</div>
+        </div>
+                <div class="rpg-stat">
+                    <div class="rpg-stat-label">Quest Reconciliation</div>
+                    <div class="rpg-stat-value">{html.escape(str(reconciliation.get('count') or 0))}</div>
+                </div>
+                <div class="rpg-stat">
+                    <div class="rpg-stat-label">Reconciliation Errors</div>
+                    <div class="rpg-stat-value">{html.escape(str(len(_safe_list(reconciliation.get('errors')))))}</div>
+                </div>
+      </div>
+      <h3>Quality Gates</h3>
+      <table class="rpg-table">
+        <thead><tr><th>Gate</th><th>Status</th></tr></thead>
+        <tbody>{gate_rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def _legacy_section_group(title: str, html_content: str, *, open_by_default: bool = False) -> str:
+    html_content = _strip_legacy_autoplay_report_partial(html_content)
+    html_content = _prefix_legacy_section_ids(html_content)
+    open_attr = " open" if open_by_default else ""
+    return f"""
+    <details class="rpg-debug-group"{open_attr}>
+      <summary>{html.escape(title)}</summary>
+      <div class="rpg-debug-group-body">
+        {html_content}
+      </div>
+    </details>
+    """
+
+
+def _split_legacy_html_into_debug_groups(legacy_html: str) -> Dict[str, str]:
+    text = _strip_legacy_autoplay_report_partial(legacy_html)
+    if not text.strip():
+        return {}
+
+    buckets: Dict[str, List[str]] = {
+        "quality": [],
+        "background": [],
+        "performance": [],
+        "campaign": [],
+        "timeline": [],
+        "raw": [],
+    }
+
+    # Split before each top-level section/article that has an ID. This is
+    # deliberately simple and robust for generated report HTML.
+    parts = re.split(r'(?=<(?:section|article)\b[^>]*\bid="[^"]+"[^>]*>)', text)
+    for part in parts:
+        chunk = part.strip()
+        if not chunk:
+            continue
+        lower = chunk.lower()
+        if any(key in lower for key in ("quality", "hundred-turn", "action-diversity", "long-run")):
+            buckets["quality"].append(chunk)
+        elif any(key in lower for key in ("background", "deferred", "advisory", "narration job")):
+            buckets["background"].append(chunk)
+        elif any(key in lower for key in ("performance", "latency", "budget", "timing", "token", "prompt")):
+            buckets["performance"].append(chunk)
+        elif any(key in lower for key in ("campaign-journal", "quest", "npc", "location", "player", "lore", "story")):
+            buckets["campaign"].append(chunk)
+        elif any(key in lower for key in ("timeline", "calendar", "turn-by-turn", "turns")):
+            buckets["timeline"].append(chunk)
+        else:
+            buckets["raw"].append(chunk)
+
+    return {key: "\n".join(values) for key, values in buckets.items() if values}
+
+
+def _wrap_technical_debug_groups(groups: Dict[str, str]) -> str:
+    groups = _safe_dict(groups)
+    ordered = [
+        ("Quality Gates", groups.get("quality")),
+        ("Background Pipeline", groups.get("background")),
+        ("Performance", groups.get("performance")),
+        ("Campaign Data", groups.get("campaign")),
+        ("Timeline / Progress", groups.get("timeline")),
+        ("Console / Raw Debug", groups.get("raw")),
+    ]
+    body = ""
+    for title, content in ordered:
+        if _safe_str(content).strip():
+            body += _legacy_section_group(title, content)
+    if not body:
+        body = _legacy_section_group("Legacy Report", groups.get("legacy") or "")
+
+    return f"""
+    <section class="rpg-card dark span-12" id="technical-debug">
+      <div class="rpg-section-title">
+        <h2>Technical Debug</h2>
+        <span class="rpg-badge neutral">Grouped Raw Data</span>
+      </div>
+      <p class="rpg-debug-note">
+        Technical sections are grouped below. Legacy anchors are prefixed with
+        <code>legacy-</code> so top-level RPG navigation remains stable.
+        The themed Autoplay Campaign Report summary is promoted near the top of this page.
+      </p>
+      <div class="rpg-debug-grid">
+        {body}
+      </div>
+    </section>
+    """
+
+
+def _wrap_technical_debug_section(existing_html: str) -> str:
+    existing_html = _strip_legacy_autoplay_report_partial(existing_html)
+    existing_html = _prefix_legacy_section_ids(existing_html)
+    return f"""
+    <section class="rpg-card dark span-12" id="technical-debug">
+      <div class="rpg-section-title">
+        <h2>Technical Debug</h2>
+        <span class="rpg-badge neutral">Grouped Raw Data</span>
+      </div>
+      <p class="rpg-debug-note">
+        Technical sections are grouped below. Legacy anchors are prefixed with
+        <code>legacy-</code> so top-level RPG navigation remains stable.
+      </p>
+      <details class="rpg-debug">
+        <summary>Show raw / legacy report sections</summary>
+        <div class="rpg-debug-body">
+          <p class="rpg-debug-note">
+            Legacy report sections are preserved below with prefixed anchors
+            such as <code>legacy-campaign-journal</code> to avoid conflicts with
+            the RPG chronicle navigation above.
+          </p>
+          {existing_html}
+        </div>
+      </details>
+    </section>
+    """
+
+
+def _latest_state_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+    for row in reversed(transcript):
+        final_state = _safe_dict(row.get("final_authoritative_state"))
+        if final_state:
+            return final_state
+        turn_result = _safe_dict(row.get("turn_result"))
+        state = _safe_dict(turn_result.get("simulation_state"))
+        if state:
+            return state
+    return {}
+
+
+def _latest_state_source(transcript: List[Dict[str, Any]]) -> str:
+    for row in reversed(transcript):
+        if _safe_dict(row.get("final_authoritative_state")):
+            return "final_authoritative_state"
+        turn_result = _safe_dict(row.get("turn_result"))
+        if _safe_dict(turn_result.get("simulation_state")):
+            return "turn_result.simulation_state"
+    return "none"
+
+
+
+def _story_arc_rows(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    arcs = _safe_dict(_safe_dict(state.get("story_arc_state")).get("arcs"))
+    rows = []
+    for arc_id, arc in arcs.items():
+        arc = _safe_dict(arc)
+        row = dict(arc)
+        row.setdefault("arc_id", arc_id)
+        rows.append(row)
+    return rows
+
+
+def _milestone_rows(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    root = _safe_dict(state.get("story_arc_milestone_state"))
+    arcs = _safe_dict(root.get("arcs"))
+    rows = []
+    for arc_id, bucket in arcs.items():
+        for milestone in _safe_list(_safe_dict(bucket).get("milestones")):
+            if isinstance(milestone, dict):
+                row = dict(milestone)
+                row.setdefault("arc_id", arc_id)
+                rows.append(row)
+    return rows
+
+
+def _journal_entries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        row
+        for row in _safe_list(_safe_dict(state.get("campaign_journal_state")).get("entries"))
+        if isinstance(row, dict)
+    ]
+
+
+def _story_events(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        row
+        for row in _safe_list(_safe_dict(state.get("story_event_queue_state")).get("queue"))
+        if isinstance(row, dict)
+    ]
+
+
+def _npc_rows(state: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    by_name: Dict[str, Dict[str, Any]] = {}
+
+    # Known state roots vary across bundles; collect likely NPC/profile stores.
+    candidate_roots = [
+        _safe_dict(state.get("npc_profile_state")).get("profiles"),
+        _safe_dict(state.get("npc_evolution_state")).get("npcs"),
+        _safe_dict(state.get("social_state")).get("npcs"),
+        _safe_dict(state.get("character_state")).get("npcs"),
+        state.get("npcs"),
+    ]
+    for root in candidate_roots:
+        if isinstance(root, dict):
+            for key, value in root.items():
+                value = _safe_dict(value)
+                name = _first_non_empty(value.get("name"), value.get("npc_id"), key)
+                if name:
+                    by_name.setdefault(name, {}).update(value)
+                    by_name[name].setdefault("name", name)
+        elif isinstance(root, list):
+            for value in root:
+                value = _safe_dict(value)
+                name = _first_non_empty(value.get("name"), value.get("npc_id"))
+                if name:
+                    by_name.setdefault(name, {}).update(value)
+                    by_name[name].setdefault("name", name)
+
+    # Also discover NPCs from dialogue.
+    for row in transcript:
+        dialogue = extract_dialogue(row)
+        speaker = dialogue.get("speaker")
+        if speaker:
+            by_name.setdefault(speaker, {"name": speaker})
+            by_name[speaker]["dialogue_turns"] = int(by_name[speaker].get("dialogue_turns") or 0) + 1
+
+    return sorted(by_name.values(), key=lambda row: str(row.get("name") or ""))
+
+
+def _player_progression(state: Dict[str, Any]) -> Dict[str, Any]:
+    candidates = [
+        state.get("player_state"),
+        state.get("character_stats"),
+        _safe_dict(state.get("party_state")).get("player"),
+        _safe_dict(state.get("runtime")).get("player"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, dict) and candidate:
+            return candidate
+    return {}
+
+
+def _lore_rows(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    lore = _safe_dict(state.get("lore_state"))
+    rows = []
+    for key in ("facts", "entries", "locations", "factions", "rumors"):
+        value = lore.get(key)
+        if isinstance(value, dict):
+            for item_id, item in value.items():
+                item = _safe_dict(item)
+                rows.append({"type": key, "id": item_id, **item})
+        elif isinstance(value, list):
+            for idx, item in enumerate(value):
+                if isinstance(item, dict):
+                    rows.append({"type": key, "id": item.get("id") or idx, **item})
+                else:
+                    rows.append({"type": key, "id": idx, "text": str(item)})
+    return rows

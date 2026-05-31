@@ -1,0 +1,514 @@
+def _npc_card_rows(summary: Dict[str, Any], metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
+    summary = _safe_dict(summary)
+    metrics = _safe_dict(metrics)
+    report_summary = _safe_dict(
+        summary.get("npc_evolution_report_summary")
+        or metrics.get("npc_evolution_report_summary")
+    )
+    cards = [_safe_dict(card) for card in _as_list(report_summary.get("cards")) if isinstance(card, dict)]
+    if cards:
+        return cards
+
+    npc_summary = _safe_dict(
+        summary.get("npc_evolution_summary")
+        or summary.get("npc_profile_summary")
+        or metrics.get("npc_evolution_summary")
+        or metrics.get("npc_profile_summary")
+    )
+    rows = _as_list(npc_summary.get("npcs") or npc_summary.get("characters") or npc_summary.get("rows") or npc_summary.get("items"))
+    return [_safe_dict(row) for row in rows if isinstance(row, dict)]
+
+
+def _npc_memory_lines(card: Dict[str, Any]) -> List[str]:
+    card = _safe_dict(card)
+    return _dedupe_texts_fuzzy(_as_list(card.get("memories")), limit=8)
+
+
+def _npc_future_hook_lines(card: Dict[str, Any]) -> List[str]:
+    return _dedupe_texts_fuzzy(_as_list(_safe_dict(card).get("future_hooks")), limit=8)
+
+
+def _npc_semantic_intent_lines(card: Dict[str, Any]) -> List[str]:
+    return _dedupe_texts_fuzzy(_as_list(_safe_dict(card).get("semantic_intents")), limit=8)
+
+
+def _npc_axes_summary(card: Dict[str, Any]) -> str:
+    axes = _safe_dict(_safe_dict(card).get("axes"))
+    if not axes:
+        return ""
+    parts = []
+    for key, value in sorted(axes.items()):
+        if isinstance(value, dict):
+            val = value.get("value") or value.get("score") or value.get("current")
+        else:
+            val = value
+        parts.append(f"{key}: {val}")
+    return ", ".join(parts[:8])
+
+
+def _npc_role_from_card(card: Dict[str, Any]) -> str:
+    card = _safe_dict(card)
+    role = _first_non_empty(
+        card.get("role"),
+        card.get("archetype"),
+        card.get("title"),
+        _safe_dict(card.get("profile")).get("role"),
+        _safe_dict(card.get("profile")).get("archetype"),
+    )
+    if role and role.lower() != "npc":
+        return role
+    name = _first_non_empty(card.get("name"), card.get("npc_id"), card.get("id"))
+    if name.lower() == "bran":
+        return "Innkeeper"
+    if "traveler" in name.lower():
+        return "Traveler"
+    if "guard" in name.lower():
+        return "Guard"
+    return role or "NPC"
+
+
+def _render_npc_chronicle(summary: Dict[str, Any], metrics: Dict[str, Any]) -> str:
+    npcs = _npc_card_rows(summary, metrics)
+    if npcs:
+        cards = ""
+        for npc in npcs[:8]:
+            npc = _safe_dict(npc)
+            name = _first_non_empty(npc.get("name"), npc.get("npc_id"), npc.get("id"), "Unknown NPC")
+            role = _npc_role_from_card(npc)
+            stage = _first_non_empty(npc.get("arc_stage"), npc.get("latest_stage"), npc.get("stage"), "stable")
+            profile_path = _first_non_empty(npc.get("profile_path"), npc.get("path"))
+            signal_count = _num(npc.get("signal_count") or npc.get("signals_consumed"))
+            axes = _npc_axes_summary(npc)
+            memories = _npc_memory_lines(npc)
+            hooks = _npc_future_hook_lines(npc)
+            intents = _npc_semantic_intent_lines(npc)
+            cards += f"""
+            <article class="rpg-character-card">
+              <h3>{html.escape(name)}</h3>
+              <div class="rpg-tag-row">
+                <span class="rpg-tag">Role: {html.escape(role)}</span>
+                <span class="rpg-tag">Stage: {html.escape(stage)}</span>
+                <span class="rpg-tag">Signals: {html.escape(str(signal_count))}</span>
+              </div>
+              {f'<p><strong>Axes:</strong> {html.escape(axes)}</p>' if axes else ''}
+              <h4>Memory Highlights</h4>
+              {_html_list(memories, empty="No memory highlights recorded.", limit=4)}
+              <h4>Intent / Relationship Signals</h4>
+              {_html_list(intents, empty="No intent signals recorded.", limit=4)}
+              <h4>Future Hooks</h4>
+              {_html_list(hooks, empty="No future hooks recorded.", limit=4)}
+              {f'<p class="rpg-muted-line">Profile: {html.escape(profile_path)}</p>' if profile_path else ''}
+            </article>
+            """
+        body = f'<div class="rpg-npc-grid">{cards}</div>'
+    else:
+        body = "<p>No expanded NPC cards were available yet. This section is ready for N83 NPC evolution card data.</p>"
+
+    return f"""
+    <section class="rpg-card rpg-promoted-section span-12" id="npc-chronicle">
+      <div class="rpg-section-title">
+        <h2>NPC Chronicle</h2>
+        <span class="rpg-badge neutral">Social State</span>
+      </div>
+      {body}
+    </section>
+    """
+
+
+def _infer_campaign_location_name(summary: Dict[str, Any], metrics: Dict[str, Any]) -> str:
+    summary = _safe_dict(summary)
+    metrics = _safe_dict(metrics)
+    candidates: List[str] = []
+
+    for quest in _as_list(_safe_dict(summary.get("quest_progress_summary")).get("quests")):
+        quest = _safe_dict(quest)
+        loc = _first_non_empty(quest.get("location"), quest.get("source_location"))
+        if loc:
+            candidates.append(loc)
+
+    for source in (
+        summary.get("lore_worldbuilding_summary"),
+        metrics.get("lore_worldbuilding_summary"),
+        summary.get("story_beat_summary"),
+        summary.get("player_journal_summary"),
+    ):
+        text = str(source)
+        if "Rusty Flagon" in text:
+            candidates.append("Rusty Flagon Tavern")
+        elif "tavern" in text.lower():
+            candidates.append("Tavern")
+
+    for state_key in ("initial_state", "latest_state", "final_state", "simulation_state"):
+        state = _safe_dict(summary.get(state_key) or metrics.get(state_key))
+        loc = _first_non_empty(
+            state.get("location"),
+            state.get("current_location"),
+            _safe_dict(state.get("location_state")).get("name"),
+        )
+        if loc:
+            candidates.append(loc)
+
+    for candidate in candidates:
+        candidate = _safe_str(candidate).strip()
+        if candidate and candidate.lower() != "unknown location":
+            return candidate
+    return ""
+
+
+def _location_name_from_row(row: Dict[str, Any]) -> str:
+    row = _safe_dict(row)
+    sim = _safe_dict(row.get("simulation_state"))
+    runtime = _safe_dict(row.get("runtime_state"))
+    turn_contract = _safe_dict(row.get("turn_contract"))
+    return _first_non_empty(
+        row.get("location"),
+        row.get("location_name"),
+        sim.get("location"),
+        sim.get("current_location"),
+        _safe_dict(sim.get("location_state")).get("name"),
+        runtime.get("location"),
+        runtime.get("current_location"),
+        turn_contract.get("location"),
+        "Unknown Location",
+    )
+
+
+_NPC_STRUCTURAL_KEYS = {
+    "speaker",
+    "line",
+    "text",
+    "dialogue",
+    "npc",
+    "npcs",
+    "metadata",
+    "summary",
+    "description",
+    "relationship",
+    "relationships",
+    "memory",
+    "memories",
+}
+
+
+def _looks_like_npc_name(value: Any) -> bool:
+    text = _safe_str(value).strip()
+    if not text:
+        return False
+    if text.lower() in _NPC_STRUCTURAL_KEYS:
+        return False
+    if len(text) > 80:
+        return False
+    return any(ch.isalpha() for ch in text)
+
+
+def _npcs_from_row(row: Dict[str, Any]) -> List[str]:
+    row = _safe_dict(row)
+    names: List[str] = []
+    for source in (
+        row.get("npc"),
+        row.get("npcs"),
+        _safe_dict(row.get("simulation_state")).get("npcs"),
+        _safe_dict(row.get("runtime_state")).get("npcs"),
+    ):
+        if isinstance(source, dict):
+            if _safe_str(source.get("speaker")):
+                names.append(source.get("speaker"))
+            for key, value in source.items():
+                if isinstance(value, dict):
+                    names.append(_first_non_empty(value.get("name"), key))
+                elif isinstance(key, str) and _looks_like_npc_name(key):
+                    names.append(key)
+        elif isinstance(source, list):
+            for item in source:
+                if isinstance(item, dict):
+                    names.append(_first_non_empty(item.get("name"), item.get("npc_id"), item.get("id")))
+                else:
+                    names.append(_safe_str(item))
+    return sorted({name for name in names if _looks_like_npc_name(name)})
+
+
+def _services_from_row(row: Dict[str, Any]) -> List[str]:
+    row = _safe_dict(row)
+    values: List[str] = []
+
+    for key in ("service_result", "merchant_result", "interaction_result"):
+        result = _safe_dict(row.get(key))
+        service = _first_non_empty(
+            result.get("service_kind"),
+            result.get("service"),
+            result.get("service_id"),
+            result.get("kind"),
+        )
+        if service:
+            values.append(_normalize_service_label(service))
+
+    semantic = _semantic_mapping_from_report_row(row)
+    action = _safe_str(semantic.get("action"))
+    raw = _safe_dict(semantic.get("raw"))
+    service_kind = _first_non_empty(
+        raw.get("service_kind"),
+        raw.get("service"),
+        raw.get("provider_service"),
+        raw.get("kind"),
+    )
+    if service_kind:
+        values.append(_normalize_service_label(service_kind))
+    if action in ("service_inquiry", "rent_room", "buy_service", "purchase_service"):
+        values.append(action)
+    if action == "service_inquiry" and _contains_any(str(raw), ["lodging", "room", "inn"]):
+        values.append("lodging")
+    if action == "rent_room":
+        values.append("lodging")
+
+    # N83.1.2: actual report row shapes may bury semantic/service metadata
+    # under turn_contract.action.metadata.semantic_action, result.turn_contract,
+    # background attachments, or serialized debug dicts. Recursively scan the
+    # row as a last-resort structured fallback.
+    values.extend(_scan_service_labels(row))
+
+    cleaned = []
+    for value in values:
+        label = _normalize_service_label(value)
+        if label and label in _SERVICE_ACTION_NAMES and label not in cleaned:
+            cleaned.append(label)
+
+    # Stable, useful order for the visible report.
+    order = ["service_inquiry", "rent_room", "lodging", "buy_service", "purchase_service"]
+    return [label for label in order if label in cleaned]
+
+
+_SERVICE_ACTION_NAMES = {
+    "service_inquiry",
+    "rent_room",
+    "buy_service",
+    "purchase_service",
+    "lodging",
+}
+
+
+def _normalize_service_label(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    text = text.replace("-", "_").replace(" ", "_")
+    text = re.sub(r"[^A-Za-z0-9_]+", "", text)
+    return text.lower()
+
+
+def _service_labels_from_mapping(mapping: Dict[str, Any]) -> List[str]:
+    mapping = _safe_dict(mapping)
+    values: List[str] = []
+
+    for key in (
+        "action_type",
+        "semantic_action",
+        "action",
+        "kind",
+        "type",
+        "service_kind",
+        "service",
+        "service_id",
+        "provider_service",
+        "interaction_type",
+    ):
+        label = _normalize_service_label(mapping.get(key))
+        if label in _SERVICE_ACTION_NAMES:
+            values.append(label)
+
+    # If the action is service_inquiry/rent_room and metadata text mentions
+    # lodging/room/inn, include lodging as the useful RPG service label.
+    text = str(mapping).lower()
+    if any(label in values for label in ("service_inquiry", "rent_room")):
+        if any(term in text for term in ("lodging", "room", "inn", "bed")):
+            values.append("lodging")
+
+    if "rent_room" in text:
+        values.append("rent_room")
+        values.append("lodging")
+    if "service_inquiry" in text:
+        values.append("service_inquiry")
+    if "lodging" in text:
+        values.append("lodging")
+
+    return values
+
+
+def _scan_service_labels(value: Any, *, depth: int = 0) -> List[str]:
+    if depth > 6:
+        return []
+
+    labels: List[str] = []
+
+    if isinstance(value, dict):
+        labels.extend(_service_labels_from_mapping(value))
+        for nested in value.values():
+            labels.extend(_scan_service_labels(nested, depth=depth + 1))
+    elif isinstance(value, list):
+        for item in value:
+            labels.extend(_scan_service_labels(item, depth=depth + 1))
+    elif isinstance(value, tuple):
+        for item in value:
+            labels.extend(_scan_service_labels(item, depth=depth + 1))
+    elif isinstance(value, str):
+        lower = value.lower()
+        if "service_inquiry" in lower:
+            labels.append("service_inquiry")
+        if "rent_room" in lower:
+            labels.append("rent_room")
+            labels.append("lodging")
+        if "lodging" in lower:
+            labels.append("lodging")
+
+    return labels
+
+
+def _campaign_service_labels_from_context(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[str]:
+    values: List[str] = []
+    values.extend(_scan_service_labels(summary))
+    values.extend(_scan_service_labels(metrics))
+    values.extend(_scan_service_labels(transcript))
+
+    cleaned = []
+    for value in values:
+        label = _normalize_service_label(value)
+        if label and label in _SERVICE_ACTION_NAMES and label not in cleaned:
+            cleaned.append(label)
+
+    order = ["service_inquiry", "rent_room", "lodging", "buy_service", "purchase_service"]
+    return [label for label in order if label in cleaned]
+
+
+def _build_location_journey_rows(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    location_summary = _safe_dict(
+        _safe_dict(summary).get("location_journey_summary")
+        or _safe_dict(metrics).get("location_journey_summary")
+    )
+    expanded = _as_list(location_summary.get("locations") or location_summary.get("rows"))
+    if expanded and isinstance(expanded[0], dict):
+        return [_safe_dict(row) for row in expanded]
+
+    inferred_location = _infer_campaign_location_name(summary, metrics)
+    by_location: Dict[str, Dict[str, Any]] = {}
+    for row in _as_list(transcript):
+        row = _safe_dict(row)
+        turn = _turn_int(row)
+        location = _location_name_from_row(row)
+        if location == "Unknown Location" and inferred_location:
+            location = inferred_location
+        bucket = by_location.setdefault(
+            location,
+            {
+                "name": location,
+                "turns": [],
+                "events": [],
+                "npcs": set(),
+                "services": set(),
+                "open_threads": [],
+            },
+        )
+        if turn:
+            bucket["turns"].append(turn)
+        title = _turn_title_from_row(row)
+        narration = _row_narration_text(row)
+        if title or narration:
+            bucket["events"].append(f"Turn {turn}: {title} — {_short_text(narration, 160)}")
+        for npc in _npcs_from_row(row):
+            bucket["npcs"].add(npc)
+        for service in _services_from_row(row):
+            bucket["services"].add(service)
+        for hook in _as_list(row.get("followup_hooks")):
+            text = _safe_str(hook if not isinstance(hook, dict) else hook.get("summary") or hook.get("hook"))
+            if text:
+                bucket["open_threads"].append(text)
+
+    if not by_location and inferred_location:
+        by_location[inferred_location] = {
+            "name": inferred_location,
+            "turns": [],
+            "events": [],
+            "npcs": set(),
+            "services": set(),
+            "open_threads": [],
+        }
+
+    rows: List[Dict[str, Any]] = []
+    for bucket in by_location.values():
+        turns = sorted(set(bucket["turns"]))
+        rows.append(
+            {
+                "name": bucket["name"],
+                "turns": turns,
+                "turn_range": f"{turns[0]}–{turns[-1]}" if turns else "",
+                "events": bucket["events"][:6],
+                "npcs": sorted(bucket["npcs"]),
+                "services": sorted(bucket["services"]),
+                "open_threads": bucket["open_threads"][:6],
+            }
+        )
+    return rows
+
+
+def _render_location_journey(summary: Dict[str, Any], metrics: Dict[str, Any], transcript: List[Dict[str, Any]]) -> str:
+    locations = _build_location_journey_rows(summary, metrics, transcript)
+    if locations:
+        campaign_services = _campaign_service_labels_from_context(summary, metrics, transcript)
+        cards = ""
+        path = " → ".join(html.escape(_safe_str(loc.get("name"))) for loc in locations[:12])
+        for loc in locations[:8]:
+            loc = _safe_dict(loc)
+            loc_services = _as_list(loc.get("services"))
+            if not loc_services and campaign_services:
+                loc_services = campaign_services
+            cards += f"""
+            <article class="rpg-location-card">
+              <h3>{html.escape(_first_non_empty(loc.get('name'), 'Unknown Location'))}</h3>
+              <div class="rpg-tag-row">
+                <span class="rpg-tag">Turns: {html.escape(_first_non_empty(loc.get('turn_range'), str(loc.get('turns') or '')))}</span>
+              </div>
+              <h4>Events</h4>
+              {_html_list(_as_list(loc.get('events')), empty="No location events recorded.", limit=5)}
+              <h4>NPCs Present</h4>
+              {_html_list(_as_list(loc.get('npcs')), empty="No NPC presence recorded.", limit=6)}
+              <h4>Services / Interactions</h4>
+              {_html_list(loc_services, empty="No services recorded.", limit=5)}
+              <h4>Open Threads</h4>
+              {_html_list(_as_list(loc.get('open_threads')), empty="No open threads recorded.", limit=4)}
+            </article>
+            """
+        body = f"<p><strong>Journey Path:</strong> {path}</p><div class=\"rpg-location-grid\">{cards}</div>"
+    else:
+        body = "<p>No location path was available yet. N83 can expand this with per-location events and NPC presence.</p>"
+
+    return f"""
+    <section class="rpg-card span-6" id="location-journey">
+      <div class="rpg-section-title">
+        <h2>Location Journey</h2>
+        <span class="rpg-badge neutral">World Path</span>
+      </div>
+      {body}
+    </section>
+    """
+
+
+def _currency_from_rows(rows: Any) -> Dict[str, Any]:
+    currency: Dict[str, Any] = {}
+    for row in _as_list(rows):
+        if isinstance(row, (list, tuple)):
+            key = _safe_str(row[0] if len(row) > 0 else "").strip()
+            value = row[1] if len(row) > 1 else 0
+            if key:
+                currency[key] = value
+            continue
+        row = _safe_dict(row)
+        key = _first_non_empty(row.get("currency"), row.get("name"), row.get("kind"), row.get("type"))
+        if not key:
+            continue
+        value = row.get("amount")
+        if value is None:
+            value = row.get("value")
+        if value is None:
+            value = row.get("count")
+        if value is None:
+            value = row.get("quantity")
+        currency[key] = value if value is not None else 0
+    return currency
