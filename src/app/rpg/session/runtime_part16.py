@@ -122,6 +122,16 @@ def _apply_turn_authoritative(
     advisory = {}
     semantic_advisory = {}
     semantic_action_record = {}
+    _stage_started = __import__("time").perf_counter()
+    key = ""
+    record = {}
+    recorded_policy = {}
+    semantic_key = ""
+    semantic_record = {}
+    semantic_record_capture = {}
+    turn_exec_index = {}
+    semantic_compiled_capture = {}
+    semantic_compiled_record = {}
     runtime_state.setdefault("conversation_settings", {})
     runtime_state.setdefault("offscreen_conversation_summaries", [])
     runtime_state.setdefault("last_player_action", {})
@@ -147,6 +157,17 @@ def _apply_turn_authoritative(
     final_tick = current_tick
     ambient_tick_command = is_ambient_tick_command(player_input)
     ambient_tick_result = {}
+    conversation_result = {}
+    before_state_for_contract = {}
+    contract_resolved = {}
+    resolved_for_contract = {}
+    resolved_from_contract = {}
+    general_interaction_result = {}
+    combat_narration_contract = {}
+    combat_narration_validation = {}
+    combat_narration_payload = {}
+    combat_llm_called = False
+    combat_llm_error = ""
     recall_request_conversation_result = {}
     if player_input_requests_recall(player_input):
         recall_request_conversation_result = advance_conversation_threads_for_turn(
@@ -428,14 +449,18 @@ def _apply_turn_authoritative(
     _maybe_resolve_stabilize_turn_result = _maybe_resolve_stabilize_turn(
         player_input=player_input,
         simulation_state=simulation_state,
+        runtime_state=runtime_state,
         current_tick=current_tick,
+        combat_state=combat_state,
     )
     if _maybe_resolve_stabilize_turn_result is not None:
         return _maybe_resolve_stabilize_turn_result
     _maybe_resolve_revive_turn_result = _maybe_resolve_revive_turn(
         player_input=player_input,
         simulation_state=simulation_state,
+        runtime_state=runtime_state,
         current_tick=current_tick,
+        combat_state=combat_state,
     )
     if _maybe_resolve_revive_turn_result is not None:
         return _maybe_resolve_revive_turn_result
@@ -661,6 +686,12 @@ def _apply_turn_authoritative(
         resolved_from_contract=resolved_from_contract,
         runtime_settings_for_contract=runtime_settings_for_contract,
         turn_contract=turn_contract,
+        general_interaction_result=general_interaction_result,
+        combat_narration_contract=combat_narration_contract,
+        combat_narration_validation=combat_narration_validation,
+        combat_narration_payload=combat_narration_payload,
+        combat_llm_called=combat_llm_called,
+        combat_llm_error=combat_llm_error,
     )
     turn_contract = _build_fallback_turn_contract_phase(
         player_input=player_input,
@@ -691,6 +722,7 @@ def _apply_turn_authoritative(
     _t_step = _time.monotonic()
     _maybe_resolve_general_interaction_turn_result = _maybe_resolve_general_interaction_turn(
         player_input=player_input,
+        simulation_state=simulation_state,
         runtime_state=runtime_state,
         current_tick=current_tick,
     )

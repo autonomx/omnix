@@ -18,6 +18,7 @@ from .runtime_part14 import *
 
 def _maybe_resolve_general_interaction_turn(
     player_input: Any,
+    simulation_state: Any,
     runtime_state: Any,
     current_tick: Any,
 ) -> Dict[str, Any] | None:
@@ -322,6 +323,12 @@ def _build_and_apply_turn_contract_phase(
     resolved_from_contract: Any,
     runtime_settings_for_contract: Any,
     turn_contract: Any,
+    general_interaction_result: Any,
+    combat_narration_contract: Any,
+    combat_narration_validation: Any,
+    combat_narration_payload: Any,
+    combat_llm_called: Any,
+    combat_llm_error: Any,
 ) -> tuple[Any, Any, Any]:
     if _safe_bool(runtime_settings_for_contract.get("enable_turn_contract"), True):
         before_state_for_contract = _safe_dict(before_state if "before_state" in locals() else simulation_state)

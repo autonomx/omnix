@@ -592,7 +592,9 @@ def _maybe_resolve_reposition_turn(
 def _maybe_resolve_stabilize_turn(
     player_input: Any,
     simulation_state: Any,
+    runtime_state: Any,
     current_tick: Any,
+    combat_state: Any,
 ) -> Dict[str, Any] | None:
     if combat_state.get("active") and _action_requests_stabilize(player_input):
         target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
@@ -650,7 +652,9 @@ def _maybe_resolve_stabilize_turn(
 def _maybe_resolve_revive_turn(
     player_input: Any,
     simulation_state: Any,
+    runtime_state: Any,
     current_tick: Any,
+    combat_state: Any,
 ) -> Dict[str, Any] | None:
     if combat_state.get("active") and _action_requests_revive_or_heal_other(player_input):
         target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
