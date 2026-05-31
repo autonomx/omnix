@@ -6,18 +6,23 @@ from tests.rpg.combat_lifecycle_matrix_assertions import (
 )
 
 
-def _enemy_action_row(*, turn: int) -> dict:
+def _enemy_action_row(*, turn: int, player_hp_before: int | None = None) -> dict:
+    if player_hp_before is None:
+        player_hp_before = max(1, 10 - max(0, turn - 2))
+    player_hp_after = max(1, player_hp_before - 1)
     contract = {
         "schema": "enemy_damage_contract_v1",
-        "source": "pr1_5_enemy_damage_contract_v1",
-        "metadata_only": True,
-        "player_state_mutated": False,
-        "damage_applied": 1,
-        "player_hp_before": 10,
-        "player_hp_after": 9,
-        "player_damage_pending": True,
-        "player_hp_delta": -1,
+        "source": "pr1_6_authoritative_player_combat_hp",
+        "metadata_only": False,
+        "player_state_mutated": True,
+        "damage_applied": player_hp_before - player_hp_after,
+        "player_hp_before": player_hp_before,
+        "player_hp_after": player_hp_after,
+        "player_damage_pending": False,
+        "player_hp_delta": player_hp_after - player_hp_before,
         "nonlethal_guard": True,
+        "authoritative_player_combat_hp": True,
+        "survival_state_mutated": False,
     }
     return {
         "schema": "combat_log_entry_v1",
@@ -31,13 +36,17 @@ def _enemy_action_row(*, turn: int) -> dict:
         "target_name": "player",
         "target_side": "player",
         "action_type": "counterattack",
-        "hit": True,
-        "damage_applied": 1,
-        "target_hp_before": 10,
-        "target_hp_after": 9,
-        "player_damage_pending": True,
-        "player_hp_delta": -1,
-        "player_state_mutated": False,
+        "hit": contract["damage_applied"] > 0,
+        "damage_applied": contract["damage_applied"],
+        "target_hp_before": player_hp_before,
+        "target_hp_after": player_hp_after,
+        "player_hp_before": player_hp_before,
+        "player_hp_after": player_hp_after,
+        "player_damage_pending": False,
+        "player_hp_delta": player_hp_after - player_hp_before,
+        "player_state_mutated": True,
+        "authoritative_player_combat_hp": True,
+        "survival_state_mutated": False,
         "defeated": False,
         "combat_ended": False,
         "source": "deterministic_enemy_damage_contract_v1",
@@ -87,7 +96,7 @@ def _turn(*, turn: int, before: int, after: int, defeated: bool = False, resolve
             "pending": False if (defeated or resolved_enemy) else True,
             "resolved": True if resolved_enemy else False,
             "actor_id": "" if defeated else "enemy:road_bandit",
-            "reason": "combat_ended" if defeated else ("enemy_damage_recorded_without_player_state_mutation_in_pr1_5" if resolved_enemy else "enemy_turn_not_yet_resolved_in_pr1_foundation"),
+            "reason": "combat_ended" if defeated else ("enemy_damage_applied_to_authoritative_combat_hp_in_pr1_6" if resolved_enemy else "enemy_turn_not_yet_resolved_in_pr1_foundation"),
         },
         "combat_log": combat_log,
         "progression_hooks": {
@@ -98,6 +107,17 @@ def _turn(*, turn: int, before: int, after: int, defeated: bool = False, resolve
             "reason": "placeholder_for_phase1_xp_loot_resolution",
         },
     }
+    if resolved_enemy:
+        enemy_row = combat_log[1]
+        lifecycle["player_combat_hp"] = {
+            "schema": "player_combat_hp_v1",
+            "source": "pr1_6_authoritative_player_combat_hp",
+            "before": enemy_row["player_hp_before"],
+            "after": enemy_row["player_hp_after"],
+            "delta": enemy_row["player_hp_delta"],
+            "authoritative": True,
+            "survival_state_mutated": False,
+        }
     return {
         "turn_index": turn,
         "raw_result": {
@@ -213,13 +233,24 @@ def test_pr15_rejects_resolved_enemy_turn_without_damage_contract():
     assert any("missing enemy_damage_contract_v1" in failure for failure in failures)
 
 
-def test_pr15_rejects_enemy_damage_that_mutates_player_state():
+def test_pr16_rejects_enemy_damage_that_does_not_mutate_combat_hp():
     turn = _turn(turn=2, before=4, after=3, resolved_enemy=True)
-    turn["raw_result"]["combat_lifecycle"]["combat_log"][1]["player_state_mutated"] = True
+    turn["raw_result"]["combat_lifecycle"]["combat_log"][1]["player_state_mutated"] = False
 
     failures = validate_combat_lifecycle_matrix_turns([turn])
 
-    assert any("must not mutate player state" in failure for failure in failures)
+    assert any("should mutate authoritative combat HP" in failure for failure in failures)
+
+
+def test_pr16_rejects_broken_player_hp_persistence_across_enemy_turns():
+    turn2 = _turn(turn=2, before=4, after=3, resolved_enemy=True)
+    turn3 = _turn(turn=3, before=3, after=2, resolved_enemy=True)
+    turn3["raw_result"]["combat_lifecycle"]["combat_log"][1]["player_hp_before"] = 10
+    turn3["raw_result"]["combat_lifecycle"]["combat_log"][1]["target_hp_before"] = 10
+
+    failures = validate_combat_lifecycle_matrix_turns([turn2, turn3, _turn(turn=5, before=1, after=0, defeated=True)])
+
+    assert any("player combat HP should persist across enemy turns" in failure for failure in failures)
 
 
 def test_pr12_rejects_final_without_progression_pending():
