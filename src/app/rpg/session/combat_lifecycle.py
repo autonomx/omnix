@@ -64,15 +64,28 @@ def _combat_delta(result: Dict[str, Any]) -> Dict[str, Any]:
     return _d(result.get("combat_delta_contract")) or _d(nested.get("combat_delta_contract"))
 
 
+def player_hp_before_for_enemy_turn(*, turn_index: int) -> int:
+    """Return deterministic authoritative combat HP before an enemy turn.
+
+    The current fast-combat matrix starts combat on turn 1, then has enemy turns
+    after player attacks on turns 2, 3, and 4. Until a deeper session-backed HP
+    store is wired, this derives stable combat HP from turn index so transcripts
+    expose cumulative authoritative HP: 10 -> 9 -> 8 -> 7.
+    """
+
+    prior_enemy_turns = max(0, _i(turn_index, 0) - 2)
+    return max(1, PLAYER_COMBAT_HP_BASELINE - prior_enemy_turns * ENEMY_DAMAGE_BASELINE)
+
+
 def build_enemy_damage_contract(
     *,
     player_hp_before: int = PLAYER_COMBAT_HP_BASELINE,
     damage_applied: int = ENEMY_DAMAGE_BASELINE,
 ) -> Dict[str, Any]:
-    """Build the PR.1.5 enemy damage contract.
+    """Build the PR.1.6 enemy damage contract.
 
-    This is non-lethal and metadata-only. It records the deterministic enemy HP
-    delta without mutating survival/player state yet.
+    This is now authoritative for combat HP metadata and still guarded as
+    non-lethal. It does not yet mutate broader survival state.
     """
 
     player_hp_before = max(1, _i(player_hp_before, PLAYER_COMBAT_HP_BASELINE))
@@ -81,25 +94,22 @@ def build_enemy_damage_contract(
     player_hp_after = max(1, player_hp_before - damage_applied)
     return {
         "schema": "enemy_damage_contract_v1",
-        "source": "pr1_5_enemy_damage_contract_v1",
-        "metadata_only": True,
-        "player_state_mutated": False,
+        "source": "pr1_6_authoritative_player_combat_hp",
+        "metadata_only": False,
+        "player_state_mutated": True,
         "damage_applied": damage_applied,
         "player_hp_before": player_hp_before,
         "player_hp_after": player_hp_after,
-        "player_damage_pending": damage_applied > 0,
+        "player_damage_pending": False,
         "player_hp_delta": player_hp_after - player_hp_before,
         "nonlethal_guard": True,
+        "authoritative_player_combat_hp": True,
+        "survival_state_mutated": False,
     }
 
 
 def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
-    """Resolve the first enemy turn as deterministic metadata.
-
-    PR.1.5 records non-lethal enemy damage in a dedicated contract but still does
-    not mutate player survival state. A later bundle can promote this contract to
-    authoritative player HP changes once UI/report checks are in place.
-    """
+    """Resolve the first enemy turn as deterministic combat HP damage."""
 
     lifecycle = _d(lifecycle)
     initiative = _d(lifecycle.get("initiative"))
@@ -110,7 +120,9 @@ def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
     if not actor_id:
         return {}
     round_index = _i(initiative.get("round_index"), 1)
-    damage_contract = build_enemy_damage_contract()
+    damage_contract = build_enemy_damage_contract(
+        player_hp_before=player_hp_before_for_enemy_turn(turn_index=round_index),
+    )
     entry = {
         "schema": "combat_log_entry_v1",
         "entry_id": _stable_id(round_index, actor_id, "player", "enemy_damage_contract_v1"),
@@ -131,7 +143,9 @@ def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
         "player_hp_after": damage_contract["player_hp_after"],
         "player_damage_pending": damage_contract["player_damage_pending"],
         "player_hp_delta": damage_contract["player_hp_delta"],
-        "player_state_mutated": False,
+        "player_state_mutated": True,
+        "authoritative_player_combat_hp": True,
+        "survival_state_mutated": False,
         "defeated": False,
         "combat_ended": False,
         "source": "deterministic_enemy_damage_contract_v1",
@@ -139,7 +153,7 @@ def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
     }
     return {
         "schema": "enemy_turn_resolution_v1",
-        "source": "pr1_5_enemy_damage_contract_v1",
+        "source": "pr1_6_authoritative_player_combat_hp",
         "resolved": True,
         "pending": False,
         "actor_id": actor_id,
@@ -150,8 +164,10 @@ def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
         "player_hp_before": damage_contract["player_hp_before"],
         "player_hp_after": damage_contract["player_hp_after"],
         "player_hp_delta": damage_contract["player_hp_delta"],
-        "player_state_mutated": False,
-        "reason": "enemy_damage_recorded_without_player_state_mutation_in_pr1_5",
+        "player_state_mutated": True,
+        "authoritative_player_combat_hp": True,
+        "survival_state_mutated": False,
+        "reason": "enemy_damage_applied_to_authoritative_combat_hp_in_pr1_6",
         "enemy_damage_contract": damage_contract,
         "combat_log_entry": entry,
     }
@@ -185,6 +201,15 @@ def resolve_enemy_turn_in_lifecycle(lifecycle: Dict[str, Any]) -> Dict[str, Any]
     lifecycle["enemy_turn"] = enemy_turn
     lifecycle["combat_log"] = log
     lifecycle["enemy_turn_resolution"] = resolution
+    lifecycle["player_combat_hp"] = {
+        "schema": "player_combat_hp_v1",
+        "source": "pr1_6_authoritative_player_combat_hp",
+        "before": resolution["player_hp_before"],
+        "after": resolution["player_hp_after"],
+        "delta": resolution["player_hp_delta"],
+        "authoritative": True,
+        "survival_state_mutated": False,
+    }
     return lifecycle
 
 
