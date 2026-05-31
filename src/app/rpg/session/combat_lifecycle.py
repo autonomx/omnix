@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 PLAYER_COMBAT_HP_BASELINE = 10
 ENEMY_DAMAGE_BASELINE = 1
+ENEMY_HP_BASELINE_FOR_FAST_COMBAT = 4
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -64,16 +65,20 @@ def _combat_delta(result: Dict[str, Any]) -> Dict[str, Any]:
     return _d(result.get("combat_delta_contract")) or _d(nested.get("combat_delta_contract"))
 
 
-def player_hp_before_for_enemy_turn(*, turn_index: int) -> int:
+def player_hp_before_for_enemy_turn(*, turn_index: int, enemy_hp_before: Any = None) -> int:
     """Return deterministic authoritative combat HP before an enemy turn.
 
-    The current fast-combat matrix starts combat on turn 1, then has enemy turns
-    after player attacks on turns 2, 3, and 4. Until a deeper session-backed HP
-    store is wired, this derives stable combat HP from turn index so transcripts
-    expose cumulative authoritative HP: 10 -> 9 -> 8 -> 7.
+    Prefer the authoritative player attack row's enemy HP before value. Runtime
+    fast-combat results do not always expose the outer transcript turn index at
+    lifecycle-build time, but the enemy HP sequence is stable: 4, 3, 2 before the
+    three non-final enemy turns. Fall back to turn index for unit-level callers.
     """
 
-    prior_enemy_turns = max(0, _i(turn_index, 0) - 2)
+    enemy_hp = _i(enemy_hp_before, -1)
+    if enemy_hp >= 0:
+        prior_enemy_turns = max(0, ENEMY_HP_BASELINE_FOR_FAST_COMBAT - enemy_hp)
+    else:
+        prior_enemy_turns = max(0, _i(turn_index, 0) - 2)
     return max(1, PLAYER_COMBAT_HP_BASELINE - prior_enemy_turns * ENEMY_DAMAGE_BASELINE)
 
 
@@ -120,8 +125,13 @@ def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
     if not actor_id:
         return {}
     round_index = _i(initiative.get("round_index"), 1)
+    player_rows = [row for row in _l(lifecycle.get("combat_log")) if _d(row).get("phase") == "player_action"]
+    enemy_hp_before = _d(player_rows[0]).get("target_hp_before") if player_rows else None
     damage_contract = build_enemy_damage_contract(
-        player_hp_before=player_hp_before_for_enemy_turn(turn_index=round_index),
+        player_hp_before=player_hp_before_for_enemy_turn(
+            turn_index=round_index,
+            enemy_hp_before=enemy_hp_before,
+        ),
     )
     entry = {
         "schema": "combat_log_entry_v1",
