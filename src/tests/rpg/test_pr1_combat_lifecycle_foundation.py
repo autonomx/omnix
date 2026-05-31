@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.rpg.session.combat_lifecycle import (
     build_combat_lifecycle_snapshot,
+    build_enemy_damage_contract,
     build_enemy_turn_resolution,
     enrich_combat_lifecycle_result,
 )
@@ -62,12 +63,30 @@ def test_pr1_builds_combat_lifecycle_snapshot_from_fast_combat_delta():
     assert log[0]["target_hp_after"] == 3
     assert log[0]["defeated"] is False
     assert log[1]["phase"] == "enemy_action"
-    assert log[1]["source"] == "deterministic_enemy_turn_skeleton_v1"
+    assert log[1]["source"] == "deterministic_enemy_damage_contract_v1"
     assert log[1]["actor_id"] == "enemy:road_bandit"
     assert log[1]["target_id"] == "player"
-    assert log[1]["damage_applied"] == 0
+    assert log[1]["damage_applied"] == 1
+    assert log[1]["target_hp_before"] == 10
+    assert log[1]["target_hp_after"] == 9
+    assert log[1]["player_damage_pending"] is True
+    assert log[1]["player_state_mutated"] is False
+    assert log[1]["enemy_damage_contract"]["schema"] == "enemy_damage_contract_v1"
     assert lifecycle["progression_hooks"]["xp_pending"] is False
     assert lifecycle["progression_hooks"]["loot_pending"] is False
+
+
+def test_pr15_builds_nonlethal_enemy_damage_contract():
+    contract = build_enemy_damage_contract(player_hp_before=1, damage_applied=5)
+
+    assert contract["schema"] == "enemy_damage_contract_v1"
+    assert contract["metadata_only"] is True
+    assert contract["player_state_mutated"] is False
+    assert contract["damage_applied"] == 0
+    assert contract["player_hp_before"] == 1
+    assert contract["player_hp_after"] == 1
+    assert contract["player_hp_delta"] == 0
+    assert contract["nonlethal_guard"] is True
 
 
 def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
@@ -87,12 +106,17 @@ def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
     resolution = build_enemy_turn_resolution(lifecycle)
 
     assert resolution["schema"] == "enemy_turn_resolution_v1"
+    assert resolution["source"] == "pr1_5_enemy_damage_contract_v1"
     assert resolution["resolved"] is True
     assert resolution["pending"] is False
     assert resolution["actor_id"] == "enemy:road_bandit"
     assert resolution["combat_log_entry"]["phase"] == "enemy_action"
-    assert resolution["combat_log_entry"]["source"] == "deterministic_enemy_turn_skeleton_v1"
-    assert resolution["combat_log_entry"]["damage_applied"] == 0
+    assert resolution["combat_log_entry"]["source"] == "deterministic_enemy_damage_contract_v1"
+    assert resolution["combat_log_entry"]["damage_applied"] == 1
+    assert resolution["player_damage_pending"] is True
+    assert resolution["player_hp_before"] == 10
+    assert resolution["player_hp_after"] == 9
+    assert resolution["player_state_mutated"] is False
 
 
 def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
@@ -116,6 +140,7 @@ def test_pr1_enriches_result_and_nested_payloads_with_lifecycle_metadata():
     assert enriched["combat_lifecycle"]["schema"] == "combat_lifecycle_v1"
     assert enriched["combat_log"][0]["damage_applied"] == 1
     assert enriched["combat_log"][1]["phase"] == "enemy_action"
+    assert enriched["combat_log"][1]["player_hp_after"] == 9
     assert enriched["result"]["combat_lifecycle"]["initiative"]["turn_phase"] == "player_turn_ready"
     assert enriched["combat_narration_payload"]["combat_lifecycle"]["schema"] == "combat_lifecycle_v1"
 
@@ -129,4 +154,6 @@ def test_pr1_interactive_normalizer_preserves_fast_narration_and_adds_lifecycle(
     assert normalized["combat_lifecycle"]["enemy_turn"]["resolved"] is True
     assert normalized["combat_log"][0]["damage_applied"] == 1
     assert normalized["combat_log"][1]["phase"] == "enemy_action"
+    assert normalized["combat_log"][1]["damage_applied"] == 1
+    assert normalized["combat_log"][1]["player_state_mutated"] is False
     assert normalized["result"]["combat_log"][0]["target_hp_after"] == 3
