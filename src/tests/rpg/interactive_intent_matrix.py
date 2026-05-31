@@ -24,6 +24,9 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
         sys.path.insert(0, path)
 
 from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
+from tests.rpg.combat_lifecycle_matrix_assertions import (  # noqa: E402
+    validate_combat_lifecycle_matrix_turns,
+)
 
 MATRIX_VERSION = "interactive_intent_matrix_v4"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-intent-matrix"
@@ -358,6 +361,7 @@ def _combat_progress_summary(turns: Sequence[Mapping[str, Any]]) -> Dict[str, An
 
 def _validate_combat_completion(turns: Sequence[Mapping[str, Any]]) -> List[str]:
     failures: List[str] = []
+    failures.extend(validate_combat_lifecycle_matrix_turns(turns))
     summary = _combat_progress_summary(turns)
     damage_rows = [row for row in summary["rows"] if int(row.get("damage_applied") or 0) > 0]
     if len(damage_rows) < 2:
