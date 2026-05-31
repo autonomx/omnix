@@ -56,6 +56,24 @@ def _enemy_action_row(*, turn: int, hp_before: int, hp_after: int) -> dict:
     }
 
 
+def _reward_result(*, turn: int) -> dict:
+    return {
+        "schema": "combat_reward_result_v1",
+        "source": "deterministic_combat_reward_v1",
+        "target_id": "enemy:road_bandit",
+        "target_name": "bandit",
+        "turn_index": turn,
+        "resolved": True,
+        "xp_awarded": 25,
+        "loot_awarded": {"currency": {"copper": 7}, "items": []},
+        "reward_lines": ["Gained 25 XP.", "Looted 7 copper."],
+        "player_state_mutated": False,
+        "inventory_state_mutated": False,
+        "promotion_pending": True,
+        "reason": "deterministic_bandit_defeat_reward_recorded_for_pr1_8",
+    }
+
+
 def _lifecycle_turn(
     *,
     turn: int,
@@ -90,6 +108,23 @@ def _lifecycle_turn(
     ]
     if player_hp_before is not None and player_hp_after is not None:
         combat_log.append(_enemy_action_row(turn=turn, hp_before=player_hp_before, hp_after=player_hp_after))
+    reward = _reward_result(turn=turn) if defeated else {}
+    progression_hooks = {
+        "schema": "combat_progression_hooks_v1",
+        "xp_pending": False,
+        "loot_pending": False,
+        "resolved": bool(defeated),
+        "reason": "combat_rewards_resolved_in_pr1_8" if defeated else "placeholder_for_phase1_xp_loot_resolution",
+    }
+    if defeated:
+        progression_hooks.update(
+            {
+                "source": "deterministic_combat_reward_v1",
+                "xp_awarded": reward["xp_awarded"],
+                "loot_awarded": reward["loot_awarded"],
+                "reward_result": reward,
+            }
+        )
     lifecycle = {
         "schema": "combat_lifecycle_v1",
         "source": "pr1_combat_lifecycle_foundation",
@@ -109,14 +144,10 @@ def _lifecycle_turn(
             "reason": "combat_ended" if defeated else "test_fixture",
         },
         "combat_log": combat_log,
-        "progression_hooks": {
-            "schema": "combat_progression_hooks_v1",
-            "xp_pending": defeated,
-            "loot_pending": defeated,
-            "resolved": False,
-            "reason": "placeholder_for_phase1_xp_loot_resolution",
-        },
+        "progression_hooks": progression_hooks,
     }
+    if defeated:
+        lifecycle["combat_reward_result"] = reward
     if player_hp_before is not None and player_hp_after is not None:
         lifecycle["player_combat_hp"] = {
             "before": player_hp_before,
@@ -203,6 +234,15 @@ def test_pr17_builds_combat_hp_report_from_matrix_result():
     assert report["enemy_hp_sequence"][-1] == {"turn_index": 5, "before": 1, "after": 0, "damage": 1}
     assert report["rows"][0]["enemy_action"]["player_state_mutated"] is True
     assert report["rows"][0]["enemy_action"]["survival_state_mutated"] is False
+    assert report["reward_sequence"] == [
+        {
+            "turn_index": 5,
+            "source": "deterministic_combat_reward_v1",
+            "xp_awarded": 25,
+            "loot_awarded": {"currency": {"copper": 7}, "items": []},
+            "promotion_pending": True,
+        }
+    ]
 
 
 def test_pr132_zips_matrix_output_root_next_to_output_directory(tmp_path):
