@@ -79,6 +79,49 @@ def _enemy_action_rows(log: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]
     return [_d(row) for row in log if _d(row).get("phase") == "enemy_action"]
 
 
+def _validate_hp_delta(
+    *,
+    turn_number: Any,
+    row: Mapping[str, Any],
+    label: str,
+) -> List[str]:
+    row = _d(row)
+    failures: List[str] = []
+    damage = _i(row.get("damage_applied"), 0)
+    before = row.get("target_hp_before")
+    after = row.get("target_hp_after")
+    if damage > 0 and before is not None and after is not None:
+        expected_after = _i(before) - damage
+        if _i(after) != expected_after:
+            failures.append(
+                f"combat lifecycle turn {turn_number}: {label} HP delta mismatch before={before!r} damage={damage!r} after={after!r}"
+            )
+    return failures
+
+
+def _validate_enemy_damage_contract(*, turn_number: Any, row: Mapping[str, Any]) -> List[str]:
+    row = _d(row)
+    failures: List[str] = []
+    contract = _d(row.get("enemy_damage_contract"))
+    if row.get("source") != "deterministic_enemy_damage_contract_v1":
+        failures.append(f"combat lifecycle turn {turn_number}: enemy action row has unexpected source")
+    if contract.get("schema") != "enemy_damage_contract_v1":
+        failures.append(f"combat lifecycle turn {turn_number}: enemy action row missing enemy_damage_contract_v1")
+    if row.get("player_state_mutated") is not False or contract.get("player_state_mutated") is not False:
+        failures.append(f"combat lifecycle turn {turn_number}: PR.1.5 enemy damage must not mutate player state")
+    if row.get("player_damage_pending") is not True or contract.get("player_damage_pending") is not True:
+        failures.append(f"combat lifecycle turn {turn_number}: enemy damage should be marked player_damage_pending")
+    expected_delta = _i(row.get("target_hp_after"), 0) - _i(row.get("target_hp_before"), 0)
+    if row.get("player_hp_delta") != expected_delta:
+        failures.append(f"combat lifecycle turn {turn_number}: enemy action player_hp_delta mismatch")
+    if contract.get("player_hp_delta") != expected_delta:
+        failures.append(f"combat lifecycle turn {turn_number}: enemy damage contract player_hp_delta mismatch")
+    if _i(row.get("target_hp_after"), 1) < 1:
+        failures.append(f"combat lifecycle turn {turn_number}: enemy damage should remain nonlethal in PR.1.5")
+    failures.extend(_validate_hp_delta(turn_number=turn_number, row=row, label="player"))
+    return failures
+
+
 def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -> List[str]:
     """Validate PR.1 lifecycle metadata on combat matrix attack/damage turns.
 
@@ -116,15 +159,7 @@ def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -
             continue
 
         row = log[0]
-        damage = _i(row.get("damage_applied"), 0)
-        before = row.get("target_hp_before")
-        after = row.get("target_hp_after")
-        if damage > 0 and before is not None and after is not None:
-            expected_after = _i(before) - damage
-            if _i(after) != expected_after:
-                failures.append(
-                    f"combat lifecycle turn {turn_number}: combat log HP delta mismatch before={before!r} damage={damage!r} after={after!r}"
-                )
+        failures.extend(_validate_hp_delta(turn_number=turn_number, row=row, label="enemy"))
         if row.get("schema") != "combat_log_entry_v1":
             failures.append(f"combat lifecycle turn {turn_number}: combat log row missing schema")
 
@@ -147,8 +182,8 @@ def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -
                 enemy_rows = _enemy_action_rows(log)
                 if not enemy_rows:
                     failures.append(f"combat lifecycle turn {turn_number}: resolved enemy turn missing enemy_action log row")
-                elif enemy_rows[0].get("source") != "deterministic_enemy_turn_skeleton_v1":
-                    failures.append(f"combat lifecycle turn {turn_number}: enemy action row has unexpected source")
+                else:
+                    failures.extend(_validate_enemy_damage_contract(turn_number=turn_number, row=enemy_rows[0]))
                 if initiative.get("turn_phase") != "player_turn_ready":
                     failures.append(f"combat lifecycle turn {turn_number}: resolved enemy turn should return to player_turn_ready")
             elif not _s(initiative.get("next_actor_id")):
