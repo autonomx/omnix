@@ -3463,7 +3463,7 @@ def _build_sable_chain_endgame_opener_graph() -> ScenarioProgressionGraph:
                 title="Secure the Red Lantern records.",
                 requires=[{"lead": "lead:secure_red_lantern_records"}],
                 action_patterns=[
-                    {"semantic": "secure", "topics_any": ["red lantern records"]},
+                    {"semantic": "secure", "topics_any": ["red lantern records", "red lantern payment records"]},
                     {"semantic": "recover", "topics_any": ["counting house records"]},
                     {"semantic": "take", "topics_any": ["payment records"]},
                     {"semantic": "protect", "topics_any": ["records", "evidence"]},

@@ -9,6 +9,7 @@ from app.rpg.progression.graph_registry import (
     get_progression_graphs_for_seed,
 )
 from app.rpg.progression.models import ProgressionNode, ScenarioProgressionGraph
+from app.rpg.progression.objective_quest_map import infer_objective_quest_id
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -187,87 +188,7 @@ def _ensure_objective(
     summary: str = "",
 ) -> Dict[str, Any]:
     if not quest_id:
-        if objective_id in {"objective:warn_garran", "objective:travel_to_wagon_yard", "objective:choose_safe_route"}:
-            quest_id = "quest:warn_wagon"
-        elif objective_id in {
-            "objective:leave_by_quarry_road",
-            "objective:scout_quarry_road",
-            "objective:spot_bridge_watchers",
-            "objective:choose_ambush_response",
-            "objective:protect_wagon",
-        }:
-            quest_id = "quest:quarry_road_ambush"
-        elif objective_id in {"objective:find_witness", "objective:ask_mira", "objective:inspect_side_door"}:
-            quest_id = "quest:witness_search"
-        elif objective_id in {
-            "objective:identify_bandit_employer",
-            "objective:find_mill_proof",
-            "objective:inspect_mill_cellar",
-        }:
-            quest_id = "quest:mill_ruins_lead"
-        elif objective_id in {
-            "objective:reach_north_road_shrine",
-            "objective:inspect_shrine_tracks",
-            "objective:watch_for_contact_signal",
-            "objective:eavesdrop_tollhouse_meeting",
-        }:
-            quest_id = "quest:north_road_shrine_contact"
-        elif objective_id in {
-            "objective:plan_against_voss",
-            "objective:identify_voss_allies",
-            "objective:seek_magistrate_hearing",
-            "objective:present_manifest",
-            "objective:secure_public_witnesses",
-            "objective:counter_voss_intimidation",
-            "objective:attend_public_hearing",
-            "objective:choose_voss_outcome",
-        }:
-            quest_id = "quest:captain_voss_consequence"
-        elif objective_id in {
-            "objective:review_voss_backer_leads",
-            "objective:trace_voss_payment_marks",
-            "objective:identify_silver_crow",
-            "objective:reach_abandoned_cooperage",
-            "objective:inspect_cooperage_cellar",
-        }:
-            quest_id = "quest:voss_backers_investigation"
-        elif objective_id in {
-            "objective:plan_against_sable_chain",
-            "objective:secure_sable_chain_evidence",
-            "objective:detect_safehouse_watchers",
-            "objective:reach_river_gate_warehouses",
-            "objective:inspect_warehouse_marks",
-            "objective:prepare_safehouse_defense",
-        }:
-            quest_id = "quest:sable_chain_countermove"
-        elif objective_id in {
-            "objective:review_handler_orders",
-            "objective:decode_handler_route_cipher",
-            "objective:warn_east_road_teamsters",
-            "objective:scout_east_road_pressure_points",
-            "objective:disable_false_toll_markers",
-            "objective:reach_black_ford",
-            "objective:secure_black_ford_crossing",
-        }:
-            quest_id = "quest:sable_chain_handler_route_pressure"
-        elif objective_id in {
-            "objective:plan_pursuit_of_veska",
-            "objective:trace_veska_courier_route",
-            "objective:reach_old_north_watchpost",
-            "objective:inspect_watchpost_courier_signs",
-            "objective:decode_veska_message",
-            "objective:reach_ridge_hideout",
-            "objective:scout_ridge_hideout",
-        }:
-            quest_id = "quest:handler_veska_leadership_pursuit"
-        elif objective_id in {
-            "objective:review_veska_ledgers",
-            "objective:identify_hidden_paymaster",
-            "objective:trace_red_lantern_payments",
-            "objective:reach_old_counting_house",
-            "objective:inspect_counting_house_records",
-        }:
-            quest_id = "quest:sable_chain_endgame_opener"
+        quest_id = infer_objective_quest_id(objective_id)
     quest_id = quest_id or _infer_active_quest_id(state) or "quest:scenario_progression"
     quest = _ensure_quest(
         state,
@@ -387,7 +308,11 @@ def _graph_is_complete(state: Dict[str, Any], graph: ScenarioProgressionGraph) -
     if not graph or not _safe_list(getattr(graph, "nodes", [])):
         return False
     completed_nodes = _nodes_completed(state)
-    return all(_safe_str(node.node_id) in completed_nodes for node in graph.nodes)
+    required_nodes = [
+        node for node in graph.nodes
+        if _safe_str(getattr(node, "objective_type", "")) != "mechanics_opportunity"
+    ]
+    return bool(required_nodes) and all(_safe_str(node.node_id) in completed_nodes for node in required_nodes)
 
 
 def _graph_is_eligible(state: Dict[str, Any], graph: ScenarioProgressionGraph) -> bool:
