@@ -129,7 +129,7 @@ def _validate_enemy_damage_contract(*, turn_number: Any, row: Mapping[str, Any])
 def _validate_reward_resolution(*, turn_number: Any, lifecycle: Mapping[str, Any], progression: Mapping[str, Any]) -> List[str]:
     lifecycle = _d(lifecycle)
     progression = _d(progression)
-    reward = _d(lifecycle.get("combat_reward_result") or progression.get("reward_result"))
+    reward = _d(lifecycle.get("combat_reward_result"))
     failures: List[str] = []
     if progression.get("xp_pending") is not False:
         failures.append(f"combat lifecycle turn {turn_number}: final xp_pending should be false after reward resolution")
