@@ -54,6 +54,24 @@ def _enemy_action_row(*, turn: int, player_hp_before: int | None = None) -> dict
     }
 
 
+def _reward_result(*, turn: int) -> dict:
+    return {
+        "schema": "combat_reward_result_v1",
+        "source": "deterministic_combat_reward_v1",
+        "target_id": "enemy:road_bandit",
+        "target_name": "bandit",
+        "turn_index": turn,
+        "resolved": True,
+        "xp_awarded": 25,
+        "loot_awarded": {"currency": {"copper": 7}, "items": []},
+        "reward_lines": ["Gained 25 XP.", "Looted 7 copper."],
+        "player_state_mutated": False,
+        "inventory_state_mutated": False,
+        "promotion_pending": True,
+        "reason": "deterministic_bandit_defeat_reward_recorded_for_pr1_8",
+    }
+
+
 def _turn(*, turn: int, before: int, after: int, defeated: bool = False, resolved_enemy: bool = False) -> dict:
     damage = before - after
     combat_log = [
@@ -80,6 +98,23 @@ def _turn(*, turn: int, before: int, after: int, defeated: bool = False, resolve
     ]
     if resolved_enemy:
         combat_log.append(_enemy_action_row(turn=turn))
+    reward = _reward_result(turn=turn) if defeated else {}
+    progression_hooks = {
+        "schema": "combat_progression_hooks_v1",
+        "xp_pending": False,
+        "loot_pending": False,
+        "resolved": bool(defeated),
+        "reason": "combat_rewards_resolved_in_pr1_8" if defeated else "placeholder_for_phase1_xp_loot_resolution",
+    }
+    if defeated:
+        progression_hooks.update(
+            {
+                "source": "deterministic_combat_reward_v1",
+                "xp_awarded": reward["xp_awarded"],
+                "loot_awarded": reward["loot_awarded"],
+                "reward_result": reward,
+            }
+        )
     lifecycle = {
         "schema": "combat_lifecycle_v1",
         "source": "pr1_combat_lifecycle_foundation",
@@ -99,14 +134,10 @@ def _turn(*, turn: int, before: int, after: int, defeated: bool = False, resolve
             "reason": "combat_ended" if defeated else ("enemy_damage_applied_to_authoritative_combat_hp_in_pr1_6" if resolved_enemy else "enemy_turn_not_yet_resolved_in_pr1_foundation"),
         },
         "combat_log": combat_log,
-        "progression_hooks": {
-            "schema": "combat_progression_hooks_v1",
-            "xp_pending": defeated,
-            "loot_pending": defeated,
-            "resolved": False,
-            "reason": "placeholder_for_phase1_xp_loot_resolution",
-        },
+        "progression_hooks": progression_hooks,
     }
+    if defeated:
+        lifecycle["combat_reward_result"] = reward
     if resolved_enemy:
         enemy_row = combat_log[1]
         lifecycle["player_combat_hp"] = {
@@ -253,10 +284,21 @@ def test_pr16_rejects_broken_player_hp_persistence_across_enemy_turns():
     assert any("player combat HP should persist across enemy turns" in failure for failure in failures)
 
 
-def test_pr12_rejects_final_without_progression_pending():
+def test_pr18_rejects_final_without_resolved_reward():
     turn = _turn(turn=5, before=1, after=0, defeated=True)
-    turn["raw_result"]["combat_lifecycle"]["progression_hooks"]["xp_pending"] = False
+    turn["raw_result"]["combat_lifecycle"]["progression_hooks"]["resolved"] = False
+    turn["raw_result"]["combat_lifecycle"].pop("combat_reward_result")
 
     failures = validate_combat_lifecycle_matrix_turns([turn])
 
-    assert any("defeat should mark xp_pending true" in failure for failure in failures)
+    assert any("missing combat_reward_result_v1" in failure for failure in failures)
+    assert any("final progression hooks should be resolved" in failure for failure in failures)
+
+
+def test_pr18_rejects_final_reward_without_positive_xp():
+    turn = _turn(turn=5, before=1, after=0, defeated=True)
+    turn["raw_result"]["combat_lifecycle"]["combat_reward_result"]["xp_awarded"] = 0
+
+    failures = validate_combat_lifecycle_matrix_turns([turn])
+
+    assert any("xp_awarded should be positive" in failure for failure in failures)
