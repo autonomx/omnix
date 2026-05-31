@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from app.rpg.session.combat_lifecycle import (
+    BANDIT_DEFEAT_COPPER_REWARD,
+    BANDIT_DEFEAT_XP_REWARD,
     build_combat_lifecycle_snapshot,
+    build_combat_reward_result,
     build_enemy_damage_contract,
     build_enemy_turn_resolution,
     enrich_combat_lifecycle_result,
@@ -108,6 +111,17 @@ def test_pr15_builds_nonlethal_enemy_damage_contract():
     assert contract["authoritative_player_combat_hp"] is True
 
 
+def test_pr18_builds_deterministic_combat_reward_result():
+    reward = build_combat_reward_result(target_id="enemy:road_bandit", target_name="bandit", turn_index=5)
+
+    assert reward["schema"] == "combat_reward_result_v1"
+    assert reward["source"] == "deterministic_combat_reward_v1"
+    assert reward["resolved"] is True
+    assert reward["xp_awarded"] == BANDIT_DEFEAT_XP_REWARD
+    assert reward["loot_awarded"]["currency"]["copper"] == BANDIT_DEFEAT_COPPER_REWARD
+    assert reward["promotion_pending"] is True
+
+
 def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
     lifecycle = {
         "initiative": {
@@ -166,7 +180,7 @@ def test_pr161_builds_enemy_turn_resolution_from_enemy_hp_when_turn_index_missin
     assert resolution["player_hp_after"] == 8
 
 
-def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
+def test_pr18_defeat_lifecycle_resolves_combat_rewards():
     lifecycle = build_combat_lifecycle_snapshot(_fast_combat_result(defeated=True, tick=5))
 
     assert lifecycle["initiative"]["next_actor_id"] == ""
@@ -176,9 +190,13 @@ def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
     assert lifecycle["combat_log"][0]["defeated"] is True
     assert lifecycle["combat_log"][0]["combat_ended"] is True
     assert len(lifecycle["combat_log"]) == 1
-    assert lifecycle["progression_hooks"]["xp_pending"] is True
-    assert lifecycle["progression_hooks"]["loot_pending"] is True
-    assert lifecycle["progression_hooks"]["resolved"] is False
+    assert lifecycle["progression_hooks"]["xp_pending"] is False
+    assert lifecycle["progression_hooks"]["loot_pending"] is False
+    assert lifecycle["progression_hooks"]["resolved"] is True
+    assert lifecycle["progression_hooks"]["xp_awarded"] == BANDIT_DEFEAT_XP_REWARD
+    assert lifecycle["progression_hooks"]["loot_awarded"]["currency"]["copper"] == BANDIT_DEFEAT_COPPER_REWARD
+    assert lifecycle["combat_reward_result"]["schema"] == "combat_reward_result_v1"
+    assert lifecycle["combat_reward_result"]["source"] == "deterministic_combat_reward_v1"
 
 
 def test_pr1_enriches_result_and_nested_payloads_with_lifecycle_metadata():
