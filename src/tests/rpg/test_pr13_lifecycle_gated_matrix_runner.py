@@ -14,6 +14,20 @@ from tests.rpg.interactive_intent_matrix_lifecycle_gate import (
 
 
 def _enemy_action_row(*, turn: int, hp_before: int, hp_after: int) -> dict:
+    contract = {
+        "schema": "enemy_damage_contract_v1",
+        "source": "pr1_6_authoritative_player_combat_hp",
+        "metadata_only": False,
+        "player_state_mutated": True,
+        "damage_applied": hp_before - hp_after,
+        "player_hp_before": hp_before,
+        "player_hp_after": hp_after,
+        "player_damage_pending": False,
+        "player_hp_delta": hp_after - hp_before,
+        "nonlethal_guard": True,
+        "authoritative_player_combat_hp": True,
+        "survival_state_mutated": False,
+    }
     return {
         "schema": "combat_log_entry_v1",
         "entry_id": f"combat:enemy:{turn}",
@@ -32,11 +46,13 @@ def _enemy_action_row(*, turn: int, hp_before: int, hp_after: int) -> dict:
         "target_hp_after": hp_after,
         "player_hp_before": hp_before,
         "player_hp_after": hp_after,
+        "player_damage_pending": False,
         "player_hp_delta": hp_after - hp_before,
         "player_state_mutated": True,
         "authoritative_player_combat_hp": True,
         "survival_state_mutated": False,
         "source": "deterministic_enemy_damage_contract_v1",
+        "enemy_damage_contract": contract,
     }
 
 
