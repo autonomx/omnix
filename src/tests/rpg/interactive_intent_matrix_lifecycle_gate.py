@@ -61,7 +61,7 @@ def _first_row(log: Sequence[Mapping[str, Any]], *, phase: str) -> Dict[str, Any
 
 
 def build_combat_hp_report(result: Mapping[str, Any]) -> Dict[str, Any]:
-    """Build a compact combat HP debug report from matrix combat turns."""
+    """Build a compact combat HP/reward debug report from matrix combat turns."""
 
     rows: list[Dict[str, Any]] = []
     for item in result.get("results") or []:
@@ -77,6 +77,7 @@ def build_combat_hp_report(result: Mapping[str, Any]) -> Dict[str, Any]:
             player_row = _first_row(log, phase="player_action")
             enemy_row = _first_row(log, phase="enemy_action")
             player_combat_hp = _d(lifecycle.get("player_combat_hp"))
+            reward = _d(lifecycle.get("combat_reward_result") or _d(lifecycle.get("progression_hooks")).get("reward_result"))
             rows.append(
                 {
                     "turn_index": turn.get("turn_index") or turn.get("turn"),
@@ -114,6 +115,7 @@ def build_combat_hp_report(result: Mapping[str, Any]) -> Dict[str, Any]:
                     if player_combat_hp
                     else {},
                     "progression_hooks": _d(lifecycle.get("progression_hooks")),
+                    "combat_reward_result": reward,
                 }
             )
     player_hp_sequence = [
@@ -136,6 +138,17 @@ def build_combat_hp_report(result: Mapping[str, Any]) -> Dict[str, Any]:
         for row in rows
         if row.get("player_action")
     ]
+    reward_sequence = [
+        {
+            "turn_index": row["turn_index"],
+            "source": row["combat_reward_result"].get("source"),
+            "xp_awarded": row["combat_reward_result"].get("xp_awarded"),
+            "loot_awarded": row["combat_reward_result"].get("loot_awarded"),
+            "promotion_pending": row["combat_reward_result"].get("promotion_pending"),
+        }
+        for row in rows
+        if row.get("combat_reward_result")
+    ]
     return {
         "format_version": COMBAT_HP_REPORT_VERSION,
         "source": "pr1_7_surface_combat_hp_debug",
@@ -144,6 +157,7 @@ def build_combat_hp_report(result: Mapping[str, Any]) -> Dict[str, Any]:
         "rows": rows,
         "player_hp_sequence": player_hp_sequence,
         "enemy_hp_sequence": enemy_hp_sequence,
+        "reward_sequence": reward_sequence,
     }
 
 
