@@ -7,6 +7,18 @@ from tests.rpg.combat_lifecycle_matrix_assertions import (
 
 
 def _enemy_action_row(*, turn: int) -> dict:
+    contract = {
+        "schema": "enemy_damage_contract_v1",
+        "source": "pr1_5_enemy_damage_contract_v1",
+        "metadata_only": True,
+        "player_state_mutated": False,
+        "damage_applied": 1,
+        "player_hp_before": 10,
+        "player_hp_after": 9,
+        "player_damage_pending": True,
+        "player_hp_delta": -1,
+        "nonlethal_guard": True,
+    }
     return {
         "schema": "combat_log_entry_v1",
         "entry_id": f"combat:enemy:{turn}",
@@ -18,14 +30,18 @@ def _enemy_action_row(*, turn: int) -> dict:
         "target_id": "player",
         "target_name": "player",
         "target_side": "player",
-        "action_type": "counterattack_skeleton",
-        "hit": False,
-        "damage_applied": 0,
-        "target_hp_before": None,
-        "target_hp_after": None,
+        "action_type": "counterattack",
+        "hit": True,
+        "damage_applied": 1,
+        "target_hp_before": 10,
+        "target_hp_after": 9,
+        "player_damage_pending": True,
+        "player_hp_delta": -1,
+        "player_state_mutated": False,
         "defeated": False,
         "combat_ended": False,
-        "source": "deterministic_enemy_turn_skeleton_v1",
+        "source": "deterministic_enemy_damage_contract_v1",
+        "enemy_damage_contract": contract,
     }
 
 
@@ -71,7 +87,7 @@ def _turn(*, turn: int, before: int, after: int, defeated: bool = False, resolve
             "pending": False if (defeated or resolved_enemy) else True,
             "resolved": True if resolved_enemy else False,
             "actor_id": "" if defeated else "enemy:road_bandit",
-            "reason": "combat_ended" if defeated else ("enemy_turn_recorded_without_player_damage_in_pr1_4" if resolved_enemy else "enemy_turn_not_yet_resolved_in_pr1_foundation"),
+            "reason": "combat_ended" if defeated else ("enemy_damage_recorded_without_player_state_mutation_in_pr1_5" if resolved_enemy else "enemy_turn_not_yet_resolved_in_pr1_foundation"),
         },
         "combat_log": combat_log,
         "progression_hooks": {
@@ -166,7 +182,7 @@ def test_pr12_rejects_combat_log_hp_delta_mismatch():
 
     failures = validate_combat_lifecycle_matrix_turns([turn])
 
-    assert any("combat log HP delta mismatch" in failure for failure in failures)
+    assert any("enemy HP delta mismatch" in failure for failure in failures)
 
 
 def test_pr12_rejects_non_final_without_enemy_turn_pending_or_resolved():
@@ -186,6 +202,24 @@ def test_pr14_rejects_resolved_enemy_turn_without_enemy_action_log_row():
     failures = validate_combat_lifecycle_matrix_turns([turn])
 
     assert any("resolved enemy turn missing enemy_action log row" in failure for failure in failures)
+
+
+def test_pr15_rejects_resolved_enemy_turn_without_damage_contract():
+    turn = _turn(turn=2, before=4, after=3, resolved_enemy=True)
+    del turn["raw_result"]["combat_lifecycle"]["combat_log"][1]["enemy_damage_contract"]
+
+    failures = validate_combat_lifecycle_matrix_turns([turn])
+
+    assert any("missing enemy_damage_contract_v1" in failure for failure in failures)
+
+
+def test_pr15_rejects_enemy_damage_that_mutates_player_state():
+    turn = _turn(turn=2, before=4, after=3, resolved_enemy=True)
+    turn["raw_result"]["combat_lifecycle"]["combat_log"][1]["player_state_mutated"] = True
+
+    failures = validate_combat_lifecycle_matrix_turns([turn])
+
+    assert any("must not mutate player state" in failure for failure in failures)
 
 
 def test_pr12_rejects_final_without_progression_pending():
