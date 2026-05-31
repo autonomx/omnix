@@ -17,28 +17,134 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 
 from tests.rpg import interactive_intent_matrix as matrix  # noqa: E402
 from tests.rpg.combat_lifecycle_matrix_assertions import (  # noqa: E402
+    combat_lifecycle_from_matrix_turn,
     validate_combat_lifecycle_matrix_turns,
 )
 
 GATED_MATRIX_VERSION = "interactive_intent_matrix_lifecycle_gate_v1"
+COMBAT_HP_REPORT_VERSION = "interactive_intent_matrix_combat_hp_report_v1"
 DEFAULT_ZIP_NAME = "interactive-intent-matrix.zip"
+COMBAT_HP_REPORT_NAME = "interactive-intent-matrix-combat-hp-report.json"
 
 
 def _d(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _l(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _scenario_id(item: Mapping[str, Any]) -> str:
+    item = _d(item)
+    scenario = item.get("scenario")
+    return str(getattr(scenario, "scenario_id", "") or _d(scenario).get("scenario_id") or "")
+
+
 def _combat_lifecycle_failures(result: Mapping[str, Any]) -> list[str]:
     failures: list[str] = []
     for item in result.get("results") or []:
         item = _d(item)
-        scenario = item.get("scenario")
-        scenario_id = getattr(scenario, "scenario_id", "") or _d(scenario).get("scenario_id")
-        if scenario_id != matrix.COMBAT_MATRIX_SCENARIO_ID:
+        if _scenario_id(item) != matrix.COMBAT_MATRIX_SCENARIO_ID:
             continue
         turns = [_d(turn) for turn in _d(item.get("result")).get("turns") or []]
         failures.extend(validate_combat_lifecycle_matrix_turns(turns))
     return failures
+
+
+def _first_row(log: Sequence[Mapping[str, Any]], *, phase: str) -> Dict[str, Any]:
+    for row in log:
+        row = _d(row)
+        if row.get("phase") == phase:
+            return row
+    return {}
+
+
+def build_combat_hp_report(result: Mapping[str, Any]) -> Dict[str, Any]:
+    """Build a compact combat HP debug report from matrix combat turns."""
+
+    rows: list[Dict[str, Any]] = []
+    for item in result.get("results") or []:
+        item = _d(item)
+        if _scenario_id(item) != matrix.COMBAT_MATRIX_SCENARIO_ID:
+            continue
+        for turn in _l(_d(item.get("result")).get("turns")):
+            turn = _d(turn)
+            lifecycle = combat_lifecycle_from_matrix_turn(turn)
+            if not lifecycle:
+                continue
+            log = [_d(row) for row in _l(lifecycle.get("combat_log"))]
+            player_row = _first_row(log, phase="player_action")
+            enemy_row = _first_row(log, phase="enemy_action")
+            player_combat_hp = _d(lifecycle.get("player_combat_hp"))
+            rows.append(
+                {
+                    "turn_index": turn.get("turn_index") or turn.get("turn"),
+                    "turn_phase": _d(lifecycle.get("initiative")).get("turn_phase"),
+                    "enemy_turn_pending": _d(lifecycle.get("enemy_turn")).get("pending"),
+                    "enemy_turn_resolved": _d(lifecycle.get("enemy_turn")).get("resolved", False),
+                    "player_action": {
+                        "actor_id": player_row.get("actor_id"),
+                        "target_id": player_row.get("target_id"),
+                        "damage_applied": player_row.get("damage_applied"),
+                        "enemy_hp_before": player_row.get("target_hp_before"),
+                        "enemy_hp_after": player_row.get("target_hp_after"),
+                        "defeated": player_row.get("defeated", False),
+                    },
+                    "enemy_action": {
+                        "actor_id": enemy_row.get("actor_id"),
+                        "target_id": enemy_row.get("target_id"),
+                        "source": enemy_row.get("source"),
+                        "damage_applied": enemy_row.get("damage_applied"),
+                        "player_hp_before": enemy_row.get("player_hp_before", enemy_row.get("target_hp_before")),
+                        "player_hp_after": enemy_row.get("player_hp_after", enemy_row.get("target_hp_after")),
+                        "player_hp_delta": enemy_row.get("player_hp_delta"),
+                        "player_state_mutated": enemy_row.get("player_state_mutated"),
+                        "survival_state_mutated": enemy_row.get("survival_state_mutated"),
+                    }
+                    if enemy_row
+                    else {},
+                    "player_combat_hp": {
+                        "before": player_combat_hp.get("before"),
+                        "after": player_combat_hp.get("after"),
+                        "delta": player_combat_hp.get("delta"),
+                        "authoritative": player_combat_hp.get("authoritative"),
+                        "survival_state_mutated": player_combat_hp.get("survival_state_mutated"),
+                    }
+                    if player_combat_hp
+                    else {},
+                    "progression_hooks": _d(lifecycle.get("progression_hooks")),
+                }
+            )
+    player_hp_sequence = [
+        {
+            "turn_index": row["turn_index"],
+            "before": row["enemy_action"].get("player_hp_before"),
+            "after": row["enemy_action"].get("player_hp_after"),
+            "delta": row["enemy_action"].get("player_hp_delta"),
+        }
+        for row in rows
+        if row.get("enemy_action")
+    ]
+    enemy_hp_sequence = [
+        {
+            "turn_index": row["turn_index"],
+            "before": row["player_action"].get("enemy_hp_before"),
+            "after": row["player_action"].get("enemy_hp_after"),
+            "damage": row["player_action"].get("damage_applied"),
+        }
+        for row in rows
+        if row.get("player_action")
+    ]
+    return {
+        "format_version": COMBAT_HP_REPORT_VERSION,
+        "source": "pr1_7_surface_combat_hp_debug",
+        "scenario_id": matrix.COMBAT_MATRIX_SCENARIO_ID,
+        "row_count": len(rows),
+        "rows": rows,
+        "player_hp_sequence": player_hp_sequence,
+        "enemy_hp_sequence": enemy_hp_sequence,
+    }
 
 
 def matrix_output_zip_path(output_root: Path, *, zip_name: str = DEFAULT_ZIP_NAME) -> Path:
@@ -111,9 +217,16 @@ def run_intent_matrix_with_lifecycle_gate(
     if output_root_value:
         root = Path(str(output_root_value))
         root.mkdir(parents=True, exist_ok=True)
+        hp_report = build_combat_hp_report(result)
+        hp_report_path = root / COMBAT_HP_REPORT_NAME
+        summary["combat_hp_report_path"] = str(hp_report_path)
         summary["zip_path"] = str(matrix_output_zip_path(root))
         (root / "interactive-intent-matrix-lifecycle-gate.json").write_text(
             json.dumps(summary.get("combat_lifecycle_gate"), indent=2, ensure_ascii=False, sort_keys=True, default=str),
+            encoding="utf-8",
+        )
+        hp_report_path.write_text(
+            json.dumps(hp_report, indent=2, ensure_ascii=False, sort_keys=True, default=str),
             encoding="utf-8",
         )
         (root / "interactive-intent-matrix-summary.json").write_text(
