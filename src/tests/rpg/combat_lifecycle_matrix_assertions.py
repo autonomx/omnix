@@ -126,6 +126,33 @@ def _validate_enemy_damage_contract(*, turn_number: Any, row: Mapping[str, Any])
     return failures
 
 
+def _validate_reward_resolution(*, turn_number: Any, lifecycle: Mapping[str, Any], progression: Mapping[str, Any]) -> List[str]:
+    lifecycle = _d(lifecycle)
+    progression = _d(progression)
+    reward = _d(lifecycle.get("combat_reward_result") or progression.get("reward_result"))
+    failures: List[str] = []
+    if progression.get("xp_pending") is not False:
+        failures.append(f"combat lifecycle turn {turn_number}: final xp_pending should be false after reward resolution")
+    if progression.get("loot_pending") is not False:
+        failures.append(f"combat lifecycle turn {turn_number}: final loot_pending should be false after reward resolution")
+    if progression.get("resolved") is not True:
+        failures.append(f"combat lifecycle turn {turn_number}: final progression hooks should be resolved")
+    if reward.get("schema") != "combat_reward_result_v1":
+        failures.append(f"combat lifecycle turn {turn_number}: missing combat_reward_result_v1")
+        return failures
+    if reward.get("source") != "deterministic_combat_reward_v1":
+        failures.append(f"combat lifecycle turn {turn_number}: reward source should be deterministic_combat_reward_v1")
+    if _i(reward.get("xp_awarded"), 0) <= 0:
+        failures.append(f"combat lifecycle turn {turn_number}: xp_awarded should be positive")
+    loot = _d(reward.get("loot_awarded"))
+    currency = _d(loot.get("currency"))
+    if _i(currency.get("copper"), 0) <= 0:
+        failures.append(f"combat lifecycle turn {turn_number}: copper loot should be positive")
+    if reward.get("resolved") is not True:
+        failures.append(f"combat lifecycle turn {turn_number}: combat reward should be resolved")
+    return failures
+
+
 def _validate_cumulative_player_hp(*, resolved_enemy_rows: Sequence[Mapping[str, Any]]) -> List[str]:
     failures: List[str] = []
     previous_after: int | None = None
@@ -185,10 +212,7 @@ def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -
                 failures.append(f"combat lifecycle turn {turn_number}: final enemy_turn.pending should be false")
             if initiative.get("turn_phase") != "combat_complete":
                 failures.append(f"combat lifecycle turn {turn_number}: final turn_phase should be combat_complete")
-            if progression.get("xp_pending") is not True:
-                failures.append(f"combat lifecycle turn {turn_number}: defeat should mark xp_pending true")
-            if progression.get("loot_pending") is not True:
-                failures.append(f"combat lifecycle turn {turn_number}: defeat should mark loot_pending true")
+            failures.extend(_validate_reward_resolution(turn_number=turn_number, lifecycle=lifecycle, progression=progression))
         else:
             resolved = enemy_turn.get("resolved") is True
             pending = enemy_turn.get("pending") is True
