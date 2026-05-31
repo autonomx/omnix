@@ -127,6 +127,8 @@ def build_enemy_turn_resolution(lifecycle: Dict[str, Any]) -> Dict[str, Any]:
         "damage_applied": damage_contract["damage_applied"],
         "target_hp_before": damage_contract["player_hp_before"],
         "target_hp_after": damage_contract["player_hp_after"],
+        "player_hp_before": damage_contract["player_hp_before"],
+        "player_hp_after": damage_contract["player_hp_after"],
         "player_damage_pending": damage_contract["player_damage_pending"],
         "player_hp_delta": damage_contract["player_hp_delta"],
         "player_state_mutated": False,
