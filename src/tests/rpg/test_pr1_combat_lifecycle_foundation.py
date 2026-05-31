@@ -12,9 +12,9 @@ from app.rpg.session.interactive_fast_combat_result_hook import (
 )
 
 
-def _fast_combat_result(*, defeated: bool = False, tick: int = 2) -> dict:
-    hp_before = 1 if defeated else 4
-    hp_after = 0 if defeated else 3
+def _fast_combat_result(*, defeated: bool = False, tick: int = 2, hp_before_override: int | None = None) -> dict:
+    hp_before = hp_before_override if hp_before_override is not None else (1 if defeated else 4)
+    hp_after = 0 if defeated else max(0, hp_before - 1)
     return {
         "tick": tick,
         "combat_narration_payload": {
@@ -87,6 +87,12 @@ def test_pr16_derives_authoritative_player_hp_from_combat_turn_index():
     assert player_hp_before_for_enemy_turn(turn_index=4) == 8
 
 
+def test_pr161_derives_authoritative_player_hp_from_enemy_hp_before_when_turn_index_missing():
+    assert player_hp_before_for_enemy_turn(turn_index=0, enemy_hp_before=4) == 10
+    assert player_hp_before_for_enemy_turn(turn_index=0, enemy_hp_before=3) == 9
+    assert player_hp_before_for_enemy_turn(turn_index=0, enemy_hp_before=2) == 8
+
+
 def test_pr15_builds_nonlethal_enemy_damage_contract():
     contract = build_enemy_damage_contract(player_hp_before=1, damage_applied=5)
 
@@ -133,6 +139,33 @@ def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
     assert resolution["survival_state_mutated"] is False
 
 
+def test_pr161_builds_enemy_turn_resolution_from_enemy_hp_when_turn_index_missing():
+    lifecycle = {
+        "initiative": {
+            "schema": "combat_initiative_v1",
+            "next_actor_id": "enemy:road_bandit",
+            "round_index": 1,
+        },
+        "enemy_turn": {
+            "schema": "enemy_turn_skeleton_v1",
+            "pending": True,
+            "actor_id": "enemy:road_bandit",
+        },
+        "combat_log": [
+            {
+                "phase": "player_action",
+                "target_hp_before": 3,
+                "target_hp_after": 2,
+            }
+        ],
+    }
+
+    resolution = build_enemy_turn_resolution(lifecycle)
+
+    assert resolution["player_hp_before"] == 9
+    assert resolution["player_hp_after"] == 8
+
+
 def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
     lifecycle = build_combat_lifecycle_snapshot(_fast_combat_result(defeated=True, tick=5))
 
@@ -149,7 +182,7 @@ def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
 
 
 def test_pr1_enriches_result_and_nested_payloads_with_lifecycle_metadata():
-    enriched = enrich_combat_lifecycle_result(_fast_combat_result(tick=3))
+    enriched = enrich_combat_lifecycle_result(_fast_combat_result(tick=3, hp_before_override=3))
 
     assert enriched["combat_lifecycle"]["schema"] == "combat_lifecycle_v1"
     assert enriched["combat_log"][0]["damage_applied"] == 1
