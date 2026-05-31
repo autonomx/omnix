@@ -5,17 +5,18 @@ from app.rpg.session.combat_lifecycle import (
     build_enemy_damage_contract,
     build_enemy_turn_resolution,
     enrich_combat_lifecycle_result,
+    player_hp_before_for_enemy_turn,
 )
 from app.rpg.session.interactive_fast_combat_result_hook import (
     normalize_interactive_fast_combat_result,
 )
 
 
-def _fast_combat_result(*, defeated: bool = False) -> dict:
+def _fast_combat_result(*, defeated: bool = False, tick: int = 2) -> dict:
     hp_before = 1 if defeated else 4
     hp_after = 0 if defeated else 3
     return {
-        "tick": 2,
+        "tick": tick,
         "combat_narration_payload": {
             "source": "deterministic_combat_fast_summary",
             "narration": (
@@ -69,24 +70,36 @@ def test_pr1_builds_combat_lifecycle_snapshot_from_fast_combat_delta():
     assert log[1]["damage_applied"] == 1
     assert log[1]["target_hp_before"] == 10
     assert log[1]["target_hp_after"] == 9
-    assert log[1]["player_damage_pending"] is True
-    assert log[1]["player_state_mutated"] is False
+    assert log[1]["player_damage_pending"] is False
+    assert log[1]["player_state_mutated"] is True
+    assert log[1]["authoritative_player_combat_hp"] is True
+    assert log[1]["survival_state_mutated"] is False
     assert log[1]["enemy_damage_contract"]["schema"] == "enemy_damage_contract_v1"
+    assert lifecycle["player_combat_hp"]["before"] == 10
+    assert lifecycle["player_combat_hp"]["after"] == 9
     assert lifecycle["progression_hooks"]["xp_pending"] is False
     assert lifecycle["progression_hooks"]["loot_pending"] is False
+
+
+def test_pr16_derives_authoritative_player_hp_from_combat_turn_index():
+    assert player_hp_before_for_enemy_turn(turn_index=2) == 10
+    assert player_hp_before_for_enemy_turn(turn_index=3) == 9
+    assert player_hp_before_for_enemy_turn(turn_index=4) == 8
 
 
 def test_pr15_builds_nonlethal_enemy_damage_contract():
     contract = build_enemy_damage_contract(player_hp_before=1, damage_applied=5)
 
     assert contract["schema"] == "enemy_damage_contract_v1"
-    assert contract["metadata_only"] is True
-    assert contract["player_state_mutated"] is False
+    assert contract["metadata_only"] is False
+    assert contract["player_state_mutated"] is True
+    assert contract["survival_state_mutated"] is False
     assert contract["damage_applied"] == 0
     assert contract["player_hp_before"] == 1
     assert contract["player_hp_after"] == 1
     assert contract["player_hp_delta"] == 0
     assert contract["nonlethal_guard"] is True
+    assert contract["authoritative_player_combat_hp"] is True
 
 
 def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
@@ -94,7 +107,7 @@ def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
         "initiative": {
             "schema": "combat_initiative_v1",
             "next_actor_id": "enemy:road_bandit",
-            "round_index": 2,
+            "round_index": 3,
         },
         "enemy_turn": {
             "schema": "enemy_turn_skeleton_v1",
@@ -106,21 +119,22 @@ def test_pr14_builds_enemy_turn_resolution_from_pending_lifecycle():
     resolution = build_enemy_turn_resolution(lifecycle)
 
     assert resolution["schema"] == "enemy_turn_resolution_v1"
-    assert resolution["source"] == "pr1_5_enemy_damage_contract_v1"
+    assert resolution["source"] == "pr1_6_authoritative_player_combat_hp"
     assert resolution["resolved"] is True
     assert resolution["pending"] is False
     assert resolution["actor_id"] == "enemy:road_bandit"
     assert resolution["combat_log_entry"]["phase"] == "enemy_action"
     assert resolution["combat_log_entry"]["source"] == "deterministic_enemy_damage_contract_v1"
     assert resolution["combat_log_entry"]["damage_applied"] == 1
-    assert resolution["player_damage_pending"] is True
-    assert resolution["player_hp_before"] == 10
-    assert resolution["player_hp_after"] == 9
-    assert resolution["player_state_mutated"] is False
+    assert resolution["player_damage_pending"] is False
+    assert resolution["player_hp_before"] == 9
+    assert resolution["player_hp_after"] == 8
+    assert resolution["player_state_mutated"] is True
+    assert resolution["survival_state_mutated"] is False
 
 
 def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
-    lifecycle = build_combat_lifecycle_snapshot(_fast_combat_result(defeated=True))
+    lifecycle = build_combat_lifecycle_snapshot(_fast_combat_result(defeated=True, tick=5))
 
     assert lifecycle["initiative"]["next_actor_id"] == ""
     assert lifecycle["initiative"]["turn_phase"] == "combat_complete"
@@ -135,12 +149,13 @@ def test_pr1_defeat_lifecycle_marks_combat_complete_and_progression_pending():
 
 
 def test_pr1_enriches_result_and_nested_payloads_with_lifecycle_metadata():
-    enriched = enrich_combat_lifecycle_result(_fast_combat_result())
+    enriched = enrich_combat_lifecycle_result(_fast_combat_result(tick=3))
 
     assert enriched["combat_lifecycle"]["schema"] == "combat_lifecycle_v1"
     assert enriched["combat_log"][0]["damage_applied"] == 1
     assert enriched["combat_log"][1]["phase"] == "enemy_action"
-    assert enriched["combat_log"][1]["player_hp_after"] == 9
+    assert enriched["combat_log"][1]["player_hp_before"] == 9
+    assert enriched["combat_log"][1]["player_hp_after"] == 8
     assert enriched["result"]["combat_lifecycle"]["initiative"]["turn_phase"] == "player_turn_ready"
     assert enriched["combat_narration_payload"]["combat_lifecycle"]["schema"] == "combat_lifecycle_v1"
 
@@ -155,5 +170,6 @@ def test_pr1_interactive_normalizer_preserves_fast_narration_and_adds_lifecycle(
     assert normalized["combat_log"][0]["damage_applied"] == 1
     assert normalized["combat_log"][1]["phase"] == "enemy_action"
     assert normalized["combat_log"][1]["damage_applied"] == 1
-    assert normalized["combat_log"][1]["player_state_mutated"] is False
+    assert normalized["combat_log"][1]["player_state_mutated"] is True
+    assert normalized["combat_log"][1]["survival_state_mutated"] is False
     assert normalized["result"]["combat_log"][0]["target_hp_after"] == 3
