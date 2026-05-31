@@ -107,32 +107,48 @@ def _validate_enemy_damage_contract(*, turn_number: Any, row: Mapping[str, Any])
         failures.append(f"combat lifecycle turn {turn_number}: enemy action row has unexpected source")
     if contract.get("schema") != "enemy_damage_contract_v1":
         failures.append(f"combat lifecycle turn {turn_number}: enemy action row missing enemy_damage_contract_v1")
-    if row.get("player_state_mutated") is not False or contract.get("player_state_mutated") is not False:
-        failures.append(f"combat lifecycle turn {turn_number}: PR.1.5 enemy damage must not mutate player state")
-    if row.get("player_damage_pending") is not True or contract.get("player_damage_pending") is not True:
-        failures.append(f"combat lifecycle turn {turn_number}: enemy damage should be marked player_damage_pending")
+    if row.get("player_state_mutated") is not True or contract.get("player_state_mutated") is not True:
+        failures.append(f"combat lifecycle turn {turn_number}: PR.1.6 enemy damage should mutate authoritative combat HP")
+    if row.get("survival_state_mutated") is not False or contract.get("survival_state_mutated") is not False:
+        failures.append(f"combat lifecycle turn {turn_number}: PR.1.6 enemy damage must not mutate survival state")
+    if row.get("player_damage_pending") is not False or contract.get("player_damage_pending") is not False:
+        failures.append(f"combat lifecycle turn {turn_number}: enemy damage should not remain pending after authoritative combat HP apply")
+    if row.get("authoritative_player_combat_hp") is not True or contract.get("authoritative_player_combat_hp") is not True:
+        failures.append(f"combat lifecycle turn {turn_number}: enemy damage should be authoritative combat HP")
     expected_delta = _i(row.get("target_hp_after"), 0) - _i(row.get("target_hp_before"), 0)
     if row.get("player_hp_delta") != expected_delta:
         failures.append(f"combat lifecycle turn {turn_number}: enemy action player_hp_delta mismatch")
     if contract.get("player_hp_delta") != expected_delta:
         failures.append(f"combat lifecycle turn {turn_number}: enemy damage contract player_hp_delta mismatch")
     if _i(row.get("target_hp_after"), 1) < 1:
-        failures.append(f"combat lifecycle turn {turn_number}: enemy damage should remain nonlethal in PR.1.5")
+        failures.append(f"combat lifecycle turn {turn_number}: enemy damage should remain nonlethal in PR.1.6")
     failures.extend(_validate_hp_delta(turn_number=turn_number, row=row, label="player"))
     return failures
 
 
-def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Validate PR.1 lifecycle metadata on combat matrix attack/damage turns.
+def _validate_cumulative_player_hp(*, resolved_enemy_rows: Sequence[Mapping[str, Any]]) -> List[str]:
+    failures: List[str] = []
+    previous_after: int | None = None
+    for row in resolved_enemy_rows:
+        row = _d(row)
+        turn_number = row.get("turn_index")
+        before = _i(row.get("player_hp_before", row.get("target_hp_before")), 0)
+        after = _i(row.get("player_hp_after", row.get("target_hp_after")), 0)
+        if previous_after is not None and before != previous_after:
+            failures.append(
+                f"combat lifecycle turn {turn_number}: player combat HP should persist across enemy turns previous_after={previous_after!r} before={before!r}"
+            )
+        previous_after = after
+    return failures
 
-    The initial combat-start turn may not have a combat delta yet. PR.1 lifecycle
-    metadata is required once an attack/damage/defeat turn has a backed combat
-    delta.
-    """
+
+def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Validate PR.1 lifecycle metadata on combat matrix attack/damage turns."""
 
     failures: List[str] = []
     combat_turns = [_d(turn) for turn in turns]
     lifecycle_turns: List[Dict[str, Any]] = []
+    resolved_enemy_rows: List[Dict[str, Any]] = []
 
     for turn in combat_turns:
         turn_number = turn.get("turn_index") or turn.get("turn")
@@ -183,7 +199,9 @@ def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -
                 if not enemy_rows:
                     failures.append(f"combat lifecycle turn {turn_number}: resolved enemy turn missing enemy_action log row")
                 else:
-                    failures.extend(_validate_enemy_damage_contract(turn_number=turn_number, row=enemy_rows[0]))
+                    enemy_row = enemy_rows[0]
+                    resolved_enemy_rows.append(enemy_row)
+                    failures.extend(_validate_enemy_damage_contract(turn_number=turn_number, row=enemy_row))
                 if initiative.get("turn_phase") != "player_turn_ready":
                     failures.append(f"combat lifecycle turn {turn_number}: resolved enemy turn should return to player_turn_ready")
             elif not _s(initiative.get("next_actor_id")):
@@ -191,6 +209,7 @@ def validate_combat_lifecycle_matrix_turns(turns: Sequence[Mapping[str, Any]]) -
             if progression.get("xp_pending") is True or progression.get("loot_pending") is True:
                 failures.append(f"combat lifecycle turn {turn_number}: non-final progression should not be pending")
 
+    failures.extend(_validate_cumulative_player_hp(resolved_enemy_rows=resolved_enemy_rows))
     if lifecycle_turns and not any(_d(_l(lifecycle.get("combat_log"))[0] if _l(lifecycle.get("combat_log")) else {}).get("defeated") for lifecycle in lifecycle_turns):
         failures.append("combat lifecycle: expected at least one defeated/completed final row")
     return failures
