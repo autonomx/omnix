@@ -10,6 +10,15 @@ on:
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
       - ".github/workflows/rpg-pr-deterministic.yml"
+  push:
+    branches:
+      - rpg
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/**"
+      - "scripts/check_rpg_file_lines.py"
+      - "ruff.toml"
+      - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
 
 permissions:
