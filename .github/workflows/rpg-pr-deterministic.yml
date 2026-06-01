@@ -82,3 +82,6 @@ jobs:
 
       - name: RPG CI combat reward narrative contract gate
         run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_reward_narrative_contract_limits_reward_claims -q --tb=short
+
+      - name: RPG CI combat quest sync gate
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_end_state_syncs_matching_quest_objective -q --tb=short
