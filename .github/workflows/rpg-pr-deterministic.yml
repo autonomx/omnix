@@ -31,11 +31,7 @@ jobs:
     timeout-minutes: 15
     env:
       PYTHONPATH: src
-      RPG_DISABLE_LIVE_LLM: "1"
       RPG_TEST_MODE: deterministic
-      OMNIX_DISABLE_LIVE_LLM: "1"
-      OMNIX_PROVIDER: deterministic
-      LLM_PROVIDER: deterministic
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -61,7 +57,7 @@ jobs:
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
 
       - name: RPG CI registry gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_progression_registry_is_importable_and_returns_inventory -q --tb=short
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_progression_registry_exposes_tavern_graphs -q --tb=short
 
       - name: RPG CI progression action gate
         run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_progression_actions_are_available_for_tavern_seed -q --tb=short
