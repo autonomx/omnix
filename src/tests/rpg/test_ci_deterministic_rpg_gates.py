@@ -1,12 +1,11 @@
-def test_ci_progression_registry_is_importable_and_returns_inventory():
-    from app.rpg.progression.graph_registry import validate_progression_graph_registry
+def test_ci_progression_registry_exposes_tavern_graphs():
+    from app.rpg.progression.graph_registry import get_progression_graphs_for_seed
 
-    result = validate_progression_graph_registry()
+    graphs = get_progression_graphs_for_seed("tavern_story_seed")
 
-    assert isinstance(result, dict)
-    assert isinstance(result.get("errors"), list)
-    assert result.get("graph_count", 0) >= 1
-    assert "tavern_story_seed" in result.get("seeds", [])
+    assert graphs
+    assert graphs[0].graph_id
+    assert graphs[0].nodes
 
 
 def test_ci_progression_actions_are_available_for_tavern_seed():
