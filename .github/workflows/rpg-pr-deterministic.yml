@@ -67,3 +67,6 @@ jobs:
 
       - name: RPG CI combat reward gate
         run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_defeat_loot_awards_player_xp_once -q --tb=short
+
+      - name: RPG CI combat attack reward surface gate
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_attack_result_exposes_nested_reward_xp -q --tb=short
