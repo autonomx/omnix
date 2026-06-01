@@ -105,7 +105,7 @@ def test_ci_combat_reward_narrative_contract_limits_reward_claims():
     from app.rpg.session import runtime
     from app.rpg.session.runtime_part24 import _apply_combat_reward_narrative_contract
 
-    assert runtime._apply_turn_authoritative.__module__.endswith(("runtime_part24", "runtime_part25"))
+    assert runtime._apply_turn_authoritative.__module__.endswith(("runtime_part24", "runtime_part25", "runtime_part26"))
     payload = {"result": {"combat_result": {"xp_result": {"awarded": True, "xp_awarded": 25, "source": "deterministic_combat_reward_runtime"}, "loot_result": {"items": [{"item_id": "item:rusty_dagger", "quantity": 1}], "currency": {"silver": 2}}}}, "resolved_result": {}, "narration_context": {"forbidden_narration": ["existing guardrail"]}}
     updated = _apply_combat_reward_narrative_contract(payload)
     contract = updated["combat_reward_narrative_contract"]
@@ -124,7 +124,7 @@ def test_ci_combat_end_state_syncs_matching_quest_objective():
     from app.rpg.session import runtime
     from app.rpg.session.runtime_part25 import _sync_combat_end_state_to_quests
 
-    assert runtime._apply_turn_authoritative.__module__.endswith("runtime_part25")
+    assert runtime._apply_turn_authoritative.__module__.endswith(("runtime_part25", "runtime_part26"))
     payload = {"tick": 8, "simulation_state": {"quest_state": {"active_quests": [{"quest_id": "quest:clear_the_road", "status": "active", "objectives": [{"objective_id": "objective:defeat_bandit", "type": "defeat", "target_id": "enemy:bandit_1", "status": "active", "current": 0, "required": 1}]}]}}, "result": {"combat_result": {"combat_ended": True, "ended_reason": "enemy_side_defeated", "target_id": "enemy:bandit_1", "tick": 8}}, "resolved_result": {}, "narration_context": {}}
     updated = _sync_combat_end_state_to_quests(payload)
     quest = updated["simulation_state"]["quest_state"]["active_quests"][0]
@@ -155,3 +155,22 @@ def test_ci_campaign_report_displays_combat_quest_sync():
     assert "objective:defeat_bandit" in html
     assert "enemy:bandit_1" in html
     assert "combat_end_state_enemy_side_defeated" in html
+
+
+def test_ci_combat_quest_narrative_contract_limits_quest_claims():
+    from app.rpg.session import runtime
+    from app.rpg.session.runtime_part26 import _apply_combat_quest_narrative_contract
+
+    assert runtime._apply_turn_authoritative.__module__.endswith("runtime_part26")
+    payload = {"result": {"combat_quest_sync_result": {"source": "deterministic_combat_quest_sync", "reason": "combat_end_state_enemy_side_defeated", "target_ids": ["enemy:bandit_1"], "updated_objectives": [{"quest_id": "quest:clear_the_road", "objective_id": "objective:defeat_bandit", "target_ids": ["enemy:bandit_1"], "status": "completed"}], "completed_quests": ["quest:clear_the_road"]}}, "resolved_result": {}, "narration_context": {"forbidden_narration": ["existing quest guardrail"]}}
+    updated = _apply_combat_quest_narrative_contract(payload)
+    contract = updated["combat_quest_narrative_contract"]
+    assert contract["source"] == "deterministic_combat_quest_sync_contract"
+    assert contract["quest_progress_lines"] == ["Quest progress: quest:clear_the_road / objective:defeat_bandit -> completed", "Quest completed: quest:clear_the_road"]
+    assert updated["narration_context"]["quest_progress_lines"] == contract["quest_progress_lines"]
+    assert updated["narration_context"]["allowed_quest_claims"] == contract["allowed_quest_claims"]
+    assert "existing quest guardrail" in updated["narration_context"]["forbidden_narration"]
+    assert any("Do not invent quest objectives" in claim for claim in updated["narration_context"]["forbidden_narration"])
+    assert any("Do not claim unmatched objectives" in claim for claim in updated["narration_context"]["forbidden_narration"])
+    assert updated["result"]["combat_quest_narrative_contract"] == contract
+    assert updated["resolved_result"]["combat_quest_narrative_contract"] == contract
