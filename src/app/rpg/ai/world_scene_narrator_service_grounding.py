@@ -5,6 +5,16 @@ from __future__ import annotations
 from app.rpg.ai.world_scene_narrator_common import *
 from app.rpg.ai.world_scene_narrator_dialogue_grounding import *
 
+
+def _strip_basic_markdown(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    for marker in ("**", "__", "`"):
+        text = text.replace(marker, "")
+    return " ".join(text.split()).strip()
+
+
 def _travel_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
     narration_context = _safe_dict(narration_context)
     resolved = _safe_dict(narration_context.get("resolved_result"))
@@ -543,6 +553,25 @@ def _build_authoritative_action_line(narration_context: Dict[str, Any]) -> str:
     if not action:
         return ""
     return f"Action: {action}"
+
+
+def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
+    return _build_authoritative_action_line(narration_context)
+
+
+def _build_rewards_block(narration_context: Dict[str, Any]) -> str:
+    xp_result = _safe_dict(narration_context.get("xp_result"))
+    skill_xp_result = _safe_dict(narration_context.get("skill_xp_result"))
+    rewards = []
+    xp_gained = int(xp_result.get("xp_gained", 0) or 0)
+    if xp_gained > 0:
+        rewards.append(f"XP +{xp_gained}")
+    awards = _safe_dict(skill_xp_result.get("awards"))
+    for skill, amount in sorted(awards.items()):
+        amount_int = int(amount or 0)
+        if amount_int > 0:
+            rewards.append(f"{_titleize_action(skill)} XP +{amount_int}")
+    return ", ".join(rewards)
 
 
 def _titleize_action(action_type: str) -> str:

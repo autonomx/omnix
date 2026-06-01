@@ -12,6 +12,10 @@ from app.rpg.interactions.item_model import (
 from app.rpg.interactions.loot_catalog import get_loot_table
 
 
+COMBAT_DEFEAT_XP_DEFAULT = 25
+COMBAT_DEFEAT_XP_TO_NEXT_DEFAULT = 100
+
+
 def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
@@ -72,6 +76,78 @@ def _player_inventory(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return inv
 
 
+def _apply_combat_defeat_xp_reward(
+    simulation_state: Dict[str, Any],
+    *,
+    source_id: str,
+    tick: int = 0,
+) -> Dict[str, Any]:
+    source_id = _safe_str(source_id).strip()
+    if not source_id.startswith("enemy:"):
+        return {
+            "awarded": False,
+            "reason": "not_combat_enemy_source",
+            "source_id": source_id,
+            "source": "deterministic_combat_reward_runtime",
+        }
+
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    claim_key = f"combat_defeat:{source_id}:{int(tick or 0)}"
+    claims = _safe_dict(player_state.get("combat_reward_claims"))
+    if claims.get(claim_key):
+        return {
+            "awarded": False,
+            "reason": "combat_reward_already_claimed",
+            "claim_key": claim_key,
+            "source_id": source_id,
+            "source": "deterministic_combat_reward_runtime",
+        }
+
+    level_before = max(1, _safe_int(player_state.get("level"), 1))
+    xp_before = max(0, _safe_int(player_state.get("xp"), 0))
+    xp_to_next = max(1, _safe_int(player_state.get("xp_to_next_level"), COMBAT_DEFEAT_XP_TO_NEXT_DEFAULT))
+    xp_awarded = max(0, _safe_int(player_state.get("combat_defeat_xp_reward"), COMBAT_DEFEAT_XP_DEFAULT))
+    xp_after = xp_before + xp_awarded
+    level_after = level_before
+    level_ups: List[Dict[str, Any]] = []
+
+    while xp_after >= xp_to_next:
+        xp_after -= xp_to_next
+        level_after += 1
+        level_ups.append({
+            "level": level_after,
+            "reason": "combat_defeat_xp_threshold",
+        })
+        xp_to_next = COMBAT_DEFEAT_XP_TO_NEXT_DEFAULT + ((level_after - 1) * 50)
+
+    claims[claim_key] = {
+        "source_id": source_id,
+        "tick": int(tick or 0),
+        "xp_awarded": xp_awarded,
+    }
+    player_state["combat_reward_claims"] = claims
+    player_state["level"] = level_after
+    player_state["xp"] = xp_after
+    player_state["xp_to_next_level"] = xp_to_next
+    player_state.setdefault("progression_source", "deterministic_combat_reward_runtime")
+    simulation_state["player_state"] = player_state
+
+    return {
+        "awarded": xp_awarded > 0,
+        "reason": "combat_defeat_xp_awarded",
+        "claim_key": claim_key,
+        "source_id": source_id,
+        "xp_awarded": xp_awarded,
+        "xp_before": xp_before,
+        "xp_after": xp_after,
+        "level_before": level_before,
+        "level_after": level_after,
+        "xp_to_next_level": xp_to_next,
+        "level_ups": level_ups,
+        "source": "deterministic_combat_reward_runtime",
+    }
+
+
 def generate_loot_from_table(
     simulation_state: Dict[str, Any],
     *,
@@ -97,6 +173,7 @@ def generate_loot_from_table(
 
     created = []
     add_result: Dict[str, Any] = {}
+    xp_result: Dict[str, Any] = {}
 
     inventory = _player_inventory(simulation_state) if add_to_inventory else {}
 
@@ -125,10 +202,15 @@ def generate_loot_from_table(
     if add_to_inventory:
         inventory = recalculate_inventory_derived_fields(inventory)
         simulation_state["player_state"]["inventory"] = inventory
+        xp_result = _apply_combat_defeat_xp_reward(
+            simulation_state,
+            source_id=source_id,
+            tick=tick,
+        )
 
     return {
         "resolved": True,
-        "changed_state": bool(add_to_inventory and created),
+        "changed_state": bool(add_to_inventory and (created or xp_result.get("awarded"))),
         "reason": "loot_generated",
         "loot_table_id": loot_table_id,
         "source_id": source_id,
@@ -136,6 +218,7 @@ def generate_loot_from_table(
         "tick": int(tick or 0),
         "items_created": created,
         "added_to_inventory": bool(add_to_inventory),
+        "xp_result": deepcopy(xp_result),
         "carry_weight": inventory.get("carry_weight") if inventory else 0,
         "encumbrance_state": inventory.get("encumbrance_state") if inventory else "",
         "source": "deterministic_loot_runtime",
