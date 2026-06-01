@@ -555,6 +555,10 @@ def _build_authoritative_action_line(narration_context: Dict[str, Any]) -> str:
     return f"Action: {action}"
 
 
+def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
+    return _build_authoritative_action_line(narration_context)
+
+
 def _titleize_action(action_type: str) -> str:
     value = _safe_str(action_type).strip().replace("_", " ")
     return value[:1].upper() + value[1:] if value else "Action"
