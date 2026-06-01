@@ -67,3 +67,58 @@ def test_ci_combat_defeat_loot_awards_player_xp_once():
     assert second["xp_result"]["reason"] == "combat_reward_already_claimed"
     assert state["player_state"]["level"] == 2
     assert state["player_state"]["xp"] == 15
+
+
+def test_ci_combat_attack_result_exposes_nested_reward_xp():
+    from app.rpg.combat.runtime import resolve_combat_attack, start_combat_encounter
+
+    state = {
+        "player_state": {
+            "level": 1,
+            "xp": 90,
+            "xp_to_next_level": 100,
+            "inventory": {"items": [], "equipment": {}},
+        }
+    }
+    start_combat_encounter(
+        state,
+        encounter_id="ci:reward_surface",
+        enemies=[
+            {
+                "actor_id": "enemy:bandit_1",
+                "side": "enemy",
+                "name": "Bandit",
+                "hp": 1,
+                "max_hp": 1,
+                "defense": 1,
+                "armor": 0,
+                "loot_table_id": "loot:bandit_common",
+                "status": "active",
+            }
+        ],
+        tick=1,
+    )
+    state["combat_state"]["turn_index"] = 0
+    state["combat_state"]["current_actor_id"] = "player"
+    state["combat_state"]["initiative_order"] = [
+        {"actor_id": "player", "initiative": 20},
+        {"actor_id": "enemy:bandit_1", "initiative": 1},
+    ]
+
+    result = resolve_combat_attack(
+        state,
+        actor_id="player",
+        target_id="enemy:bandit_1",
+        session_id="ci-combat-reward-surface",
+        tick=3,
+        combat_modifiers={"accuracy_bonus": 99, "damage_bonus": 99},
+    )
+
+    xp_result = result["loot_result"]["xp_result"]
+    assert result["resolved"] is True
+    assert result["defeated"] is True
+    assert result["combat_ended"] is True
+    assert xp_result["awarded"] is True
+    assert xp_result["xp_awarded"] == 25
+    assert state["player_state"]["level"] == 2
+    assert state["player_state"]["xp"] == 15
