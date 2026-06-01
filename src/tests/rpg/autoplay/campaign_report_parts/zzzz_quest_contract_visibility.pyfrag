@@ -1,0 +1,93 @@
+
+# PR.1.20: Quest narrative contract report visibility extension.
+from html import escape as _quest_contract_report_escape
+
+_base_render_campaign_report_html_for_quest_contract_visibility = render_campaign_report_html
+
+
+def _quest_contract_report_safe_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _quest_contract_report_safe_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _iter_quest_contract_report_turns(report_data):
+    report_data = _quest_contract_report_safe_dict(report_data)
+    for candidate in (
+        report_data.get("turns"),
+        report_data.get("transcript"),
+        report_data.get("final_transcript"),
+        report_data.get("turn_records"),
+        _quest_contract_report_safe_dict(report_data.get("summary")).get("turns"),
+    ):
+        for turn in _quest_contract_report_safe_list(candidate):
+            if isinstance(turn, dict):
+                yield turn
+
+
+def _quest_contract_from_turn(turn):
+    result = _quest_contract_report_safe_dict(turn.get("result"))
+    resolved_result = _quest_contract_report_safe_dict(turn.get("resolved_result"))
+    narration_context = _quest_contract_report_safe_dict(turn.get("narration_context"))
+    return (
+        _quest_contract_report_safe_dict(turn.get("combat_quest_narrative_contract"))
+        or _quest_contract_report_safe_dict(result.get("combat_quest_narrative_contract"))
+        or _quest_contract_report_safe_dict(resolved_result.get("combat_quest_narrative_contract"))
+        or _quest_contract_report_safe_dict(narration_context.get("combat_quest_narrative_contract"))
+    )
+
+
+def _collect_quest_contract_report_rows(report_data):
+    rows = []
+    guardrail_count = 0
+    for index, turn in enumerate(_iter_quest_contract_report_turns(report_data), start=1):
+        contract = _quest_contract_from_turn(turn)
+        if not contract:
+            continue
+        guardrail_count += len(_quest_contract_report_safe_list(contract.get("forbidden_quest_claims")))
+        for line in _quest_contract_report_safe_list(contract.get("allowed_quest_claims") or contract.get("quest_progress_lines")):
+            rows.append({"turn": turn.get("turn") or turn.get("turn_index") or turn.get("tick") or index, "claim": str(line), "source": contract.get("source") or ""})
+    return rows, guardrail_count
+
+
+def _render_quest_contract_report_section(report_data):
+    rows, guardrail_count = _collect_quest_contract_report_rows(report_data)
+    if not rows:
+        return (
+            '<section id="quest-narrative-contract" class="card">'
+            '<h2>Quest Narrative Contract</h2>'
+            '<p>No deterministic quest narrative contracts were recorded in this run.</p>'
+            '</section>'
+        )
+    row_html = []
+    for row in rows:
+        row_html.append(
+            "<tr>"
+            f"<td>{_quest_contract_report_escape(str(row['turn']))}</td>"
+            f"<td>{_quest_contract_report_escape(str(row['claim']))}</td>"
+            f"<td>{_quest_contract_report_escape(str(row['source']))}</td>"
+            "</tr>"
+        )
+    return (
+        '<section id="quest-narrative-contract" class="card">'
+        '<h2>Quest Narrative Contract</h2>'
+        f'<p>Allowed quest claims: <strong>{len(rows)}</strong>; quest guardrails: <strong>{guardrail_count}</strong></p>'
+        '<table><thead><tr><th>Turn</th><th>Allowed Quest Claim</th><th>Source</th></tr></thead><tbody>'
+        + "".join(row_html)
+        + '</tbody></table>'
+        '</section>'
+    )
+
+
+def _insert_quest_contract_report_section(html, section):
+    body_close = html.lower().rfind("</body>")
+    if body_close >= 0:
+        return html[:body_close] + section + html[body_close:]
+    return html + section
+
+
+def render_campaign_report_html(report_data):
+    html = _base_render_campaign_report_html_for_quest_contract_visibility(report_data)
+    return _insert_quest_contract_report_section(html, _render_quest_contract_report_section(report_data))
