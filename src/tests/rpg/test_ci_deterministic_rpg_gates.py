@@ -270,3 +270,43 @@ def test_ci_campaign_report_displays_combat_xp_rewards():
     assert "<strong>25</strong>" in html
     assert "enemy:bandit_1" in html
     assert "combat_defeat_resolved" in html
+
+
+def test_ci_combat_reward_narrative_contract_limits_reward_claims():
+    from app.rpg.session import runtime
+    from app.rpg.session.runtime_part24 import _apply_combat_reward_narrative_contract
+
+    assert runtime._apply_turn_authoritative.__module__.endswith("runtime_part24")
+
+    payload = {
+        "result": {
+            "combat_result": {
+                "xp_result": {
+                    "awarded": True,
+                    "xp_awarded": 25,
+                    "source": "deterministic_combat_reward_runtime",
+                },
+                "loot_result": {
+                    "items": [{"item_id": "item:rusty_dagger", "quantity": 1}],
+                    "currency": {"silver": 2},
+                },
+            }
+        },
+        "resolved_result": {},
+        "narration_context": {"forbidden_narration": ["existing guardrail"]},
+    }
+
+    updated = _apply_combat_reward_narrative_contract(payload)
+    contract = updated["combat_reward_narrative_contract"]
+    narration_context = updated["narration_context"]
+
+    assert contract["source"] == "deterministic_combat_reward_contract"
+    assert contract["reward_lines"] == ["XP +25", "Loot: 1 x item:rusty_dagger", "Loot: 2 silver"]
+    assert narration_context["reward_lines"] == contract["reward_lines"]
+    assert narration_context["allowed_reward_claims"] == contract["allowed_reward_claims"]
+    assert "XP +25" in narration_context["allowed_reward_claims"]
+    assert "existing guardrail" in narration_context["forbidden_narration"]
+    assert any("Do not invent XP" in claim for claim in narration_context["forbidden_narration"])
+    assert any("Do not change awarded XP" in claim for claim in narration_context["forbidden_narration"])
+    assert updated["result"]["combat_reward_narrative_contract"] == contract
+    assert updated["resolved_result"]["combat_reward_narrative_contract"] == contract

@@ -79,3 +79,6 @@ jobs:
 
       - name: RPG CI combat XP report visibility gate
         run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_displays_combat_xp_rewards -q --tb=short
+
+      - name: RPG CI combat reward narrative contract gate
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_reward_narrative_contract_limits_reward_claims -q --tb=short
