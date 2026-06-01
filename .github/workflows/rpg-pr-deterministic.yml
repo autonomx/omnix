@@ -61,7 +61,7 @@ jobs:
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
 
       - name: RPG scenario progression deterministic tests
-        run: python -m pytest src/tests/rpg/test_scenario_progression_runtime.py -q --tb=short
+        run: python -m pytest src/tests/rpg/test_scenario_progression_runtime.py -vv --tb=long -x
 
       - name: RPG campaign report deterministic tests
         run: python -m pytest src/tests/rpg/autoplay/test_campaign_report.py -q --tb=short
