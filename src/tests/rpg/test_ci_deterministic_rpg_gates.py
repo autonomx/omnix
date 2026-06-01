@@ -174,3 +174,15 @@ def test_ci_combat_quest_narrative_contract_limits_quest_claims():
     assert any("Do not claim unmatched objectives" in claim for claim in updated["narration_context"]["forbidden_narration"])
     assert updated["result"]["combat_quest_narrative_contract"] == contract
     assert updated["resolved_result"]["combat_quest_narrative_contract"] == contract
+
+
+def test_ci_campaign_report_displays_quest_narrative_contract():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html({"scenario_seed": "ci_quest_contract_report", "turns": [{"turn": 9, "combat_quest_narrative_contract": {"source": "deterministic_combat_quest_sync_contract", "allowed_quest_claims": ["Quest progress: quest:clear_the_road / objective:defeat_bandit -> completed", "Quest completed: quest:clear_the_road"], "forbidden_quest_claims": ["Do not invent quest objectives", "Do not claim unmatched objectives"]}}]})
+    assert "Quest Narrative Contract" in html
+    assert "Allowed quest claims" in html
+    assert "quest guardrails" in html
+    assert "Quest progress: quest:clear_the_road / objective:defeat_bandit -&gt; completed" in html
+    assert "Quest completed: quest:clear_the_road" in html
+    assert "deterministic_combat_quest_sync_contract" in html
