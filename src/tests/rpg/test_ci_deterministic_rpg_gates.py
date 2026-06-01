@@ -124,3 +124,32 @@ def test_ci_combat_attack_result_exposes_nested_reward_xp():
     assert result["xp_result"]["xp_awarded"] == 25
     assert state["player_state"]["level"] == 2
     assert state["player_state"]["xp"] == 15
+
+
+def test_ci_combat_xp_bridge_surfaces_reward_to_turn_payloads():
+    from app.rpg.session.runtime_part22 import _surface_combat_xp_result_in_turn_payload
+
+    payload = {
+        "result": {
+            "combat_result": {
+                "xp_result": {
+                    "awarded": True,
+                    "xp_awarded": 25,
+                    "source": "deterministic_combat_reward_runtime",
+                }
+            }
+        },
+        "resolved_result": {},
+        "narration_context": {"xp_result": {}, "combat_result": {}},
+        "runtime_state": {"last_turn_result": {"xp_result": {}}},
+        "session": {"runtime_state": {"last_turn_result": {"xp_result": {}}}},
+    }
+
+    updated = _surface_combat_xp_result_in_turn_payload(payload)
+
+    assert updated["xp_result"]["xp_awarded"] == 25
+    assert updated["result"]["xp_result"]["xp_awarded"] == 25
+    assert updated["resolved_result"]["xp_result"]["xp_awarded"] == 25
+    assert updated["narration_context"]["xp_result"]["xp_awarded"] == 25
+    assert updated["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
+    assert updated["session"]["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
