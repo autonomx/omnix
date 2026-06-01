@@ -5,6 +5,16 @@ from __future__ import annotations
 from app.rpg.ai.world_scene_narrator_common import *
 from app.rpg.ai.world_scene_narrator_dialogue_grounding import *
 
+
+def _strip_basic_markdown(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if not text:
+        return ""
+    for marker in ("**", "__", "`"):
+        text = text.replace(marker, "")
+    return " ".join(text.split()).strip()
+
+
 def _travel_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
     narration_context = _safe_dict(narration_context)
     resolved = _safe_dict(narration_context.get("resolved_result"))
