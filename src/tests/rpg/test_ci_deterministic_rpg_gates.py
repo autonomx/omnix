@@ -142,3 +142,16 @@ def test_ci_combat_end_state_syncs_matching_quest_objective():
     assert updated["resolved_result"]["combat_quest_sync_result"] == sync_result
     assert updated["narration_context"]["combat_quest_sync_result"] == sync_result
     assert "Quest objective completed: objective:defeat_bandit" in updated["narration_context"]["quest_progress_lines"]
+
+
+def test_ci_campaign_report_displays_combat_quest_sync():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html({"scenario_seed": "ci_combat_quest_sync_report", "turns": [{"turn": 8, "combat_quest_sync_result": {"source": "deterministic_combat_quest_sync", "reason": "combat_end_state_enemy_side_defeated", "target_ids": ["enemy:bandit_1"], "updated_objectives": [{"quest_id": "quest:clear_the_road", "objective_id": "objective:defeat_bandit", "target_ids": ["enemy:bandit_1"], "status": "completed"}], "completed_quests": ["quest:clear_the_road"]}}]})
+    assert "Combat Quest Sync" in html
+    assert "Combat-synced objectives" in html
+    assert "completed quests" in html
+    assert "quest:clear_the_road" in html
+    assert "objective:defeat_bandit" in html
+    assert "enemy:bandit_1" in html
+    assert "combat_end_state_enemy_side_defeated" in html

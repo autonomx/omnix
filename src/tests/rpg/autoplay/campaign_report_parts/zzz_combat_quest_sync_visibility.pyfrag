@@ -1,0 +1,110 @@
+
+# PR.1.18: Combat quest sync report visibility extension.
+from html import escape as _combat_quest_report_escape
+
+_base_render_campaign_report_html_for_combat_quest_sync_visibility = render_campaign_report_html
+
+
+def _combat_quest_report_safe_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _combat_quest_report_safe_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _iter_combat_quest_report_turns(report_data):
+    report_data = _combat_quest_report_safe_dict(report_data)
+    for candidate in (
+        report_data.get("turns"),
+        report_data.get("transcript"),
+        report_data.get("final_transcript"),
+        report_data.get("turn_records"),
+        _combat_quest_report_safe_dict(report_data.get("summary")).get("turns"),
+    ):
+        for turn in _combat_quest_report_safe_list(candidate):
+            if isinstance(turn, dict):
+                yield turn
+
+
+def _combat_quest_report_sync_result(turn):
+    result = _combat_quest_report_safe_dict(turn.get("result"))
+    resolved_result = _combat_quest_report_safe_dict(turn.get("resolved_result"))
+    narration_context = _combat_quest_report_safe_dict(turn.get("narration_context"))
+    return (
+        _combat_quest_report_safe_dict(turn.get("combat_quest_sync_result"))
+        or _combat_quest_report_safe_dict(result.get("combat_quest_sync_result"))
+        or _combat_quest_report_safe_dict(resolved_result.get("combat_quest_sync_result"))
+        or _combat_quest_report_safe_dict(narration_context.get("combat_quest_sync_result"))
+    )
+
+
+def _collect_combat_quest_report_rows(report_data):
+    rows = []
+    completed_quests = set()
+    for index, turn in enumerate(_iter_combat_quest_report_turns(report_data), start=1):
+        sync_result = _combat_quest_report_sync_result(turn)
+        if not sync_result:
+            continue
+        for quest_id in _combat_quest_report_safe_list(sync_result.get("completed_quests")):
+            if quest_id:
+                completed_quests.add(str(quest_id))
+        for objective in _combat_quest_report_safe_list(sync_result.get("updated_objectives")):
+            objective = _combat_quest_report_safe_dict(objective)
+            rows.append(
+                {
+                    "turn": turn.get("turn") or turn.get("turn_index") or turn.get("tick") or index,
+                    "quest_id": objective.get("quest_id") or "",
+                    "objective_id": objective.get("objective_id") or "combat objective",
+                    "targets": ", ".join(str(value) for value in _combat_quest_report_safe_list(objective.get("target_ids"))),
+                    "status": objective.get("status") or "",
+                    "reason": sync_result.get("reason") or "",
+                }
+            )
+    return rows, sorted(completed_quests)
+
+
+def _render_combat_quest_sync_report_section(report_data):
+    rows, completed_quests = _collect_combat_quest_report_rows(report_data)
+    if not rows:
+        return (
+            '<section id="combat-quest-sync" class="card">'
+            '<h2>Combat Quest Sync</h2>'
+            '<p>No deterministic combat quest objective updates were recorded in this run.</p>'
+            '</section>'
+        )
+    row_html = []
+    for row in rows:
+        row_html.append(
+            "<tr>"
+            f"<td>{_combat_quest_report_escape(str(row['turn']))}</td>"
+            f"<td>{_combat_quest_report_escape(str(row['quest_id']))}</td>"
+            f"<td>{_combat_quest_report_escape(str(row['objective_id']))}</td>"
+            f"<td>{_combat_quest_report_escape(str(row['targets']))}</td>"
+            f"<td>{_combat_quest_report_escape(str(row['status']))}</td>"
+            f"<td>{_combat_quest_report_escape(str(row['reason']))}</td>"
+            "</tr>"
+        )
+    return (
+        '<section id="combat-quest-sync" class="card">'
+        '<h2>Combat Quest Sync</h2>'
+        f'<p>Combat-synced objectives: <strong>{len(rows)}</strong>; completed quests: <strong>{len(completed_quests)}</strong></p>'
+        '<table><thead><tr>'
+        '<th>Turn</th><th>Quest</th><th>Objective</th><th>Targets</th><th>Status</th><th>Reason</th>'
+        '</tr></thead><tbody>'
+        + "".join(row_html)
+        + '</tbody></table>'
+        '</section>'
+    )
+
+
+def _insert_combat_quest_sync_report_section(html, section):
+    body_close = html.lower().rfind("</body>")
+    if body_close >= 0:
+        return html[:body_close] + section + html[body_close:]
+    return html + section
+
+
+def render_campaign_report_html(report_data):
+    html = _base_render_campaign_report_html_for_combat_quest_sync_visibility(report_data)
+    return _insert_combat_quest_sync_report_section(html, _render_combat_quest_sync_report_section(report_data))
