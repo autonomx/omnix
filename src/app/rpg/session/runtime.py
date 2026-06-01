@@ -31,6 +31,7 @@ _PART_MODULE_NAMES = [
     'runtime_part19',
     'runtime_part20',
     'runtime_part21',
+    'runtime_part22',
 ]
 _PART_MODULES = [
     _import_module(f"{__package__}.{name}") for name in _PART_MODULE_NAMES
