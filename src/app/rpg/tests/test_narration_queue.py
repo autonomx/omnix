@@ -428,7 +428,9 @@ def test_compatibility_wrapper_returns_immediate_result():
         assert result["ok"] is True
         assert result["result"]["narration"] == "Fallback text"
         assert result["result"]["narration_status"] == "queued"
-        assert result["result"]["resolved_result"] == {"success": True}
+        resolved = result["result"]["resolved_result"]
+        assert resolved["success"] is True
+        assert "survival_tick_result" in resolved
         assert result["result"]["xp_result"] == {"xp_gained": 10}
 
         # Should not have waited for LLM narration
