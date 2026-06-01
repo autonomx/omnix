@@ -153,3 +153,85 @@ def test_ci_combat_xp_bridge_surfaces_reward_to_turn_payloads():
     assert updated["narration_context"]["xp_result"]["xp_awarded"] == 25
     assert updated["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
     assert updated["session"]["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
+
+
+def test_ci_session_attack_defeat_bridge_awards_and_surfaces_xp_once():
+    from app.rpg.session import runtime
+    from app.rpg.session.runtime_part22 import _surface_combat_xp_result_in_turn_payload
+    from app.rpg.session.runtime_part23 import _attach_session_attack_defeat_reward
+
+    assert runtime._apply_attack_combat_action.__module__.endswith("runtime_part23")
+
+    state = {
+        "player_state": {
+            "level": 1,
+            "xp": 90,
+            "xp_to_next_level": 100,
+            "inventory": {"items": [], "equipment": {}},
+        },
+    }
+    runtime_state = {"session_id": "ci-session-attack-reward"}
+    combat_state = {
+        "active": False,
+        "ended_reason": "enemy_side_defeated",
+        "participants": {
+            "enemy:bandit_1": {
+                "actor_id": "enemy:bandit_1",
+                "side": "enemy",
+                "name": "Bandit",
+                "hp": 0,
+                "max_hp": 1,
+                "defense": 1,
+                "armor": 0,
+                "loot_table_id": "loot:bandit_common",
+                "status": "defeated",
+            }
+        },
+    }
+    combat_result = {"defeated": True, "target_id": "enemy:bandit_1"}
+
+    rewarded = _attach_session_attack_defeat_reward(
+        after_action_state=state,
+        runtime_state=runtime_state,
+        combat_state=combat_state,
+        combat_result=combat_result,
+        target_id="enemy:bandit_1",
+        turn_id="turn:ci-session-attack-reward",
+        tick=5,
+    )
+
+    xp_result = rewarded["xp_result"]
+    assert rewarded["loot_result"]["xp_result"]["awarded"] is True
+    assert xp_result["awarded"] is True
+    assert xp_result["xp_awarded"] == 25
+    assert state["player_state"]["level"] == 2
+    assert state["player_state"]["xp"] == 15
+    assert state["player_state"]["xp_to_next_level"] == 150
+
+    repeated = _attach_session_attack_defeat_reward(
+        after_action_state=state,
+        runtime_state=runtime_state,
+        combat_state=combat_state,
+        combat_result={"defeated": True, "target_id": "enemy:bandit_1"},
+        target_id="enemy:bandit_1",
+        turn_id="turn:ci-session-attack-reward",
+        tick=5,
+    )
+    assert repeated["xp_result"]["awarded"] is False
+    assert repeated["xp_result"]["reason"] == "combat_reward_already_claimed"
+    assert state["player_state"]["level"] == 2
+    assert state["player_state"]["xp"] == 15
+
+    payload = {
+        "result": {"combat_result": rewarded},
+        "resolved_result": {},
+        "narration_context": {"xp_result": {}, "combat_result": {}},
+        "runtime_state": {"last_turn_result": {"xp_result": {}}},
+        "session": {"runtime_state": {"last_turn_result": {"xp_result": {}}}},
+    }
+    updated = _surface_combat_xp_result_in_turn_payload(payload)
+    assert updated["result"]["xp_result"]["xp_awarded"] == 25
+    assert updated["resolved_result"]["xp_result"]["xp_awarded"] == 25
+    assert updated["narration_context"]["xp_result"]["xp_awarded"] == 25
+    assert updated["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
+    assert updated["session"]["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
