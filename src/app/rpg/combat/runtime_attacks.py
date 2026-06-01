@@ -92,6 +92,7 @@ def resolve_combat_attack(
         tick,
         resolution["defeated"],
     )
+    xp_result = safe_dict(loot_result.get("xp_result"))
 
     return {
         "resolved": True,
@@ -104,6 +105,7 @@ def resolve_combat_attack(
         "next_actor_id": next_actor_id,
         "ammo_result": deepcopy(safe_dict(ammo_result.get("result"))),
         "loot_result": deepcopy(loot_result),
+        "xp_result": deepcopy(xp_result),
         "combat_log_entry": deepcopy(combat_log_entry),
         "combat_state": deepcopy(combat_state),
         "tick": int(tick or 0),

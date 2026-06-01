@@ -120,5 +120,7 @@ def test_ci_combat_attack_result_exposes_nested_reward_xp():
     assert result["combat_ended"] is True
     assert xp_result["awarded"] is True
     assert xp_result["xp_awarded"] == 25
+    assert result["xp_result"]["awarded"] is True
+    assert result["xp_result"]["xp_awarded"] == 25
     assert state["player_state"]["level"] == 2
     assert state["player_state"]["xp"] == 15
