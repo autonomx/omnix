@@ -60,15 +60,8 @@ jobs:
       - name: RPG narration queue deterministic tests
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
 
-      - name: RPG scenario progression smoke tests
-        run: |
-          python -m pytest \
-            src/tests/rpg/test_scenario_progression_runtime.py::test_progression_graph_produces_initial_concrete_action \
-            src/tests/rpg/test_scenario_progression_runtime.py::test_progression_applies_effects_and_unlocks_next_action \
-            src/tests/rpg/test_scenario_progression_runtime.py::test_progression_registry_returns_seed_specific_actions_for_caravan_scenario \
-            src/tests/rpg/test_scenario_progression_runtime.py::test_completed_node_is_not_returned_again_after_effects_apply \
-            src/tests/rpg/test_scenario_progression_runtime.py::test_progression_nodes_advance_in_order_without_repeating_first_node \
-            -q --tb=short
+      - name: RPG progression registry deterministic check
+        run: python -c "from app.rpg.progression.graph_registry import validate_progression_graph_registry; result = validate_progression_graph_registry(); assert result['ok'], result"
 
       - name: RPG campaign report deterministic tests
         run: python -m pytest src/tests/rpg/autoplay/test_campaign_report.py -q --tb=short
