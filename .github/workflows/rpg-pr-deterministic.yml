@@ -1,0 +1,62 @@
+name: RPG deterministic PR gates
+
+on:
+  pull_request:
+    branches:
+      - rpg
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/**"
+      - "scripts/check_rpg_file_lines.py"
+      - "ruff.toml"
+      - ".github/workflows/rpg-pr-deterministic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-rpg-gates:
+    name: Deterministic RPG gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src
+      RPG_DISABLE_LIVE_LLM: "1"
+      RPG_TEST_MODE: deterministic
+      OMNIX_DISABLE_LIVE_LLM: "1"
+      OMNIX_PROVIDER: deterministic
+      LLM_PROVIDER: deterministic
+      OPENAI_API_KEY: ""
+      OPENROUTER_API_KEY: ""
+      CEREBRAS_API_KEY: ""
+      LMSTUDIO_BASE_URL: ""
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install deterministic test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart
+
+      - name: Check RPG file line limits
+        run: python scripts/check_rpg_file_lines.py
+
+      - name: Ruff generated runtime bridge checks
+        run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py
+
+      - name: RPG narration queue deterministic tests
+        run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
+
+      - name: RPG scenario progression deterministic tests
+        run: python -m pytest src/tests/rpg/test_scenario_progression_runtime.py -q
+
+      - name: RPG campaign report deterministic tests
+        run: python -m pytest src/tests/rpg/autoplay/test_campaign_report.py -q
