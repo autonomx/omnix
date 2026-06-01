@@ -60,5 +60,11 @@ jobs:
       - name: RPG narration queue deterministic tests
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
 
-      - name: RPG deterministic CI gate tests
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py -q --tb=short
+      - name: RPG CI registry gate
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_progression_registry_is_importable_and_validates -q --tb=short
+
+      - name: RPG CI progression action gate
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_progression_actions_are_available_for_tavern_seed -q --tb=short
+
+      - name: RPG CI campaign report gate
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_renderer_is_importable -q --tb=short
