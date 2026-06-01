@@ -310,3 +310,62 @@ def test_ci_combat_reward_narrative_contract_limits_reward_claims():
     assert any("Do not change awarded XP" in claim for claim in narration_context["forbidden_narration"])
     assert updated["result"]["combat_reward_narrative_contract"] == contract
     assert updated["resolved_result"]["combat_reward_narrative_contract"] == contract
+
+
+def test_ci_combat_end_state_syncs_matching_quest_objective():
+    from app.rpg.session import runtime
+    from app.rpg.session.runtime_part25 import _sync_combat_end_state_to_quests
+
+    assert runtime._apply_turn_authoritative.__module__.endswith("runtime_part25")
+
+    payload = {
+        "tick": 8,
+        "simulation_state": {
+            "quest_state": {
+                "active_quests": [
+                    {
+                        "quest_id": "quest:clear_the_road",
+                        "status": "active",
+                        "objectives": [
+                            {
+                                "objective_id": "objective:defeat_bandit",
+                                "type": "defeat",
+                                "target_id": "enemy:bandit_1",
+                                "status": "active",
+                                "current": 0,
+                                "required": 1,
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+        "result": {
+            "combat_result": {
+                "combat_ended": True,
+                "ended_reason": "enemy_side_defeated",
+                "target_id": "enemy:bandit_1",
+                "tick": 8,
+            }
+        },
+        "resolved_result": {},
+        "narration_context": {},
+    }
+
+    updated = _sync_combat_end_state_to_quests(payload)
+    quest = updated["simulation_state"]["quest_state"]["active_quests"][0]
+    objective = quest["objectives"][0]
+    sync_result = updated["combat_quest_sync_result"]
+
+    assert objective["status"] == "completed"
+    assert objective["current"] == 1
+    assert objective["completed_at_tick"] == 8
+    assert quest["status"] == "completed"
+    assert quest["completed_at_tick"] == 8
+    assert sync_result["source"] == "deterministic_combat_quest_sync"
+    assert sync_result["updated_objectives"][0]["objective_id"] == "objective:defeat_bandit"
+    assert sync_result["completed_quests"] == ["quest:clear_the_road"]
+    assert updated["result"]["combat_quest_sync_result"] == sync_result
+    assert updated["resolved_result"]["combat_quest_sync_result"] == sync_result
+    assert updated["narration_context"]["combat_quest_sync_result"] == sync_result
+    assert "Quest objective completed: objective:defeat_bandit" in updated["narration_context"]["quest_progress_lines"]
