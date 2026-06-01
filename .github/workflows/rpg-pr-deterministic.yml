@@ -76,3 +76,6 @@ jobs:
 
       - name: RPG CI session attack XP consistency gate
         run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_session_attack_defeat_bridge_awards_and_surfaces_xp_once -q --tb=short
+
+      - name: RPG CI combat XP report visibility gate
+        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_displays_combat_xp_rewards -q --tb=short

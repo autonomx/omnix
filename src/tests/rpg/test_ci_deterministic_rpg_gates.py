@@ -235,3 +235,38 @@ def test_ci_session_attack_defeat_bridge_awards_and_surfaces_xp_once():
     assert updated["narration_context"]["xp_result"]["xp_awarded"] == 25
     assert updated["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
     assert updated["session"]["runtime_state"]["last_turn_result"]["xp_result"]["xp_awarded"] == 25
+
+
+def test_ci_campaign_report_displays_combat_xp_rewards():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html(
+        {
+            "scenario_seed": "ci_combat_xp_report",
+            "turns": [
+                {
+                    "turn": 3,
+                    "result": {
+                        "action_type": "attack",
+                        "combat_result": {
+                            "target_id": "enemy:bandit_1",
+                            "reason": "combat_defeat_resolved",
+                            "xp_result": {
+                                "awarded": True,
+                                "xp_awarded": 25,
+                                "source": "deterministic_combat_reward_runtime",
+                            },
+                        },
+                    },
+                    "resolved_result": {},
+                    "narration_context": {},
+                }
+            ],
+        }
+    )
+
+    assert "Combat XP Rewards" in html
+    assert "Total deterministic combat XP shown in turn payloads" in html
+    assert "<strong>25</strong>" in html
+    assert "enemy:bandit_1" in html
+    assert "combat_defeat_resolved" in html
