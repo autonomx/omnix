@@ -559,6 +559,21 @@ def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
     return _build_authoritative_action_line(narration_context)
 
 
+def _build_rewards_block(narration_context: Dict[str, Any]) -> str:
+    xp_result = _safe_dict(narration_context.get("xp_result"))
+    skill_xp_result = _safe_dict(narration_context.get("skill_xp_result"))
+    rewards = []
+    xp_gained = int(xp_result.get("xp_gained", 0) or 0)
+    if xp_gained > 0:
+        rewards.append(f"XP +{xp_gained}")
+    awards = _safe_dict(skill_xp_result.get("awards"))
+    for skill, amount in sorted(awards.items()):
+        amount_int = int(amount or 0)
+        if amount_int > 0:
+            rewards.append(f"{_titleize_action(skill)} XP +{amount_int}")
+    return ", ".join(rewards)
+
+
 def _titleize_action(action_type: str) -> str:
     value = _safe_str(action_type).strip().replace("_", " ")
     return value[:1].upper() + value[1:] if value else "Action"
