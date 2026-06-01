@@ -1,3 +1,5 @@
 [lint.per-file-ignores]
+"src/app/rpg/session/runtime_part16.py" = ["F405"]
+"src/app/rpg/session/runtime_part17.py" = ["F403", "F405"]
 "src/app/rpg/session/runtime_part18.py" = ["F403", "F405"]
 "src/app/rpg/session/runtime_part19.py" = ["F403", "F405"]
