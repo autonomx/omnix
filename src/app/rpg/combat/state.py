@@ -39,6 +39,7 @@ def build_empty_combat_state() -> Dict[str, Any]:
         "winner_ids": [],
         "loser_ids": [],
         "exit_reason": "",
+        "ended_reason": "",
         "last_resolution": {},
         "recent_events": [],
     }
@@ -80,6 +81,7 @@ def normalize_combat_state(value: Any) -> Dict[str, Any]:
         "winner_ids": [str(x) for x in _safe_list(state.get("winner_ids")) if str(x or "").strip()],
         "loser_ids": [str(x) for x in _safe_list(state.get("loser_ids")) if str(x or "").strip()],
         "exit_reason": str(state.get("exit_reason") or ""),
+        "ended_reason": str(state.get("ended_reason") or ""),
         "last_resolution": _safe_dict(state.get("last_resolution")),
         "recent_events": _safe_list(state.get("recent_events"))[:24],
         "force_next_attack_roll": _safe_int(state.get("force_next_attack_roll"), 0) if state.get("force_next_attack_roll") else None,

@@ -174,13 +174,17 @@ def evaluate_combat_exit(simulation_state: Dict[str, Any], combat_state: Dict[st
         # Determine specific exit reason
         if not winners:
             state["exit_reason"] = "all_downed"
+            state["ended_reason"] = "all_sides_defeated"
         elif "player" in winners:
             state["exit_reason"] = "victory"
+            state["ended_reason"] = "enemy_side_defeated"
         elif "player" in losers:
             state["exit_reason"] = "party_defeat"
+            state["ended_reason"] = "party_side_defeated"
         else:
             # Fallback for non-player combats
             state["exit_reason"] = "last_team_standing"
+            state["ended_reason"] = "last_team_standing"
 
         # Generate rewards and loot for victory
         if state["exit_reason"] == "victory":
