@@ -70,6 +70,17 @@ The saved certification payload is the canonical artifact for automation and ope
 
 Digest-related fields may also appear when final/loadable/expected checkpoint or state digests are available. Digest mismatch blockers must not be ignored.
 
+## Source constants and helpers
+
+Keep operator guidance aligned with these deterministic source constants and helper names:
+
+- `deterministic_phase7_saved_certification_artifact_writer_gate` — `emit_saved_100_turn_certification_artifacts` in `src/tests/rpg/manual/certification_artifacts.py`.
+- `deterministic_phase7_live_manual_saved_artifact_emission_hooks_gate` — `emit_live_manual_saved_artifact_completion_hooks` in `src/tests/rpg/manual/emission_hooks.py`.
+- `deterministic_phase7_saved_artifact_bundle_zip_verification_gate` — `write_and_verify_saved_artifact_bundle_zip` in `src/tests/rpg/manual/bundle_verification.py`.
+- `deterministic_phase7_saved_certification_operator_runbook_gate` — this runbook's source guard test in `src/tests/rpg/test_ci_phase7_saved_certification_operator_runbook.py`.
+
+These constants are intentionally repeated here so source guards catch stale operator instructions when helper names, artifact filenames, or workflow gate names change.
+
 ## Diagnostics and blockers to inspect
 
 Common source-backed diagnostics/blockers include:
