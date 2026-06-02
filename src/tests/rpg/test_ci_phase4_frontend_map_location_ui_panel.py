@@ -1,5 +1,6 @@
 from copy import deepcopy
 import inspect
+from pathlib import Path
 
 
 def _session_id(name: str) -> str:
@@ -107,6 +108,22 @@ def test_ci_phase4_frontend_map_location_turn_payload_surfaces_panel_for_ui(monk
     assert result["resolved_result"]["map_location_panel"] == panel
     assert result["narration_context"]["map_location_panel"] == panel
     assert saved["simulation_state"]["travel_state"]["current_location_id"] == OLD_ROAD
+
+
+def test_ci_phase4_frontend_map_location_browser_renderer_uses_safe_visible_payload():
+    renderer = Path("src/static/rpg/rpgMapLocationPanel.js").read_text(encoding="utf-8")
+    settings = Path("src/static/rpg-conversation-settings.js").read_text(encoding="utf-8")
+
+    assert "window.RpgMapLocationPanel" in renderer
+    assert "panelPayloadFromTurnPayload" in renderer
+    assert "firstNonEmptyObj" in renderer
+    assert "escapeHtml" in renderer
+    assert "visible_exits" in renderer
+    assert "block_reason" in renderer
+    assert "Undiscovered destination" in renderer
+    assert "passable" not in renderer.casefold()
+    assert "/static/rpg/rpgMapLocationPanel.js" in settings
+    assert "ensureMapLocationPanelScript" in settings
 
 
 def test_ci_phase4_frontend_map_location_runtime_manifest_stays_authoritative():
