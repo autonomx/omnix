@@ -50,20 +50,27 @@ for _module in _PART_MODULES:
         }
     )
 
+_RUNTIME_WRAPPER_MANIFEST = {
+    "part_modules": list(_PART_MODULE_NAMES),
+    "final_apply_turn_authoritative_module": _RUNTIME_GLOBALS.get("_apply_turn_authoritative").__module__,
+    "final_apply_attack_combat_action_module": _RUNTIME_GLOBALS.get("_apply_attack_combat_action").__module__,
+    "combat_contract_modules": [
+        "app.rpg.session.runtime_part22",
+        "app.rpg.session.runtime_part23",
+        "app.rpg.session.runtime_part24",
+        "app.rpg.session.runtime_part25",
+        "app.rpg.session.runtime_part26",
+    ],
+}
 
-def get_runtime_wrapper_manifest() -> dict:
+
+def get_runtime_wrapper_manifest(_manifest: dict = _RUNTIME_WRAPPER_MANIFEST) -> dict:
     """Return the deterministic session runtime wrapper/load manifest."""
     return {
-        "part_modules": list(_PART_MODULE_NAMES),
-        "final_apply_turn_authoritative_module": _RUNTIME_GLOBALS.get("_apply_turn_authoritative").__module__,
-        "final_apply_attack_combat_action_module": _RUNTIME_GLOBALS.get("_apply_attack_combat_action").__module__,
-        "combat_contract_modules": [
-            "app.rpg.session.runtime_part22",
-            "app.rpg.session.runtime_part23",
-            "app.rpg.session.runtime_part24",
-            "app.rpg.session.runtime_part25",
-            "app.rpg.session.runtime_part26",
-        ],
+        "part_modules": list(_manifest["part_modules"]),
+        "final_apply_turn_authoritative_module": _manifest["final_apply_turn_authoritative_module"],
+        "final_apply_attack_combat_action_module": _manifest["final_apply_attack_combat_action_module"],
+        "combat_contract_modules": list(_manifest["combat_contract_modules"]),
     }
 
 
@@ -91,6 +98,7 @@ for _name in (
     "_name",
     "_value",
     "_RUNTIME_GLOBALS",
+    "_RUNTIME_WRAPPER_MANIFEST",
     "_ModuleType",
     "_RuntimeFacadeModule",
     "_sys",
