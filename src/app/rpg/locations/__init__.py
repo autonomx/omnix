@@ -1,4 +1,4 @@
-"""Deterministic RPG location graph helpers."""
+"""Deterministic RPG location and travel helpers."""
 
 from app.rpg.locations.graph import (
     CANONICAL_EDGES,
@@ -20,6 +20,16 @@ from app.rpg.locations.graph import (
     list_location_exits,
     validate_location_graph,
 )
+from app.rpg.locations.travel import (
+    ROUTE_TRAVEL_COSTS,
+    apply_travel,
+    assert_phase4_travel_costs_ready,
+    build_travel_narration_contract,
+    calculate_route_travel_cost,
+    ensure_travel_state,
+    get_route_travel_cost,
+    validate_route_travel_costs,
+)
 
 __all__ = [
     "CANONICAL_EDGES",
@@ -29,15 +39,23 @@ __all__ = [
     "NEARBY_WILDERNESS",
     "OLD_MILL",
     "OLD_ROAD",
+    "ROUTE_TRAVEL_COSTS",
     "RUSTY_FLAGON",
     "SOURCE",
+    "apply_travel",
     "assert_phase4_location_graph_ready",
+    "assert_phase4_travel_costs_ready",
     "build_location_map_payload",
     "build_location_narration_contract",
+    "build_travel_narration_contract",
+    "calculate_route_travel_cost",
+    "ensure_travel_state",
     "find_location_route",
     "get_canonical_location",
+    "get_route_travel_cost",
     "list_canonical_edges",
     "list_canonical_locations",
     "list_location_exits",
     "validate_location_graph",
+    "validate_route_travel_costs",
 ]
