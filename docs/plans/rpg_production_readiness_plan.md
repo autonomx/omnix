@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.14 — campaign report map/location panel integration**.
+Next recommended slice: **Phase 4.15 — frontend map/location UI panel wiring**.
 
 Latest completed PRs:
 
@@ -22,31 +22,32 @@ Latest completed PRs:
 | #144 Phase 2.3 economy report guardrails | `de8d2e06713b57e7eeceef116d11ebc4e7bf1340` | Phase 2 | Complete | Economy transaction report rows, campaign report injection, deterministic price/merchant-state presentation guardrails. |
 | #145 Phase 2.4 inn room rest services | `8b472d9511ed752a51e793eb61cfb5123722dfb8` | Phase 2 | Complete | Deterministic inn room/rest runtime, Bran/Rusty Flagon 5 silver room price, HP/fatigue/rest state effects, insufficient-funds rejection, Phase 2 economy gate passed. |
 | #146 Phase 2.5 ration water survival pressure | `6f4b9200bd79e27ad32473d959034bcd43dffc20` | Phase 2 | Complete | Deterministic ration/water consumption, canonical survival items, survival pressure state, source-backed survival log, Phase 0 and deterministic gates passed. |
-| #147 Phase 2.6 inventory persistence save load | `06771ed584f42479674f617d9591bc54c27baea6` | Phase 2 | Complete | Deterministic Phase 2 persistence snapshot and session package export/import gate for inventory, currency, merchant/service/survival economy state, rest state, and survival state. |
+| #147 Phase 2.6 inventory persistence save load | `06771ed584f42479674f617d9591bc54c27baea6` | Phase 2 | Complete | Deterministic Phase 2 persistence snapshot and session package export/import gate for economy, rest, and survival state. |
 | #148 Phase 2.7 economy price modifiers | `0848197d9b02c5c0a19c52f0968e1083f3ec9414` | Phase 2 | Complete | Deterministic charisma, relationship, reputation, and scarcity price modifiers for merchant buy/sell transactions. |
-| #149 Phase 3.1 quest schema and giver state | `f810404a995308042fbc4fb9bd27b71e97320981` | Phase 3 | Complete | Deterministic quest template normalization, starter quest template, quest-giver offer registration/listing/acceptance. |
-| #150 Phase 3.2 objective lifecycle | `dd22a5e77e863f7bd5befe7494ff60c3dc803d80` | Phase 3 | Complete | Deterministic objective creation/progress/completion/failure lifecycle and source-backed responses. |
-| #151 Phase 3.3 quest journal report | `621d02da216d252d4e746fa5d3fdcafaf2d7e582` | Phase 3 | Complete | Deterministic quest journal entries, objective-result journal bridge, grouped summary, escaped report HTML. |
-| #152 Phase 3.4 rumor quest conversion | `591792ba7298d3b7bab6cbab5e8da25b7899420a` | Phase 3 | Complete | Deterministic rumor registration, evidence backing, propagation, and quest-offer conversion. |
-| #153 Phase 3.5 work inquiry objective suggestions | `991e0b03df19a6ea73a988c599d58ee5d50d26d4` | Phase 3 | Complete | Deterministic work inquiry routing, quest-giver offers, objective suggestions, and narration claim contract. |
-| #154 Phase 3.6 deterministic quest reward rules | `d7d866523d8199d4bb64a534dccd250caf265b0a` | Phase 3 | Complete | Deterministic completed-quest reward claiming, idempotent rewards, and source-backed reward logs. |
-| #155 Phase 3.7 quest persistence save-load coverage | `bc69af0225b821a8cb373ad6b67d8a07e9804bf7` | Phase 3 | Complete | Deterministic quest/giver/journal/rumor/reward persistence snapshots and roundtrip verification. |
-| #156 Phase 3.8 quest report matrix coverage | `521676dc75ec790bdc66e825a6619e8a6ead45f6` | Phase 3 | Complete | Source-backed Phase 3 quest report model, escaped HTML, and matrix lifecycle coverage. |
-| #157 Phase 3.9 quest return report flow | `b1831eb237a32818486b84ef61371781bd81d383` | Phase 3 | Complete | Deterministic quest return/report-result helpers, reward claiming, journal closure entries. |
-| #158 Phase 3.10 completion audit and scorecard refresh | `07f2c1c2c6a3277c4fc42949d807c0c5a7a888f6` | Phase 3 | Complete | Deterministic Phase 3 completion audit helpers, audit doc, runtime-matrix evidence, advisory scorecard refresh. |
-| #159 Phase 4.1 canonical location graph foundation | `3e72a19b7255e32af3ffe323fed79cedd169d154` | Phase 4 | Complete | Deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers. |
-| #160 Phase 4.2 deterministic travel time and fatigue costs | `d23f1ec7e00c45d797466d0cfe4f32c37e7b089d` | Phase 4 | Complete | Deterministic route travel minutes, fatigue deltas, resource-cost accounting, risk flags, travel-state mutation, guardrails. |
-| #161 Phase 4.3 location discovery and route blocking | `cc8d025aee8976312b7ef1579ed74ea1e32d6962` | Phase 4 | Complete | Deterministic starter discovery state, old mill route blocking/unblocking, route-access validation, accessible map payloads. |
-| #162 Phase 4.4 seeded travel and location encounters | `cab3a9d5dc48f352f3a8992319937bd82ce15357` | Phase 4 | Complete | Deterministic seeded route/location encounter tables, source-backed encounter logs, and narration guardrails. |
-| #163 Phase 4.5 local world events and location history | `b01bc18629d7ca26c5e8bf528b80a717a03d5816` | Phase 4 | Complete | Deterministic local world-event state, derived history rows, escaped location-history report HTML. |
+| #149 Phase 3.1 quest schema and giver state | `f810404a995308042fbc4fb9bd27b71e97320981` | Phase 3 | Complete | Quest template normalization, starter quest template, and quest-giver offer registration/listing/acceptance. |
+| #150 Phase 3.2 objective lifecycle | `dd22a5e77e863f7bd5befe7494ff60c3dc803d80` | Phase 3 | Complete | Objective creation/progress/completion/failure lifecycle and source-backed responses. |
+| #151 Phase 3.3 quest journal report | `621d02da216d252d4e746fa5d3fdcafaf2d7e582` | Phase 3 | Complete | Quest journal entries, objective-result journal bridge, grouped summary, escaped report HTML. |
+| #152 Phase 3.4 rumor quest conversion | `591792ba7298d3b7bab6cbab5e8da25b7899420a` | Phase 3 | Complete | Rumor registration, evidence backing, propagation, and quest-offer conversion. |
+| #153 Phase 3.5 work inquiry objective suggestions | `991e0b03df19a6ea73a988c599d58ee5d50d26d4` | Phase 3 | Complete | Work inquiry routing, quest-giver offers, objective suggestions, and narration claim contract. |
+| #154 Phase 3.6 deterministic quest reward rules | `d7d866523d8199d4bb64a534dccd250caf265b0a` | Phase 3 | Complete | Completed-quest reward claiming, idempotent rewards, and source-backed reward logs. |
+| #155 Phase 3.7 quest persistence save-load coverage | `bc69af0225b821a8cb373ad6b67d8a07e9804bf7` | Phase 3 | Complete | Quest/giver/journal/rumor/reward persistence snapshots and roundtrip verification. |
+| #156 Phase 3.8 quest report matrix coverage | `521676dc75ec790bdc66e825a6619e8a6ead45f6` | Phase 3 | Complete | Source-backed quest report model, escaped HTML, and matrix lifecycle coverage. |
+| #157 Phase 3.9 quest return report flow | `b1831eb237a32818486b84ef61371781bd81d383` | Phase 3 | Complete | Quest return/report-result helpers, reward claiming, journal closure entries. |
+| #158 Phase 3.10 completion audit and scorecard refresh | `07f2c1c2c6a3277c4fc42949d807c0c5a7a888f6` | Phase 3 | Complete | Phase 3 completion audit helpers, audit doc, runtime-matrix evidence, advisory scorecard refresh. |
+| #159 Phase 4.1 canonical location graph foundation | `3e72a19b7255e32af3ffe323fed79cedd169d154` | Phase 4 | Complete | Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers. |
+| #160 Phase 4.2 deterministic travel time and fatigue costs | `d23f1ec7e00c45d797466d0cfe4f32c37e7b089d` | Phase 4 | Complete | Route travel minutes, fatigue deltas, resource-cost accounting, risk flags, travel-state mutation, guardrails. |
+| #161 Phase 4.3 location discovery and route blocking | `cc8d025aee8976312b7ef1579ed74ea1e32d6962` | Phase 4 | Complete | Starter discovery state, old mill route blocking/unblocking, route-access validation, accessible map payloads. |
+| #162 Phase 4.4 seeded travel and location encounters | `cab3a9d5dc48f352f3a8992319937bd82ce15357` | Phase 4 | Complete | Seeded route/location encounter tables, source-backed encounter logs, and narration guardrails. |
+| #163 Phase 4.5 local world events and location history | `b01bc18629d7ca26c5e8bf528b80a717a03d5816` | Phase 4 | Complete | Local world-event state, derived history rows, escaped location-history report HTML. |
 | #164 Phase 4.6 runtime travel access integration | `1b2f4d3892a11dc8311c9ef07c841079048ea547` | Phase 4 | Complete | Runtime travel wrapper validates discovery/route blocking before applying travel. |
-| #166 Phase 4.7 time of day and day count hooks | `38f166e0de82720cb806805c0d8144c3271d2848` | Phase 4 | Complete | Deterministic time state, day count, clock labels, travel-time application, and weather placeholder. |
-| #168 Phase 4.8 map location report payload | `d04ab19e3f6fcb29dfef6a249590452df9763f49` | Phase 4 | Complete | Deterministic map/location panel payload, escaped report HTML, discovery/block/time/history integration. |
-| #170 Phase 4.9 travel resource consumption | `7f46aca92bbc56fe99ae3bdc7ca42b08027260ba` | Phase 4 | Complete | Guarded runtime travel resource preflight, deterministic ration/water requirements from route costs, missing-resource rejection before travel-state mutation, reuse of canonical survival APIs `consume_food` and `consume_water`, source-backed travel resource logs, narration guardrails, and Phase 4 travel resource consumption CI gate passed. |
-| #172 Phase 4.10 encounter combat world event bridge | `a62c0be5296ee33d05f0d08ac6316815c61749de` | Phase 4 | Complete | Deterministic encounter runtime bridge, source-backed local world-event recording for non-combat/evidence encounters, source-backed combat candidate payloads for combat-capable encounters when no canonical combat-start API is invoked, narration guardrails, and Phase 4 encounter combat events CI gate passed. |
-| #174 Phase 4.11 runtime travel encounter routing | `4ac5c5357b1ce0097a585733b431111ca0d219b4` | Phase 4 | Complete | Deterministic runtime travel command-routing bridge, canonical destination alias resolution, guarded travel/resource helper use, seeded encounter roll/record after successful travel, encounter runtime routing, combat-candidate preservation, and Phase 4 runtime travel encounter routing CI gate passed. |
-| #176 Phase 4.12 command routing session integration | `d34761b661b6972cb363276553fd561788e65956` | Phase 4 | Complete | Exported Phase 4.11 command-routing helpers through `app.rpg.locations`, added deterministic facade/session follow-up tests, added the Phase 4 command routing facade session CI gate, and both required RPG checks passed. |
-| #178 Phase 4.13 runtime session travel command integration | `5633113e10688c6b9a96b1d452d70fd656eb6589` | Phase 4 | Complete | Added `runtime_part27` as the final authoritative runtime wrapper, routed session travel commands through the guarded Phase 4 command router, preserved non-travel delegation, updated runtime wrapper manifest/tests, added the Phase 4 runtime session travel command gate, and both required RPG checks passed. |
+| #166 Phase 4.7 time of day and day count hooks | `38f166e0de82720cb806805c0d8144c3271d2848` | Phase 4 | Complete | Time state, day count, clock labels, travel-time application, and weather placeholder. |
+| #168 Phase 4.8 map location report payload | `d04ab19e3f6fcb29dfef6a249590452df9763f49` | Phase 4 | Complete | Map/location panel payload, escaped report HTML, discovery/block/time/history integration. |
+| #170 Phase 4.9 travel resource consumption | `7f46aca92bbc56fe99ae3bdc7ca42b08027260ba` | Phase 4 | Complete | Guarded runtime travel resource preflight, ration/water requirements, missing-resource rejection before mutation, and canonical survival API consumption. |
+| #172 Phase 4.10 encounter combat world event bridge | `a62c0be5296ee33d05f0d08ac6316815c61749de` | Phase 4 | Complete | Encounter runtime bridge, source-backed local world events, and combat candidate payloads for combat-capable encounters. |
+| #174 Phase 4.11 runtime travel encounter routing | `4ac5c5357b1ce0097a585733b431111ca0d219b4` | Phase 4 | Complete | Runtime travel command-routing bridge, destination alias resolution, guarded travel/resource helper use, seeded encounter roll/record, and encounter runtime routing. |
+| #176 Phase 4.12 command routing session integration | `d34761b661b6972cb363276553fd561788e65956` | Phase 4 | Complete | Exported command-routing helpers through `app.rpg.locations`, facade/session follow-up tests, and Phase 4 command routing facade session gate. |
+| #178 Phase 4.13 runtime session travel command integration | `5633113e10688c6b9a96b1d452d70fd656eb6589` | Phase 4 | Complete | Added `runtime_part27` as the final authoritative runtime wrapper and routed session travel commands through the guarded Phase 4 command router. |
+| #180 Phase 4.14 campaign report map/location panel integration | `f9b46b4a8ff09a73e577cdee08eb2b43c742ad2c` | Phase 4 | Complete | Wired deterministic map/location panel helpers into the campaign report flow, kept rendering provider-free and non-mutating, added the Phase 4 campaign report map location gate, and both required RPG checks passed. |
 
 After every merged PR:
 
@@ -112,7 +113,7 @@ Completed: quest template schema, giver state, objective lifecycle, journal/repo
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1 through 4.13 are merged; Phase 4.14 campaign report map/location panel integration is next.**
+Status: **In progress. Phase 4.1 through 4.14 are merged; Phase 4.15 frontend map/location UI panel wiring is next.**
 
 Completed or materially completed:
 
@@ -130,25 +131,38 @@ Completed or materially completed:
 - [~] Local world-event state and derived location history.
 - [~] Location history report model and escaped HTML.
 - [x] Deterministic map/location panel payload and escaped report HTML.
+- [x] Campaign report map/location panel integration using deterministic map/location helpers.
 - [x] Deterministic time-of-day/day-count hooks and weather placeholder.
 
 Pending:
 
-- [ ] Phase 4.14 campaign report map/location panel integration.
-- [ ] Frontend map/location UI panel wiring.
+- [ ] Phase 4.15 frontend map/location UI panel wiring.
 - [ ] Optional season/weather hooks beyond placeholder, if desired later.
 
 ## Phase 4.14 — Campaign Report Map/Location Panel Integration
 
+Status: **Complete.**
+
+Completed in PR #180 (`f9b46b4a8ff09a73e577cdee08eb2b43c742ad2c`):
+
+- Wired deterministic map/location panel payloads into the campaign/main report flow.
+- Reused `app.rpg.locations.build_map_location_panel_payload` and `render_map_location_report_html` instead of duplicating map/report logic.
+- Kept rendering provider-free, source-backed, escaped, and non-mutating.
+- Preserved map guardrails: do not reveal undiscovered locations as known and do not claim blocked routes are passable.
+- Added deterministic tests for map/location panel visibility, route-block display, current-location display, time display, hidden undiscovered locations, idempotent append behavior, and no gameplay mutation during report rendering.
+- Added the `RPG CI Phase 4 campaign report map location gate`.
+
+## Phase 4.15 — Frontend Map/Location UI Panel Wiring
+
 Recommended scope:
 
-- Wire deterministic map/location panel payloads into the campaign/main report flow if they are not already visible there.
-- Reuse `app.rpg.locations.build_map_location_panel_payload` and `render_map_location_report_html` rather than duplicating map/report logic.
-- Keep rendering provider-free, source-backed, and non-mutating.
-- Do not reveal undiscovered locations as known to the player.
+- Add a visible frontend map/location section.
+- Show current location, visible routes, blocked route reasons, discovered/undiscovered status, and time/day labels from deterministic runtime/map payloads.
+- Reuse existing Phase 4 map/location helpers rather than duplicating map logic.
+- Do not expose hidden or undiscovered state as known.
 - Do not claim blocked routes are passable.
-- Preserve escaped report HTML and deterministic source fields.
-- Add narrow deterministic tests proving map/location panel visibility, route-block display, current-location display, time display, and no gameplay mutation during report rendering.
+- Keep UI rendering provider-free and non-mutating.
+- Add deterministic tests for visible UI panel wiring and hidden-state guardrails.
 
 ## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
 
@@ -167,7 +181,7 @@ Current coverage:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel; Phase 4.10 adds encounter-to-world-event bridge and combat candidate payloads for combat-capable encounter hooks; Phase 4.11 adds deterministic command-level travel bridge for guarded travel, encounter rolling, encounter logging, and encounter runtime routing; Phase 4.12 exports command-routing helpers through the public locations facade; Phase 4.13 connects session travel commands through the final canonical runtime wrapper.
+- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel; Phase 4.10 adds encounter-to-world-event bridge and combat candidate payloads for combat-capable encounter hooks; Phase 4.11 adds deterministic command-level travel bridge for guarded travel, encounter rolling, encounter logging, and encounter runtime routing; Phase 4.12 exports command-routing helpers through the public locations facade; Phase 4.13 connects session travel commands through the final canonical runtime wrapper; Phase 4.14 wires the deterministic map/location panel into the campaign report flow without mutating gameplay state.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
