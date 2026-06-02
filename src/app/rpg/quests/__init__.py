@@ -16,6 +16,11 @@ from app.rpg.quests.objectives import (
     objective_from_template,
     update_objective_progress,
 )
+from app.rpg.quests.persistence import (
+    assert_quest_persistence_roundtrip,
+    build_quest_persistence_snapshot,
+    restore_quest_persistence_snapshot,
+)
 from app.rpg.quests.rewards import build_reward_payload, claim_quest_rewards, mark_reward_claimed
 from app.rpg.quests.rumors import (
     back_rumor_with_evidence,
@@ -45,8 +50,10 @@ __all__ = [
     "add_journal_entry",
     "add_journal_entry_from_objective_result",
     "apply_quest_transition",
+    "assert_quest_persistence_roundtrip",
     "back_rumor_with_evidence",
     "build_quest_journal_summary",
+    "build_quest_persistence_snapshot",
     "build_reward_payload",
     "build_rumor_summary",
     "build_work_inquiry_narration_contract",
@@ -69,6 +76,7 @@ __all__ = [
     "propagate_backed_rumors",
     "register_rumor",
     "render_quest_journal_report_html",
+    "restore_quest_persistence_snapshot",
     "route_work_inquiry",
     "set_quest_stage",
     "start_quest",
