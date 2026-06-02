@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from app.rpg.session import session_checkpoint_digest
+from tests.rpg.manual.artifact_discovery import read_json_artifact_group
 from tests.rpg.manual.certification_artifacts import emit_saved_100_turn_certification_artifacts
 
 SOURCE = "deterministic_phase7_real_saved_state_certification_gate"
@@ -45,25 +46,6 @@ def _stable_digest(value: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _read_json(path: Path) -> Dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return _safe_dict(value)
-
-
-def _find_first_json(output_dir: Path, names: tuple[str, ...]) -> tuple[Path | None, Dict[str, Any]]:
-    for name in names:
-        path = output_dir / name
-        if not path.is_file():
-            continue
-        payload = _read_json(path)
-        if payload:
-            return path, payload
-    return None, {}
-
-
 def _payload_session(payload: Dict[str, Any]) -> Dict[str, Any]:
     if "manifest" in payload or "simulation_state" in payload or "runtime_state" in payload:
         return payload
@@ -86,6 +68,16 @@ def _state_digest(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _json_group(output_dir: Path, group: str, names: tuple[str, ...], *, required: bool) -> Dict[str, Any]:
+    return read_json_artifact_group(
+        output_dir=output_dir,
+        group=group,
+        names=names,
+        required=required,
+        source=SOURCE,
+    )
+
+
 def build_real_saved_state_certification_artifact(
     saved_artifacts: Dict[str, Any],
     *,
@@ -95,11 +87,19 @@ def build_real_saved_state_certification_artifact(
 
     output_dir = Path(output_dir)
     saved = dict(_safe_dict(saved_artifacts))
-    final_path, final_payload = _find_first_json(output_dir, FINAL_STATE_FILENAMES)
-    loaded_path, loaded_payload = _find_first_json(output_dir, LOADABLE_STATE_FILENAMES)
-    expected_path, expected_payload = _find_first_json(output_dir, EXPECTED_STATE_FILENAMES)
+    final = _json_group(output_dir, "final_state_artifact", FINAL_STATE_FILENAMES, required=True)
+    loaded = _json_group(output_dir, "loadable_state_artifact", LOADABLE_STATE_FILENAMES, required=True)
+    expected = _json_group(output_dir, "expected_state_artifact", EXPECTED_STATE_FILENAMES, required=False)
     blockers: List[Dict[str, Any]] = []
     metadata: List[Dict[str, Any]] = []
+    discovery_metadata: List[Dict[str, Any]] = []
+    discovery_metadata.extend(final["diagnostics"])
+    discovery_metadata.extend(loaded["diagnostics"])
+    discovery_metadata.extend(expected["diagnostics"])
+
+    final_payload = _safe_dict(final.get("payload"))
+    loaded_payload = _safe_dict(loaded.get("payload"))
+    expected_payload = _safe_dict(expected.get("payload"))
 
     if not final_payload:
         blockers.append(_source_entry("missing_final_saved_state", output_dir=str(output_dir)))
@@ -110,7 +110,7 @@ def build_real_saved_state_certification_artifact(
         metadata.append(
             _source_entry(
                 "final_saved_state",
-                path=str(final_path),
+                path=str(final.get("relative_path")),
                 digest_kind=final_digest["digest_kind"],
                 checkpoint_digest=final_digest["checkpoint_digest"],
                 state_digest=final_digest["state_digest"],
@@ -126,7 +126,7 @@ def build_real_saved_state_certification_artifact(
         metadata.append(
             _source_entry(
                 "loadable_saved_state",
-                path=str(loaded_path),
+                path=str(loaded.get("relative_path")),
                 digest_kind=loaded_digest["digest_kind"],
                 checkpoint_digest=loaded_digest["checkpoint_digest"],
                 state_digest=loaded_digest["state_digest"],
@@ -140,7 +140,7 @@ def build_real_saved_state_certification_artifact(
         metadata.append(
             _source_entry(
                 "expected_final_saved_state",
-                path=str(expected_path),
+                path=str(expected.get("relative_path")),
                 digest_kind=expected_digest["digest_kind"],
                 checkpoint_digest=expected_digest["checkpoint_digest"],
                 state_digest=expected_digest["state_digest"],
@@ -150,6 +150,7 @@ def build_real_saved_state_certification_artifact(
     saved["state_diff_source"] = SOURCE
     saved["artifact_source"] = _safe_str(saved.get("artifact_source") or SOURCE)
     saved["saved_state_source_metadata"] = metadata
+    saved["saved_state_discovery_metadata"] = discovery_metadata
     return {
         "ok": not blockers,
         "reason": "phase7_real_saved_state_artifact_ready"
@@ -157,6 +158,7 @@ def build_real_saved_state_certification_artifact(
         else "phase7_real_saved_state_artifact_blocked",
         "saved_artifacts": saved,
         "metadata": metadata,
+        "discovery_metadata": discovery_metadata,
         "blockers": blockers,
         "source": SOURCE,
     }
@@ -179,6 +181,7 @@ def emit_real_saved_state_certification_artifacts(
     emitted = dict(emitted)
     emitted["saved_state_source"] = SOURCE
     emitted["saved_state_metadata"] = artifact["metadata"]
+    emitted["saved_state_discovery_metadata"] = artifact["discovery_metadata"]
     emitted["saved_state_blockers"] = artifact["blockers"]
     emitted["ok"] = emitted.get("ok") is True and artifact.get("ok") is True
     if artifact.get("ok") is not True:

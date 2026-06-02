@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from tests.rpg.manual.artifact_discovery import discover_artifact_group, expanded_artifact_candidates, normalize_artifact_name
 from tests.rpg.manual.certification_artifacts import CERTIFICATION_PAYLOAD_FILENAME
 from tests.rpg.manual.emission_hooks import REPORT_HTML_FILENAMES
 from tests.rpg.manual.output_artifacts import write_results_zip
@@ -32,29 +33,16 @@ def _source_entry(kind: str, **fields: Any) -> Dict[str, Any]:
     return entry
 
 
-def _normal_name(name: str) -> str:
-    return name.replace("\\", "/").lstrip("/")
-
-
-def _existing_bundle_match(output_dir: Path, names: Iterable[str]) -> str:
-    output_root = Path(output_dir)
-    for name in names:
-        normalized = _normal_name(name)
-        if (output_root / normalized).is_file():
-            return normalized
-    return ""
-
-
 def _zip_names(zip_path: Path) -> set[str]:
     try:
         with zipfile.ZipFile(zip_path, "r") as archive:
-            return {_normal_name(name) for name in archive.namelist()}
+            return {normalize_artifact_name(name) for name in archive.namelist()}
     except (OSError, zipfile.BadZipFile):
         return set()
 
 
 def _matching_zip_name(names: set[str], candidates: Iterable[str]) -> str:
-    normalized_candidates = {_normal_name(name) for name in candidates}
+    normalized_candidates = set(expanded_artifact_candidates(candidates))
     for name in sorted(names):
         if name in normalized_candidates:
             return name
@@ -79,11 +67,13 @@ def build_saved_artifact_bundle_verification(
     else:
         diagnostics.append(_source_entry("bundle_output_directory_found", output_dir=str(output_root)))
         for group, names in REQUIRED_BUNDLE_GROUPS.items():
-            match = _existing_bundle_match(output_root, names)
-            if match:
-                diagnostics.append(_source_entry("bundle_artifact_found", group=group, path=match))
+            discovery = discover_artifact_group(output_dir=output_root, group=group, names=names, source=SOURCE)
+            diagnostics.extend(discovery["diagnostics"])
+            if discovery.get("selected_path"):
+                diagnostics.append(_source_entry("bundle_artifact_found", group=group, path=discovery["selected_path"]))
             else:
                 blockers.append(_source_entry("missing_bundle_artifact", group=group, candidates=list(names)))
+            blockers.extend(discovery["blockers"])
 
     if not zip_file.is_file():
         blockers.append(_source_entry("missing_results_zip", path=str(zip_file)))
