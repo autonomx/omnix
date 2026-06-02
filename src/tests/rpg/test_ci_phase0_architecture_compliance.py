@@ -14,6 +14,9 @@ FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES = [
     "anthropic",
     "app.llm",
 ]
+ALLOWED_PROVIDER_INTERFACE_IMPORTS = {
+    "app.providers.base",
+}
 EXPECTED_COMBAT_CONTRACT_PARTS = [
     "runtime_part22",
     "runtime_part23",
@@ -32,7 +35,13 @@ def _python_files_under(path: str):
     return sorted(item for item in root.rglob("*.py") if item.is_file())
 
 
+def _module_is_allowed_provider_interface(module: str) -> bool:
+    return module in ALLOWED_PROVIDER_INTERFACE_IMPORTS
+
+
 def _module_is_forbidden(module: str) -> bool:
+    if _module_is_allowed_provider_interface(module):
+        return False
     return any(
         module == forbidden or module.startswith(f"{forbidden}.")
         for forbidden in FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES
