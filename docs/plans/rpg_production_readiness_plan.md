@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2**.
 
-Next recommended slice: **Phase 3.2 — objective lifecycle creation/update/completion/failure**.
+Next recommended slice: **Phase 3.3 — journal entries and quest report section**.
 
 Latest completed PRs:
 
@@ -25,13 +25,14 @@ Latest completed PRs:
 | #147 Phase 2.6 inventory persistence save load | `06771ed584f42479674f617d9591bc54c27baea6` | Phase 2 | Complete | Deterministic Phase 2 persistence snapshot and session package export/import gate for inventory, currency, merchant/service/survival economy state, rest state, and survival state; Phase 0 and deterministic gates passed. |
 | #148 Phase 2.7 economy price modifiers | `0848197d9b02c5c0a19c52f0968e1083f3ec9414` | Phase 2 | Complete | Deterministic charisma, relationship, reputation, and scarcity price modifiers for merchant buy/sell transactions; source-backed modifier logs; Phase 0 and deterministic gates passed. |
 | #149 Phase 3.1 quest schema and giver state | `f810404a995308042fbc4fb9bd27b71e97320981` | Phase 3 | Complete | Deterministic quest template normalization, starter quest template, quest-giver offer registration/listing/acceptance, and Phase 3 CI gate; Phase 0 and deterministic gates passed. |
+| #150 Phase 3.2 objective lifecycle | `dd22a5e77e863f7bd5befe7494ff60c3dc803d80` | Phase 3 | Complete | Deterministic objective creation/progress/completion/failure lifecycle, duplicate event suppression, quest completion/failure derivation, source-backed responses, and Phase 3 objective lifecycle CI gate; Phase 0 and deterministic gates passed. |
 
 After every merged PR:
 
-- [ ] Update this handoff section with PR number, merge SHA, and validation result.
-- [ ] Mark completed phase checklist items below.
-- [ ] Update the next recommended slice.
-- [ ] Keep this planning doc on `rpg` so future sessions can resume from source control.
+- [x] Update this handoff section with PR number, merge SHA, and validation result.
+- [x] Mark completed phase checklist items below.
+- [x] Update the next recommended slice.
+- [x] Keep this planning doc on `rpg` so future sessions can resume from source control.
 
 ## Target Scorecard
 
@@ -161,11 +162,11 @@ Status: **Materially complete. Remaining work is full inventory UI/report polish
 
 ## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
 
-Status: **In progress. Quest template schema and quest giver state are merged.**
+Status: **In progress. Quest template schema, quest giver state, and objective lifecycle are merged.**
 
 - [x] Quest template schema.
 - [x] Quest giver state.
-- [ ] Objective creation, update, completion, and failure.
+- [x] Objective creation, update, completion, and failure.
 - [ ] Journal entries: what happened, what I learned, next objective.
 - [ ] Reward rules.
 - [ ] Rumor-to-quest conversion.
@@ -177,12 +178,13 @@ Status: **In progress. Quest template schema and quest giver state are merged.**
 ### Completed Phase 3 slices
 
 - Phase 3.1 / PR #149 — deterministic quest template schema and quest giver state.
+- Phase 3.2 / PR #150 — deterministic objective lifecycle creation/update/completion/failure.
 
 ### Next Phase 3 slices
 
-1. Phase 3.2 — objective lifecycle creation/update/completion/failure.
-2. Phase 3.3 — journal entries and quest report section.
-3. Phase 3.4 — rumor-to-quest conversion and backed rumor propagation.
+1. Phase 3.3 — journal entries and quest report section.
+2. Phase 3.4 — rumor-to-quest conversion and backed rumor propagation.
+3. Phase 3.5 — work inquiry routing and objective suggestions.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
@@ -250,8 +252,6 @@ Status: **Pending.**
 Status: **Pending.**
 
 - [ ] Current objective panel.
-- [ ] Suggested actions.
-- [ ] Inventory/currency panel.
 - [ ] Combat log and combat state panel.
 - [ ] Party panel.
 - [ ] Journal panel.
