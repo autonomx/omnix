@@ -8,6 +8,7 @@ on:
       - "src/app/rpg/**"
       - "src/tests/rpg/**"
       - "docs/plans/rpg_production_readiness_plan.md"
+      - "docs/rpg_saved_certification_runbook.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
       - ".github/workflows/rpg-pr-deterministic.yml"
@@ -18,6 +19,7 @@ on:
       - "src/app/rpg/**"
       - "src/tests/rpg/**"
       - "docs/plans/rpg_production_readiness_plan.md"
+      - "docs/rpg_saved_certification_runbook.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
       - ".github/workflows/rpg-pr-deterministic.yml"
@@ -228,6 +230,9 @@ jobs:
 
       - name: RPG CI Phase 7 saved artifact bundle ZIP verification gate
         run: python -m pytest src/tests/rpg/test_ci_phase7_saved_artifact_bundle_zip_verification.py -q --tb=short
+
+      - name: RPG CI Phase 7 saved certification operator runbook gate
+        run: python -m pytest src/tests/rpg/test_ci_phase7_saved_certification_operator_runbook.py -q --tb=short
 
       - name: RPG CI runtime facade manifest gate
         run: python -m pytest src/tests/rpg/test_ci_runtime_wrapper_manifest.py -q --tb=short
