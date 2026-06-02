@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.17 — real completion path smoke integration**.
+Next recommended slice: **Phase 7.18 — optional real artifact discovery hardening**.
 
 Latest completed PRs:
 
@@ -33,6 +33,7 @@ Latest completed PRs:
 | #212 Phase 7.14 saved artifact bundle ZIP verification | `02e8f8519d3b81bc1ae922f53001575461adc253` | Phase 7 | Complete | Added deterministic saved artifact bundle and ZIP verification helpers for certification JSON, transcript rows, final/loadable state artifacts, report HTML bundle presence, source-backed missing artifact diagnostics, and the saved artifact bundle ZIP verification gate; both required RPG checks passed. |
 | #214 Phase 7.15 saved certification operator runbook | `e4d33ec2ac06946bc8199d060976f60c044419c9` | Phase 7 | Complete | Added operator-facing saved certification runbook guidance, deterministic source guards for helper names/artifact filenames/workflow gate names/source constants/JSON fields, documented provider-free CI versus optional live-provider local runs, and added the saved certification operator runbook gate; both required RPG checks passed. |
 | #216 Phase 7.16 end-to-end saved 100-turn fixture certification | `a8e3d5d6c7a3a67bc0a3107e7ac8686cdf930790` | Phase 7 | Complete | Added a provider-free end-to-end saved 100-turn fixture helper and gate that writes manual/autoplay-shaped outputs, emits saved certification JSON, appends report diagnostics, verifies disk bundle and ZIP inclusion, and covers digest drift blockers; both required RPG checks passed. |
+| #218 Phase 7.17 real completion path smoke integration | `5a974b237325443c802fa5dbc36551924585b061` | Phase 7 | Complete | Added provider-free real completion path smoke integration, wired manual CLI saved certification emission before ZIP creation with an opt-out flag, covered skipped/missing artifact diagnostics and complete saved-output emission, and added the real completion path smoke gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -106,16 +107,17 @@ Completed:
 - [x] Phase 7.14 — full saved artifact bundle and ZIP inclusion verification: add deterministic saved artifact bundle and ZIP verification helpers, verify certification JSON/transcript/final/loadable state artifacts in ZIPs, verify report HTML exists in saved bundles, surface source-backed missing artifact diagnostics, and add the `RPG CI Phase 7 saved artifact bundle ZIP verification gate`.
 - [x] Phase 7.15 — saved certification operator runbook and live/manual invocation guidance: add operator-facing manual/autoplay saved certification guidance, document expected artifacts, ZIP/report behavior, important JSON fields, diagnostics/blockers, provider-free CI versus optional live-provider local runs, deterministic source guard tests, and the `RPG CI Phase 7 saved certification operator runbook gate`.
 - [x] Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification: add a canonical tiny saved output fixture builder, exercise transcript rows, report bytes, final/loadable state digests, progress/loop diagnostics, saved certification payload writing, report HTML append, emission hooks, and bundle/ZIP verification together, and add the `RPG CI Phase 7 end-to-end saved 100-turn fixture certification gate`.
+- [x] Phase 7.17 — real completion path smoke integration: add a provider-free completion-path smoke bridge, wire manual CLI completion to attempt saved certification emission before results ZIP creation, skip without mutation when live artifacts are absent or incomplete, emit saved certification JSON/HTML when complete saved outputs exist, and add the `RPG CI Phase 7 real completion path smoke gate`.
 
-Next recommended slice: **Phase 7.17 — real completion path smoke integration**.
+Next recommended slice: **Phase 7.18 — optional real artifact discovery hardening**.
 
-Suggested Phase 7.17 scope:
+Suggested Phase 7.18 scope:
 
-- Wire or smoke-test saved certification emission hooks in actual manual/autoplay completion path entry points without requiring a live provider in CI.
-- Confirm provider-free skip behavior when live artifacts are absent.
-- Confirm real completion paths call the saved certification emission hook when output directories and saved artifacts are available.
-- Keep tests deterministic and avoid committing `resources/data/test-results` runtime artifacts.
-- Keep live-provider execution optional/outside required PR CI.
+- Harden real saved artifact discovery across additional actual output layouts without requiring a live provider in CI.
+- Cover nested report/transcript/state paths and alternate manual/autoplay naming patterns.
+- Add source-backed diagnostics for ambiguous, duplicate, or partially complete saved artifact groups.
+- Keep deterministic tests provider-free and avoid committing `resources/data/test-results` runtime artifacts.
+- Preserve Phase 7 saved certification payload, report diagnostics, and ZIP/bundle guardrails.
 
 ## Definition of 8/10 Production Readiness
 
