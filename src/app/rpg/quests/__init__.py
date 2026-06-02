@@ -1,5 +1,9 @@
 """Deterministic RPG quest state machine helpers."""
 
+from app.rpg.quests.completion_audit import (
+    assert_phase3_completion_ready,
+    build_phase3_completion_audit,
+)
 from app.rpg.quests.conditions import evaluate_quest_condition
 from app.rpg.quests.journal import (
     add_journal_entry,
@@ -60,8 +64,10 @@ __all__ = [
     "add_journal_entry",
     "add_journal_entry_from_objective_result",
     "apply_quest_transition",
+    "assert_phase3_completion_ready",
     "assert_quest_persistence_roundtrip",
     "back_rumor_with_evidence",
+    "build_phase3_completion_audit",
     "build_phase3_matrix_scenario_payload",
     "build_phase3_quest_report_model",
     "build_quest_journal_summary",
