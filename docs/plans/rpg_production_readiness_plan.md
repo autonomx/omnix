@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.6 — full 100-turn autoplay certification gate**.
+Next recommended slice: **Phase 7.7 — real autoplay artifact wiring and saved 100-turn certification report integration**.
 
 Latest completed PRs:
 
@@ -22,6 +22,7 @@ Latest completed PRs:
 | #190 Phase 7.3 save load replay persistence roundtrip | `f3b2255973f305cc2e8e471b7a6e00b33a36b27f` | Phase 7 | Complete | Added provider-free package/disk save-load replay roundtrip validation using existing package bridge, durable store, checkpoint, and replay sequence paths; surfaced digest drift details; exported Phase 7.3 helpers; added the Phase 7 save load replay roundtrip gate; both required RPG checks passed. |
 | #192 Phase 7.4 100-turn readiness loop progress report gate | `767b40863b30ad0d05e651ce26c6b81e48bfcda9` | Phase 7 | Complete | Added provider-free advisory 100-turn readiness analysis for loop, progress, and report-budget signals; classified incomplete turn counts and report/transcript growth as blockers; surfaced repeated action/location/no-progress risks as advisory warnings; exported Phase 7.4 helpers; added the Phase 7 100-turn readiness gate; both required RPG checks passed. |
 | #194 Phase 7.5 100-turn readiness report integration | `687cb8cd2d519f5ab2d8c19bc82cd8371e0c51eb` | Phase 7 | Complete | Added deterministic readiness report payloads, critical/warning/advisory severity categories, escaped report HTML, idempotent report append helpers, source-backed advisory certification guardrails, exports, and the Phase 7 100-turn readiness report gate; both required RPG checks passed. |
+| #196 Phase 7.6 full 100-turn autoplay certification gate | `79adb4326f896c44ab9544b27786aca762211c95` | Phase 7 | Complete | Added deterministic full 100-turn artifact certification helpers, exact turn-count enforcement, readiness/report severity reuse, optional state/checkpoint digest mismatch blockers, exports, and the Phase 7 full 100-turn certification gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -191,18 +192,21 @@ Completed:
 - [x] Phase 7.3 — save/load replay persistence roundtrip gate: use existing package bridge and durable store paths, validate package/disk checkpoint digest stability, replay from loaded checkpoint state, surface source-backed drift details, export readiness/contract helpers, and add the `RPG CI Phase 7 save load replay roundtrip gate`.
 - [x] Phase 7.4 — 100-turn readiness loop, progress, and report gate: add provider-free advisory 100-turn readiness analysis for turn count, loop risks, progress signals, report/transcript growth projections, source-backed blockers/warnings, exports, and the `RPG CI Phase 7 100-turn readiness gate`.
 - [x] Phase 7.5 — critical warning severity and 100-turn readiness report integration: integrate Phase 7.4 readiness results into deterministic report-facing payloads, add critical/warning/advisory severity categories, escaped HTML rendering, idempotent report append helpers, source-backed advisory certification guardrails, exports, and the `RPG CI Phase 7 100-turn readiness report gate`.
+- [x] Phase 7.6 — full 100-turn autoplay certification gate: add deterministic artifact-shaped 100-turn certification helpers, require exact 100-turn completion, reuse Phase 7.4 readiness and Phase 7.5 report severity payloads, block on readiness critical blockers and provided state/checkpoint digest mismatches, export source-backed contract helpers, and add the `RPG CI Phase 7 full 100-turn certification gate`.
 
-Next recommended slice: **Phase 7.6 — full 100-turn autoplay certification gate**.
+Next recommended slice: **Phase 7.7 — real autoplay artifact wiring and saved 100-turn certification report integration**.
 
-Suggested Phase 7.6 scope:
+Suggested Phase 7.7 scope:
 
-- Add a deterministic 100-turn autoplay certification gate that consumes actual 100-turn run artifacts instead of advisory scaffolding alone.
-- Require complete 100-turn completion, zero critical readiness blockers, and source-backed report severity output.
-- Integrate real autoplay loop-risk, progress-metric, and report/transcript growth data with the Phase 7.4/7.5 readiness helpers.
-- Add final state diff validation against saved/loadable campaign state where available.
-- Keep certification report rendering escaped/safe, source-backed, provider-free, and non-mutating.
-- Keep LLM/provider narration advisory and outside deterministic certification logic.
-- Add a focused deterministic CI test for the full 100-turn certification contract before expanding to broader combat/NPC replay certification.
+- Locate actual autoplay campaign/report artifact producers.
+- Wire saved 100-turn run artifacts into `build_full_100_turn_certification_result`.
+- Add a saved/serialized certification payload next to existing campaign report artifacts.
+- Integrate certification status into report-facing artifacts using Phase 7.5/7.6 helpers.
+- Keep certification source-backed, deterministic, escaped/safe, non-mutating, and provider-free.
+- Include actual turn rows, report byte size, transcript/debug byte size, readiness severity counts, and optional final checkpoint/save/load digests where available.
+- Add tests using realistic saved artifact-shaped fixtures rather than synthetic-only turn rows.
+- Do not make the full expensive live-provider autoplay run a required PR CI step.
+- Keep real 100-turn live-provider execution manual/offline or separate from required PR checks unless explicitly approved.
 
 ## Phase 8 — UI/UX Production Pass
 
