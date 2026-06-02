@@ -1,5 +1,12 @@
 """Phase 13.5 + 15.0 — Session lifecycle + persistence module."""
 # Phase 15.0 — Durable persistence
+from .autoplay_certification_artifact import (
+    append_saved_100_turn_certification_to_campaign_report_html,
+    assert_phase7_real_autoplay_certification_artifact_ready,
+    build_real_autoplay_certification_artifact,
+    build_saved_100_turn_certification_payload,
+    render_saved_100_turn_certification_report_html,
+)
 from .durable_store import (
     list_sessions_from_disk,
     load_session_from_disk,
@@ -122,4 +129,10 @@ __all__ = [
     "assert_phase7_full_100_turn_certification_ready",
     "build_full_100_turn_certification_contract",
     "build_full_100_turn_certification_result",
+    # Phase 7.7
+    "append_saved_100_turn_certification_to_campaign_report_html",
+    "assert_phase7_real_autoplay_certification_artifact_ready",
+    "build_real_autoplay_certification_artifact",
+    "build_saved_100_turn_certification_payload",
+    "render_saved_100_turn_certification_report_html",
 ]
