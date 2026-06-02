@@ -153,9 +153,9 @@ def _consume_survival_item(
     tick: int,
 ) -> Dict[str, Any]:
     state = _safe_dict(simulation_state)
-    player_state = _ensure_player_state(state)
-    before_inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
-    before_survival_state = normalize_survival_state(_safe_dict(player_state.get("survival_state")))
+    read_player_state = _safe_dict(state.get("player_state"))
+    before_inventory_state = normalize_inventory_state(_safe_dict(read_player_state.get("inventory_state")))
+    before_survival_state = normalize_survival_state(_safe_dict(read_player_state.get("survival_state")))
 
     item = _find_first_matching_item(before_inventory_state, item_ids)
     if not item.get("item_id"):
@@ -170,6 +170,7 @@ def _consume_survival_item(
             tick=tick,
         )
 
+    player_state = _ensure_player_state(state)
     consumed_item_id = _safe_str(item.get("item_id"))
     after_inventory_state = remove_inventory_item(before_inventory_state, consumed_item_id, 1)
     player_state["inventory_state"] = after_inventory_state
