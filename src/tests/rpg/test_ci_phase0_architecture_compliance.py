@@ -1,4 +1,3 @@
-import ast
 from pathlib import Path
 
 
@@ -34,16 +33,19 @@ def _module_is_forbidden(module: str) -> bool:
 
 
 def _find_forbidden_imports(path: Path) -> list[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     violations = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if _module_is_forbidden(alias.name):
-                    violations.append(f"line {node.lineno}: import {alias.name}")
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            if _module_is_forbidden(node.module):
-                violations.append(f"line {node.lineno}: from {node.module} import ...")
+    for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw_line.strip()
+        if line.startswith("import "):
+            imported_modules = line.removeprefix("import ").split(",")
+            for imported in imported_modules:
+                module = imported.strip().split(" as ", 1)[0]
+                if _module_is_forbidden(module):
+                    violations.append(f"line {lineno}: import {module}")
+        elif line.startswith("from ") and " import " in line:
+            module = line.removeprefix("from ").split(" import ", 1)[0].strip()
+            if _module_is_forbidden(module):
+                violations.append(f"line {lineno}: from {module} import ...")
     return violations
 
 
