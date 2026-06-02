@@ -54,7 +54,7 @@ def test_ci_phase7_live_manual_saved_artifact_completion_hook_emits_payload_and_
     assert result["ok"] is True
     assert result["emission_hook_source"] == "deterministic_phase7_live_manual_saved_artifact_emission_hooks_gate"
     assert payload["certification_result"]["certification_status"] == "final_100_turn_certification_passed"
-    assert payload["normalized_artifact"]["emission_hook_source"] == result["emission_hook_source"]
+    assert payload["emission_hook_source"] == result["emission_hook_source"]
     assert "completion_report_html_found" in diagnostic_kinds
     assert "completion_transcript_artifact_found" in diagnostic_kinds
     assert "completion_state_checkpoint_artifacts_found" in diagnostic_kinds
@@ -107,7 +107,7 @@ def test_ci_phase7_live_manual_saved_artifact_completion_hook_emits_with_missing
     assert "missing_transcript_artifacts" in diagnostic_kinds
     assert "missing_state_checkpoint_artifacts" in diagnostic_kinds
     assert "certification_payload_emission_blocker" in diagnostic_kinds
-    assert payload["normalized_artifact"]["emission_hook_diagnostics"]
+    assert payload["emission_hook_diagnostics"]
 
 
 def test_ci_phase7_live_manual_saved_artifact_completion_hook_ready():
