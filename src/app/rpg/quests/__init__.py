@@ -21,6 +21,11 @@ from app.rpg.quests.persistence import (
     build_quest_persistence_snapshot,
     restore_quest_persistence_snapshot,
 )
+from app.rpg.quests.reporting import (
+    build_phase3_matrix_scenario_payload,
+    build_phase3_quest_report_model,
+    render_phase3_quest_report_html,
+)
 from app.rpg.quests.rewards import build_reward_payload, claim_quest_rewards, mark_reward_claimed
 from app.rpg.quests.rumors import (
     back_rumor_with_evidence,
@@ -52,6 +57,8 @@ __all__ = [
     "apply_quest_transition",
     "assert_quest_persistence_roundtrip",
     "back_rumor_with_evidence",
+    "build_phase3_matrix_scenario_payload",
+    "build_phase3_quest_report_model",
     "build_quest_journal_summary",
     "build_quest_persistence_snapshot",
     "build_reward_payload",
@@ -75,6 +82,7 @@ __all__ = [
     "objective_from_template",
     "propagate_backed_rumors",
     "register_rumor",
+    "render_phase3_quest_report_html",
     "render_quest_journal_report_html",
     "restore_quest_persistence_snapshot",
     "route_work_inquiry",
