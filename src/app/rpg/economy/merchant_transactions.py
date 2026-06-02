@@ -233,6 +233,8 @@ def _sell_price_for_item(player_item: Dict[str, Any], stock_entry: Dict[str, Any
 
 def _multiply_currency(currency: Any, qty: int) -> Dict[str, int]:
     qty = max(1, _safe_int(qty, 1))
+    if qty == 1:
+        return normalize_currency(currency)
     return copper_to_currency(currency_to_copper_value(currency) * qty)
 
 
