@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.13 — runtime session travel command integration / entry-point wiring**.
+Next recommended slice: **Phase 4.14 — campaign report map/location panel integration**.
 
 Latest completed PRs:
 
@@ -46,6 +46,7 @@ Latest completed PRs:
 | #172 Phase 4.10 encounter combat world event bridge | `a62c0be5296ee33d05f0d08ac6316815c61749de` | Phase 4 | Complete | Deterministic encounter runtime bridge, source-backed local world-event recording for non-combat/evidence encounters, source-backed combat candidate payloads for combat-capable encounters when no canonical combat-start API is invoked, narration guardrails, and Phase 4 encounter combat events CI gate passed. |
 | #174 Phase 4.11 runtime travel encounter routing | `4ac5c5357b1ce0097a585733b431111ca0d219b4` | Phase 4 | Complete | Deterministic runtime travel command-routing bridge, canonical destination alias resolution, guarded travel/resource helper use, seeded encounter roll/record after successful travel, encounter runtime routing, combat-candidate preservation, and Phase 4 runtime travel encounter routing CI gate passed. |
 | #176 Phase 4.12 command routing session integration | `d34761b661b6972cb363276553fd561788e65956` | Phase 4 | Complete | Exported Phase 4.11 command-routing helpers through `app.rpg.locations`, added deterministic facade/session follow-up tests, added the Phase 4 command routing facade session CI gate, and both required RPG checks passed. |
+| #178 Phase 4.13 runtime session travel command integration | `5633113e10688c6b9a96b1d452d70fd656eb6589` | Phase 4 | Complete | Added `runtime_part27` as the final authoritative runtime wrapper, routed session travel commands through the guarded Phase 4 command router, preserved non-travel delegation, updated runtime wrapper manifest/tests, added the Phase 4 runtime session travel command gate, and both required RPG checks passed. |
 
 After every merged PR:
 
@@ -111,7 +112,7 @@ Completed: quest template schema, giver state, objective lifecycle, journal/repo
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1 through 4.12 are merged; Phase 4.13 runtime session travel command integration / entry-point wiring is next.**
+Status: **In progress. Phase 4.1 through 4.13 are merged; Phase 4.14 campaign report map/location panel integration is next.**
 
 Completed or materially completed:
 
@@ -125,6 +126,7 @@ Completed or materially completed:
 - [x] Encounter-to-world-event bridge and combat candidate payloads.
 - [x] Runtime travel command-routing bridge for guarded travel, seeded encounters, and encounter runtime routing.
 - [x] Command-routing helpers exported through the public `app.rpg.locations` facade.
+- [x] Session-level travel command routing through the canonical runtime wrapper.
 - [~] Local world-event state and derived location history.
 - [~] Location history report model and escaped HTML.
 - [x] Deterministic map/location panel payload and escaped report HTML.
@@ -132,23 +134,21 @@ Completed or materially completed:
 
 Pending:
 
-- [ ] Phase 4.13 runtime session travel command integration / entry-point wiring.
-- [ ] Broader campaign report integration for map/location panels if not already wired into the main report flow.
+- [ ] Phase 4.14 campaign report map/location panel integration.
 - [ ] Frontend map/location UI panel wiring.
 - [ ] Optional season/weather hooks beyond placeholder, if desired later.
 
-## Phase 4.13 — Runtime Session Travel Command Integration / Entry-Point Wiring
+## Phase 4.14 — Campaign Report Map/Location Panel Integration
 
 Recommended scope:
 
-- Locate the actual deterministic session/runtime command entry point for player travel commands.
-- Wire travel-command handling to `app.rpg.locations.apply_runtime_travel_command` only through runtime modules.
-- Keep command routing provider-free and source-backed.
-- Do not call LLM.
-- Do not bypass discovery, route-block, resource, or encounter runtime guardrails.
-- Preserve combat candidates without starting combat unless a canonical deterministic combat-start API is located and reused.
-- Add narrow deterministic tests proving missing resources deny before mutation, successful travel records encounter/runtime results, and non-travel commands do not mutate travel or encounter state.
-- If no safe entry point is found, document the blocker and keep gameplay routing out of harness shortcuts.
+- Wire deterministic map/location panel payloads into the campaign/main report flow if they are not already visible there.
+- Reuse `app.rpg.locations.build_map_location_panel_payload` and `render_map_location_report_html` rather than duplicating map/report logic.
+- Keep rendering provider-free, source-backed, and non-mutating.
+- Do not reveal undiscovered locations as known to the player.
+- Do not claim blocked routes are passable.
+- Preserve escaped report HTML and deterministic source fields.
+- Add narrow deterministic tests proving map/location panel visibility, route-block display, current-location display, time display, and no gameplay mutation during report rendering.
 
 ## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
 
@@ -167,7 +167,7 @@ Current coverage:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel; Phase 4.10 adds encounter-to-world-event bridge and combat candidate payloads for combat-capable encounter hooks; Phase 4.11 adds deterministic command-level travel bridge for guarded travel, encounter rolling, encounter logging, and encounter runtime routing; Phase 4.12 exports command-routing helpers through the public locations facade.
+- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel; Phase 4.10 adds encounter-to-world-event bridge and combat candidate payloads for combat-capable encounter hooks; Phase 4.11 adds deterministic command-level travel bridge for guarded travel, encounter rolling, encounter logging, and encounter runtime routing; Phase 4.12 exports command-routing helpers through the public locations facade; Phase 4.13 connects session travel commands through the final canonical runtime wrapper.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
