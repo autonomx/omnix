@@ -1,0 +1,49 @@
+name: RPG Phase 0 architecture compliance
+
+on:
+  pull_request:
+    branches:
+      - rpg
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
+      - ".github/workflows/rpg-phase0-architecture-compliance.yml"
+      - ".github/workflows/rpg-pr-deterministic.yml"
+  push:
+    branches:
+      - rpg
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
+      - ".github/workflows/rpg-phase0-architecture-compliance.yml"
+      - ".github/workflows/rpg-pr-deterministic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase0-architecture-compliance:
+    name: Phase 0 architecture compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: src
+      RPG_TEST_MODE: deterministic
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deterministic test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart playwright
+
+      - name: Run Phase 0 architecture compliance gates
+        run: python -m pytest src/tests/rpg/test_ci_phase0_architecture_compliance.py -q --tb=short
