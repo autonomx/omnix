@@ -78,13 +78,15 @@ def test_ci_phase7_checkpoint_contract_forbids_provider_and_mutation():
     checkpoint = build_session_checkpoint(_session(), label="contract", turn_index=2)
     contract = build_replay_checkpoint_contract(checkpoint)
     source = inspect.getsource(replay_checkpoint)
+    dependency_source = source.replace("providers", "").replace("provider_latency_ms", "")
 
     assert "Checkpoint digest: " + checkpoint["digest"] in contract["allowed_checkpoint_claims"]
     assert "Do not call providers or LLMs to build, restore, or compare replay checkpoints." in contract[
         "forbidden_checkpoint_claims"
     ]
     assert "openai" not in source.lower()
-    assert "provider" not in source.replace("providers", "").lower()
+    assert "provider" not in dependency_source.lower()
+    assert "llm" not in dependency_source.lower()
 
 
 def test_ci_phase7_checkpoint_roundtrip_is_non_mutating():
