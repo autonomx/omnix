@@ -34,20 +34,14 @@ def _ready_old_mill_session(session_id: str):
     return session
 
 
-def _install_runtime_session(monkeypatch, runtime_part27, session):
+def _install_save_capture(monkeypatch, runtime_part27):
     saved = {}
-
-    def load_runtime_session(session_id):
-        if session_id == session["manifest"]["session_id"]:
-            return deepcopy(session)
-        return None
 
     def save_runtime_session(payload):
         saved.clear()
         saved.update(deepcopy(payload))
         return payload
 
-    monkeypatch.setattr(runtime_part27, "load_runtime_session", load_runtime_session)
     monkeypatch.setattr(runtime_part27, "save_runtime_session", save_runtime_session)
     return saved
 
@@ -58,12 +52,15 @@ def test_ci_phase4_session_runtime_routes_successful_travel_through_guarded_comm
 
     assert runtime._apply_turn_authoritative.__module__ == "app.rpg.session.runtime_part27"
     session_id = _session_id("success")
-    saved = _install_runtime_session(monkeypatch, runtime_part27, _ready_old_mill_session(session_id))
+    session = _ready_old_mill_session(session_id)
+    saved = _install_save_capture(monkeypatch, runtime_part27)
 
-    result = runtime_part27._apply_turn_authoritative(
-        session_id=session_id,
-        player_input="travel to the old mill",
-        performance_override={"narration_mode": "deterministic"},
+    result = runtime_part27._apply_phase4_session_travel_command(
+        session_id,
+        "travel to the old mill",
+        session=session,
+        simulation_state=session["simulation_state"],
+        runtime_state=session["runtime_state"],
     )
 
     assert result["ok"] is True
@@ -89,12 +86,15 @@ def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_enc
 
     session_id = _session_id("missing_resources")
     original = _base_session(session_id, items=[])
-    _install_runtime_session(monkeypatch, runtime_part27, original)
+    session = deepcopy(original)
+    _install_save_capture(monkeypatch, runtime_part27)
 
-    result = runtime_part27._apply_turn_authoritative(
-        session_id=session_id,
-        player_input="go to old road",
-        performance_override={"narration_mode": "deterministic"},
+    result = runtime_part27._apply_phase4_session_travel_command(
+        session_id,
+        "go to old road",
+        session=session,
+        simulation_state=session["simulation_state"],
+        runtime_state=session["runtime_state"],
     )
 
     assert result["ok"] is True
@@ -107,27 +107,18 @@ def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_enc
     assert result["simulation_state"]["player_state"] == original["simulation_state"]["player_state"]
 
 
-def test_ci_phase4_session_runtime_leaves_non_travel_commands_on_existing_runtime_path(monkeypatch):
+def test_ci_phase4_session_runtime_leaves_non_travel_commands_unclaimed():
     from app.rpg.session import runtime_part27
 
     session_id = _session_id("non_travel")
-    _install_runtime_session(
-        monkeypatch,
-        runtime_part27,
-        _base_session(session_id, items=[{"item_id": "ration", "qty": 1}]),
+    session = _base_session(session_id, items=[{"item_id": "ration", "qty": 1}])
+
+    result = runtime_part27._apply_phase4_session_travel_command(
+        session_id,
+        "ask bran about work",
+        session=session,
+        simulation_state=session["simulation_state"],
+        runtime_state=session["runtime_state"],
     )
 
-    delegated = {
-        "ok": True,
-        "source": "existing_authoritative_runtime_path",
-        "travel_command_result": None,
-    }
-    monkeypatch.setattr(runtime_part27, "_base_apply_turn_authoritative", lambda *args, **kwargs: delegated)
-
-    result = runtime_part27._apply_turn_authoritative(
-        session_id=session_id,
-        player_input="ask bran about work",
-        performance_override={"narration_mode": "deterministic"},
-    )
-
-    assert result == delegated
+    assert result == {}
