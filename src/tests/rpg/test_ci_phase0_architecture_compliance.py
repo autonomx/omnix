@@ -14,6 +14,13 @@ FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES = [
     "anthropic",
     "app.llm",
 ]
+EXPECTED_COMBAT_CONTRACT_PARTS = [
+    "runtime_part22",
+    "runtime_part23",
+    "runtime_part24",
+    "runtime_part25",
+    "runtime_part26",
+]
 
 
 def _read(path: str) -> str:
@@ -30,6 +37,10 @@ def _module_is_forbidden(module: str) -> bool:
         module == forbidden or module.startswith(f"{forbidden}.")
         for forbidden in FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES
     )
+
+
+def _runtime_part_from_module(module: str) -> str:
+    return module.rsplit(".", 1)[-1]
 
 
 def _find_forbidden_imports(path: Path) -> list[str]:
@@ -53,16 +64,17 @@ def test_phase0_runtime_facade_loads_split_parts_monotonically():
     from app.rpg.session import runtime
 
     manifest = runtime.get_runtime_wrapper_manifest()
-    part_numbers = [int(name.removeprefix("runtime_part")) for name in manifest["part_modules"]]
+    part_modules = list(manifest["part_modules"])
+    part_numbers = [int(name.removeprefix("runtime_part")) for name in part_modules]
+    combat_contract_parts = [
+        _runtime_part_from_module(module)
+        for module in manifest["combat_contract_modules"]
+    ]
 
     assert part_numbers == list(range(1, max(part_numbers) + 1))
-    assert manifest["part_modules"][-5:] == [
-        "runtime_part22",
-        "runtime_part23",
-        "runtime_part24",
-        "runtime_part25",
-        "runtime_part26",
-    ]
+    assert combat_contract_parts == EXPECTED_COMBAT_CONTRACT_PARTS
+    for part_name in EXPECTED_COMBAT_CONTRACT_PARTS:
+        assert part_name in part_modules
 
 
 def test_phase0_combat_contract_bridges_emit_source_fields():
