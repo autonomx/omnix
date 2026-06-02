@@ -14,10 +14,11 @@ Latest completed PRs:
 |---|---|---|---|---|
 | #141 Phase 0 provider boundary static gate | `9ccca09d9636dc8d035c640c3ec1ef9955c6a08f` | Phase 0 | Complete | Added provider-boundary static scan, hardened runtime manifest assertions, allowed only neutral `app.providers.base` interface import. Phase 0 and deterministic gates passed before merge. |
 | #142 Phase 2 starter loadout economy gate | `792451adabda3bdf96f18b41d135052b91285eac` | Phase 2 | Complete | Added deterministic starter loadout helper, canonical starting 15 silver, starter items, idempotency/preservation behavior, and focused Phase 2 economy CI gate. Phase 0 and deterministic gates passed before merge. |
+| #143 Phase 2.2 merchant commerce runtime | `ab26de192e8f3536756b42a218135e1fdb2a8834` | Phase 2 | Complete | Added deterministic merchant inventory, price, player currency/inventory changes, and Phase 2 economy CI coverage. Phase 0 and deterministic gates passed before merge. |
 
 Current phase focus: **Phase 2 — Economy, Inventory, Services, and Survival v2**.
 
-Next recommended slice: **Phase 2.2 — Merchant stock and deterministic buy/sell transaction runtime**.
+Next recommended slice: **Phase 2.3 — Economy report rows and deterministic price/merchant-state presentation guardrails**.
 
 Do this after each merged PR:
 
@@ -33,14 +34,14 @@ Do this after each merged PR:
 | Architecture / system design | 8.3 | 8.5+ | Runtime modularized enough that systems are maintainable and not harness-dependent. |
 | LLM grounding / hallucination control | 7.8 | 8.5+ | Final visible state-claim validator passes matrix/autoplay with zero critical state contradictions. |
 | Runtime performance architecture | 7.0 | 8.5+ | Fast buckets <0.15s; first-call average <2.5s; p95 bounded and explained. |
-| Testability / diagnostics | 8.3 | 9.0+ | Matrix, manual, autoplay, save/load, and report gates run predictably with source-backed failures. |
-| Core gameplay mechanics | 5.9 | 8.0+ | Combat, economy, travel, quests, party, inventory, XP, and survival all have complete loops. |
-| Game design / player experience | 4.9 | 8.0+ | 30-60 minute vertical slice is coherent, fun, visible, and replayable. |
+| Testability / diagnostics | 8.4 | 9.0+ | Matrix, manual, autoplay, save/load, and report gates run predictably with source-backed failures. |
+| Core gameplay mechanics | 6.1 | 8.0+ | Combat, economy, travel, quests, party, inventory, XP, and survival all have complete loops. |
+| Game design / player experience | 5.1 | 8.0+ | 30-60 minute vertical slice is coherent, fun, visible, and replayable. |
 | NPC roleplay potential | 6.5 | 8.5+ | NPC profiles, memory, relationships, schedules, and evolution persist and affect play. |
-| 100-turn readiness | 5.8 | 8.0+ | 100-turn run completes with zero critical warnings and useful progression. |
+| 100-turn readiness | 5.9 | 8.0+ | 100-turn run completes with zero critical warnings and useful progression. |
 | 1000-turn readiness | 2.5 | 8.0+ | 1000-turn run completes with bounded reports, compression, memory aging, and no collapse. |
-| Production readiness | 3.2 | 8.0+ | Install/run/config/save/load/error handling are player-safe. |
-| Commercial/game-quality readiness | 2.7 | 8.0+ | Enough content, polish, UX, stability, and onboarding for external users. |
+| Production readiness | 3.3 | 8.0+ | Install/run/config/save/load/error handling are player-safe. |
+| Commercial/game-quality readiness | 2.8 | 8.0+ | Enough content, polish, UX, stability, and onboarding for external users. |
 
 ## 2. Roadmap Principles
 
@@ -137,28 +138,28 @@ Status: **Materially complete enough to proceed to Phase 2; remaining items are 
 
 Goal: make shops, inns, food, water, rest, and inventory function as coherent systems.
 
-Status: **In progress. PR #142 completed starter loadout and focused Phase 2 CI.**
+Status: **In progress. PR #142 completed starter loadout; PR #143 completed merchant inventory and deterministic commerce runtime.**
 
 ### Scope
 
 - [x] Canonical item database.
 - [x] Item IDs, display names, tags, stackability, value, weight if used.
-- [ ] Merchant stock and quantities.
-- [ ] Buy/sell rules.
+- [x] Merchant stock and quantities.
+- [x] Buy/sell rules.
 - [ ] Room/rest service effects.
 - [ ] Food/water consumption effects.
 - [x] Currency normalization: gold/silver/copper.
 - [ ] Price modifiers from charisma, reputation, relationship, scarcity.
-- [ ] Transaction logs.
+- [x] Transaction logs.
 - [ ] Inventory UI/report table.
 - [x] Starter loadout and starting currency.
 - [ ] Survival pressure tuning.
 
 ### Tests
 
-- [ ] Buy/sell success/failure.
-- [ ] Insufficient funds.
-- [ ] Stock depletion.
+- [x] Buy/sell success/failure.
+- [x] Insufficient funds.
+- [x] Stock depletion.
 - [ ] Inn room purchase and rest effect.
 - [ ] Ration/water consumption.
 - [x] Currency normalization.
@@ -168,7 +169,7 @@ Status: **In progress. PR #142 completed starter loadout and focused Phase 2 CI.
 
 ### Exit Criteria
 
-- [ ] Player can buy food, rent a room, rest, consume food/water, sell item, and see inventory/currency changes.
+- [~] Player can buy food, rent a room, rest, consume food/water, sell item, and see inventory/currency changes. Commerce and state deltas are covered; rest and consumption remain.
 - [ ] Economy report shows transactions and deltas.
 - [ ] No LLM-invented prices or stock.
 
@@ -179,14 +180,19 @@ Status: **In progress. PR #142 completed starter loadout and focused Phase 2 CI.
   - Added `app.rpg.economy.starter_loadout`.
   - Added `src/tests/rpg/test_ci_phase2_economy_inventory.py`.
   - Added deterministic workflow step `RPG CI Phase 2 economy inventory gate`.
+- Phase 2.2 / PR #143 — merchant inventory and commerce runtime.
+  - Merge SHA: `ab26de192e8f3536756b42a218135e1fdb2a8834`
+  - Added `app.rpg.economy.merchant_transactions`.
+  - Added Phase 2 CI coverage for merchant inventory, commerce success, insufficient currency, stock depletion, sell-back, and transaction log source fields.
+  - Added diagnostic artifact capture for Phase 2 economy gate failures.
 
 ### Next Phase 2 slices
 
-1. Phase 2.2 — merchant stock and deterministic buy/sell transaction runtime.
-2. Phase 2.3 — stock depletion, insufficient funds, and transaction log report rows.
-3. Phase 2.4 — inn room/rest service effects.
-4. Phase 2.5 — ration/water consumption and survival pressure tuning.
-5. Phase 2.6 — inventory persistence through save/load.
+1. Phase 2.3 — economy report rows and deterministic price/merchant-state presentation guardrails.
+2. Phase 2.4 — inn room/rest service effects.
+3. Phase 2.5 — ration/water consumption and survival pressure tuning.
+4. Phase 2.6 — inventory persistence through save/load.
+5. Phase 2.7 — price modifiers from charisma/reputation/relationship/scarcity.
 
 ### Target Score Impact
 
@@ -528,7 +534,7 @@ Goal: reach production-quality operation.
 |---|---|---|---|
 | 0 | Architecture compliance | Architecture/grounding | Mostly complete; provider-boundary static gate merged. |
 | 1 | Combat lifecycle | Mechanics | Materially complete enough to proceed; polish backlog remains. |
-| 2 | Economy/inventory/survival | Mechanics/game loop | In progress; starter loadout merged. |
+| 2 | Economy/inventory/survival | Mechanics/game loop | In progress; starter loadout and merchant commerce runtime merged. |
 | 3 | Quest/journal/rumor lifecycle | Game design/progression | Pending. |
 | 4 | Travel/location graph | World/game design | Pending. |
 | 5 | NPC memory/evolution | NPC roleplay | Pending. |
@@ -558,8 +564,10 @@ Goal: reach production-quality operation.
 
 - [x] Add canonical item database.
 - [x] Add starter inventory/currency.
-- [ ] Add merchant stock and quantities.
-- [ ] Add buy/sell transaction report rows.
+- [x] Add merchant stock and quantities.
+- [x] Add deterministic commerce runtime.
+- [ ] Add economy report rows.
+- [ ] Add deterministic price and merchant-state presentation guardrails.
 
 ### Bundle PR.3 — Vertical Slice Content Skeleton
 
