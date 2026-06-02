@@ -1,0 +1,23 @@
+
+# Phase 4.14 finalizer: ensure the map/location panel wraps the final public
+# campaign report renderer after every earlier sorted report fragment has loaded.
+
+_phase4_14_final_render_campaign_report_html = globals().get("render_campaign_report_html")
+
+if callable(_phase4_14_final_render_campaign_report_html) and not getattr(
+    _phase4_14_final_render_campaign_report_html,
+    "_phase4_14_map_location_finalized",
+    False,
+):
+
+    def render_campaign_report_html(*args, **kwargs):
+        html = _phase4_14_final_render_campaign_report_html(*args, **kwargs)
+        report_payload = args[0] if args else kwargs.get("report_payload") or kwargs.get("payload")
+        simulation_state = kwargs.get("simulation_state") or kwargs.get("state")
+        return append_phase4_map_location_panel_to_campaign_report_html(
+            html,
+            report_payload=report_payload,
+            simulation_state=simulation_state,
+        )
+
+    render_campaign_report_html._phase4_14_map_location_finalized = True

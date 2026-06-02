@@ -1,0 +1,86 @@
+
+# Phase 4.14: campaign report map/location panel integration.
+# This fragment intentionally loads late and wraps the public campaign report
+# renderer without duplicating deterministic map/location logic.
+
+from copy import deepcopy as _phase4_14_deepcopy
+from typing import Any as _Phase414Any, Dict as _Phase414Dict
+
+
+def _phase4_14_safe_dict(value: _Phase414Any) -> _Phase414Dict[str, _Phase414Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _phase4_14_extract_simulation_state(
+    report_payload: _Phase414Any = None,
+    simulation_state: _Phase414Any = None,
+) -> _Phase414Dict[str, _Phase414Any]:
+    explicit_state = _phase4_14_safe_dict(simulation_state)
+    if explicit_state:
+        return explicit_state
+    payload = _phase4_14_safe_dict(report_payload)
+    for key in (
+        "simulation_state",
+        "runtime_state",
+        "final_simulation_state",
+        "final_runtime_state",
+        "state",
+    ):
+        candidate = _phase4_14_safe_dict(payload.get(key))
+        if candidate:
+            return candidate
+    return {}
+
+
+def render_phase4_campaign_report_map_location_panel(
+    report_payload: _Phase414Any = None,
+    *,
+    simulation_state: _Phase414Any = None,
+) -> str:
+    from app.rpg.locations import build_map_location_panel_payload, render_map_location_report_html
+
+    source_state = _phase4_14_extract_simulation_state(
+        report_payload=report_payload,
+        simulation_state=simulation_state,
+    )
+    # Report rendering is read-only.  The Phase 4.8 helper may normalize default
+    # travel/discovery/time state, so build from a deep copy instead of mutating
+    # the campaign runtime state that generated the report.
+    safe_state = _phase4_14_deepcopy(source_state)
+    panel_payload = build_map_location_panel_payload(safe_state)
+    return render_map_location_report_html(panel_payload)
+
+
+def append_phase4_map_location_panel_to_campaign_report_html(
+    html: str,
+    report_payload: _Phase414Any = None,
+    *,
+    simulation_state: _Phase414Any = None,
+) -> str:
+    source_html = "" if html is None else str(html)
+    if "id=\"map-location-panel\"" in source_html or "id='map-location-panel'" in source_html:
+        return source_html
+    panel_html = render_phase4_campaign_report_map_location_panel(
+        report_payload=report_payload,
+        simulation_state=simulation_state,
+    )
+    if "</main>" in source_html:
+        return source_html.replace("</main>", panel_html + "\n</main>", 1)
+    if "</body>" in source_html:
+        return source_html.replace("</body>", panel_html + "\n</body>", 1)
+    return source_html + "\n" + panel_html
+
+
+_phase4_14_original_render_campaign_report_html = globals().get("render_campaign_report_html")
+
+if callable(_phase4_14_original_render_campaign_report_html):
+
+    def render_campaign_report_html(*args: _Phase414Any, **kwargs: _Phase414Any) -> str:
+        html = _phase4_14_original_render_campaign_report_html(*args, **kwargs)
+        report_payload = args[0] if args else kwargs.get("report_payload") or kwargs.get("payload")
+        simulation_state = kwargs.get("simulation_state") or kwargs.get("state")
+        return append_phase4_map_location_panel_to_campaign_report_html(
+            html,
+            report_payload=report_payload,
+            simulation_state=simulation_state,
+        )
