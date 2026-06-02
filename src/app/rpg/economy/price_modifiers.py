@@ -10,9 +10,9 @@ SOURCE = "deterministic_price_modifiers"
 MIN_PRICE_COPPER = 1
 MIN_BUY_MULTIPLIER_BPS = 6500
 MAX_BUY_MULTIPLIER_BPS = 15000
-MIN_SELL_MULTIPLIER_BPS = 2500
-MAX_SELL_MULTIPLIER_BPS = 9000
-DEFAULT_SELL_MULTIPLIER_BPS = 5000
+MIN_SELL_MULTIPLIER_BPS = 6500
+MAX_SELL_MULTIPLIER_BPS = 15000
+DEFAULT_SELL_MULTIPLIER_BPS = 10000
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -117,7 +117,7 @@ def _modifier_rows(
 
     if kind == "sell":
         for row in rows:
-            row["basis_points_delta"] = int(round(-int(row["basis_points_delta"]) * 0.5))
+            row["basis_points_delta"] = -int(row["basis_points_delta"])
 
     return rows
 
@@ -180,14 +180,16 @@ def apply_price_modifier(
         item_id=item_id,
         kind=kind,
     )
-    adjusted_copper = int(round(base_copper * _safe_int(modifier.get("multiplier_bps"), 10000) / 10000))
+    multiplier_bps = _safe_int(modifier.get("multiplier_bps"), 10000)
+    adjusted_copper = int(round(base_copper * multiplier_bps / 10000))
     if base_copper > 0:
         adjusted_copper = max(MIN_PRICE_COPPER, adjusted_copper)
+    adjusted_price = normalized_base if adjusted_copper == base_copper else copper_to_currency(adjusted_copper)
 
     return {
         "base_price": normalized_base,
         "base_price_copper": base_copper,
-        "adjusted_price": copper_to_currency(adjusted_copper),
+        "adjusted_price": adjusted_price,
         "adjusted_price_copper": adjusted_copper,
         "price_modifier": deepcopy(modifier),
         "source": SOURCE,
