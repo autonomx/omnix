@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.5 — local world events and location history report**.
+Next recommended slice: **Phase 4.6 — travel/discovery/blocking integration into actual runtime travel commands**.
 
 Latest completed PRs:
 
@@ -37,7 +37,8 @@ Latest completed PRs:
 | #159 Phase 4.1 canonical location graph foundation | `3e72a19b7255e32af3ffe323fed79cedd169d154` | Phase 4 | Complete | Deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers; source-backed location metadata, exits, map payload, narration contract, and Phase 4 location graph CI gate passed. |
 | #160 Phase 4.2 deterministic travel time and fatigue costs | `d23f1ec7e00c45d797466d0cfe4f32c37e7b089d` | Phase 4 | Complete | Deterministic route travel minutes, fatigue deltas, resource-cost accounting, risk flags, travel-state mutation, narration guardrails, and Phase 4 travel costs CI gate passed. |
 | #161 Phase 4.3 location discovery and route blocking | `cc8d025aee8976312b7ef1579ed74ea1e32d6962` | Phase 4 | Complete | Deterministic starter discovery state, old mill route blocking/unblocking, route-access validation, accessible map payloads, narration guardrails, and Phase 4 discovery route blocking CI gate passed. |
-| Phase 4.4 seeded travel and location encounters | `pending PR merge` | Phase 4 | In review | Deterministic seeded route/location encounter tables, source-backed encounter logs, narration guardrails, and Phase 4 seeded encounters CI gate. |
+| #162 Phase 4.4 seeded travel and location encounters | `cab3a9d5dc48f352f3a8992319937bd82ce15357` | Phase 4 | Complete | Deterministic seeded route/location encounter tables, source-backed encounter logs, narration guardrails, and Phase 4 seeded encounters CI gate passed. |
+| Phase 4.5 local world events and location history report | `pending PR merge` | Phase 4 | In review | Deterministic local world-event state, derived history rows from travel/encounter/discovery logs, escaped location-history report HTML, and narration guardrails. |
 
 After every merged PR:
 
@@ -206,13 +207,13 @@ Status: **Complete enough to proceed to Phase 4. Quest lifecycle, reporting, per
 
 ### Next recommended Phase 4 slices
 
-1. Phase 4.5 — local world events and location history report.
-2. Phase 4.6 — travel/discovery/blocking integration into actual runtime travel commands.
-3. Phase 4.7 — time of day/day count hooks.
+1. Phase 4.6 — travel/discovery/blocking integration into actual runtime travel commands.
+2. Phase 4.7 — time of day/day count hooks.
+3. Phase 4.8 — map/location UI payload/report integration.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1, 4.2, and 4.3 are merged; Phase 4.4 seeded encounters is in review.**
+Status: **In progress. Phase 4.1 through 4.4 are merged; Phase 4.5 local world events and location history is in review.**
 
 - [x] Canonical location graph. Phase 4.1 added deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers.
 - [x] Location IDs, names, descriptions, services, NPCs, hazards, exits. Phase 4.1 defined source-backed metadata for the starter vertical slice.
@@ -220,8 +221,8 @@ Status: **In progress. Phase 4.1, 4.2, and 4.3 are merged; Phase 4.4 seeded enco
 - [~] Discovery state. Phase 4.3 adds deterministic starter discovered locations/routes and discovery log helpers.
 - [~] Random/seeded encounters. Phase 4.4 adds deterministic seeded encounter tables/results/logs and narration guardrails; combat/world-event integration remains pending.
 - [~] Route blocking/unblocking. Phase 4.3 adds deterministic route block state, block/unblock helpers, and route-access validation.
-- [ ] Local world events by location.
-- [~] Location history in report. Phase 4.1 adds the map payload foundation; report history remains for Phase 4.5.
+- [~] Local world events by location. Phase 4.5 adds deterministic local event state and derived event rows from travel, encounter, and discovery logs.
+- [~] Location history in report. Phase 4.5 adds source-backed location-history report model and escaped HTML rendering.
 - [~] Map/location UI payload. Phase 4.1 adds source-backed map payload helpers; Phase 4.3 adds discovered/blocked visible-exit payloads; UI wiring remains pending.
 - [ ] Time of day, day count, optional season/weather hooks.
 
@@ -251,7 +252,7 @@ Required player loops:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks.
+- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
@@ -282,3 +283,108 @@ Status: **Pending.**
 - [ ] Map/location panel.
 - [ ] NPC relationship/memory summary panel.
 - [ ] Save/load controls.
+- [ ] Provider/narration/media settings.
+- [ ] Error/retry/fallback user messages.
+- [ ] Accessibility/readability pass.
+
+## Phase 9 — 1000-Turn Endurance Systems
+
+Status: **Pending.**
+
+- [ ] World-state compression/summarization.
+- [ ] Memory aging and importance compaction.
+- [ ] Long-term economy/resource pressure.
+- [ ] NPC schedules and agency expansion.
+- [ ] Faction/reputation consequences.
+- [ ] Story arc completion/failure rules.
+- [ ] Campaign end-state detection.
+- [ ] Long-run report segmentation.
+- [ ] Automated evals for coherence and repetition.
+
+## Phase 10 — Production Packaging, Stability, and Release Readiness
+
+Status: **Pending.**
+
+- [ ] Installation/run scripts.
+- [ ] Environment validation.
+- [ ] Provider setup wizard or clear settings UX.
+- [ ] Model/provider fallback behavior.
+- [ ] Crash recovery.
+- [ ] Save backup/restore.
+- [ ] Content versioning and migration.
+- [ ] Privacy/security review for local files and provider calls.
+- [ ] Performance profiles for local and remote providers.
+- [ ] Player onboarding/tutorial.
+- [ ] Mod/content authoring structure.
+- [ ] Release checklist.
+
+## Immediate Next Bundles
+
+### Bundle PR.0 — Architecture Compliance Audit
+
+- [x] Add provider-boundary static gate.
+- [ ] Assert matrix/manual use `interactive_first_call_runtime`.
+- [ ] Assert harness gameplay routing does not return.
+- [ ] Assert fallback source fields exist.
+- [ ] Add stateful visible-response no-mutation regression.
+
+### Bundle PR.1 — Combat Lifecycle Foundation
+
+- [x] Add initiative, enemy turn skeleton, combat log schema, XP/loot hooks.
+- [x] Keep fast combat provider skip intact.
+- [ ] Add/verify crit and full enemy-turn automation gates.
+
+### Bundle PR.2 — Economy Item Database
+
+- [x] Add canonical item database.
+- [x] Add starter inventory/currency.
+- [x] Add merchant stock and quantities.
+- [x] Add deterministic commerce runtime.
+- [x] Add economy report rows.
+- [x] Add deterministic price and merchant-state presentation guardrails.
+- [x] Add inn/rest service effects.
+- [x] Add ration/water consumption.
+- [x] Add inventory/economy save-load persistence gate.
+- [x] Add deterministic charisma/reputation/relationship/scarcity price modifiers.
+
+### Bundle PR.3 — Vertical Slice Content Skeleton
+
+- [x] Define Rusty Flagon, market, old road, old mill, and nearby wilderness.
+- [ ] Define Bran, Elara, Aldric, road bandit profiles.
+- [x] Define one quest chain and one quest-giver offer path.
+
+## Definition of 8/10 Production Readiness
+
+The project reaches the target when:
+
+1. A new player can play a 30-60 minute vertical slice without debug knowledge.
+2. Matrix and manual tests pass.
+3. 100-turn autoplay passes with zero critical warnings.
+4. 1000-turn endurance passes with bounded reports.
+5. Save/load works across combat, quest, NPC memory, party, travel, and economy.
+6. NPCs have persistent memory and evolving profiles.
+7. Combat, economy, quest, travel, party, and survival loops are complete.
+8. Final narration has no critical unsupported state claims.
+9. UI clearly shows player state, objective, journal, combat, inventory, party, map, and settings.
+10. Install/config/error handling is stable enough for external users.
+
+## Revisit Process
+
+Every major milestone should update:
+
+- `docs/rpg_evaluation_snapshot.md`
+- `docs/rpg_architecture.md`
+- this roadmap
+- latest matrix report
+- latest 100-turn report
+- latest endurance report when available
+
+Each revisit should answer:
+
+```text
+What improved?
+What regressed?
+Which score changed?
+Which phase gate is now complete?
+What is the next highest-leverage blocker?
+```
