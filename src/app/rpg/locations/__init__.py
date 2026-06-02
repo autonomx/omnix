@@ -16,6 +16,12 @@ from app.rpg.locations.discovery import (
     unblock_route,
     validate_route_access,
 )
+from app.rpg.locations.encounter_runtime import (
+    apply_seeded_encounter_runtime,
+    assert_phase4_encounter_combat_events_ready,
+    build_encounter_runtime_narration_contract,
+    classify_encounter_resolution,
+)
 from app.rpg.locations.encounters import (
     ENCOUNTER_TABLES,
     NO_ENCOUNTER,
@@ -123,10 +129,12 @@ __all__ = [
     "advance_time",
     "apply_runtime_travel",
     "apply_runtime_travel_with_resource_consumption",
+    "apply_seeded_encounter_runtime",
     "apply_travel",
     "apply_travel_resource_consumption",
     "apply_travel_time",
     "assert_phase4_discovery_route_blocking_ready",
+    "assert_phase4_encounter_combat_events_ready",
     "assert_phase4_location_graph_ready",
     "assert_phase4_map_location_report_ready",
     "assert_phase4_runtime_travel_access_ready",
@@ -139,6 +147,7 @@ __all__ = [
     "build_accessible_location_map_payload",
     "build_discovery_narration_contract",
     "build_encounter_narration_contract",
+    "build_encounter_runtime_narration_contract",
     "build_location_history_model",
     "build_location_map_payload",
     "build_location_narration_contract",
@@ -151,6 +160,7 @@ __all__ = [
     "build_travel_resource_requirement",
     "build_world_event_narration_contract",
     "calculate_route_travel_cost",
+    "classify_encounter_resolution",
     "derive_world_events_from_logs",
     "describe_time_of_day",
     "discover_location",
