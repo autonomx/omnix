@@ -55,6 +55,12 @@ from app.rpg.locations.graph import (
     list_location_exits,
     validate_location_graph,
 )
+from app.rpg.locations.map_report import (
+    assert_phase4_map_location_report_ready,
+    build_map_location_narration_contract,
+    build_map_location_panel_payload,
+    render_map_location_report_html,
+)
 from app.rpg.locations.runtime_travel import (
     apply_runtime_travel,
     assert_phase4_runtime_travel_access_ready,
@@ -112,6 +118,7 @@ __all__ = [
     "apply_travel_time",
     "assert_phase4_discovery_route_blocking_ready",
     "assert_phase4_location_graph_ready",
+    "assert_phase4_map_location_report_ready",
     "assert_phase4_runtime_travel_access_ready",
     "assert_phase4_seeded_encounters_ready",
     "assert_phase4_time_day_hooks_ready",
@@ -124,6 +131,8 @@ __all__ = [
     "build_location_history_model",
     "build_location_map_payload",
     "build_location_narration_contract",
+    "build_map_location_narration_contract",
+    "build_map_location_panel_payload",
     "build_runtime_travel_narration_contract",
     "build_time_narration_contract",
     "build_travel_narration_contract",
@@ -151,6 +160,7 @@ __all__ = [
     "record_encounter",
     "record_world_event",
     "render_location_history_report_html",
+    "render_map_location_report_html",
     "roll_seeded_encounter",
     "unblock_route",
     "validate_location_graph",
