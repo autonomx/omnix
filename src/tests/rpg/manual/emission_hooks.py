@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
+from tests.rpg.manual.artifact_discovery import discover_artifact_group
 from tests.rpg.manual.certification_artifacts import emit_saved_100_turn_certification_artifacts
 from tests.rpg.manual.progress_metrics_certification import (
     REPORT_FILENAMES,
@@ -36,16 +37,8 @@ def _source_entry(kind: str, **fields: Any) -> Dict[str, Any]:
     return entry
 
 
-def _existing_path(output_dir: Path, names: tuple[str, ...]) -> Path | None:
-    for name in names:
-        path = output_dir / name
-        if path.is_file():
-            return path
-    return None
-
-
-def _has_any_file(output_dir: Path, names: tuple[str, ...]) -> bool:
-    return _existing_path(output_dir, names) is not None
+def _completion_group(output_dir: Path, group: str, names: tuple[str, ...], *, required: bool = True) -> Dict[str, Any]:
+    return discover_artifact_group(output_dir=output_dir, group=group, names=names, required=required, source=SOURCE)
 
 
 def discover_live_manual_saved_artifact_completion_inputs(
@@ -73,19 +66,38 @@ def discover_live_manual_saved_artifact_completion_inputs(
 
     diagnostics.append(_source_entry("completion_output_directory_found", output_dir=str(output_root)))
 
-    resolved_report = Path(report_html_path) if report_html_path is not None else _existing_path(output_root, REPORT_HTML_FILENAMES)
-    if resolved_report is not None and resolved_report.is_file():
+    if report_html_path is not None:
+        resolved_report = Path(report_html_path)
+        if resolved_report.is_file():
+            diagnostics.append(_source_entry("completion_report_html_found", path=str(resolved_report)))
+            report_discovery = {"selected_path": str(resolved_report), "diagnostics": [], "blockers": []}
+        else:
+            diagnostics.append(_source_entry("missing_report_html", output_dir=str(output_root)))
+            resolved_report = None
+            report_discovery = {"selected_path": "", "diagnostics": [], "blockers": []}
+    else:
+        report_discovery = _completion_group(output_root, "report_html", REPORT_HTML_FILENAMES)
+        diagnostics.extend(report_discovery["diagnostics"])
+        blockers.extend(report_discovery["blockers"])
+        selected = str(report_discovery.get("selected_path") or "")
+        resolved_report = output_root / selected if selected else None
+
+    transcript_discovery = _completion_group(output_root, "transcript_artifact", TRANSCRIPT_FILENAMES)
+    final_discovery = _completion_group(output_root, "final_state_artifact", FINAL_STATE_FILENAMES)
+    loadable_discovery = _completion_group(output_root, "loadable_state_artifact", LOADABLE_STATE_FILENAMES)
+    for discovery in (transcript_discovery, final_discovery, loadable_discovery):
+        diagnostics.extend(discovery["diagnostics"])
+        blockers.extend(discovery["blockers"])
+
+    if report_discovery.get("selected_path"):
         diagnostics.append(_source_entry("completion_report_html_found", path=str(resolved_report)))
     else:
         diagnostics.append(_source_entry("missing_report_html", output_dir=str(output_root)))
-        resolved_report = None
-
-    if _has_any_file(output_root, TRANSCRIPT_FILENAMES):
+    if transcript_discovery.get("selected_path"):
         diagnostics.append(_source_entry("completion_transcript_artifact_found", output_dir=str(output_root)))
     else:
         diagnostics.append(_source_entry("missing_transcript_artifacts", output_dir=str(output_root)))
-
-    if _has_any_file(output_root, FINAL_STATE_FILENAMES) and _has_any_file(output_root, LOADABLE_STATE_FILENAMES):
+    if final_discovery.get("selected_path") and loadable_discovery.get("selected_path"):
         diagnostics.append(_source_entry("completion_state_checkpoint_artifacts_found", output_dir=str(output_root)))
     else:
         diagnostics.append(_source_entry("missing_state_checkpoint_artifacts", output_dir=str(output_root)))
