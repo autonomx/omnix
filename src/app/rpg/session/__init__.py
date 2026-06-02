@@ -33,6 +33,11 @@ from .replay_turn_sequence import (
     run_replay_turn_sequence,
     validate_replay_turn_sequence,
 )
+from .saved_autoplay_digest_sources import (
+    assert_phase7_saved_autoplay_digest_source_ready,
+    build_saved_autoplay_digest_source_contract,
+    capture_saved_autoplay_digest_sources,
+)
 from .session_store import (
     archive_session,
     ensure_session_registry,
@@ -135,4 +140,8 @@ __all__ = [
     "build_real_autoplay_certification_artifact",
     "build_saved_100_turn_certification_payload",
     "render_saved_100_turn_certification_report_html",
+    # Phase 7.9
+    "assert_phase7_saved_autoplay_digest_source_ready",
+    "build_saved_autoplay_digest_source_contract",
+    "capture_saved_autoplay_digest_sources",
 ]
