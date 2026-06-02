@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.15 — saved certification operator runbook and live/manual invocation guidance**.
+Next recommended slice: **Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification**.
 
 Latest completed PRs:
 
@@ -31,6 +31,7 @@ Latest completed PRs:
 | #208 Phase 7.12 saved certification report diagnostics visibility | `002ca914930f48ea966536e428dd193687bf64a4` | Phase 7 | Complete | Added source-backed saved certification report diagnostics in JSON/HTML for readiness, progress, loop, budget, state/checkpoint checks, blockers, and warnings; both required RPG checks passed. |
 | #210 Phase 7.13 live/manual saved artifact emission hook integration | `17dd28758b18bb25db7ff6c2757056e039f4fda3` | Phase 7 | Complete | Added deterministic completion-path emission hooks for manual/autoplay output directories, source-backed skipped/missing artifact diagnostics, saved certification JSON/HTML emission, and the live manual saved artifact emission hooks gate; both required RPG checks passed. |
 | #212 Phase 7.14 saved artifact bundle ZIP verification | `02e8f8519d3b81bc1ae922f53001575461adc253` | Phase 7 | Complete | Added deterministic saved artifact bundle and ZIP verification helpers for certification JSON, transcript rows, final/loadable state artifacts, report HTML bundle presence, source-backed missing artifact diagnostics, and the saved artifact bundle ZIP verification gate; both required RPG checks passed. |
+| #214 Phase 7.15 saved certification operator runbook | `e4d33ec2ac06946bc8199d060976f60c044419c9` | Phase 7 | Complete | Added operator-facing saved certification runbook guidance, deterministic source guards for helper names/artifact filenames/workflow gate names/source constants/JSON fields, documented provider-free CI versus optional live-provider local runs, and added the saved certification operator runbook gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -102,15 +103,17 @@ Completed:
 - [x] Phase 7.12 — saved certification report diagnostics visibility integration: add escaped source-backed saved certification diagnostics in JSON and report HTML for digest mismatches, progress/loop warnings, readiness blockers, and report/transcript budget blockers, and add the `RPG CI Phase 7 saved certification report diagnostics gate`.
 - [x] Phase 7.13 — live/manual saved artifact emission hook integration: add deterministic manual/autoplay completion-path hooks that discover output directories, report HTML, transcript rows, and final/loadable state artifacts; emit saved certification JSON and appended diagnostics HTML when artifacts are available; surface source-backed skipped/missing diagnostics; and add the `RPG CI Phase 7 live manual saved artifact emission hooks gate`.
 - [x] Phase 7.14 — full saved artifact bundle and ZIP inclusion verification: add deterministic saved artifact bundle and ZIP verification helpers, verify certification JSON/transcript/final/loadable state artifacts in ZIPs, verify report HTML exists in saved bundles, surface source-backed missing artifact diagnostics, and add the `RPG CI Phase 7 saved artifact bundle ZIP verification gate`.
+- [x] Phase 7.15 — saved certification operator runbook and live/manual invocation guidance: add operator-facing manual/autoplay saved certification guidance, document expected artifacts, ZIP/report behavior, important JSON fields, diagnostics/blockers, provider-free CI versus optional live-provider local runs, deterministic source guard tests, and the `RPG CI Phase 7 saved certification operator runbook gate`.
 
-Next recommended slice: **Phase 7.15 — saved certification operator runbook and live/manual invocation guidance**.
+Next recommended slice: **Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification**.
 
-Suggested Phase 7.15 scope:
+Suggested Phase 7.16 scope:
 
-- Add operator-facing instructions for running manual/autoplay saved certification locally without requiring providers in CI.
-- Document expected saved artifacts, ZIP contents, report HTML location, and diagnostic JSON fields.
-- Add deterministic source guards that keep the runbook aligned with current helper names, artifact filenames, and workflow gate names.
-- Keep live-provider 100-turn autoplay optional/outside required PR CI.
+- Add one canonical tiny deterministic 100-turn saved output fixture builder that mirrors a real manual/autoplay saved output directory.
+- Exercise transcript rows, report bytes, final/loadable state digests, progress/loop diagnostics, saved certification payload writing, report HTML append, emission hooks, and bundle/ZIP verification together.
+- Verify saved certification JSON, appended HTML, disk bundle, and ZIP inclusion in one provider-free end-to-end gate.
+- Surface a clear blocker/warning contract for fixture drift, missing artifacts, digest drift, readiness blockers, certification blockers, and ZIP omissions.
+- Keep live-provider execution optional/outside required PR CI and keep helpers deterministic, idempotent, provider-free, and non-mutating where appropriate.
 - Avoid committing `resources/data/test-results` runtime artifacts.
 
 ## Definition of 8/10 Production Readiness
@@ -127,24 +130,3 @@ The project reaches the target when:
 8. Final narration has no critical unsupported state claims.
 9. UI clearly shows player state, objective, journal, combat, inventory, party, map, and settings.
 10. Install/config/error handling is stable enough for external users.
-
-## Revisit Process
-
-Every major milestone should update:
-
-- `docs/rpg_evaluation_snapshot.md`
-- `docs/rpg_architecture.md`
-- this roadmap
-- latest matrix report
-- latest 100-turn report
-- latest endurance report when available
-
-Each revisit should answer:
-
-```text
-What improved?
-What regressed?
-Which score changed?
-Which phase gate is now complete?
-What is the next highest-leverage blocker?
-```
