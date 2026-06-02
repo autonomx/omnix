@@ -1,3 +1,6 @@
+import json
+
+
 def test_ci_runtime_wrapper_manifest_tracks_contract_chain():
     from app.rpg.session import runtime
 
@@ -21,3 +24,23 @@ def test_ci_runtime_wrapper_manifest_tracks_contract_chain():
     ]
     assert runtime._apply_turn_authoritative.__module__ == manifest["final_apply_turn_authoritative_module"]
     assert runtime._apply_attack_combat_action.__module__ == manifest["final_apply_attack_combat_action_module"]
+
+
+def test_ci_runtime_wrapper_drift_report_is_clean_and_json_safe():
+    from app.rpg.session import runtime
+
+    report = runtime.get_runtime_wrapper_drift_report()
+
+    assert report["ok"] is True
+    assert report["missing_combat_contract_modules"] == []
+    assert report["unexpected_combat_contract_modules"] == []
+    assert report["actual_combat_contract_modules"] == report[
+        "expected_combat_contract_modules"
+    ]
+    assert report["final_apply_turn_authoritative_module"] == report[
+        "expected_final_apply_turn_authoritative_module"
+    ]
+    assert report["final_apply_attack_combat_action_module"] == report[
+        "expected_final_apply_attack_combat_action_module"
+    ]
+    assert json.loads(json.dumps(report)) == report
