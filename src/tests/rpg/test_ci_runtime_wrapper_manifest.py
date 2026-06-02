@@ -44,3 +44,20 @@ def test_ci_runtime_wrapper_drift_report_is_clean_and_json_safe():
         "expected_final_apply_attack_combat_action_module"
     ]
     assert json.loads(json.dumps(report)) == report
+
+
+def test_ci_campaign_report_displays_runtime_wrapper_manifest():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html({"scenario_seed": "ci_runtime_manifest_report"})
+
+    assert "Runtime Wrapper Manifest" in html
+    assert "Runtime wrapper drift status" in html
+    assert "<strong>clean</strong>" in html
+    assert "Expected wrappers" in html
+    assert "Actual wrappers" in html
+    assert "Missing wrappers" in html
+    assert "Unexpected wrappers" in html
+    assert "app.rpg.session.runtime_part22" in html
+    assert "app.rpg.session.runtime_part26" in html
+    assert "app.rpg.session.runtime_part23" in html

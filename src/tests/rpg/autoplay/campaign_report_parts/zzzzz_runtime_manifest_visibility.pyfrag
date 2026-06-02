@@ -1,0 +1,89 @@
+
+# PR.1.23: Runtime wrapper manifest report visibility.
+from html import escape as _runtime_manifest_report_escape
+
+_base_render_campaign_report_html_for_runtime_manifest_visibility = render_campaign_report_html
+
+
+def _runtime_manifest_report_load():
+    try:
+        from app.rpg.session import runtime
+
+        return runtime.get_runtime_wrapper_drift_report()
+    except Exception as exc:  # pragma: no cover - defensive report rendering guard
+        return {
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "expected_combat_contract_modules": [],
+            "actual_combat_contract_modules": [],
+            "missing_combat_contract_modules": [],
+            "unexpected_combat_contract_modules": [],
+        }
+
+
+def _runtime_manifest_report_rows(values):
+    rows = []
+    for label, items in values:
+        escaped_items = ", ".join(
+            _runtime_manifest_report_escape(str(item)) for item in items
+        )
+        rows.append(
+            "<tr>"
+            f"<td>{_runtime_manifest_report_escape(label)}</td>"
+            f"<td>{escaped_items}</td>"
+            "</tr>"
+        )
+    return "".join(rows)
+
+
+def _render_runtime_manifest_report_section():
+    report = _runtime_manifest_report_load()
+    ok = bool(report.get("ok"))
+    rows = _runtime_manifest_report_rows(
+        [
+            ("Expected wrappers", report.get("expected_combat_contract_modules") or []),
+            ("Actual wrappers", report.get("actual_combat_contract_modules") or []),
+            ("Missing wrappers", report.get("missing_combat_contract_modules") or []),
+            ("Unexpected wrappers", report.get("unexpected_combat_contract_modules") or []),
+            (
+                "Final authoritative turn wrapper",
+                [report.get("final_apply_turn_authoritative_module") or ""],
+            ),
+            (
+                "Final attack action wrapper",
+                [report.get("final_apply_attack_combat_action_module") or ""],
+            ),
+        ]
+    )
+    error = report.get("error")
+    error_html = (
+        f'<p class="warning">{_runtime_manifest_report_escape(str(error))}</p>'
+        if error
+        else ""
+    )
+    status = "clean" if ok else "drift detected"
+    return (
+        '<section id="runtime-wrapper-manifest" class="card">'
+        '<h2>Runtime Wrapper Manifest</h2>'
+        f'<p>Runtime wrapper drift status: <strong>{status}</strong></p>'
+        + error_html
+        + '<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>'
+        + rows
+        + '</tbody></table>'
+        '</section>'
+    )
+
+
+def _insert_runtime_manifest_report_section(html, section):
+    body_close = html.lower().rfind("</body>")
+    if body_close >= 0:
+        return html[:body_close] + section + html[body_close:]
+    return html + section
+
+
+def render_campaign_report_html(report_data):
+    html = _base_render_campaign_report_html_for_runtime_manifest_visibility(report_data)
+    return _insert_runtime_manifest_report_section(
+        html,
+        _render_runtime_manifest_report_section(),
+    )
