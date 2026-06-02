@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.8 — map/location UI payload and report integration**.
+Next recommended slice: **Phase 4.9 — travel resource consumption integration with survival/inventory APIs**.
 
 Latest completed PRs:
 
@@ -41,6 +41,7 @@ Latest completed PRs:
 | #163 Phase 4.5 local world events and location history | `b01bc18629d7ca26c5e8bf528b80a717a03d5816` | Phase 4 | Complete | Deterministic local world-event state, derived history rows from travel/encounter/discovery logs, escaped location-history report HTML, and Phase 4 world events location history CI gate passed. |
 | #164 Phase 4.6 runtime travel access integration | `1b2f4d3892a11dc8311c9ef07c841079048ea547` | Phase 4 | Complete | Runtime travel wrapper validates discovery/route blocking before applying travel, preserves low-level travel helper behavior, adds runtime-travel guardrails, and Phase 4 runtime travel access CI gate passed. |
 | #166 Phase 4.7 time of day and day count hooks | `38f166e0de82720cb806805c0d8144c3271d2848` | Phase 4 | Complete | Deterministic time state, day count, clock labels, travel-time application, source-backed time logs, narration guardrails, and Phase 4 time day hooks CI gate passed. |
+| #168 Phase 4.8 map location report payload | `d04ab19e3f6fcb29dfef6a249590452df9763f49` | Phase 4 | Complete | Deterministic map/location panel payload, escaped map/location report HTML, discovery/block/time/history integration, narration guardrails, and Phase 4 map location report CI gate passed. |
 
 After every merged PR:
 
@@ -209,23 +210,22 @@ Status: **Complete enough to proceed to Phase 4. Quest lifecycle, reporting, per
 
 ### Next recommended Phase 4 slices
 
-1. Phase 4.8 — map/location UI payload/report integration.
-2. Phase 4.9 — travel resource consumption integration with survival/inventory APIs.
-3. Phase 4.10 — encounter-to-combat/world-event integration.
+1. Phase 4.9 — travel resource consumption integration with survival/inventory APIs.
+2. Phase 4.10 — encounter-to-combat/world-event integration.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1 through 4.7 are merged; Phase 4.8 map/location UI payload and report integration is next.**
+Status: **In progress. Phase 4.1 through 4.8 are merged; Phase 4.9 travel resource consumption integration is next.**
 
 - [x] Canonical location graph. Phase 4.1 added deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers.
 - [x] Location IDs, names, descriptions, services, NPCs, hazards, exits. Phase 4.1 defined source-backed metadata for the starter vertical slice.
-- [~] Travel time and fatigue/resource costs. Phase 4.2 adds deterministic route costs, travel-state mutation, and source-backed narration contracts; Phase 4.6 adds runtime travel access enforcement before guarded travel application; inventory/survival consumption wiring remains pending for Phase 4.9 or later.
+- [~] Travel time and fatigue/resource costs. Phase 4.2 adds deterministic route costs, travel-state mutation, and source-backed narration contracts; Phase 4.6 adds runtime travel access enforcement before guarded travel application; inventory/survival consumption wiring remains pending for Phase 4.9.
 - [~] Discovery state. Phase 4.3 adds deterministic starter discovered locations/routes and discovery log helpers.
 - [~] Random/seeded encounters. Phase 4.4 adds deterministic seeded encounter tables/results/logs and narration guardrails; combat/world-event integration remains pending.
 - [~] Route blocking/unblocking. Phase 4.3 adds deterministic route block state, block/unblock helpers, and route-access validation; Phase 4.6 adds runtime travel access enforcement so guarded runtime travel cannot bypass discovery or route blocks.
 - [~] Local world events by location. Phase 4.5 adds deterministic local event state and derived event rows from travel, encounter, and discovery logs.
 - [~] Location history in report. Phase 4.5 adds source-backed location-history report model and escaped HTML rendering.
-- [~] Map/location UI payload. Phase 4.1 adds source-backed map payload helpers; Phase 4.3 adds discovered/blocked visible-exit payloads; Phase 4.8 should wire a consolidated map/location report payload and UI-facing panel data.
+- [x] Map/location UI payload. Phase 4.1 adds source-backed map payload helpers; Phase 4.3 adds discovered/blocked visible-exit payloads; Phase 4.8 adds a consolidated map/location panel payload and escaped report HTML integrating discovery, blocks, time, and history.
 - [x] Time of day, day count, optional season/weather hooks. Phase 4.7 adds deterministic time state, day count, clock labels, travel-time application, source-backed time logs, and a weather placeholder without weather effects.
 
 ## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
@@ -254,7 +254,7 @@ Required player loops:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement before applying travel; Phase 4.7 adds deterministic time/day advancement hooks for travel minutes.
+- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement before applying travel; Phase 4.7 adds deterministic time/day advancement hooks for travel minutes; Phase 4.8 adds map/location panel and report payloads for travel visibility.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
@@ -282,7 +282,7 @@ Status: **Pending.**
 - [ ] Combat log and combat state panel.
 - [ ] Party panel.
 - [ ] Journal panel.
-- [ ] Map/location panel.
+- [~] Map/location panel. Phase 4.8 provides deterministic panel/report payloads; frontend UI wiring remains pending.
 - [ ] NPC relationship/memory summary panel.
 - [ ] Save/load controls.
 - [ ] Provider/narration/media settings.
