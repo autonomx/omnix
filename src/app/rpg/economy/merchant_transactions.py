@@ -13,6 +13,7 @@ from app.rpg.economy.currency import (
     set_player_currency,
     subtract_currency_cost,
 )
+from app.rpg.economy.price_modifiers import apply_price_modifier
 from app.rpg.items.inventory_state import (
     add_inventory_items,
     find_inventory_item,
@@ -154,15 +155,34 @@ def buy_from_merchant(
     if _safe_int(stock_entry.get("qty"), 0) < qty:
         return _transaction_response("buy", False, "insufficient_stock", state, merchant_state, item_id, qty, tick=tick)
 
-    unit_price = normalize_currency(stock_entry.get("price"))
+    player_state = _safe_dict(state.get("player_state"))
+    unit_price_result = apply_price_modifier(
+        normalize_currency(stock_entry.get("price")),
+        player_state=player_state,
+        merchant_state=merchant_state,
+        merchant_id=merchant_id,
+        item_id=item_id,
+        kind="buy",
+    )
+    unit_price = normalize_currency(unit_price_result.get("adjusted_price"))
     total_price = _multiply_currency(unit_price, qty)
     wallet = get_player_currency(state)
     if not can_afford(wallet, total_price):
-        response = _transaction_response("buy", False, "insufficient_funds", state, merchant_state, item_id, qty, price=total_price, tick=tick)
+        response = _transaction_response(
+            "buy",
+            False,
+            "insufficient_funds",
+            state,
+            merchant_state,
+            item_id,
+            qty,
+            price=total_price,
+            price_modifier=unit_price_result,
+            tick=tick,
+        )
         response["player_currency"] = wallet
         return response
 
-    player_state = _safe_dict(state.get("player_state"))
     inventory_state = normalize_inventory_state(_safe_dict(player_state.get("inventory_state")))
     inventory_state = add_inventory_items(inventory_state, [{"item_id": item_id, "qty": qty}])
     player_state["inventory_state"] = inventory_state
@@ -175,11 +195,31 @@ def buy_from_merchant(
         for row in _safe_list(merchant_state.get("stock"))
     ]
     merchant_state["currency"] = add_currency(merchant_state.get("currency"), total_price)
-    log_entry = _transaction_log_entry("buy", item_id, qty, total_price, tick=tick, reason="transaction_completed")
+    log_entry = _transaction_log_entry(
+        "buy",
+        item_id,
+        qty,
+        total_price,
+        tick=tick,
+        reason="transaction_completed",
+        price_modifier=unit_price_result,
+    )
     merchant_state["transaction_log"] = list(_safe_list(merchant_state.get("transaction_log"))) + [log_entry]
     _put_merchant_state(state, merchant_state)
 
-    return _transaction_response("buy", True, "transaction_completed", state, merchant_state, item_id, qty, price=total_price, log_entry=log_entry, tick=tick)
+    return _transaction_response(
+        "buy",
+        True,
+        "transaction_completed",
+        state,
+        merchant_state,
+        item_id,
+        qty,
+        price=total_price,
+        log_entry=log_entry,
+        price_modifier=unit_price_result,
+        tick=tick,
+    )
 
 
 def sell_to_merchant(
@@ -201,7 +241,16 @@ def sell_to_merchant(
         return _transaction_response("sell", False, "player_item_not_found", state, merchant_state, item_id, qty, tick=tick)
 
     stock_entry = _find_stock_entry(merchant_state, item_id)
-    unit_price = _sell_price_for_item(player_item, stock_entry)
+    base_unit_price = _sell_price_for_item(player_item, stock_entry)
+    unit_price_result = apply_price_modifier(
+        base_unit_price,
+        player_state=player_state,
+        merchant_state=merchant_state,
+        merchant_id=merchant_id,
+        item_id=item_id,
+        kind="sell",
+    )
+    unit_price = normalize_currency(unit_price_result.get("adjusted_price"))
     total_price = _multiply_currency(unit_price, qty)
     inventory_state = remove_inventory_item(inventory_state, item_id, qty)
     player_state["inventory_state"] = inventory_state
@@ -217,11 +266,31 @@ def sell_to_merchant(
     else:
         merchant_state["stock"] = list(_safe_list(merchant_state.get("stock"))) + [_stock_row(item_id, qty, unit_price)]
 
-    log_entry = _transaction_log_entry("sell", item_id, qty, total_price, tick=tick, reason="transaction_completed")
+    log_entry = _transaction_log_entry(
+        "sell",
+        item_id,
+        qty,
+        total_price,
+        tick=tick,
+        reason="transaction_completed",
+        price_modifier=unit_price_result,
+    )
     merchant_state["transaction_log"] = list(_safe_list(merchant_state.get("transaction_log"))) + [log_entry]
     _put_merchant_state(state, merchant_state)
 
-    return _transaction_response("sell", True, "transaction_completed", state, merchant_state, item_id, qty, price=total_price, log_entry=log_entry, tick=tick)
+    return _transaction_response(
+        "sell",
+        True,
+        "transaction_completed",
+        state,
+        merchant_state,
+        item_id,
+        qty,
+        price=total_price,
+        log_entry=log_entry,
+        price_modifier=unit_price_result,
+        tick=tick,
+    )
 
 
 def _sell_price_for_item(player_item: Dict[str, Any], stock_entry: Dict[str, Any]) -> Dict[str, int]:
@@ -242,7 +311,16 @@ def _half_currency(currency: Any) -> Dict[str, int]:
     return copper_to_currency(max(1, currency_to_copper_value(currency) // 2))
 
 
-def _transaction_log_entry(kind: str, item_id: str, qty: int, price: Any, *, tick: int, reason: str) -> Dict[str, Any]:
+def _transaction_log_entry(
+    kind: str,
+    item_id: str,
+    qty: int,
+    price: Any,
+    *,
+    tick: int,
+    reason: str,
+    price_modifier: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     return {
         "kind": kind,
         "item_id": item_id,
@@ -250,6 +328,7 @@ def _transaction_log_entry(kind: str, item_id: str, qty: int, price: Any, *, tic
         "price": normalize_currency(price),
         "tick": int(tick or 0),
         "reason": reason,
+        "price_modifier": deepcopy(_safe_dict(price_modifier)),
         "source": SOURCE,
     }
 
@@ -265,6 +344,7 @@ def _transaction_response(
     *,
     price: Any | None = None,
     log_entry: Dict[str, Any] | None = None,
+    price_modifier: Dict[str, Any] | None = None,
     tick: int = 0,
 ) -> Dict[str, Any]:
     return {
@@ -275,6 +355,7 @@ def _transaction_response(
         "item_id": item_id,
         "qty": qty,
         "price": normalize_currency(price),
+        "price_modifier": deepcopy(_safe_dict(price_modifier)),
         "transaction_log_entry": deepcopy(_safe_dict(log_entry)),
         "merchant_state": deepcopy(normalize_merchant_state(merchant_state, merchant_id=_safe_str(merchant_state.get("merchant_id")))),
         "simulation_state": simulation_state,
