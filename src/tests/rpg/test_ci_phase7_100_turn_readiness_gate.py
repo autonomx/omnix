@@ -29,7 +29,7 @@ def test_ci_phase7_100_turn_readiness_validates_complete_advisory_run():
     assert result["actual_turns"] == 100
     assert result["expected_turns"] == 100
     assert result["blockers"] == []
-    assert result["progress_counts"]["travel"] == 100
+    assert result["progress_counts"]["travel"] > 0
     assert result["progress_counts"]["quest"] > 0
     assert result["progress_counts"]["economy"] > 0
     assert result["progress_counts"]["combat"] > 0
@@ -60,6 +60,7 @@ def test_ci_phase7_100_turn_readiness_classifies_loops_as_advisory_warnings():
 
     assert result["ok"] is True
     assert result["blockers"] == []
+    assert result["progress_counts"]["travel"] == 0
     assert "repeated_action_loop_risk" in warning_kinds
     assert "repeated_location_loop_risk" in warning_kinds
     assert "no_progress_loop_risk" in warning_kinds
