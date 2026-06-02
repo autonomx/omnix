@@ -14,6 +14,13 @@ from .replay_checkpoint import (
     restore_session_from_checkpoint,
     session_checkpoint_digest,
 )
+from .replay_turn_sequence import (
+    assert_phase7_replay_turn_sequence_ready,
+    build_replay_turn_sequence_contract,
+    default_replay_command_handlers,
+    run_replay_turn_sequence,
+    validate_replay_turn_sequence,
+)
 from .session_store import (
     archive_session,
     ensure_session_registry,
@@ -69,4 +76,10 @@ __all__ = [
     "compare_session_checkpoints",
     "restore_session_from_checkpoint",
     "session_checkpoint_digest",
+    # Phase 7.2
+    "assert_phase7_replay_turn_sequence_ready",
+    "build_replay_turn_sequence_contract",
+    "default_replay_command_handlers",
+    "run_replay_turn_sequence",
+    "validate_replay_turn_sequence",
 ]
