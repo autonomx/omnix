@@ -8,9 +8,9 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 ## Current Handoff Status
 
-Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
+Current phase focus: **Phase 8 — UI/UX Production Pass**.
 
-Next recommended slice: **Phase 7.20 — Phase 7 closeout planning and remaining-risk routing**.
+Next recommended slice: **Phase 8.1 — player-visible state and objective HUD foundation**.
 
 Latest completed PRs:
 
@@ -36,6 +36,7 @@ Latest completed PRs:
 | #218 Phase 7.17 real completion path smoke integration | `5a974b237325443c802fa5dbc36551924585b061` | Phase 7 | Complete | Added provider-free real completion path smoke integration, wired manual CLI saved certification emission before ZIP creation with an opt-out flag, covered skipped/missing artifact diagnostics and complete saved-output emission, and added the real completion path smoke gate; both required RPG checks passed. |
 | #220 Phase 7.18 real artifact discovery hardening | `a8660c7f32af4647c0e2cba0c21b76b605eb0333` | Phase 7 | Complete | Added provider-free hardened saved artifact discovery for flat/nested manual/autoplay output layouts, wired progress/state/emission/bundle helpers through shared discovery diagnostics, preserved saved-state metadata compatibility, and added the real artifact discovery hardening gate; both required RPG checks passed. |
 | #222 Phase 7.19 saved artifact operator UX diagnostics | `b244b9e47e4790b860656f7b748e73786cdc6767` | Phase 7 | Complete | Added operator-facing nested artifact layout guidance, duplicate/partial-output diagnostics guidance, provider-free nested discovery and ambiguity source guards, and the saved artifact operator UX diagnostics gate; both required RPG checks passed. |
+| #224 Phase 7.20 closeout planning | `18041ebf17b51ed05940b91c4b502802a62863ef` | Phase 7 | Complete | Added Phase 7 closeout planning, routed remaining live/replay risks forward without overstating live-provider coverage, added the closeout planning gate, and kept required PR coverage provider-free; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -80,14 +81,14 @@ After every merged PR:
 - Phase 4 — Travel Graph, Locations, Time, and Encounters v2: **Materially complete; Phase 4.1 through 4.16 merged**.
 - Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2: **Pending**.
 - Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
-- Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **In progress**.
-- Phase 8 — UI/UX Production Pass: **Pending**.
+- Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
+- Phase 8 — UI/UX Production Pass: **Next**.
 - Phase 9 — 1000-Turn Endurance Systems: **Pending**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
 
 ## Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate
 
-Status: **In progress.**
+Status: **Materially complete for provider-free PR gate coverage.**
 
 Scope: save/load checkpoint validation, replay determinism, state diff validation, loop detection, progress metrics, report growth budget enforcement, critical warning severity categories, and 100-turn readiness/certification reporting.
 
@@ -112,15 +113,26 @@ Completed:
 - [x] Phase 7.17 — real completion path smoke integration: add a provider-free completion-path smoke bridge, wire manual CLI completion to attempt saved certification emission before results ZIP creation, skip without mutation when live artifacts are absent or incomplete, emit saved certification JSON/HTML when complete saved outputs exist, and add the `RPG CI Phase 7 real completion path smoke gate`.
 - [x] Phase 7.18 — optional real artifact discovery hardening: add shared provider-free discovery for flat and nested saved artifact layouts, cover ambiguous/duplicate candidates with source-backed diagnostics, wire progress metrics/state certification/emission hooks/bundle verification through hardened discovery, preserve payload/report/ZIP guardrails, and add the `RPG CI Phase 7 real artifact discovery hardening gate`.
 - [x] Phase 7.19 — optional saved artifact operator UX and diagnostics polish: update operator runbook guidance for nested saved output layouts, duplicate/ambiguous candidate diagnostics, partial-output behavior, provider-free CI boundaries, add nested discovery/ambiguity source guards, and add the `RPG CI Phase 7 saved artifact operator UX diagnostics gate`.
+- [x] Phase 7.20 — Phase 7 closeout planning and remaining-risk routing: add `docs/plans/rpg_phase7_closeout_plan.md`, record provider-free Phase 7 coverage, route remaining live/replay risks forward, preserve architecture boundaries, recommend Phase 8 entry, and add the `RPG CI Phase 7 closeout planning gate`.
 
-Next recommended slice: **Phase 7.20 — Phase 7 closeout planning and remaining-risk routing**.
+Remaining risks routed forward:
 
-Suggested Phase 7.20 scope:
+- Full live-provider 100-turn campaign execution is still not required in PR CI.
+- Long multi-turn campaign replay, combat replay, quest reward replay, NPC memory replay, party/companion replay, and full package/disk replay of an actual 100-turn campaign still need broader coverage.
+- Real saved/loadable campaign state diff validation in live completion paths needs more evidence.
+- NPC file-backed profiles/persona/memory remain pending under Phase 5 or later follow-up.
+- UI/UX production pass, 1000-turn endurance, and production packaging remain pending.
 
-- Decide whether Phase 7 needs one more narrow saved/live-artifact visibility hardening slice or can move to Phase 8.
-- If closing Phase 7, mark Phase 7 materially complete and route remaining risks to later phases without overstating live-provider coverage.
-- Preserve the provider-free required PR gates and keep live 100-turn campaign execution optional/manual unless a future slice explicitly adds that requirement.
-- Summarize remaining replay/save/load gaps for long campaign replay, combat replay, quest reward replay, NPC memory replay, party replay, and full package/disk replay of a 100-turn campaign.
+## Phase 8 — UI/UX Production Pass
+
+Status: **Next.**
+
+Suggested Phase 8.1 scope:
+
+- Add player-visible state and objective HUD foundation.
+- Keep deterministic runtime authoritative and source-backed.
+- Show current location, active objective, player resources, party summary, major warnings, and relevant saved/certification status without allowing UI presentation to mutate simulation state.
+- Add a provider-free deterministic CI guard for the HUD contract and source-backed state extraction.
 
 ## Definition of 8/10 Production Readiness
 
