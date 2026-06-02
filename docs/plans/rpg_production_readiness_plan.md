@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 2 — Economy, Inventory, Services, and Survival v2**.
 
-Next recommended slice: **Phase 2.6 — inventory persistence through save/load**.
+Next recommended slice: **Phase 2.7 — price modifiers from charisma/reputation/relationship/scarcity**.
 
 Latest completed PRs:
 
@@ -22,6 +22,7 @@ Latest completed PRs:
 | #144 Phase 2.3 economy report guardrails | `de8d2e06713b57e7eeceef116d11ebc4e7bf1340` | Phase 2 | Complete | Economy transaction report rows, campaign report injection, deterministic price/merchant-state presentation guardrails. |
 | #145 Phase 2.4 inn room rest services | `8b472d9511ed752a51e793eb61cfb5123722dfb8` | Phase 2 | Complete | Deterministic inn room/rest runtime, Bran/Rusty Flagon 5 silver room price, HP/fatigue/rest state effects, insufficient-funds rejection, Phase 2 economy gate passed. |
 | #146 Phase 2.5 ration water survival pressure | `6f4b9200bd79e27ad32473d959034bcd43dffc20` | Phase 2 | Complete | Deterministic ration/water consumption, canonical survival items, survival pressure state, source-backed survival log, Phase 0 and deterministic gates passed. |
+| #147 Phase 2.6 inventory persistence save load | `06771ed584f42479674f617d9591bc54c27baea6` | Phase 2 | Complete | Deterministic Phase 2 persistence snapshot and session package export/import gate for inventory, currency, merchant/service/survival economy state, rest state, and survival state; Phase 0 and deterministic gates passed. |
 
 After every merged PR:
 
@@ -108,7 +109,7 @@ Status: **Materially complete enough to proceed to Phase 2; remaining items are 
 
 ## Phase 2 — Economy, Inventory, Services, and Survival v2
 
-Status: **In progress. Starter loadout, merchant commerce, economy report guardrails, inn/rest services, and survival consumption/pressure are merged.**
+Status: **In progress. Starter loadout, merchant commerce, economy report guardrails, inn/rest services, survival consumption/pressure, and inventory/economy persistence are merged.**
 
 ### Scope
 
@@ -121,7 +122,7 @@ Status: **In progress. Starter loadout, merchant commerce, economy report guardr
 - [x] Currency normalization: gold/silver/copper.
 - [ ] Price modifiers from charisma, reputation, relationship, scarcity.
 - [x] Transaction logs.
-- [~] Inventory UI/report table. Economy transaction report rows are present; full inventory UI/report remains.
+- [~] Inventory UI/report table. Economy transaction report rows and persistence snapshots are present; full inventory UI/report remains.
 - [x] Starter loadout and starting currency.
 - [x] Survival pressure tuning.
 
@@ -133,7 +134,7 @@ Status: **In progress. Starter loadout, merchant commerce, economy report guardr
 - [x] Inn room purchase and rest effect.
 - [x] Ration/water consumption.
 - [x] Currency normalization.
-- [ ] Inventory persistence through save/load.
+- [x] Inventory persistence through save/load.
 - [x] Starter loadout grants canonical starting currency/items and is idempotent.
 - [x] Starter loadout preserves existing inventory/currency.
 - [x] Economy report shows deterministic transaction rows.
@@ -141,7 +142,7 @@ Status: **In progress. Starter loadout, merchant commerce, economy report guardr
 
 ### Exit Criteria
 
-- [~] Player can buy food, rent a room, rest, consume food/water, sell item, and see inventory/currency changes. Commerce/report/rest/consumption deltas are covered; save/load persistence remains.
+- [~] Player can buy food, rent a room, rest, consume food/water, sell item, and see inventory/currency changes. Commerce/report/rest/consumption/persistence deltas are covered; price modifiers and full inventory UI/report remain.
 - [x] Economy report shows transactions and deltas.
 - [x] No LLM-invented prices or stock in economy report guardrails.
 
@@ -152,11 +153,11 @@ Status: **In progress. Starter loadout, merchant commerce, economy report guardr
 - Phase 2.3 / PR #144 — economy transaction report rows and deterministic presentation guardrails.
 - Phase 2.4 / PR #145 — deterministic inn room/rest service effects.
 - Phase 2.5 / PR #146 — deterministic ration/water consumption and survival pressure tuning.
+- Phase 2.6 / PR #147 — deterministic inventory/economy persistence through session package export/import.
 
 ### Next Phase 2 slices
 
-1. Phase 2.6 — inventory persistence through save/load.
-2. Phase 2.7 — price modifiers from charisma/reputation/relationship/scarcity.
+1. Phase 2.7 — price modifiers from charisma/reputation/relationship/scarcity.
 
 ## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
 
@@ -219,7 +220,7 @@ Required player loops:
 - [ ] Return/report result.
 - [ ] Recruit companion or deepen relationship.
 - [ ] See journal/objective updates.
-- [ ] Save/load without losing state.
+- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival package export/import is covered; full combat/quest/NPC memory save-load remains.
 
 ## Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate
 
@@ -308,6 +309,7 @@ Status: **Pending.**
 - [x] Add deterministic price and merchant-state presentation guardrails.
 - [x] Add inn/rest service effects.
 - [x] Add ration/water consumption.
+- [x] Add inventory/economy save-load persistence gate.
 
 ### Bundle PR.3 — Vertical Slice Content Skeleton
 
