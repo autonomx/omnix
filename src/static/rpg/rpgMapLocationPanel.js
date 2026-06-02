@@ -21,15 +21,23 @@
       .replace(/"/g, "&quot;");
   }
 
+  function firstNonEmptyObj(values) {
+    for (const value of values) {
+      const candidate = safeObj(value);
+      if (Object.keys(candidate).length) return candidate;
+    }
+    return {};
+  }
+
   function panelPayloadFromTurnPayload(payload) {
     const root = safeObj(payload);
     const result = safeObj(root.result || root.resolved_result || root);
-    return (
-      safeObj(root.map_location_panel) ||
-      safeObj(result.map_location_panel) ||
-      safeObj(safeObj(root.resolved_result).map_location_panel) ||
-      safeObj(safeObj(root.narration_context).map_location_panel)
-    );
+    return firstNonEmptyObj([
+      root.map_location_panel,
+      result.map_location_panel,
+      safeObj(root.resolved_result).map_location_panel,
+      safeObj(root.narration_context).map_location_panel,
+    ]);
   }
 
   function ensurePanelHost() {
