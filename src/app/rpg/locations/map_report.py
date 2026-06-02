@@ -37,12 +37,25 @@ def _current_location_id(simulation_state: Dict[str, Any]) -> str:
     return _safe_str(travel_state.get("current_location_id")) or RUSTY_FLAGON
 
 
+def _weather_state_from_time(time_state: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "season": _safe_str(time_state.get("season")),
+        "weather_id": _safe_str(time_state.get("weather_id")),
+        "weather_label": _safe_str(time_state.get("weather_label")),
+        "weather_visibility": _safe_str(time_state.get("weather_visibility")),
+        "weather_travel_fatigue_delta": _safe_int(time_state.get("weather_travel_fatigue_delta"), 0),
+        "weather_survival_thirst_delta": _safe_int(time_state.get("weather_survival_thirst_delta"), 0),
+        "weather_source": _safe_str(time_state.get("weather_source")),
+        "source": SOURCE,
+    }
+
+
 def build_map_location_panel_payload(
     simulation_state: Dict[str, Any],
     *,
     current_location_id: str | None = None,
 ) -> Dict[str, Any]:
-    state = _safe_dict(simulation_state)
+    state = deepcopy(_safe_dict(simulation_state))
     current_id = _safe_str(current_location_id) or _current_location_id(state)
     location = get_canonical_location(current_id)
     accessible = build_accessible_location_map_payload(state, current_id)
@@ -74,6 +87,7 @@ def build_map_location_panel_payload(
         "discovered_routes": list(_safe_list(accessible.get("discovered_routes"))),
         "route_blocks": deepcopy(_safe_dict(accessible.get("route_blocks"))),
         "time_state": deepcopy(time_state),
+        "weather_state": _weather_state_from_time(time_state),
         "location_history": history,
         "discovery_source": discovery_state.get("source"),
     }
@@ -93,6 +107,15 @@ def render_map_location_report_html(panel_payload: Dict[str, Any]) -> str:
         f"{escape(_safe_str(time_state.get('clock_time')))} "
         f"({escape(_safe_str(time_state.get('time_of_day_label')))})</p>"
     )
+    weather_state = _safe_dict(payload.get("weather_state")) or _weather_state_from_time(time_state)
+    rows.append(
+        "<p>Season: "
+        f"{escape(_safe_str(weather_state.get('season')).replace('_', ' '))} — "
+        f"Weather: {escape(_safe_str(weather_state.get('weather_label')))}"
+        "</p>"
+    )
+    if weather_state.get("weather_visibility"):
+        rows.append(f"<p>Visibility: {escape(_safe_str(weather_state.get('weather_visibility')))}</p>")
     rows.append("<h3>Visible exits</h3><ul>")
     for edge in _safe_list(payload.get("visible_exits")):
         row = _safe_dict(edge)
@@ -114,7 +137,11 @@ def render_map_location_report_html(panel_payload: Dict[str, Any]) -> str:
 def build_map_location_narration_contract(panel_payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = _safe_dict(panel_payload)
     location = _safe_dict(payload.get("current_location"))
+    weather_state = _safe_dict(payload.get("weather_state"))
     allowed = [f"Current location: {payload.get('current_location_id')} — {location.get('name')}"]
+    if weather_state:
+        allowed.append(f"Season: {weather_state.get('season')}")
+        allowed.append(f"Weather: {weather_state.get('weather_label')}")
     for edge in _safe_list(payload.get("visible_exits")):
         row = _safe_dict(edge)
         allowed.append(
@@ -125,10 +152,11 @@ def build_map_location_narration_contract(panel_payload: Dict[str, Any]) -> Dict
         "source": SOURCE,
         "allowed_map_location_claims": allowed,
         "forbidden_map_location_claims": [
-            "Do not invent locations, exits, route blocks, services, NPCs, hazards, or map state.",
+            "Do not invent locations, exits, route blocks, services, NPCs, hazards, map state, weather, or seasons.",
             "Do not reveal undiscovered destinations as known unless the panel payload marks them discovered.",
             "Do not claim blocked routes are passable unless the panel payload marks blocked=false.",
-            "Do not mutate travel, discovery, time, inventory, combat, quest, or world-event state from map/report rendering.",
+            "Only claim season/weather details present in the panel weather_state payload.",
+            "Do not mutate travel, discovery, time, weather, inventory, combat, quest, or world-event state from map/report rendering.",
         ],
     }
 
@@ -152,7 +180,9 @@ def assert_phase4_map_location_report_ready() -> Dict[str, Any]:
         blockers.append({"kind": "missing_visible_exits", "source": SOURCE})
     if after_travel.get("current_location_id") != "location:old_road":
         blockers.append({"kind": "travel_location_not_reflected", "source": SOURCE})
-    if "Map & Location" not in html or SOURCE not in html:
+    if not after_travel.get("weather_state", {}).get("weather_label"):
+        blockers.append({"kind": "missing_panel_weather_state", "source": SOURCE})
+    if "Map & Location" not in html or "Weather:" not in html or SOURCE not in html:
         blockers.append({"kind": "map_location_html_not_rendered", "source": SOURCE})
     if not contract.get("forbidden_map_location_claims"):
         blockers.append({"kind": "missing_map_location_guardrails", "source": SOURCE})
