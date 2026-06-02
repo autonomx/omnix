@@ -52,9 +52,14 @@ def _max_streak(values: List[str]) -> int:
     return best
 
 
-def _progress_flags(turn: Dict[str, Any]) -> Dict[str, bool]:
+def _progress_flags(turn: Dict[str, Any], *, previous_location: str = "") -> Dict[str, bool]:
+    current_location = _event_text(turn, "location_id", "current_location_id")
+    destination = _event_text(turn, "destination_id")
+    travel_changed = bool(turn.get("travel_event") or turn.get("location_changed"))
+    if current_location and previous_location and current_location != previous_location:
+        travel_changed = True
     return {
-        "travel": bool(_event_text(turn, "location_id", "current_location_id", "destination_id")),
+        "travel": bool(destination or travel_changed),
         "quest": bool(_safe_list(turn.get("quest_events")) or _safe_dict(turn.get("quest_delta"))),
         "economy": bool(_safe_dict(turn.get("currency_delta")) or _safe_list(turn.get("inventory_delta"))),
         "combat": bool(turn.get("combat_event") or turn.get("encounter_event")),
@@ -62,11 +67,22 @@ def _progress_flags(turn: Dict[str, Any]) -> Dict[str, bool]:
     }
 
 
-def _no_progress_streak(turns: List[Dict[str, Any]]) -> int:
+def _progress_rows(turns: List[Dict[str, Any]]) -> List[Dict[str, bool]]:
+    rows = []
+    previous_location = ""
+    for turn in turns:
+        rows.append(_progress_flags(turn, previous_location=previous_location))
+        current_location = _event_text(turn, "location_id", "current_location_id")
+        if current_location:
+            previous_location = current_location
+    return rows
+
+
+def _no_progress_streak(progress_rows: List[Dict[str, bool]]) -> int:
     best = 0
     current = 0
-    for turn in turns:
-        if any(_progress_flags(turn).values()):
+    for flags in progress_rows:
+        if any(flags.values()):
             current = 0
         else:
             current += 1
@@ -92,16 +108,17 @@ def build_100_turn_readiness_result(
     actual_turns = len(turns)
     actions = [_event_text(turn, "action", "action_text", "command_text") for turn in turns]
     locations = [_event_text(turn, "location_id", "current_location_id") for turn in turns]
+    progress_rows = _progress_rows(turns)
     progress_counts = {key: 0 for key in ("travel", "quest", "economy", "combat", "journal")}
-    for turn in turns:
-        for key, value in _progress_flags(turn).items():
+    for flags in progress_rows:
+        for key, value in flags.items():
             if value:
                 progress_counts[key] += 1
 
     loop_summary = {
         "max_repeated_action_streak": _max_streak(actions),
         "max_repeated_location_streak": _max_streak(locations),
-        "max_no_progress_streak": _no_progress_streak(turns),
+        "max_no_progress_streak": _no_progress_streak(progress_rows),
         "distinct_actions": len({action for action in actions if action}),
         "distinct_locations": len({location for location in locations if location}),
         "source": SOURCE,
