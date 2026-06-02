@@ -33,6 +33,11 @@ from .session_store import (
     list_sessions,
     save_session,
 )
+from .turn_readiness import (
+    assert_phase7_100_turn_readiness_ready,
+    build_100_turn_readiness_contract,
+    build_100_turn_readiness_result,
+)
 
 
 def _install_optional_fast_runtime_hooks() -> None:
@@ -91,4 +96,8 @@ __all__ = [
     "assert_phase7_save_load_replay_roundtrip_ready",
     "build_save_load_replay_roundtrip_contract",
     "run_save_load_replay_persistence_roundtrip",
+    # Phase 7.4
+    "assert_phase7_100_turn_readiness_ready",
+    "build_100_turn_readiness_contract",
+    "build_100_turn_readiness_result",
 ]
