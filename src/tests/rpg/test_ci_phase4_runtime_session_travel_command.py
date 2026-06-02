@@ -34,7 +34,7 @@ def _ready_old_mill_session(session_id: str):
     return session
 
 
-def _install_runtime_session(monkeypatch, runtime, session):
+def _install_runtime_session(monkeypatch, runtime_part27, session):
     saved = {}
 
     def load_runtime_session(session_id):
@@ -47,19 +47,20 @@ def _install_runtime_session(monkeypatch, runtime, session):
         saved.update(deepcopy(payload))
         return payload
 
-    monkeypatch.setattr(runtime, "load_runtime_session", load_runtime_session)
-    monkeypatch.setattr(runtime, "save_runtime_session", save_runtime_session)
+    monkeypatch.setattr(runtime_part27, "load_runtime_session", load_runtime_session)
+    monkeypatch.setattr(runtime_part27, "save_runtime_session", save_runtime_session)
     return saved
 
 
 def test_ci_phase4_session_runtime_routes_successful_travel_through_guarded_command_helper(monkeypatch):
     from app.rpg.locations import OLD_MILL
-    from app.rpg.session import runtime
+    from app.rpg.session import runtime, runtime_part27
 
+    assert runtime._apply_turn_authoritative.__module__ == "app.rpg.session.runtime_part27"
     session_id = _session_id("success")
-    saved = _install_runtime_session(monkeypatch, runtime, _ready_old_mill_session(session_id))
+    saved = _install_runtime_session(monkeypatch, runtime_part27, _ready_old_mill_session(session_id))
 
-    result = runtime._apply_turn_authoritative(
+    result = runtime_part27._apply_turn_authoritative(
         session_id=session_id,
         player_input="travel to the old mill",
         performance_override={"narration_mode": "deterministic"},
@@ -84,13 +85,13 @@ def test_ci_phase4_session_runtime_routes_successful_travel_through_guarded_comm
 
 def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_encounter(monkeypatch):
     from app.rpg.locations import RUSTY_FLAGON
-    from app.rpg.session import runtime
+    from app.rpg.session import runtime_part27
 
     session_id = _session_id("missing_resources")
     original = _base_session(session_id, items=[])
-    _install_runtime_session(monkeypatch, runtime, original)
+    _install_runtime_session(monkeypatch, runtime_part27, original)
 
-    result = runtime._apply_turn_authoritative(
+    result = runtime_part27._apply_turn_authoritative(
         session_id=session_id,
         player_input="go to old road",
         performance_override={"narration_mode": "deterministic"},
@@ -99,7 +100,7 @@ def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_enc
     assert result["ok"] is True
     assert result["result"]["ok"] is False
     assert result["travel_command_result"]["reason"] == "insufficient_travel_resources"
-    assert result["travel_result"]["travel_result"] is None
+    assert result["travel_result"].get("travel_result") is None
     assert result["encounter_result"] == {}
     assert result["encounter_runtime_result"] == {}
     assert result["simulation_state"]["travel_state"]["current_location_id"] == RUSTY_FLAGON
@@ -107,12 +108,12 @@ def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_enc
 
 
 def test_ci_phase4_session_runtime_leaves_non_travel_commands_on_existing_runtime_path(monkeypatch):
-    from app.rpg.session import runtime
+    from app.rpg.session import runtime_part27
 
     session_id = _session_id("non_travel")
     _install_runtime_session(
         monkeypatch,
-        runtime,
+        runtime_part27,
         _base_session(session_id, items=[{"item_id": "ration", "qty": 1}]),
     )
 
@@ -121,9 +122,9 @@ def test_ci_phase4_session_runtime_leaves_non_travel_commands_on_existing_runtim
         "source": "existing_authoritative_runtime_path",
         "travel_command_result": None,
     }
-    monkeypatch.setattr(runtime, "_base_apply_turn_authoritative", lambda *args, **kwargs: delegated)
+    monkeypatch.setattr(runtime_part27, "_base_apply_turn_authoritative", lambda *args, **kwargs: delegated)
 
-    result = runtime._apply_turn_authoritative(
+    result = runtime_part27._apply_turn_authoritative(
         session_id=session_id,
         player_input="ask bran about work",
         performance_override={"narration_mode": "deterministic"},
