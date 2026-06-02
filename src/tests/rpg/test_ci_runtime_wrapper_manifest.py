@@ -6,14 +6,15 @@ def test_ci_runtime_wrapper_manifest_tracks_contract_chain():
 
     manifest = runtime.get_runtime_wrapper_manifest()
 
-    assert manifest["part_modules"][-5:] == [
+    assert manifest["part_modules"][-6:] == [
         "runtime_part22",
         "runtime_part23",
         "runtime_part24",
         "runtime_part25",
         "runtime_part26",
+        "runtime_part27",
     ]
-    assert manifest["final_apply_turn_authoritative_module"] == "app.rpg.session.runtime_part26"
+    assert manifest["final_apply_turn_authoritative_module"] == "app.rpg.session.runtime_part27"
     assert manifest["final_apply_attack_combat_action_module"] == "app.rpg.session.runtime_part23"
     assert manifest["combat_contract_modules"] == [
         "app.rpg.session.runtime_part22",
@@ -60,4 +61,5 @@ def test_ci_campaign_report_displays_runtime_wrapper_manifest():
     assert "Unexpected wrappers" in html
     assert "app.rpg.session.runtime_part22" in html
     assert "app.rpg.session.runtime_part26" in html
+    assert "app.rpg.session.runtime_part27" in html
     assert "app.rpg.session.runtime_part23" in html
