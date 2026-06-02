@@ -10,20 +10,21 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.8 — saved 100-turn certification payload emission and artifact writer integration**.
+Next recommended slice: **Phase 7.9 — saved autoplay checkpoint/state digest source integration**.
 
 Latest completed PRs:
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #184 Phase 4.16 optional season/weather expansion | `74409e87ad5fffabf4f894bfa246aa5596616daa` | Phase 4 | Complete | Replaced the deterministic weather placeholder with source-backed season/weather helpers, surfaced weather fields in time/map/report/UI payloads, added weather narration guardrails, and both required RPG checks passed. |
-| #186 Phase 7.1 save load replay checkpoint foundation | `2e73cdd29b40d023e88e777514ec1c14b4552f81` | Phase 7 | Complete | Added deterministic replay checkpoint helpers, canonical session digests, restore validation, drift comparison, exports, and the Phase 7 replay checkpoint foundation gate; both required RPG checks passed. |
-| #188 Phase 7.2 replay turn sequence validation | `468463f545b4069b755eb73002516260cc50a59c` | Phase 7 | Complete | Added deterministic replay turn-sequence helpers that restore from checkpoints, apply provider-free command steps through canonical runtime command helpers, compare per-turn/final checkpoint digests, cover rejected commands without hidden mutation, and added the Phase 7 replay turn sequence gate; both required RPG checks passed. |
-| #190 Phase 7.3 save load replay persistence roundtrip | `f3b2255973f305cc2e8e471b7a6e00b33a36b27f` | Phase 7 | Complete | Added provider-free package/disk save-load replay roundtrip validation using existing package bridge, durable store, checkpoint, and replay sequence paths; surfaced digest drift details; exported Phase 7.3 helpers; added the Phase 7 save load replay roundtrip gate; both required RPG checks passed. |
-| #192 Phase 7.4 100-turn readiness loop progress report gate | `767b40863b30ad0d05e651ce26c6b81e48bfcda9` | Phase 7 | Complete | Added provider-free advisory 100-turn readiness analysis for loop, progress, and report-budget signals; classified incomplete turn counts and report/transcript growth as blockers; surfaced repeated action/location/no-progress risks as advisory warnings; exported Phase 7.4 helpers; added the Phase 7 100-turn readiness gate; both required RPG checks passed. |
-| #194 Phase 7.5 100-turn readiness report integration | `687cb8cd2d519f5ab2d8c19bc82cd8371e0c51eb` | Phase 7 | Complete | Added deterministic readiness report payloads, critical/warning/advisory severity categories, escaped report HTML, idempotent report append helpers, source-backed advisory certification guardrails, exports, and the Phase 7 100-turn readiness report gate; both required RPG checks passed. |
-| #196 Phase 7.6 full 100-turn autoplay certification gate | `79adb4326f896c44ab9544b27786aca762211c95` | Phase 7 | Complete | Added deterministic full 100-turn artifact certification helpers, exact turn-count enforcement, readiness/report severity reuse, optional state/checkpoint digest mismatch blockers, exports, and the Phase 7 full 100-turn certification gate; both required RPG checks passed. |
-| #198 Phase 7.7 real autoplay certification artifact wiring | `fe4d6d8ae20981199c0799d338301a1dfd8e50fc` | Phase 7 | Complete | Added deterministic saved autoplay/report artifact normalization into the Phase 7.6 certification shape, escaped/idempotent certification report rendering, session exports, and the Phase 7 real autoplay certification artifact gate; both required RPG checks passed. |
+| #184 Phase 4.16 optional season/weather expansion | `74409e87ad5fffabf4f894bfa246aa5596616daa` | Phase 4 | Complete | Added source-backed deterministic season/weather state and weather/report/UI hooks; both required RPG checks passed. |
+| #186 Phase 7.1 save load replay checkpoint foundation | `2e73cdd29b40d023e88e777514ec1c14b4552f81` | Phase 7 | Complete | Added deterministic replay checkpoint helpers, canonical session digests, restore validation, drift comparison, exports, and checkpoint gate; both required RPG checks passed. |
+| #188 Phase 7.2 replay turn sequence validation | `468463f545b4069b755eb73002516260cc50a59c` | Phase 7 | Complete | Added deterministic replay turn-sequence helpers through canonical runtime command helpers and replay drift checks; both required RPG checks passed. |
+| #190 Phase 7.3 save load replay persistence roundtrip | `f3b2255973f305cc2e8e471b7a6e00b33a36b27f` | Phase 7 | Complete | Added provider-free package/disk save-load replay roundtrip validation and drift details; both required RPG checks passed. |
+| #192 Phase 7.4 100-turn readiness loop progress report gate | `767b40863b30ad0d05e651ce26c6b81e48bfcda9` | Phase 7 | Complete | Added provider-free advisory 100-turn readiness analysis for turn count, loops, progress, and report/transcript budgets; both required RPG checks passed. |
+| #194 Phase 7.5 100-turn readiness report integration | `687cb8cd2d519f5ab2d8c19bc82cd8371e0c51eb` | Phase 7 | Complete | Added deterministic readiness report payloads, severity categories, escaped HTML, idempotent report append helpers, and advisory certification guardrails; both required RPG checks passed. |
+| #196 Phase 7.6 full 100-turn autoplay certification gate | `79adb4326f896c44ab9544b27786aca762211c95` | Phase 7 | Complete | Added deterministic full 100-turn artifact certification helpers with exact turn count, readiness critical blocker, and optional state/checkpoint digest mismatch enforcement; both required RPG checks passed. |
+| #198 Phase 7.7 real autoplay certification artifact wiring | `fe4d6d8ae20981199c0799d338301a1dfd8e50fc` | Phase 7 | Complete | Added deterministic saved artifact normalization into the Phase 7.6 certification shape, escaped/idempotent certification report rendering, session exports, and CI gate; both required RPG checks passed. |
+| #200 Phase 7.8 saved certification artifact writer integration | `d369b3ced3cdd622f3865165f271b2fafee95e6b` | Phase 7 | Complete | Added deterministic saved 100-turn certification artifact writer helpers, emits `phase7_100_turn_certification.json` next to manual/autoplay-style result artifacts, optionally appends escaped/idempotent certification HTML, and added the saved certification artifact writer gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -59,173 +60,48 @@ After every merged PR:
 7. Build toward one strong vertical slice first, then scale.
 8. Production readiness means player experience, not only tests passing.
 
-## Phase 0 — Architecture Compliance and Baseline Hardening
+## Phase Status Summary
 
-Status: **Mostly complete / guardrail active**.
-
-Remaining: assert manual/matrix runtime-wrapper usage, prevent harness-owned routing, require fallback/repair source fields, add visible-response no-mutation and final state-claim audit scaffolding.
-
-## Phase 1 — Combat Lifecycle v2
-
-Status: **Materially complete enough to proceed; polish/depth remains.**
-
-Completed: initiative, turn order, enemy/NPC combat turn support, attack/gating/flee/defense hooks, weapon/armor, companion support, multiple enemy support, XP/loot hooks, combat log/report/contract visibility, deterministic combat seed support, and fast-mode provider skip.
-
-Remaining: crit-specific deterministic gate, full enemy-turn automation gate, broader player combat action variety, and vertical-slice validation.
-
-## Phase 2 — Economy, Inventory, Services, and Survival v2
-
-Status: **Materially complete.**
-
-Completed: canonical item database, starter loadout/currency, merchant stock, buy/sell runtime, inn room/rest effects, ration/water survival pressure, inventory/economy persistence, price modifiers, transaction logs, and deterministic economy guardrails.
-
-Remaining: full inventory UI/report polish and broader vertical-slice integration.
-
-## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
-
-Status: **Complete enough to proceed to Phase 4.**
-
-Completed: quest template schema, giver state, objective lifecycle, journal/report rows, reward rules, rumor-to-quest conversion, work inquiry routing, objective suggestions, persistence/save-load coverage, quest return/report-result flow, and completion audit.
-
-## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
-
-Status: **Materially complete. Phase 4.1 through 4.16 are merged; deeper discovery, encounter, and location-history polish can continue as follow-up work.**
-
-Completed or materially completed:
-
-- [x] Canonical location graph.
-- [x] Location IDs, names, descriptions, services, NPCs, hazards, exits.
-- [x] Deterministic route travel time, fatigue, and resource costs.
-- [x] Runtime travel wrapper enforcing discovery/route blocking before travel.
-- [x] Travel resource preflight and consumption using canonical survival APIs.
-- [~] Discovery state and route block helpers.
-- [~] Random/seeded encounter payloads and logs.
-- [x] Encounter-to-world-event bridge and combat candidate payloads.
-- [x] Runtime travel command-routing bridge for guarded travel, seeded encounters, and encounter runtime routing.
-- [x] Command-routing helpers exported through the public `app.rpg.locations` facade.
-- [x] Session-level travel command routing through the canonical runtime wrapper.
-- [~] Local world-event state and derived location history.
-- [~] Location history report model and escaped HTML.
-- [x] Deterministic map/location panel payload and escaped report HTML.
-- [x] Campaign report map/location panel integration using deterministic map/location helpers.
-- [x] Frontend map/location UI panel wiring using deterministic runtime map/location payloads.
-- [x] Deterministic time-of-day/day-count hooks with source-backed season/weather state.
-
-Follow-up polish:
-
-- [~] Discovery state and route block helper depth.
-- [~] Random/seeded encounter payload and log gameplay depth.
-- [~] Broader location history report usage.
-
-## Phase 4.14 — Campaign Report Map/Location Panel Integration
-
-Status: **Complete.**
-
-Completed in PR #180 (`f9b46b4a8ff09a73e577cdee08eb2b43c742ad2c`):
-
-- Wired deterministic map/location panel payloads into the campaign/main report flow.
-- Reused `app.rpg.locations.build_map_location_panel_payload` and `render_map_location_report_html` instead of duplicating map/report logic.
-- Kept rendering provider-free, source-backed, escaped, and non-mutating.
-- Preserved map guardrails: do not reveal undiscovered locations as known and do not claim blocked routes are passable.
-- Added deterministic tests for map/location panel visibility, route-block display, current-location display, time display, hidden undiscovered locations, idempotent append behavior, and no gameplay mutation during report rendering.
-- Added the `RPG CI Phase 4 campaign report map location gate`.
-
-## Phase 4.15 — Frontend Map/Location UI Panel Wiring
-
-Status: **Complete.**
-
-Completed in PR #182 (`f112d8db632e69416cc6823e033757330d0497fd`):
-
-- Added a visible frontend map/location section by wiring a browser renderer into the existing RPG minimap panel.
-- Surfaced deterministic map/location panel payloads through runtime travel turn responses, resolved results, and narration context.
-- Reused `app.rpg.locations.build_map_location_panel_payload` rather than duplicating canonical graph logic in JavaScript.
-- Showed current location, description, time labels, visible exits, blocked route status/reason, and guarded undiscovered destination labels.
-- Preserved guardrails: hidden or undiscovered locations are not exposed as known, and blocked routes are not described as passable.
-- Kept rendering escaped, provider-free, and non-mutating.
-- Added the `RPG CI Phase 4 frontend map location UI panel gate`.
-
-## Phase 4.16 — Optional Season/Weather Expansion
-
-Status: **Complete.**
-
-Completed in PR #184 (`74409e87ad5fffabf4f894bfa246aa5596616daa`):
-
-- Replaced the Phase 4.7 weather placeholder with deterministic source-backed season/weather state.
-- Added provider-free weather profiles, season progression, deterministic weather selection, weather refresh logs, and weather narration guardrails.
-- Surfaced weather/season fields through time state, map/location payloads, escaped report HTML, and the frontend map/location panel.
-- Preserved report/UI non-mutation and hidden-state/route-block guardrails.
-- Added the `RPG CI Phase 4 season weather expansion gate`.
-
-## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
-
-Status: **Pending.**
-
-Scope: file-backed profiles for Bran, Elara, Aldric, bandit leader, and companion candidates; biography/personality/voice/speech examples; relationship scoring; memory aging/summarization; schedules; NPC agency; NPC-to-NPC conversation hooks; evolution arcs such as Bran tavern loss to companion/adventurer path.
-
-## Phase 6 — Vertical Slice: Rusty Flagon Production Loop
-
-Status: **Pending.**
-
-Current coverage:
-
-- [ ] Talk to Bran with persona-rich dialogue.
-- [x] Buy food/water from merchant or tavern.
-- [x] Rent room/rest.
-- [x] Ask for work/rumors.
-- [x] Accept quest.
-- [~] Travel to old mill route: Phase 4.1 through 4.16 now cover deterministic route validation, travel time, discovery/blocking, seeded encounters, history/reporting, runtime travel access, time/day advancement, resource preflight, encounter routing, campaign report map payloads, frontend map/location UI, and source-backed season/weather state.
-- [ ] Resolve the old mill combat route.
-- [x] Return/report result.
-- [ ] Recruit companion or deepen relationship.
-- [x] See journal/objective updates.
-- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival and Phase 3 quest persistence are covered; Phase 7.1 adds canonical checkpoint digest/restore comparison foundation; Phase 7.2 adds deterministic replay turn-sequence validation through canonical runtime command helpers; Phase 7.3 adds package/disk save-load replay persistence roundtrip validation for manifest/session identity, installed packs, simulation/runtime state, travel, quest, economy, and survival seeds; full combat/NPC persistence roundtrip gates remain.
+- Phase 0 — Architecture Compliance and Baseline Hardening: **Mostly complete / guardrail active**.
+- Phase 1 — Combat Lifecycle v2: **Materially complete enough to proceed; polish/depth remains**.
+- Phase 2 — Economy, Inventory, Services, and Survival v2: **Materially complete**.
+- Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2: **Complete enough to proceed**.
+- Phase 4 — Travel Graph, Locations, Time, and Encounters v2: **Materially complete; Phase 4.1 through 4.16 merged**.
+- Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2: **Pending**.
+- Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
+- Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **In progress**.
+- Phase 8 — UI/UX Production Pass: **Pending**.
+- Phase 9 — 1000-Turn Endurance Systems: **Pending**.
+- Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
 
 ## Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate
 
 Status: **In progress.**
 
-Scope: save/load checkpoint validation, replay determinism, state diff validation, loop detection, progress metrics, report growth budget enforcement, critical warning severity categories, and 100-turn readiness report.
+Scope: save/load checkpoint validation, replay determinism, state diff validation, loop detection, progress metrics, report growth budget enforcement, critical warning severity categories, and 100-turn readiness/certification reporting.
 
 Completed:
 
 - [x] Phase 7.1 — replay checkpoint foundation: canonical session JSON, deterministic checkpoint digests, restore validation, drift comparison, volatile runtime diagnostic filtering, exports, and `RPG CI Phase 7 replay checkpoint foundation gate`.
-- [x] Phase 7.2 — replay turn sequence validation against checkpoint digests: restore from checkpoint inputs, apply provider-free command steps through canonical runtime command helpers, build per-turn checkpoint digests, compare final checkpoint digests, cover rejected commands without hidden mutation, emit source-backed replay drift details, and add the `RPG CI Phase 7 replay turn sequence gate`.
-- [x] Phase 7.3 — save/load replay persistence roundtrip gate: use existing package bridge and durable store paths, validate package/disk checkpoint digest stability, replay from loaded checkpoint state, surface source-backed drift details, export readiness/contract helpers, and add the `RPG CI Phase 7 save load replay roundtrip gate`.
-- [x] Phase 7.4 — 100-turn readiness loop, progress, and report gate: add provider-free advisory 100-turn readiness analysis for turn count, loop risks, progress signals, report/transcript growth projections, source-backed blockers/warnings, exports, and the `RPG CI Phase 7 100-turn readiness gate`.
-- [x] Phase 7.5 — critical warning severity and 100-turn readiness report integration: integrate Phase 7.4 readiness results into deterministic report-facing payloads, add critical/warning/advisory severity categories, escaped HTML rendering, idempotent report append helpers, source-backed advisory certification guardrails, exports, and the `RPG CI Phase 7 100-turn readiness report gate`.
-- [x] Phase 7.6 — full 100-turn autoplay certification gate: add deterministic artifact-shaped 100-turn certification helpers, require exact 100-turn completion, reuse Phase 7.4 readiness and Phase 7.5 report severity payloads, block on readiness critical blockers and provided state/checkpoint digest mismatches, export source-backed contract helpers, and add the `RPG CI Phase 7 full 100-turn certification gate`.
-- [x] Phase 7.7 — real autoplay certification artifact wiring: normalize saved report/transcript/checkpoint-shaped artifacts into the Phase 7.6 certification helper, add saved certification payload helpers, render escaped/idempotent certification report sections, export helpers, and add the `RPG CI Phase 7 real autoplay certification artifact gate`.
+- [x] Phase 7.2 — replay turn sequence validation against checkpoint digests: restore from checkpoint inputs, apply provider-free command steps through canonical runtime command helpers, build per-turn checkpoint digests, compare final checkpoint digests, cover rejected commands without hidden mutation, and add the `RPG CI Phase 7 replay turn sequence gate`.
+- [x] Phase 7.3 — save/load replay persistence roundtrip gate: use existing package bridge and durable store paths, validate package/disk checkpoint digest stability, replay from loaded checkpoint state, surface source-backed drift details, and add the `RPG CI Phase 7 save load replay roundtrip gate`.
+- [x] Phase 7.4 — 100-turn readiness loop, progress, and report gate: add provider-free advisory analysis for turn count, loop risks, progress signals, report/transcript budgets, source-backed blockers/warnings, and add the `RPG CI Phase 7 100-turn readiness gate`.
+- [x] Phase 7.5 — critical warning severity and 100-turn readiness report integration: add deterministic report-facing payloads, severity categories, escaped HTML, idempotent append helpers, advisory certification guardrails, and the `RPG CI Phase 7 100-turn readiness report gate`.
+- [x] Phase 7.6 — full 100-turn autoplay certification gate: add deterministic artifact-shaped 100-turn certification helpers, exact turn count enforcement, readiness critical blocker enforcement, optional state/checkpoint digest mismatch enforcement, and the `RPG CI Phase 7 full 100-turn certification gate`.
+- [x] Phase 7.7 — real autoplay certification artifact wiring: normalize saved report/transcript/checkpoint-shaped artifacts into the Phase 7.6 certifier, add saved payload helpers, render escaped/idempotent certification report sections, export helpers, and add the `RPG CI Phase 7 real autoplay certification artifact gate`.
+- [x] Phase 7.8 — saved 100-turn certification payload emission and artifact writer integration: add deterministic writer helpers that emit `phase7_100_turn_certification.json` beside manual/autoplay-style result artifacts, optionally append safe certification HTML to saved reports, preserve ZIP inclusion for the JSON payload, and add the `RPG CI Phase 7 saved certification artifact writer gate`.
 
-Next recommended slice: **Phase 7.8 — saved 100-turn certification payload emission and artifact writer integration**.
+Next recommended slice: **Phase 7.9 — saved autoplay checkpoint/state digest source integration**.
 
-Suggested Phase 7.8 scope:
+Suggested Phase 7.9 scope:
 
-- Locate the actual manual/autoplay campaign report and result ZIP artifact writer paths.
-- Emit the saved 100-turn certification payload next to existing report/transcript artifacts using the Phase 7.7 adapter.
-- Append the Phase 7.7 certification section into saved campaign report HTML when a saved artifact bundle is available.
-- Keep artifact emission deterministic, escaped/safe, source-backed, and non-mutating.
-- Include actual turn rows, report byte size, transcript/debug byte size, readiness severity counts, and optional final checkpoint/save-load digests where available.
-- Add tests using tiny deterministic saved artifact fixtures and writer paths, not live-provider autoplay.
+- Capture final checkpoint/state digests from saved autoplay/manual artifact sources when available.
+- Thread captured digests into the Phase 7.7/7.8 saved certification payload path.
+- Add source-backed digest metadata so final-vs-loaded and expected-vs-final mismatches are easy to diagnose.
+- Keep digest capture deterministic and provider-free.
+- Use tiny deterministic saved artifact fixtures in CI rather than live-provider autoplay.
 - Do not commit large runtime artifacts under `resources/data/test-results`.
 - Do not make a full expensive live-provider 100-turn run a required PR CI step.
-
-## Phase 8 — UI/UX Production Pass
-
-Status: **Pending.**
-
-Scope: objective panel, combat panel/log, party panel, journal panel, map/location panel polish, NPC relationship/memory summary panel, save/load controls, provider/narration/media settings, error/retry/fallback user messages, accessibility/readability pass.
-
-## Phase 9 — 1000-Turn Endurance Systems
-
-Status: **Pending.**
-
-Scope: world-state compression/summarization, memory aging/importance compaction, long-term economy/resource pressure, NPC schedules and agency expansion, faction/reputation consequences, story arc completion/failure rules, campaign end-state detection, long-run report segmentation, automated coherence/repetition evals.
-
-## Phase 10 — Production Packaging, Stability, and Release Readiness
-
-Status: **Pending.**
-
-Scope: install/run scripts, environment validation, provider setup wizard or clear settings UX, provider fallback behavior, crash recovery, save backup/restore, content versioning/migration, privacy/security review, performance profiles, player onboarding/tutorial, mod/content authoring structure, release checklist.
 
 ## Definition of 8/10 Production Readiness
 
