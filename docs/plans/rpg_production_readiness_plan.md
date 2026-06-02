@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.19 — optional saved artifact operator UX and diagnostics polish**.
+Next recommended slice: **Phase 7.20 — Phase 7 closeout planning and remaining-risk routing**.
 
 Latest completed PRs:
 
@@ -35,6 +35,7 @@ Latest completed PRs:
 | #216 Phase 7.16 end-to-end saved 100-turn fixture certification | `a8e3d5d6c7a3a67bc0a3107e7ac8686cdf930790` | Phase 7 | Complete | Added a provider-free end-to-end saved 100-turn fixture helper and gate that writes manual/autoplay-shaped outputs, emits saved certification JSON, appends report diagnostics, verifies disk bundle and ZIP inclusion, and covers digest drift blockers; both required RPG checks passed. |
 | #218 Phase 7.17 real completion path smoke integration | `5a974b237325443c802fa5dbc36551924585b061` | Phase 7 | Complete | Added provider-free real completion path smoke integration, wired manual CLI saved certification emission before ZIP creation with an opt-out flag, covered skipped/missing artifact diagnostics and complete saved-output emission, and added the real completion path smoke gate; both required RPG checks passed. |
 | #220 Phase 7.18 real artifact discovery hardening | `a8660c7f32af4647c0e2cba0c21b76b605eb0333` | Phase 7 | Complete | Added provider-free hardened saved artifact discovery for flat/nested manual/autoplay output layouts, wired progress/state/emission/bundle helpers through shared discovery diagnostics, preserved saved-state metadata compatibility, and added the real artifact discovery hardening gate; both required RPG checks passed. |
+| #222 Phase 7.19 saved artifact operator UX diagnostics | `b244b9e47e4790b860656f7b748e73786cdc6767` | Phase 7 | Complete | Added operator-facing nested artifact layout guidance, duplicate/partial-output diagnostics guidance, provider-free nested discovery and ambiguity source guards, and the saved artifact operator UX diagnostics gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -110,15 +111,16 @@ Completed:
 - [x] Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification: add a canonical tiny saved output fixture builder, exercise transcript rows, report bytes, final/loadable state digests, progress/loop diagnostics, saved certification payload writing, report HTML append, emission hooks, and bundle/ZIP verification together, and add the `RPG CI Phase 7 end-to-end saved 100-turn fixture certification gate`.
 - [x] Phase 7.17 — real completion path smoke integration: add a provider-free completion-path smoke bridge, wire manual CLI completion to attempt saved certification emission before results ZIP creation, skip without mutation when live artifacts are absent or incomplete, emit saved certification JSON/HTML when complete saved outputs exist, and add the `RPG CI Phase 7 real completion path smoke gate`.
 - [x] Phase 7.18 — optional real artifact discovery hardening: add shared provider-free discovery for flat and nested saved artifact layouts, cover ambiguous/duplicate candidates with source-backed diagnostics, wire progress metrics/state certification/emission hooks/bundle verification through hardened discovery, preserve payload/report/ZIP guardrails, and add the `RPG CI Phase 7 real artifact discovery hardening gate`.
+- [x] Phase 7.19 — optional saved artifact operator UX and diagnostics polish: update operator runbook guidance for nested saved output layouts, duplicate/ambiguous candidate diagnostics, partial-output behavior, provider-free CI boundaries, add nested discovery/ambiguity source guards, and add the `RPG CI Phase 7 saved artifact operator UX diagnostics gate`.
 
-Next recommended slice: **Phase 7.19 — optional saved artifact operator UX and diagnostics polish**.
+Next recommended slice: **Phase 7.20 — Phase 7 closeout planning and remaining-risk routing**.
 
-Suggested Phase 7.19 scope:
+Suggested Phase 7.20 scope:
 
-- Surface hardened discovery paths and ambiguity diagnostics more clearly in operator guidance and saved report diagnostics.
-- Add provider-free tests for operator-facing examples that use nested output directories.
-- Keep deterministic tests provider-free and avoid committing `resources/data/test-results` runtime artifacts.
-- Preserve Phase 7 saved certification payload, report diagnostics, and ZIP/bundle guardrails.
+- Decide whether Phase 7 needs one more narrow saved/live-artifact visibility hardening slice or can move to Phase 8.
+- If closing Phase 7, mark Phase 7 materially complete and route remaining risks to later phases without overstating live-provider coverage.
+- Preserve the provider-free required PR gates and keep live 100-turn campaign execution optional/manual unless a future slice explicitly adds that requirement.
+- Summarize remaining replay/save/load gaps for long campaign replay, combat replay, quest reward replay, NPC memory replay, party replay, and full package/disk replay of a 100-turn campaign.
 
 ## Definition of 8/10 Production Readiness
 
