@@ -8,7 +8,7 @@ MINUTES_PER_DAY = 24 * 60
 DEFAULT_START_MINUTE_OF_DAY = 8 * 60
 DEFAULT_DAY_COUNT = 1
 DEFAULT_SEASON = "early_autumn"
-DEFAULT_WEATHER_ID = "weather:unset"
+DEFAULT_WEATHER_ID = "weather:clear_mild"
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -30,6 +30,16 @@ def _non_negative_int(value: Any, default: int = 0) -> int:
     return max(0, _safe_int(value, default))
 
 
+def _travel_location_id(state: Dict[str, Any]) -> str:
+    return str(_safe_dict(state.get("travel_state")).get("current_location_id") or "")
+
+
+def _weather_fields(day_count: int, *, location_id: str = "") -> Dict[str, Any]:
+    from app.rpg.locations.weather import weather_fields_for_time_state
+
+    return weather_fields_for_time_state(day_count, location_id=location_id)
+
+
 def describe_time_of_day(minute_of_day: int) -> str:
     minute = _non_negative_int(minute_of_day, 0) % MINUTES_PER_DAY
     hour = minute // 60
@@ -49,34 +59,36 @@ def format_clock_time(minute_of_day: int) -> str:
     return f"{minute // 60:02d}:{minute % 60:02d}"
 
 
-def _derive_time_state(elapsed_minutes: int, *, season: str, weather_id: str, time_log: List[Any]) -> Dict[str, Any]:
+def _derive_time_state(elapsed_minutes: int, *, time_log: List[Any], location_id: str = "") -> Dict[str, Any]:
     elapsed = _non_negative_int(elapsed_minutes, 0)
     absolute = DEFAULT_START_MINUTE_OF_DAY + elapsed
     minute_of_day = absolute % MINUTES_PER_DAY
-    return {
+    day_count = DEFAULT_DAY_COUNT + (absolute // MINUTES_PER_DAY)
+    normalized = {
         "elapsed_minutes": elapsed,
-        "day_count": DEFAULT_DAY_COUNT + (absolute // MINUTES_PER_DAY),
+        "day_count": day_count,
         "minute_of_day": minute_of_day,
         "hour": minute_of_day // 60,
         "clock_time": format_clock_time(minute_of_day),
         "time_of_day_label": describe_time_of_day(minute_of_day),
-        "season": season or DEFAULT_SEASON,
-        "weather_id": weather_id or DEFAULT_WEATHER_ID,
         "time_log": list(time_log),
         "source": SOURCE,
     }
+    normalized.update(_weather_fields(day_count, location_id=location_id))
+    return normalized
 
 
 def ensure_time_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     state = _safe_dict(simulation_state)
     time_state = _safe_dict(state.get("time_state"))
     elapsed = _non_negative_int(time_state.get("elapsed_minutes"), 0)
-    season = str(time_state.get("season") or DEFAULT_SEASON)
-    weather_id = str(time_state.get("weather_id") or DEFAULT_WEATHER_ID)
     time_log = list(_safe_list(time_state.get("time_log")))
-    normalized = _derive_time_state(elapsed, season=season, weather_id=weather_id, time_log=time_log)
+    normalized = _derive_time_state(elapsed, time_log=time_log, location_id=_travel_location_id(state))
     state["time_state"] = normalized
-    return normalized
+    from app.rpg.locations.weather import ensure_weather_state
+
+    ensure_weather_state(state, location_id=_travel_location_id(state))
+    return _safe_dict(state.get("time_state"))
 
 
 def advance_time(
@@ -96,21 +108,32 @@ def advance_time(
         }
     before = deepcopy(ensure_time_state(simulation_state))
     after_elapsed = _non_negative_int(before.get("elapsed_minutes"), 0) + requested
+    after_day_count = DEFAULT_DAY_COUNT + ((DEFAULT_START_MINUTE_OF_DAY + after_elapsed) // MINUTES_PER_DAY)
     entry = {
         "turn_index": int(turn_index or 0),
         "minutes": requested,
         "reason": str(reason or "time_advanced"),
         "before_day_count": before["day_count"],
-        "after_day_count": DEFAULT_DAY_COUNT + ((DEFAULT_START_MINUTE_OF_DAY + after_elapsed) // MINUTES_PER_DAY),
+        "after_day_count": after_day_count,
         "source": SOURCE,
     }
+    location_id = _travel_location_id(simulation_state)
     after = _derive_time_state(
         after_elapsed,
-        season=str(before.get("season") or DEFAULT_SEASON),
-        weather_id=str(before.get("weather_id") or DEFAULT_WEATHER_ID),
         time_log=list(_safe_list(before.get("time_log"))) + [deepcopy(entry)],
+        location_id=location_id,
     )
     simulation_state["time_state"] = after
+    from app.rpg.locations.weather import refresh_weather_state
+
+    weather_refresh = refresh_weather_state(
+        simulation_state,
+        day_count=after_day_count,
+        location_id=location_id,
+        reason=entry["reason"],
+        turn_index=turn_index,
+    )
+    after = _safe_dict(simulation_state.get("time_state"))
     return {
         "ok": True,
         "reason": "time_advanced",
@@ -119,6 +142,7 @@ def advance_time(
         "before": before,
         "after": deepcopy(after),
         "time_log_entry": entry,
+        "weather_refresh": weather_refresh,
         "source": SOURCE,
     }
 
@@ -156,6 +180,8 @@ def build_time_narration_contract(time_result: Dict[str, Any]) -> Dict[str, Any]
                 f"Clock time: {after.get('clock_time')}",
                 f"Time of day: {after.get('time_of_day_label')}",
                 f"Elapsed minutes: {_safe_int(after.get('elapsed_minutes'), 0)}",
+                f"Season: {after.get('season')}",
+                f"Weather: {after.get('weather_label')}",
             ]
         )
     return {
@@ -163,7 +189,8 @@ def build_time_narration_contract(time_result: Dict[str, Any]) -> Dict[str, Any]
         "allowed_time_claims": allowed_claims,
         "forbidden_time_claims": [
             "Do not invent dates, calendar names, or time jumps.",
-            "Do not claim weather effects; Phase 4.7 only exposes a deterministic weather_id placeholder.",
+            "Only claim weather and season details present in the deterministic after time_state.",
+            "Do not claim weather changed unless the weather_refresh payload says changed=true.",
             "Do not claim time changed unless advance_time or apply_travel_time returned ok=true.",
             "Do not mutate inventory, survival, combat, quest, discovery, or route access from time hooks.",
         ],
@@ -180,6 +207,8 @@ def assert_phase4_time_day_hooks_ready() -> Dict[str, Any]:
     blockers = []
     if initial.get("day_count") != 1 or initial.get("clock_time") != "08:00" or initial.get("time_of_day_label") != "Morning":
         blockers.append({"kind": "unexpected_initial_time_state", "source": SOURCE})
+    if initial.get("weather_id") == "weather:unset" or not initial.get("weather_label"):
+        blockers.append({"kind": "missing_deterministic_weather_state", "source": SOURCE})
     if morning.get("after", {}).get("clock_time") != "08:55":
         blockers.append({"kind": "unexpected_travel_time_advance", "source": SOURCE})
     if crossing.get("after", {}).get("day_count") != 2:
