@@ -12,7 +12,9 @@ def test_ci_phase4_time_day_hooks_initializes_deterministically():
     assert time_state["clock_time"] == "08:00"
     assert time_state["time_of_day_label"] == "Morning"
     assert time_state["season"] == "early_autumn"
-    assert time_state["weather_id"] == "weather:unset"
+    assert time_state["weather_id"] != "weather:unset"
+    assert time_state["weather_label"]
+    assert time_state["weather_source"] == "deterministic_phase4_season_weather_expansion"
     assert time_state["time_log"] == []
     assert time_state["source"] == "deterministic_phase4_time_day_hooks"
 
@@ -43,6 +45,7 @@ def test_ci_phase4_time_day_hooks_advance_minutes_and_day_count():
     assert first["before"]["clock_time"] == "08:00"
     assert first["after"]["clock_time"] == "08:55"
     assert first["after"]["day_count"] == 1
+    assert first["after"]["weather_id"] != "weather:unset"
     assert first["time_log_entry"] == {
         "turn_index": 7,
         "minutes": 55,
@@ -72,6 +75,7 @@ def test_ci_phase4_time_day_hooks_apply_old_mill_travel_time():
     assert applied["after"]["elapsed_minutes"] == 55
     assert applied["after"]["clock_time"] == "08:55"
     assert applied["after"]["time_of_day_label"] == "Morning"
+    assert applied["after"]["weather_source"] == "deterministic_phase4_season_weather_expansion"
     assert applied["source"] == "deterministic_phase4_time_day_hooks"
 
 
@@ -105,8 +109,9 @@ def test_ci_phase4_time_day_hooks_narration_contract_forbids_invention():
     assert "Clock time: 08:55" in contract["allowed_time_claims"]
     assert "Time of day: Morning" in contract["allowed_time_claims"]
     assert "Elapsed minutes: 55" in contract["allowed_time_claims"]
+    assert "Season: early_autumn" in contract["allowed_time_claims"]
     assert "Do not invent dates, calendar names, or time jumps." in contract["forbidden_time_claims"]
-    assert "Do not claim weather effects; Phase 4.7 only exposes a deterministic weather_id placeholder." in contract[
+    assert "Only claim weather and season details present in the deterministic after time_state." in contract[
         "forbidden_time_claims"
     ]
 
