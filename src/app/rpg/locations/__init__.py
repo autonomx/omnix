@@ -55,6 +55,11 @@ from app.rpg.locations.graph import (
     list_location_exits,
     validate_location_graph,
 )
+from app.rpg.locations.runtime_travel import (
+    apply_runtime_travel,
+    assert_phase4_runtime_travel_access_ready,
+    build_runtime_travel_narration_contract,
+)
 from app.rpg.locations.travel import (
     ROUTE_TRAVEL_COSTS,
     apply_travel,
@@ -82,9 +87,11 @@ __all__ = [
     "SOURCE",
     "STARTER_DISCOVERED_LOCATIONS",
     "STARTER_DISCOVERED_ROUTES",
+    "apply_runtime_travel",
     "apply_travel",
     "assert_phase4_discovery_route_blocking_ready",
     "assert_phase4_location_graph_ready",
+    "assert_phase4_runtime_travel_access_ready",
     "assert_phase4_seeded_encounters_ready",
     "assert_phase4_travel_costs_ready",
     "assert_phase4_world_events_location_history_ready",
@@ -95,6 +102,7 @@ __all__ = [
     "build_location_history_model",
     "build_location_map_payload",
     "build_location_narration_contract",
+    "build_runtime_travel_narration_contract",
     "build_travel_narration_contract",
     "build_world_event_narration_contract",
     "calculate_route_travel_cost",
