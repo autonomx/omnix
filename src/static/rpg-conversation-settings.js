@@ -288,10 +288,20 @@
     document.head.appendChild(script);
   }
 
+  function ensureMapLocationPanelScript() {
+    if (window.RpgMapLocationPanel || document.getElementById("rpg-map-location-panel-script")) return;
+    const script = document.createElement("script");
+    script.id = "rpg-map-location-panel-script";
+    script.src = "/static/rpg/rpgMapLocationPanel.js";
+    script.defer = true;
+    document.head.appendChild(script);
+  }
+
   function ensureSurvivalInspectorScript() {
     if (window.RpgSurvivalInspector || document.getElementById("rpg-survival-inspector-script")) return;
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
+    ensureMapLocationPanelScript();
     const script = document.createElement("script");
     script.id = "rpg-survival-inspector-script";
     script.src = "/static/rpg/rpg-survival-inspector.js";
@@ -306,6 +316,7 @@
     attachToPayload,
     ensureCommandBridgeScript,
     ensureLivePayloadBridgeScript,
+    ensureMapLocationPanelScript,
     ensureSurvivalInspectorScript,
   };
 
@@ -314,12 +325,14 @@
       render();
       ensureCommandBridgeScript();
       ensureLivePayloadBridgeScript();
+      ensureMapLocationPanelScript();
       ensureSurvivalInspectorScript();
     });
   } else {
     render();
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
+    ensureMapLocationPanelScript();
     ensureSurvivalInspectorScript();
   }
 })();

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Dict
 
 # Generated split module for app.rpg.session.runtime.
@@ -8,6 +9,7 @@ from .runtime_part26 import *
 from .runtime_part26 import _apply_turn_authoritative as _base_apply_turn_authoritative
 
 _PHASE4_SESSION_TRAVEL_SOURCE = "deterministic_phase4_session_travel_command_integration"
+_PHASE4_FRONTEND_MAP_LOCATION_SOURCE = "deterministic_phase4_frontend_map_location_ui_panel"
 
 
 def _phase4_session_travel_turn_index(runtime_state: Dict[str, Any], simulation_state: Dict[str, Any]) -> int:
@@ -52,6 +54,15 @@ def _phase4_session_travel_summary(command_result: Dict[str, Any]) -> str:
     return f"Travel command result: {reason or 'not_applied'}."
 
 
+def _phase4_frontend_map_location_panel_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the player-visible map/location UI payload without mutating state."""
+    from app.rpg.locations import build_map_location_panel_payload
+
+    panel_payload = build_map_location_panel_payload(deepcopy(_safe_dict(simulation_state)))
+    panel_payload["frontend_source"] = _PHASE4_FRONTEND_MAP_LOCATION_SOURCE
+    return panel_payload
+
+
 def _phase4_session_travel_payload(
     *,
     session_id: str,
@@ -71,6 +82,7 @@ def _phase4_session_travel_payload(
     travel_result = _safe_dict(command_result.get("travel_result"))
     encounter_result = _safe_dict(command_result.get("encounter_result"))
     encounter_runtime_result = _safe_dict(command_result.get("encounter_runtime_result"))
+    map_location_panel = _phase4_frontend_map_location_panel_payload(simulation_state)
 
     resolved_result: Dict[str, Any] = {
         "ok": command_result.get("ok") is True,
@@ -83,6 +95,7 @@ def _phase4_session_travel_payload(
         "encounter_result": encounter_result,
         "encounter_runtime_result": encounter_runtime_result,
         "runtime_travel_command_narration_contract": contract,
+        "map_location_panel": map_location_panel,
         "meaningful_progress": command_result.get("ok") is True,
         "progress_category": "location_progression" if command_result.get("ok") is True else "blocked_travel",
         "source": _PHASE4_SESSION_TRAVEL_SOURCE,
@@ -126,6 +139,7 @@ def _phase4_session_travel_payload(
         "encounter_result": encounter_result,
         "encounter_runtime_result": encounter_runtime_result,
         "runtime_travel_command_narration_contract": contract,
+        "map_location_panel": map_location_panel,
         "forbidden_narration": list(_safe_list(contract.get("forbidden_runtime_travel_command_claims"))),
         "settings": runtime_state.get("runtime_settings", {}),
         "conversation_threads": [],
@@ -143,6 +157,7 @@ def _phase4_session_travel_payload(
         "encounter_result": encounter_result,
         "encounter_runtime_result": encounter_runtime_result,
         "runtime_travel_command_narration_contract": contract,
+        "map_location_panel": map_location_panel,
         "narration_context": narration_context,
         "narration": summary,
         "final_narration": summary,
