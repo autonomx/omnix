@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.10 — encounter-to-combat/world-event integration**.
+Next recommended slice: **Phase 4.11 — runtime command-level travel/encounter routing integration**.
 
 Latest completed PRs:
 
@@ -43,6 +43,7 @@ Latest completed PRs:
 | #166 Phase 4.7 time of day and day count hooks | `38f166e0de82720cb806805c0d8144c3271d2848` | Phase 4 | Complete | Deterministic time state, day count, clock labels, travel-time application, and weather placeholder. |
 | #168 Phase 4.8 map location report payload | `d04ab19e3f6fcb29dfef6a249590452df9763f49` | Phase 4 | Complete | Deterministic map/location panel payload, escaped report HTML, discovery/block/time/history integration. |
 | #170 Phase 4.9 travel resource consumption | `7f46aca92bbc56fe99ae3bdc7ca42b08027260ba` | Phase 4 | Complete | Guarded runtime travel resource preflight, deterministic ration/water requirements from route costs, missing-resource rejection before travel-state mutation, reuse of canonical survival APIs `consume_food` and `consume_water`, source-backed travel resource logs, narration guardrails, and Phase 4 travel resource consumption CI gate passed. |
+| #172 Phase 4.10 encounter combat world event bridge | `a62c0be5296ee33d05f0d08ac6316815c61749de` | Phase 4 | Complete | Deterministic encounter runtime bridge, source-backed local world-event recording for non-combat/evidence encounters, source-backed combat candidate payloads for combat-capable encounters when no canonical combat-start API is invoked, narration guardrails, and Phase 4 encounter combat events CI gate passed. |
 
 After every merged PR:
 
@@ -106,14 +107,9 @@ Status: **Complete enough to proceed to Phase 4.**
 
 Completed: quest template schema, giver state, objective lifecycle, journal/report rows, reward rules, rumor-to-quest conversion, work inquiry routing, objective suggestions, persistence/save-load coverage, quest return/report-result flow, and completion audit.
 
-### Next recommended Phase 4 slices
-
-1. Phase 4.10 — encounter-to-combat/world-event integration.
-2. Phase 4.11 — runtime command-level travel/encounter routing integration, if actual interactive routing is not yet using the guarded Phase 4 helpers.
-
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1 through 4.9 are merged; Phase 4.10 encounter-to-combat/world-event integration is next.**
+Status: **In progress. Phase 4.1 through 4.10 are merged; Phase 4.11 runtime command-level travel/encounter routing integration is next.**
 
 Completed or materially completed:
 
@@ -124,6 +120,7 @@ Completed or materially completed:
 - [x] Travel resource preflight and consumption using canonical survival APIs.
 - [~] Discovery state and route block helpers.
 - [~] Random/seeded encounter payloads and logs.
+- [x] Encounter-to-world-event bridge and combat candidate payloads.
 - [~] Local world-event state and derived location history.
 - [~] Location history report model and escaped HTML.
 - [x] Deterministic map/location panel payload and escaped report HTML.
@@ -131,38 +128,32 @@ Completed or materially completed:
 
 Pending:
 
-- [ ] Phase 4.10 encounter-to-combat/world-event integration.
-- [ ] Combat/world-event bridge for encounter results.
-- [ ] Runtime command-level travel/encounter routing integration, if needed.
+- [ ] Phase 4.11 runtime command-level travel/encounter routing integration, if actual interactive routing is not yet using the guarded Phase 4 helpers.
 - [ ] Broader campaign report integration for map/location panels if not already wired into the main report flow.
 - [ ] Frontend map/location UI panel wiring.
 - [ ] Optional season/weather hooks beyond placeholder, if desired later.
 
-## Phase 4.10 — Encounter-to-Combat / World-Event Integration
+## Phase 4.11 — Runtime Command-Level Travel / Encounter Routing Integration
 
 Recommended scope:
 
-- Add deterministic encounter runtime/bridge helper.
-- Reuse existing world-event helper `record_world_event` for evidence/world-event encounters.
-- Locate and reuse canonical combat-start APIs before mutating combat state.
-- If canonical combat start is not clear, return a source-backed combat candidate payload instead of inventing a mutation path.
-- Add narration guardrails forbidding invented combat outcomes, rewards, quest progress, inventory changes, route changes, discovery changes, or unsupported world events.
-- Keep tests deterministic, provider-free, and narrow.
+- Locate actual interactive/runtime command routing for travel commands.
+- Ensure command-level travel uses the most guarded appropriate helper, preferably `apply_runtime_travel_with_resource_consumption`.
+- Ensure command-level travel can roll deterministic seeded encounters where appropriate.
+- Route resulting encounter payloads through `apply_seeded_encounter_runtime`.
+- Preserve deterministic runtime authority and source-backed guardrails.
+- Do not call LLM.
+- Do not invent combat starts; only start combat through a canonical deterministic combat-start API if one is located and reused.
+- Keep tests narrow, provider-free, and source-backed.
 
-Suggested files:
+Suggested files to inspect:
 
-- `src/app/rpg/locations/encounter_runtime.py` or `src/app/rpg/locations/encounter_bridge.py`
-- `src/tests/rpg/test_ci_phase4_encounter_combat_events.py`
-- `src/app/rpg/locations/__init__.py`
-- `.github/workflows/rpg-pr-deterministic.yml`
-- `docs/plans/rpg_production_readiness_plan.md`
-
-Suggested gate:
-
-```yaml
-- name: RPG CI Phase 4 encounter combat events gate
-  run: python -m pytest src/tests/rpg/test_ci_phase4_encounter_combat_events.py -q --tb=short
-```
+- `src/app/rpg/session/runtime*.py`
+- `src/app/rpg/session/interactive_first_call_runtime.py`
+- `src/app/rpg/locations/runtime_travel.py`
+- `src/app/rpg/locations/travel_resources.py`
+- `src/app/rpg/locations/encounter_runtime.py`
+- `src/tests/rpg/test_ci_deterministic_rpg_gates.py`
 
 ## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
 
@@ -181,7 +172,7 @@ Current coverage:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel.
+- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel; Phase 4.10 adds encounter-to-world-event bridge and combat candidate payloads for combat-capable encounter hooks.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
