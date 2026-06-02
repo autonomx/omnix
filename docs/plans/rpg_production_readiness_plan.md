@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2**.
 
-Next recommended slice: **Phase 3.1 — quest template schema and quest giver state**.
+Next recommended slice: **Phase 3.2 — objective lifecycle creation/update/completion/failure**.
 
 Latest completed PRs:
 
@@ -24,6 +24,7 @@ Latest completed PRs:
 | #146 Phase 2.5 ration water survival pressure | `6f4b9200bd79e27ad32473d959034bcd43dffc20` | Phase 2 | Complete | Deterministic ration/water consumption, canonical survival items, survival pressure state, source-backed survival log, Phase 0 and deterministic gates passed. |
 | #147 Phase 2.6 inventory persistence save load | `06771ed584f42479674f617d9591bc54c27baea6` | Phase 2 | Complete | Deterministic Phase 2 persistence snapshot and session package export/import gate for inventory, currency, merchant/service/survival economy state, rest state, and survival state; Phase 0 and deterministic gates passed. |
 | #148 Phase 2.7 economy price modifiers | `0848197d9b02c5c0a19c52f0968e1083f3ec9414` | Phase 2 | Complete | Deterministic charisma, relationship, reputation, and scarcity price modifiers for merchant buy/sell transactions; source-backed modifier logs; Phase 0 and deterministic gates passed. |
+| #149 Phase 3.1 quest schema and giver state | `f810404a995308042fbc4fb9bd27b71e97320981` | Phase 3 | Complete | Deterministic quest template normalization, starter quest template, quest-giver offer registration/listing/acceptance, and Phase 3 CI gate; Phase 0 and deterministic gates passed. |
 
 After every merged PR:
 
@@ -160,10 +161,10 @@ Status: **Materially complete. Remaining work is full inventory UI/report polish
 
 ## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
 
-Status: **Next.**
+Status: **In progress. Quest template schema and quest giver state are merged.**
 
-- [ ] Quest template schema.
-- [ ] Quest giver state.
+- [x] Quest template schema.
+- [x] Quest giver state.
 - [ ] Objective creation, update, completion, and failure.
 - [ ] Journal entries: what happened, what I learned, next objective.
 - [ ] Reward rules.
@@ -173,11 +174,15 @@ Status: **Next.**
 - [ ] Objective suggestions.
 - [ ] Quest report section.
 
+### Completed Phase 3 slices
+
+- Phase 3.1 / PR #149 — deterministic quest template schema and quest giver state.
+
 ### Next Phase 3 slices
 
-1. Phase 3.1 — quest template schema and quest giver state.
-2. Phase 3.2 — objective lifecycle creation/update/completion/failure.
-3. Phase 3.3 — journal entries and quest report section.
+1. Phase 3.2 — objective lifecycle creation/update/completion/failure.
+2. Phase 3.3 — journal entries and quest report section.
+3. Phase 3.4 — rumor-to-quest conversion and backed rumor propagation.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
@@ -218,8 +223,8 @@ Required player loops:
 - [ ] Talk to Bran with persona-rich dialogue.
 - [x] Buy food/water from merchant or tavern.
 - [x] Rent room/rest.
-- [ ] Ask for work/rumors.
-- [ ] Accept quest.
+- [~] Ask for work/rumors. Quest giver offer state is present; work/rumor routing remains.
+- [x] Accept quest.
 - [ ] Travel to old mill route.
 - [ ] Fight bandit.
 - [ ] Return/report result.
@@ -321,7 +326,7 @@ Status: **Pending.**
 
 - [ ] Define Rusty Flagon, road, old mill, market.
 - [ ] Define Bran, Elara, Aldric, road bandit profiles.
-- [ ] Define one quest chain and one rumor lead.
+- [x] Define one quest chain and one quest-giver offer path.
 
 ## Definition of 8/10 Production Readiness
 
