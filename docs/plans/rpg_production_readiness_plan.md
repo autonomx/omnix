@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.14 — full saved artifact bundle and ZIP inclusion verification**.
+Next recommended slice: **Phase 7.15 — saved certification operator runbook and live/manual invocation guidance**.
 
 Latest completed PRs:
 
@@ -30,6 +30,7 @@ Latest completed PRs:
 | #206 Phase 7.11 real autoplay progress metrics integration | `a17dbbe404d5dcf58ed1cb1460e6df415bac0db7` | Phase 7 | Complete | Added deterministic saved output progress metrics bridge, normalizes real transcript/report rows into readiness analysis, threads progress/loop/budget diagnostics into saved certification artifacts, and added the real autoplay progress metrics gate; both required RPG checks passed. |
 | #208 Phase 7.12 saved certification report diagnostics visibility | `002ca914930f48ea966536e428dd193687bf64a4` | Phase 7 | Complete | Added source-backed saved certification report diagnostics in JSON/HTML for readiness, progress, loop, budget, state/checkpoint checks, blockers, and warnings; both required RPG checks passed. |
 | #210 Phase 7.13 live/manual saved artifact emission hook integration | `17dd28758b18bb25db7ff6c2757056e039f4fda3` | Phase 7 | Complete | Added deterministic completion-path emission hooks for manual/autoplay output directories, source-backed skipped/missing artifact diagnostics, saved certification JSON/HTML emission, and the live manual saved artifact emission hooks gate; both required RPG checks passed. |
+| #212 Phase 7.14 saved artifact bundle ZIP verification | `02e8f8519d3b81bc1ae922f53001575461adc253` | Phase 7 | Complete | Added deterministic saved artifact bundle and ZIP verification helpers for certification JSON, transcript rows, final/loadable state artifacts, report HTML bundle presence, source-backed missing artifact diagnostics, and the saved artifact bundle ZIP verification gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -100,16 +101,17 @@ Completed:
 - [x] Phase 7.11 — real autoplay progress and loop metrics certification integration: add deterministic saved output progress metrics extraction, normalize real transcript/report rows into Phase 7.4 readiness analysis, thread progress/loop/budget diagnostics through saved certification artifacts, and add the `RPG CI Phase 7 real autoplay progress metrics gate`.
 - [x] Phase 7.12 — saved certification report diagnostics visibility integration: add escaped source-backed saved certification diagnostics in JSON and report HTML for digest mismatches, progress/loop warnings, readiness blockers, and report/transcript budget blockers, and add the `RPG CI Phase 7 saved certification report diagnostics gate`.
 - [x] Phase 7.13 — live/manual saved artifact emission hook integration: add deterministic manual/autoplay completion-path hooks that discover output directories, report HTML, transcript rows, and final/loadable state artifacts; emit saved certification JSON and appended diagnostics HTML when artifacts are available; surface source-backed skipped/missing diagnostics; and add the `RPG CI Phase 7 live manual saved artifact emission hooks gate`.
+- [x] Phase 7.14 — full saved artifact bundle and ZIP inclusion verification: add deterministic saved artifact bundle and ZIP verification helpers, verify certification JSON/transcript/final/loadable state artifacts in ZIPs, verify report HTML exists in saved bundles, surface source-backed missing artifact diagnostics, and add the `RPG CI Phase 7 saved artifact bundle ZIP verification gate`.
 
-Next recommended slice: **Phase 7.14 — full saved artifact bundle and ZIP inclusion verification**.
+Next recommended slice: **Phase 7.15 — saved certification operator runbook and live/manual invocation guidance**.
 
-Suggested Phase 7.14 scope:
+Suggested Phase 7.15 scope:
 
-- Verify saved certification JSON, report HTML, transcript/debug rows, final/loadable state fixtures, and diagnostics metadata are consistently included in saved bundles/ZIPs.
-- Add deterministic ZIP/bundle verification helpers with source-backed missing artifact diagnostics.
-- Use tiny temp-dir output bundle fixtures in CI without requiring live-provider autoplay.
+- Add operator-facing instructions for running manual/autoplay saved certification locally without requiring providers in CI.
+- Document expected saved artifacts, ZIP contents, report HTML location, and diagnostic JSON fields.
+- Add deterministic source guards that keep the runbook aligned with current helper names, artifact filenames, and workflow gate names.
+- Keep live-provider 100-turn autoplay optional/outside required PR CI.
 - Avoid committing `resources/data/test-results` runtime artifacts.
-- Keep helpers provider-free, deterministic, idempotent, and non-mutating.
 
 ## Definition of 8/10 Production Readiness
 
