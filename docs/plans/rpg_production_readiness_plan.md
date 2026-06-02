@@ -8,9 +8,9 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 ## Current Handoff Status
 
-Current phase focus: **Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2**.
+Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 3.9 — vertical-slice quest return/report-result flow**.
+Next recommended slice: **Phase 4.1 — canonical location graph foundation**.
 
 Latest completed PRs:
 
@@ -32,6 +32,8 @@ Latest completed PRs:
 | #154 Phase 3.6 deterministic quest reward rules | `d7d866523d8199d4bb64a534dccd250caf265b0a` | Phase 3 | Complete | Deterministic completed-quest reward claiming, idempotent reward grants, currency/item/relationship effects, source-backed reward logs, and Phase 3 quest reward CI gate; Phase 0 and deterministic gates passed. |
 | #155 Phase 3.7 quest persistence save-load coverage | `bc69af0225b821a8cb373ad6b67d8a07e9804bf7` | Phase 3 | Complete | Deterministic quest/giver/journal/rumor/reward persistence snapshots, restore/roundtrip verification, source/version validation, and Phase 3 quest persistence CI gate; Phase 0 and deterministic gates passed. |
 | #156 Phase 3.8 quest report matrix coverage | `521676dc75ec790bdc66e825a6619e8a6ead45f6` | Phase 3 | Complete | Source-backed Phase 3 quest report model, escaped HTML report rendering, matrix lifecycle payload coverage, and Phase 3 quest report matrix CI gate; Phase 0 and deterministic gates passed. |
+| #157 Phase 3.9 quest return report flow | `b1831eb237a32818486b84ef61371781bd81d383` | Phase 3 | Complete | Deterministic quest return/report-result helpers, idempotent reward claiming, source-backed report logs, journal closure entries, and Phase 3 quest return flow CI gate; Phase 0 and deterministic gates passed. |
+| #158 Phase 3.10 completion audit and scorecard refresh | `07f2c1c2c6a3277c4fc42949d807c0c5a7a888f6` | Phase 3 | Complete | Deterministic Phase 3 completion audit helpers, audit doc, runtime-matrix evidence, advisory scorecard refresh, and Phase 3.10 CI gate; Phase 0 and deterministic gates passed. |
 
 After every merged PR:
 
@@ -47,13 +49,13 @@ After every merged PR:
 | Architecture / system design | 8.3 | 8.5+ | Runtime modularized enough that systems are maintainable and not harness-dependent. |
 | LLM grounding / hallucination control | 7.9 | 8.5+ | Final visible state-claim validator passes matrix/autoplay with zero critical state contradictions. |
 | Runtime performance architecture | 7.0 | 8.5+ | Fast buckets <0.15s; first-call average <2.5s; p95 bounded and explained. |
-| Testability / diagnostics | 8.5 | 9.0+ | Matrix, manual, autoplay, save/load, and report gates run predictably with source-backed failures. |
-| Core gameplay mechanics | 6.2 | 8.0+ | Combat, economy, travel, quests, party, inventory, XP, and survival all have complete loops. |
-| Game design / player experience | 5.2 | 8.0+ | 30-60 minute vertical slice is coherent, fun, visible, and replayable. |
+| Testability / diagnostics | 8.8 | 9.0+ | Matrix, manual, autoplay, save/load, and report gates run predictably with source-backed failures. |
+| Core gameplay mechanics | 6.8 | 8.0+ | Combat, economy, travel, quests, party, inventory, XP, and survival all have complete loops. |
+| Game design / player experience | 5.7 | 8.0+ | 30-60 minute vertical slice is coherent, fun, visible, and replayable. |
 | NPC roleplay potential | 6.5 | 8.5+ | NPC profiles, memory, relationships, schedules, and evolution persist and affect play. |
 | 100-turn readiness | 6.0 | 8.0+ | 100-turn run completes with zero critical warnings and useful progression. |
 | 1000-turn readiness | 2.5 | 8.0+ | 1000-turn run completes with bounded reports, compression, memory aging, and no collapse. |
-| Production readiness | 3.4 | 8.0+ | Install/run/config/save/load/error handling are player-safe. |
+| Production readiness | 3.8 | 8.0+ | Install/run/config/save/load/error handling are player-safe. |
 | Commercial/game-quality readiness | 2.9 | 8.0+ | Enough content, polish, UX, stability, and onboarding for external users. |
 
 ## Roadmap Principles
@@ -168,7 +170,7 @@ Status: **Materially complete. Remaining work is full inventory UI/report polish
 
 ## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
 
-Status: **Mostly complete. Quest template schema, giver state, objective lifecycle, journal/report, rumor conversion, work routing, reward rules, persistence, and report matrix coverage are merged.**
+Status: **Complete enough to proceed to Phase 4. Quest lifecycle, reporting, persistence, return/report-result flow, and completion audit are merged.**
 
 - [x] Quest template schema.
 - [x] Quest giver state.
@@ -182,6 +184,8 @@ Status: **Mostly complete. Quest template schema, giver state, objective lifecyc
 - [x] Quest report section.
 - [x] Quest persistence/save-load coverage.
 - [x] Quest report matrix coverage.
+- [x] Quest return/report-result flow.
+- [x] Phase 3 completion audit and scorecard refresh.
 
 ### Completed Phase 3 slices
 
@@ -193,26 +197,28 @@ Status: **Mostly complete. Quest template schema, giver state, objective lifecyc
 - Phase 3.6 / PR #154 — deterministic completed-quest reward claiming rules.
 - Phase 3.7 / PR #155 — deterministic quest/giver/journal/rumor/reward persistence roundtrip coverage.
 - Phase 3.8 / PR #156 — deterministic Phase 3 quest report model, escaped HTML, and matrix lifecycle coverage.
+- Phase 3.9 / PR #157 — deterministic vertical-slice quest return/report-result flow.
+- Phase 3.10 / PR #158 — deterministic Phase 3 completion audit and scorecard refresh.
 
-### Next Phase 3 slices
+### Next recommended Phase 4 slices
 
-1. Phase 3.9 — vertical-slice quest return/report-result flow.
-2. Phase 3.10 — Phase 3 completion audit and scorecard refresh.
-3. Phase 4.1 — canonical location graph foundation.
+1. Phase 4.1 — canonical location graph foundation.
+2. Phase 4.2 — travel time, fatigue, and resource costs.
+3. Phase 4.3 — location discovery and route blocking.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **Pending.**
+Status: **Starting. Phase 4.1 is the active slice for canonical location graph foundation.**
 
-- [ ] Canonical location graph.
-- [ ] Location IDs, names, descriptions, services, NPCs, hazards, exits.
+- [~] Canonical location graph. Phase 4.1 adds deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers.
+- [~] Location IDs, names, descriptions, services, NPCs, hazards, exits. Phase 4.1 defines source-backed metadata for the starter vertical slice.
 - [ ] Travel time and fatigue/resource costs.
 - [ ] Discovery state.
 - [ ] Random/seeded encounters.
 - [ ] Route blocking/unblocking.
 - [ ] Local world events by location.
-- [ ] Location history in report.
-- [ ] Map/location UI payload.
+- [~] Location history in report. Phase 4.1 adds the map payload foundation; report history remains for Phase 4.5.
+- [~] Map/location UI payload. Phase 4.1 adds source-backed map payload helpers; UI wiring remains pending.
 - [ ] Time of day, day count, optional season/weather hooks.
 
 ## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
@@ -241,12 +247,12 @@ Required player loops:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [ ] Travel to old mill route.
+- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; travel runtime remains pending.
 - [ ] Fight bandit.
-- [ ] Return/report result.
+- [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
 - [x] See journal/objective updates.
-- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival package export/import is covered; Phase 3 quest/giver/journal/rumor/reward persistence is covered; full combat/NPC memory save-load remains.
+- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival package export/import is covered; Phase 3 quest/giver/journal/rumor/reward persistence is covered; full combat/NPC memory/save-load remains.
 
 ## Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate
 
@@ -338,7 +344,7 @@ Status: **Pending.**
 
 ### Bundle PR.3 — Vertical Slice Content Skeleton
 
-- [ ] Define Rusty Flagon, road, old mill, market.
+- [x] Define Rusty Flagon, market, old road, old mill, and nearby wilderness.
 - [ ] Define Bran, Elara, Aldric, road bandit profiles.
 - [x] Define one quest chain and one quest-giver offer path.
 
