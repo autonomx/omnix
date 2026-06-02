@@ -7,6 +7,7 @@ from .saved_autoplay_digest_sources import capture_saved_autoplay_digest_sources
 from .turn_certification import build_full_100_turn_certification_contract, build_full_100_turn_certification_result
 
 SOURCE = "deterministic_phase7_real_autoplay_certification_artifact_gate"
+REPORT_DIAGNOSTICS_SOURCE = "deterministic_phase7_saved_certification_report_diagnostics_gate"
 CERTIFICATION_SECTION_MARKER = "<!-- rpg-phase7-real-autoplay-certification -->"
 DEFAULT_EXPECTED_TURNS = 100
 
@@ -68,6 +69,76 @@ def _source_entry(kind: str, **fields: Any) -> Dict[str, Any]:
 
 def _digest_from_capture(capture: Dict[str, Any], key: str, fallback: str) -> str:
     return _safe_str(_safe_dict(capture.get("digests")).get(key) or fallback)
+
+
+def _html_items(rows: List[Any], *, empty: str = "None") -> str:
+    if not rows:
+        return f"<li>{escape(empty)}</li>"
+    return "".join(f"<li>{escape(_safe_str(row))}</li>" for row in rows)
+
+
+def _kv_items(mapping: Dict[str, Any], keys: List[str]) -> str:
+    rows = []
+    for key in keys:
+        if key in mapping:
+            rows.append(f"{key}: {_safe_str(mapping.get(key))}")
+    return _html_items(rows)
+
+
+def _readiness_diagnostics(result: Dict[str, Any]) -> str:
+    readiness = _safe_dict(result.get("readiness_result"))
+    progress = _safe_dict(readiness.get("progress_counts"))
+    loop = _safe_dict(readiness.get("loop_summary"))
+    budget = _safe_dict(readiness.get("budget_summary"))
+    readiness_blockers = _safe_list(readiness.get("blockers"))
+    readiness_warnings = _safe_list(readiness.get("warnings"))
+    return (
+        "<h3>Readiness Diagnostics</h3>"
+        "<h4>Progress Counts</h4>"
+        f"<ul>{_kv_items(progress, ['travel', 'quest', 'economy', 'combat', 'journal'])}</ul>"
+        "<h4>Loop Summary</h4>"
+        f"<ul>{_kv_items(loop, ['max_repeated_action_streak', 'max_repeated_location_streak', 'max_no_progress_streak', 'distinct_actions', 'distinct_locations', 'source'])}</ul>"
+        "<h4>Budget Summary</h4>"
+        f"<ul>{_kv_items(budget, ['report_bytes', 'transcript_debug_bytes', 'projected_report_bytes', 'projected_transcript_debug_bytes', 'report_budget_bytes', 'transcript_debug_budget_bytes', 'source'])}</ul>"
+        "<h4>Readiness Blockers</h4>"
+        f"<ul>{_html_items(readiness_blockers)}</ul>"
+        "<h4>Readiness Warnings</h4>"
+        f"<ul>{_html_items(readiness_warnings)}</ul>"
+    )
+
+
+def _state_diff_diagnostics(result: Dict[str, Any]) -> str:
+    state_diff = _safe_dict(result.get("state_diff"))
+    return (
+        "<h3>State and Checkpoint Diagnostics</h3>"
+        "<h4>Digest Checks</h4>"
+        f"<ul>{_html_items(_safe_list(state_diff.get('checks')))}</ul>"
+        "<h4>Digest Blockers</h4>"
+        f"<ul>{_html_items(_safe_list(state_diff.get('blockers')))}</ul>"
+        f"<p><strong>Source:</strong> {escape(_safe_str(state_diff.get('source')))}</p>"
+    )
+
+
+def build_saved_certification_report_diagnostics(payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = _safe_dict(payload)
+    result = _safe_dict(payload.get("certification_result"))
+    readiness = _safe_dict(result.get("readiness_result"))
+    state_diff = _safe_dict(result.get("state_diff"))
+    return {
+        "certification_status": _safe_str(result.get("certification_status")),
+        "reason": _safe_str(result.get("reason")),
+        "turns": f"{_safe_int(result.get('actual_turns'))}/{_safe_int(result.get('expected_turns'))}",
+        "progress_counts": _safe_dict(readiness.get("progress_counts")),
+        "loop_summary": _safe_dict(readiness.get("loop_summary")),
+        "budget_summary": _safe_dict(readiness.get("budget_summary")),
+        "readiness_blockers": _safe_list(readiness.get("blockers")),
+        "readiness_warnings": _safe_list(readiness.get("warnings")),
+        "digest_checks": _safe_list(state_diff.get("checks")),
+        "digest_blockers": _safe_list(state_diff.get("blockers")),
+        "blockers": _safe_list(result.get("blockers")),
+        "warnings": _safe_list(result.get("warnings")),
+        "source": REPORT_DIAGNOSTICS_SOURCE,
+    }
 
 
 def build_real_autoplay_certification_artifact(saved_artifacts: Dict[str, Any]) -> Dict[str, Any]:
@@ -165,7 +236,7 @@ def build_saved_100_turn_certification_payload(
     artifact = build_real_autoplay_certification_artifact(saved_artifacts)
     result = build_full_100_turn_certification_result(artifact, expected_turns=expected_turns)
     contract = build_full_100_turn_certification_contract(result)
-    return {
+    payload = {
         "ok": result.get("ok") is True,
         "reason": "phase7_real_autoplay_certification_artifact_ready"
         if result.get("ok") is True
@@ -175,30 +246,35 @@ def build_saved_100_turn_certification_payload(
         "normalized_artifact": artifact,
         "source": SOURCE,
     }
+    payload["report_diagnostics"] = build_saved_certification_report_diagnostics(payload)
+    return payload
 
 
 def render_saved_100_turn_certification_report_html(payload: Dict[str, Any]) -> str:
     payload = _safe_dict(payload)
     result = _safe_dict(payload.get("certification_result"))
+    diagnostics = _safe_dict(payload.get("report_diagnostics")) or build_saved_certification_report_diagnostics(payload)
     status = _safe_str(result.get("certification_status"))
     reason = _safe_str(result.get("reason"))
     turns = f"{_safe_int(result.get('actual_turns'))}/{_safe_int(result.get('expected_turns'))}"
     blockers = _safe_list(result.get("blockers"))
     warnings = _safe_list(result.get("warnings"))
-    blocker_items = "".join(f"<li>{escape(_safe_str(row))}</li>" for row in blockers) or "<li>None</li>"
-    warning_items = "".join(f"<li>{escape(_safe_str(row))}</li>" for row in warnings) or "<li>None</li>"
     return (
         f"{CERTIFICATION_SECTION_MARKER}\n"
         '<section id="phase7-real-autoplay-certification">'
         "<h2>Phase 7.7 Real Autoplay Certification</h2>"
+        "<h3>Phase 7 Saved Certification Diagnostics</h3>"
         f"<p><strong>Status:</strong> {escape(status)}</p>"
         f"<p><strong>Reason:</strong> {escape(reason)}</p>"
         f"<p><strong>Turns:</strong> {escape(turns)}</p>"
         f"<p><strong>Source:</strong> {escape(SOURCE)}</p>"
-        "<h3>Blockers</h3>"
-        f"<ul>{blocker_items}</ul>"
-        "<h3>Warnings</h3>"
-        f"<ul>{warning_items}</ul>"
+        f"<p><strong>Diagnostics source:</strong> {escape(_safe_str(diagnostics.get('source')))}</p>"
+        f"{_readiness_diagnostics(result)}"
+        f"{_state_diff_diagnostics(result)}"
+        "<h3>Certification Blockers</h3>"
+        f"<ul>{_html_items(blockers)}</ul>"
+        "<h3>Certification Warnings</h3>"
+        f"<ul>{_html_items(warnings)}</ul>"
         "</section>"
     )
 
@@ -243,6 +319,8 @@ def assert_phase7_real_autoplay_certification_artifact_ready() -> Dict[str, Any]
         blockers.append(_source_entry("real_artifact_certification_payload_not_ok"))
     if CERTIFICATION_SECTION_MARKER not in rendered or CERTIFICATION_SECTION_MARKER not in appended:
         blockers.append(_source_entry("missing_real_artifact_certification_report_section"))
+    if "Readiness Diagnostics" not in rendered or "State and Checkpoint Diagnostics" not in rendered:
+        blockers.append(_source_entry("missing_saved_certification_report_diagnostics"))
     return {
         "ok": not blockers,
         "reason": "phase7_real_autoplay_certification_artifact_gate_ready"
