@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.4 — 100-turn readiness loop, progress, and report gate**.
+Next recommended slice: **Phase 7.5 — critical warning severity and 100-turn readiness report integration**.
 
 Latest completed PRs:
 
@@ -20,6 +20,7 @@ Latest completed PRs:
 | #186 Phase 7.1 save load replay checkpoint foundation | `2e73cdd29b40d023e88e777514ec1c14b4552f81` | Phase 7 | Complete | Added deterministic replay checkpoint helpers, canonical session digests, restore validation, drift comparison, exports, and the Phase 7 replay checkpoint foundation gate; both required RPG checks passed. |
 | #188 Phase 7.2 replay turn sequence validation | `468463f545b4069b755eb73002516260cc50a59c` | Phase 7 | Complete | Added deterministic replay turn-sequence helpers that restore from checkpoints, apply provider-free command steps through canonical runtime command helpers, compare per-turn/final checkpoint digests, cover rejected commands without hidden mutation, and added the Phase 7 replay turn sequence gate; both required RPG checks passed. |
 | #190 Phase 7.3 save load replay persistence roundtrip | `f3b2255973f305cc2e8e471b7a6e00b33a36b27f` | Phase 7 | Complete | Added provider-free package/disk save-load replay roundtrip validation using existing package bridge, durable store, checkpoint, and replay sequence paths; surfaced digest drift details; exported Phase 7.3 helpers; added the Phase 7 save load replay roundtrip gate; both required RPG checks passed. |
+| #192 Phase 7.4 100-turn readiness loop progress report gate | `767b40863b30ad0d05e651ce26c6b81e48bfcda9` | Phase 7 | Complete | Added provider-free advisory 100-turn readiness analysis for loop, progress, and report-budget signals; classified incomplete turn counts and report/transcript growth as blockers; surfaced repeated action/location/no-progress risks as advisory warnings; exported Phase 7.4 helpers; added the Phase 7 100-turn readiness gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -187,19 +188,20 @@ Completed:
 - [x] Phase 7.1 — replay checkpoint foundation: canonical session JSON, deterministic checkpoint digests, restore validation, drift comparison, volatile runtime diagnostic filtering, exports, and `RPG CI Phase 7 replay checkpoint foundation gate`.
 - [x] Phase 7.2 — replay turn sequence validation against checkpoint digests: restore from checkpoint inputs, apply provider-free command steps through canonical runtime command helpers, build per-turn checkpoint digests, compare final checkpoint digests, cover rejected commands without hidden mutation, emit source-backed replay drift details, and add the `RPG CI Phase 7 replay turn sequence gate`.
 - [x] Phase 7.3 — save/load replay persistence roundtrip gate: use existing package bridge and durable store paths, validate package/disk checkpoint digest stability, replay from loaded checkpoint state, surface source-backed drift details, export readiness/contract helpers, and add the `RPG CI Phase 7 save load replay roundtrip gate`.
+- [x] Phase 7.4 — 100-turn readiness loop, progress, and report gate: add provider-free advisory 100-turn readiness analysis for turn count, loop risks, progress signals, report/transcript growth projections, source-backed blockers/warnings, exports, and the `RPG CI Phase 7 100-turn readiness gate`.
 
-Next recommended slice: **Phase 7.4 — 100-turn readiness loop, progress, and report gate**.
+Next recommended slice: **Phase 7.5 — critical warning severity and 100-turn readiness report integration**.
 
-Suggested Phase 7.4 scope:
+Suggested Phase 7.5 scope:
 
-- Add deterministic 100-turn readiness scaffolding that can classify critical vs advisory warnings without provider calls.
-- Add loop-detection summaries for repeated actions, repeated locations, and no-progress streaks.
-- Add progress metrics for travel, quest state, economy/resource changes, combat/encounter signals, and journal/objective movement.
-- Add report growth budget checks for deterministic report artifacts and transcript/debug payload projections.
-- Emit a compact 100-turn readiness result with source-backed blockers and warnings.
-- Keep the gate deterministic, provider-free, and advisory until the final 100-turn readiness pass.
-- Add `src/tests/rpg/test_ci_phase7_100_turn_readiness_gate.py`.
-- Add an `RPG CI Phase 7 100-turn readiness gate` after the save/load replay roundtrip gate and before the runtime facade manifest gate.
+- Integrate the Phase 7.4 readiness result into deterministic campaign/report-facing artifacts.
+- Add critical, warning, and advisory severity categories for readiness blockers and warnings.
+- Add a compact escaped/safe 100-turn readiness report section that surfaces turn count status, loop risks, progress metrics, report/transcript growth projections, and critical blockers vs advisory warnings.
+- Keep report rendering provider-free, source-backed, escaped, and non-mutating.
+- Ensure every blocker and warning entry carries a source field.
+- Add source-backed guardrails that the report remains advisory until a full 100-turn autoplay gate passes.
+- Add `src/tests/rpg/test_ci_phase7_100_turn_readiness_report.py`.
+- Add an `RPG CI Phase 7 100-turn readiness report gate` after the Phase 7 100-turn readiness gate and before the runtime facade manifest gate.
 
 ## Phase 8 — UI/UX Production Pass
 
