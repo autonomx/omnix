@@ -14,6 +14,11 @@ from .replay_checkpoint import (
     restore_session_from_checkpoint,
     session_checkpoint_digest,
 )
+from .replay_persistence_roundtrip_v2 import (
+    assert_phase7_save_load_replay_roundtrip_ready,
+    build_save_load_replay_roundtrip_contract,
+    run_save_load_replay_persistence_roundtrip,
+)
 from .replay_turn_sequence import (
     assert_phase7_replay_turn_sequence_ready,
     build_replay_turn_sequence_contract,
@@ -82,4 +87,8 @@ __all__ = [
     "default_replay_command_handlers",
     "run_replay_turn_sequence",
     "validate_replay_turn_sequence",
+    # Phase 7.3
+    "assert_phase7_save_load_replay_roundtrip_ready",
+    "build_save_load_replay_roundtrip_contract",
+    "run_save_load_replay_persistence_roundtrip",
 ]
