@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.11 — real autoplay progress and loop metrics certification integration**.
+Next recommended slice: **Phase 7.12 — saved certification report diagnostics visibility integration**.
 
 Latest completed PRs:
 
@@ -27,6 +27,7 @@ Latest completed PRs:
 | #200 Phase 7.8 saved certification artifact writer integration | `d369b3ced3cdd622f3865165f271b2fafee95e6b` | Phase 7 | Complete | Added deterministic saved 100-turn certification artifact writer helpers, emits `phase7_100_turn_certification.json` next to manual/autoplay-style result artifacts, optionally appends escaped/idempotent certification HTML, and added the saved certification artifact writer gate; both required RPG checks passed. |
 | #202 Phase 7.9 saved autoplay digest source integration | `047fb0a6e9ca27e800188ea7f171101829c5cec7` | Phase 7 | Complete | Added provider-free saved autoplay/manual checkpoint and state digest source capture, threaded source metadata into saved certification payloads, separated checkpoint/state mismatch blockers, and added the saved autoplay digest source gate; both required RPG checks passed. |
 | #204 Phase 7.10 real saved state certification integration | `39f24306418e8d7127e24e32ad6936609ed424ba` | Phase 7 | Complete | Added deterministic real saved/loadable state certification bridge for manual/autoplay output directories, computes provider-free checkpoint/state digests from tiny persisted JSON fixtures, feeds the saved certification writer path, and added the real saved state certification gate; both required RPG checks passed. |
+| #206 Phase 7.11 real autoplay progress metrics integration | `a17dbbe404d5dcf58ed1cb1460e6df415bac0db7` | Phase 7 | Complete | Added deterministic saved output progress metrics bridge, normalizes real transcript/report rows into readiness analysis, threads progress/loop/budget diagnostics into saved certification artifacts, and added the real autoplay progress metrics gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -94,17 +95,17 @@ Completed:
 - [x] Phase 7.8 — saved 100-turn certification payload emission and artifact writer integration: add deterministic writer helpers that emit `phase7_100_turn_certification.json` beside manual/autoplay-style result artifacts, optionally append safe certification HTML to saved reports, preserve ZIP inclusion for the JSON payload, and add the `RPG CI Phase 7 saved certification artifact writer gate`.
 - [x] Phase 7.9 — saved autoplay checkpoint/state digest source integration: add deterministic digest source capture for saved autoplay/manual artifact shapes, thread captured metadata into Phase 7.7/7.8 certification payloads, report checkpoint and state digest mismatches separately, and add the `RPG CI Phase 7 saved autoplay digest source gate`.
 - [x] Phase 7.10 — real saved/loadable campaign state certification integration: add deterministic manual/autoplay output-directory state discovery, compute provider-free checkpoint/state digests from persisted JSON state files, thread digests through the saved certification writer, report saved/loadable mismatches, and add the `RPG CI Phase 7 real saved state certification gate`.
+- [x] Phase 7.11 — real autoplay progress and loop metrics certification integration: add deterministic saved output progress metrics extraction, normalize real transcript/report rows into Phase 7.4 readiness analysis, thread progress/loop/budget diagnostics through saved certification artifacts, and add the `RPG CI Phase 7 real autoplay progress metrics gate`.
 
-Next recommended slice: **Phase 7.11 — real autoplay progress and loop metrics certification integration**.
+Next recommended slice: **Phase 7.12 — saved certification report diagnostics visibility integration**.
 
-Suggested Phase 7.11 scope:
+Suggested Phase 7.12 scope:
 
-- Locate real manual/autoplay transcript rows and report payloads that already contain progress, loop, location, quest, economy, combat, and journal signals.
-- Normalize those real saved output shapes into the Phase 7.4 readiness analyzer without requiring live-provider autoplay in PR CI.
-- Add source-backed metadata for missing progress signals, repeated action/location loop risks, no-progress windows, and report/transcript budget diagnostics.
-- Thread readiness progress/loop diagnostics into the saved certification payload/report path so blocked 100-turn runs are easy to diagnose.
-- Use tiny deterministic saved-output fixtures in CI and avoid committing `resources/data/test-results` runtime artifacts.
-- Keep readiness/certification/report rendering provider-free, deterministic, escaped, idempotent, and non-mutating.
+- Make saved certification report HTML expose concise source-backed diagnostics for digest mismatches, progress/loop warnings, readiness blockers, and report/transcript budget blockers.
+- Keep HTML escaped, deterministic, idempotent, and compact.
+- Preserve JSON payload as the canonical machine-readable artifact while making saved reports easier to inspect manually.
+- Use tiny deterministic saved certification payload fixtures in CI and avoid committing `resources/data/test-results` runtime artifacts.
+- Do not require live-provider autoplay in PR CI.
 
 ## Definition of 8/10 Production Readiness
 
