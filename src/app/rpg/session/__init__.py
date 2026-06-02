@@ -33,6 +33,11 @@ from .session_store import (
     list_sessions,
     save_session,
 )
+from .turn_certification import (
+    assert_phase7_full_100_turn_certification_ready,
+    build_full_100_turn_certification_contract,
+    build_full_100_turn_certification_result,
+)
 from .turn_readiness import (
     assert_phase7_100_turn_readiness_ready,
     build_100_turn_readiness_contract,
@@ -113,4 +118,8 @@ __all__ = [
     "build_100_turn_readiness_report_contract",
     "build_100_turn_readiness_report_payload",
     "render_100_turn_readiness_report_html",
+    # Phase 7.6
+    "assert_phase7_full_100_turn_certification_ready",
+    "build_full_100_turn_certification_contract",
+    "build_full_100_turn_certification_result",
 ]
