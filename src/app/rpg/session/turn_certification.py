@@ -52,23 +52,79 @@ def _artifact_int(artifact: Dict[str, Any], *keys: str) -> int:
     return 0
 
 
+def _digest_source(artifact: Dict[str, Any], digest_key: str, fallback_source: str) -> str:
+    metadata = artifact.get("digest_source_metadata") or artifact.get("digest_metadata")
+    for row in _safe_list(metadata):
+        row_dict = _safe_dict(row)
+        if row_dict.get("kind") == digest_key:
+            return _safe_str(row_dict.get("source") or fallback_source)
+    return fallback_source
+
+
+def _add_digest_check(
+    checks: List[Dict[str, Any]],
+    blockers: List[Dict[str, Any]],
+    *,
+    kind: str,
+    mismatch_kind: str,
+    left_digest: str,
+    right_digest: str,
+    source: str,
+) -> None:
+    if not left_digest or not right_digest:
+        return
+    ok = left_digest == right_digest
+    checks.append({"kind": kind, "ok": ok, "source": source})
+    if not ok:
+        blockers.append(_source_entry(mismatch_kind, source=source))
+
+
 def _state_diff_result(artifact: Dict[str, Any]) -> Dict[str, Any]:
-    final_digest = _safe_str(artifact.get("final_checkpoint_digest") or artifact.get("final_state_digest"))
-    loaded_digest = _safe_str(artifact.get("loaded_checkpoint_digest") or artifact.get("loaded_state_digest"))
-    expected_digest = _safe_str(artifact.get("expected_final_checkpoint_digest") or artifact.get("expected_final_state_digest"))
     source = _safe_str(artifact.get("state_diff_source") or SOURCE)
-    checks = []
-    blockers = []
-    if final_digest and loaded_digest:
-        ok = final_digest == loaded_digest
-        checks.append({"kind": "final_vs_loaded_checkpoint_digest", "ok": ok, "source": source})
-        if not ok:
-            blockers.append(_source_entry("final_vs_loaded_checkpoint_digest_mismatch", source=source))
-    if final_digest and expected_digest:
-        ok = final_digest == expected_digest
-        checks.append({"kind": "final_vs_expected_checkpoint_digest", "ok": ok, "source": source})
-        if not ok:
-            blockers.append(_source_entry("final_vs_expected_checkpoint_digest_mismatch", source=source))
+    final_checkpoint_digest = _safe_str(artifact.get("final_checkpoint_digest"))
+    loaded_checkpoint_digest = _safe_str(artifact.get("loaded_checkpoint_digest"))
+    expected_checkpoint_digest = _safe_str(artifact.get("expected_final_checkpoint_digest"))
+    final_state_digest = _safe_str(artifact.get("final_state_digest"))
+    loaded_state_digest = _safe_str(artifact.get("loaded_state_digest"))
+    expected_state_digest = _safe_str(artifact.get("expected_final_state_digest"))
+    checks: List[Dict[str, Any]] = []
+    blockers: List[Dict[str, Any]] = []
+    _add_digest_check(
+        checks,
+        blockers,
+        kind="final_vs_loaded_checkpoint_digest",
+        mismatch_kind="final_vs_loaded_checkpoint_digest_mismatch",
+        left_digest=final_checkpoint_digest,
+        right_digest=loaded_checkpoint_digest,
+        source=_digest_source(artifact, "loaded_checkpoint_digest", source),
+    )
+    _add_digest_check(
+        checks,
+        blockers,
+        kind="final_vs_expected_checkpoint_digest",
+        mismatch_kind="final_vs_expected_checkpoint_digest_mismatch",
+        left_digest=final_checkpoint_digest,
+        right_digest=expected_checkpoint_digest,
+        source=_digest_source(artifact, "expected_final_checkpoint_digest", source),
+    )
+    _add_digest_check(
+        checks,
+        blockers,
+        kind="final_vs_loaded_state_digest",
+        mismatch_kind="final_vs_loaded_state_digest_mismatch",
+        left_digest=final_state_digest,
+        right_digest=loaded_state_digest,
+        source=_digest_source(artifact, "loaded_state_digest", source),
+    )
+    _add_digest_check(
+        checks,
+        blockers,
+        kind="final_vs_expected_state_digest",
+        mismatch_kind="final_vs_expected_state_digest_mismatch",
+        left_digest=final_state_digest,
+        right_digest=expected_state_digest,
+        source=_digest_source(artifact, "expected_final_state_digest", source),
+    )
     return {"checked": bool(checks), "checks": checks, "blockers": blockers, "source": source}
 
 
@@ -95,15 +151,36 @@ def build_full_100_turn_certification_result(
     if len(turns) != expected_turns:
         blockers.append(_source_entry("artifact_turn_count_not_exact", actual=len(turns), expected=expected_turns))
     for row in _safe_list(report_payload.get("critical_blockers")):
-        blockers.append(_source_entry("readiness_critical_blocker", source=_safe_str(_safe_dict(row).get("source") or READINESS_SOURCE), blocker=_safe_str(_safe_dict(row).get("kind"))))
+        row_dict = _safe_dict(row)
+        blockers.append(
+            _source_entry(
+                "readiness_critical_blocker",
+                source=_safe_str(row_dict.get("source") or READINESS_SOURCE),
+                blocker=_safe_str(row_dict.get("kind")),
+            )
+        )
     blockers.extend(_safe_list(state_diff.get("blockers")))
     if not _safe_dict(report_payload.get("severity_counts")):
         blockers.append(_source_entry("missing_report_severity_counts", source=REPORT_SOURCE))
     for row in _safe_list(report_payload.get("warnings")):
-        warnings.append(_source_entry("readiness_warning", source=_safe_str(_safe_dict(row).get("source") or REPORT_SOURCE), warning=_safe_str(_safe_dict(row).get("kind"))))
+        row_dict = _safe_dict(row)
+        warnings.append(
+            _source_entry(
+                "readiness_warning",
+                source=_safe_str(row_dict.get("source") or REPORT_SOURCE),
+                warning=_safe_str(row_dict.get("kind")),
+            )
+        )
     for row in _safe_list(report_payload.get("advisories")):
-        if _safe_dict(row).get("kind") != "advisory_until_full_100_turn_autoplay_gate":
-            warnings.append(_source_entry("readiness_advisory", source=_safe_str(_safe_dict(row).get("source") or REPORT_SOURCE), advisory=_safe_str(_safe_dict(row).get("kind"))))
+        row_dict = _safe_dict(row)
+        if row_dict.get("kind") != "advisory_until_full_100_turn_autoplay_gate":
+            warnings.append(
+                _source_entry(
+                    "readiness_advisory",
+                    source=_safe_str(row_dict.get("source") or REPORT_SOURCE),
+                    advisory=_safe_str(row_dict.get("kind")),
+                )
+            )
     ok = not blockers
     certification_status = "final_100_turn_certification_passed" if ok else "final_100_turn_certification_blocked"
     return {
@@ -161,6 +238,8 @@ def assert_phase7_full_100_turn_certification_ready() -> Dict[str, Any]:
         "transcript_debug_bytes": 500_000,
         "final_checkpoint_digest": "digest:phase7:final",
         "loaded_checkpoint_digest": "digest:phase7:final",
+        "final_state_digest": "digest:phase7:state",
+        "loaded_state_digest": "digest:phase7:state",
         "state_diff_source": SOURCE,
     }
     result = build_full_100_turn_certification_result(artifact)
