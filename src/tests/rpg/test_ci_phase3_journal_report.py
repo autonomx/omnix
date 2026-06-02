@@ -74,7 +74,7 @@ def test_ci_phase3_journal_entry_can_be_created_from_objective_result():
     assert entry["quest_id"] == "quest:clear_the_road"
     assert entry["objective_id"] == "objective:defeat_bandit"
     assert entry["event_type"] == "objective_completed"
-    assert "Defeat the road bandit" in entry["what_happened"]
+    assert "Defeat the bandit threatening the old mill road" in entry["what_happened"]
     assert entry["next_objective"] == "Return for the quest reward or ask about the next lead."
     assert "completed" in entry["tags"]
 
