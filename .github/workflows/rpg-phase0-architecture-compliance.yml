@@ -7,6 +7,7 @@ on:
     paths:
       - "src/app/rpg/**"
       - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
+      - "docs/plans/rpg_production_readiness_plan.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
@@ -15,6 +16,7 @@ on:
     paths:
       - "src/app/rpg/**"
       - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
+      - "docs/plans/rpg_production_readiness_plan.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:

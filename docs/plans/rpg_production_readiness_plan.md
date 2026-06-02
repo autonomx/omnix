@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.6 — travel/discovery/blocking integration into actual runtime travel commands**.
+Next recommended slice: **Phase 4.7 — time of day/day count hooks**.
 
 Latest completed PRs:
 
@@ -26,19 +26,20 @@ Latest completed PRs:
 | #148 Phase 2.7 economy price modifiers | `0848197d9b02c5c0a19c52f0968e1083f3ec9414` | Phase 2 | Complete | Deterministic charisma, relationship, reputation, and scarcity price modifiers for merchant buy/sell transactions; source-backed modifier logs; Phase 0 and deterministic gates passed. |
 | #149 Phase 3.1 quest schema and giver state | `f810404a995308042fbc4fb9bd27b71e97320981` | Phase 3 | Complete | Deterministic quest template normalization, starter quest template, quest-giver offer registration/listing/acceptance, and Phase 3 CI gate; Phase 0 and deterministic gates passed. |
 | #150 Phase 3.2 objective lifecycle | `dd22a5e77e863f7bd5befe7494ff60c3dc803d80` | Phase 3 | Complete | Deterministic objective creation/progress/completion/failure lifecycle, duplicate event suppression, quest completion/failure derivation, source-backed responses, and Phase 3 objective lifecycle CI gate; Phase 0 and deterministic gates passed. |
-| #151 Phase 3.3 quest journal report | `621d02da216d252d4e746fa5d3fdcafaf2d7e582` | Phase 3 | Complete | Deterministic quest journal entries for what happened/learned/next objective, objective-result journal bridge, grouped journal summary, escaped journal report HTML, and Phase 3 journal report CI gate; Phase 0 and deterministic gates passed. |
-| #152 Phase 3.4 rumor quest conversion | `591792ba7298d3b7bab6cbab5e8da25b7899420a` | Phase 3 | Complete | Deterministic rumor registration, evidence backing, backed-rumor propagation, backed-rumor quest-offer conversion, and Phase 3 rumor quest CI gate; Phase 0 and deterministic gates passed. |
-| #153 Phase 3.5 work inquiry objective suggestions | `991e0b03df19a6ea73a988c599d58ee5d50d26d4` | Phase 3 | Complete | Deterministic work inquiry classification/routing, quest-giver offer registration, active objective suggestions, source-backed narration claim contract, and Phase 3 work objective CI gate; Phase 0 and deterministic gates passed. |
-| #154 Phase 3.6 deterministic quest reward rules | `d7d866523d8199d4bb64a534dccd250caf265b0a` | Phase 3 | Complete | Deterministic completed-quest reward claiming, idempotent reward grants, currency/item/relationship effects, source-backed reward logs, and Phase 3 quest reward CI gate; Phase 0 and deterministic gates passed. |
-| #155 Phase 3.7 quest persistence save-load coverage | `bc69af0225b821a8cb373ad6b67d8a07e9804bf7` | Phase 3 | Complete | Deterministic quest/giver/journal/rumor/reward persistence snapshots, restore/roundtrip verification, source/version validation, and Phase 3 quest persistence CI gate; Phase 0 and deterministic gates passed. |
-| #156 Phase 3.8 quest report matrix coverage | `521676dc75ec790bdc66e825a6619e8a6ead45f6` | Phase 3 | Complete | Source-backed Phase 3 quest report model, escaped HTML report rendering, matrix lifecycle payload coverage, and Phase 3 quest report matrix CI gate; Phase 0 and deterministic gates passed. |
-| #157 Phase 3.9 quest return report flow | `b1831eb237a32818486b84ef61371781bd81d383` | Phase 3 | Complete | Deterministic quest return/report-result helpers, idempotent reward claiming, source-backed report logs, journal closure entries, and Phase 3 quest return flow CI gate; Phase 0 and deterministic gates passed. |
-| #158 Phase 3.10 completion audit and scorecard refresh | `07f2c1c2c6a3277c4fc42949d807c0c5a7a888f6` | Phase 3 | Complete | Deterministic Phase 3 completion audit helpers, audit doc, runtime-matrix evidence, advisory scorecard refresh, and Phase 3.10 CI gate; Phase 0 and deterministic gates passed. |
+| #151 Phase 3.3 quest journal report | `621d02da216d252d4e746fa5d3fdcafaf2d7e582` | Phase 3 | Complete | Deterministic quest journal entries, objective-result journal bridge, grouped journal summary, escaped journal report HTML, and Phase 3 journal report CI gate. |
+| #152 Phase 3.4 rumor quest conversion | `591792ba7298d3b7bab6cbab5e8da25b7899420a` | Phase 3 | Complete | Deterministic rumor registration, evidence backing, backed-rumor propagation, backed-rumor quest-offer conversion, and Phase 3 rumor quest CI gate. |
+| #153 Phase 3.5 work inquiry objective suggestions | `991e0b03df19a6ea73a988c599d58ee5d50d26d4` | Phase 3 | Complete | Deterministic work inquiry classification/routing, quest-giver offer registration, active objective suggestions, source-backed narration claim contract, and Phase 3 work objective CI gate. |
+| #154 Phase 3.6 deterministic quest reward rules | `d7d866523d8199d4bb64a534dccd250caf265b0a` | Phase 3 | Complete | Deterministic completed-quest reward claiming, idempotent reward grants, currency/item/relationship effects, source-backed reward logs, and Phase 3 quest reward CI gate. |
+| #155 Phase 3.7 quest persistence save-load coverage | `bc69af0225b821a8cb373ad6b67d8a07e9804bf7` | Phase 3 | Complete | Deterministic quest/giver/journal/rumor/reward persistence snapshots, restore/roundtrip verification, source/version validation, and Phase 3 quest persistence CI gate. |
+| #156 Phase 3.8 quest report matrix coverage | `521676dc75ec790bdc66e825a6619e8a6ead45f6` | Phase 3 | Complete | Source-backed Phase 3 quest report model, escaped HTML report rendering, matrix lifecycle payload coverage, and Phase 3 quest report matrix CI gate. |
+| #157 Phase 3.9 quest return report flow | `b1831eb237a32818486b84ef61371781bd81d383` | Phase 3 | Complete | Deterministic quest return/report-result helpers, idempotent reward claiming, source-backed report logs, journal closure entries, and Phase 3 quest return flow CI gate. |
+| #158 Phase 3.10 completion audit and scorecard refresh | `07f2c1c2c6a3277c4fc42949d807c0c5a7a888f6` | Phase 3 | Complete | Deterministic Phase 3 completion audit helpers, audit doc, runtime-matrix evidence, advisory scorecard refresh, and Phase 3.10 CI gate. |
 | #159 Phase 4.1 canonical location graph foundation | `3e72a19b7255e32af3ffe323fed79cedd169d154` | Phase 4 | Complete | Deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers; source-backed location metadata, exits, map payload, narration contract, and Phase 4 location graph CI gate passed. |
 | #160 Phase 4.2 deterministic travel time and fatigue costs | `d23f1ec7e00c45d797466d0cfe4f32c37e7b089d` | Phase 4 | Complete | Deterministic route travel minutes, fatigue deltas, resource-cost accounting, risk flags, travel-state mutation, narration guardrails, and Phase 4 travel costs CI gate passed. |
 | #161 Phase 4.3 location discovery and route blocking | `cc8d025aee8976312b7ef1579ed74ea1e32d6962` | Phase 4 | Complete | Deterministic starter discovery state, old mill route blocking/unblocking, route-access validation, accessible map payloads, narration guardrails, and Phase 4 discovery route blocking CI gate passed. |
 | #162 Phase 4.4 seeded travel and location encounters | `cab3a9d5dc48f352f3a8992319937bd82ce15357` | Phase 4 | Complete | Deterministic seeded route/location encounter tables, source-backed encounter logs, narration guardrails, and Phase 4 seeded encounters CI gate passed. |
-| Phase 4.5 local world events and location history report | `pending PR merge` | Phase 4 | In review | Deterministic local world-event state, derived history rows from travel/encounter/discovery logs, escaped location-history report HTML, and narration guardrails. |
+| #163 Phase 4.5 local world events and location history | `b01bc18629d7ca26c5e8bf528b80a717a03d5816` | Phase 4 | Complete | Deterministic local world-event state, derived history rows from travel/encounter/discovery logs, escaped location-history report HTML, and Phase 4 world events location history CI gate passed. |
+| #164 Phase 4.6 runtime travel access integration | `1b2f4d3892a11dc8311c9ef07c841079048ea547` | Phase 4 | Complete | Runtime travel wrapper validates discovery/route blocking before applying travel, preserves low-level travel helper behavior, adds runtime-travel guardrails, and Phase 4 runtime travel access CI gate passed. |
 
 After every merged PR:
 
@@ -207,20 +208,21 @@ Status: **Complete enough to proceed to Phase 4. Quest lifecycle, reporting, per
 
 ### Next recommended Phase 4 slices
 
-1. Phase 4.6 — travel/discovery/blocking integration into actual runtime travel commands.
-2. Phase 4.7 — time of day/day count hooks.
-3. Phase 4.8 — map/location UI payload/report integration.
+1. Phase 4.7 — time of day/day count hooks.
+2. Phase 4.8 — map/location UI payload/report integration.
+3. Phase 4.9 — travel resource consumption integration with survival/inventory APIs.
+4. Phase 4.10 — encounter-to-combat/world-event integration.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1 through 4.4 are merged; Phase 4.5 local world events and location history is in review.**
+Status: **In progress. Phase 4.1 through 4.6 are merged; Phase 4.7 time of day/day count hooks is next.**
 
 - [x] Canonical location graph. Phase 4.1 added deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers.
 - [x] Location IDs, names, descriptions, services, NPCs, hazards, exits. Phase 4.1 defined source-backed metadata for the starter vertical slice.
-- [~] Travel time and fatigue/resource costs. Phase 4.2 adds deterministic route costs, travel-state mutation, and source-backed narration contracts; inventory consumption wiring remains pending.
+- [~] Travel time and fatigue/resource costs. Phase 4.2 adds deterministic route costs, travel-state mutation, and source-backed narration contracts; Phase 4.6 adds runtime travel access enforcement before guarded travel application; inventory/survival consumption wiring remains pending for Phase 4.9 or later.
 - [~] Discovery state. Phase 4.3 adds deterministic starter discovered locations/routes and discovery log helpers.
 - [~] Random/seeded encounters. Phase 4.4 adds deterministic seeded encounter tables/results/logs and narration guardrails; combat/world-event integration remains pending.
-- [~] Route blocking/unblocking. Phase 4.3 adds deterministic route block state, block/unblock helpers, and route-access validation.
+- [~] Route blocking/unblocking. Phase 4.3 adds deterministic route block state, block/unblock helpers, and route-access validation; Phase 4.6 adds runtime travel access enforcement so guarded runtime travel cannot bypass discovery or route blocks.
 - [~] Local world events by location. Phase 4.5 adds deterministic local event state and derived event rows from travel, encounter, and discovery logs.
 - [~] Location history in report. Phase 4.5 adds source-backed location-history report model and escaped HTML rendering.
 - [~] Map/location UI payload. Phase 4.1 adds source-backed map payload helpers; Phase 4.3 adds discovered/blocked visible-exit payloads; UI wiring remains pending.
@@ -252,12 +254,12 @@ Required player loops:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks.
+- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement before applying travel.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
 - [x] See journal/objective updates.
-- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival package export/import is covered; Phase 3 quest/giver/journal/rumor/reward persistence is covered; full combat/NPC memory/save-load remains.
+- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival package export/import is covered; Phase 3 quest/giver/journal/rumor/reward persistence is covered; full combat/NPC/travel/time save-load remains.
 
 ## Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate
 
