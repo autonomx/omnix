@@ -34,6 +34,12 @@ from app.rpg.quests.state import (
     start_quest,
 )
 from app.rpg.quests.transitions import apply_quest_transition
+from app.rpg.quests.work import (
+    build_work_inquiry_narration_contract,
+    classify_work_inquiry,
+    route_work_inquiry,
+    suggest_objectives,
+)
 
 __all__ = [
     "add_journal_entry",
@@ -43,6 +49,8 @@ __all__ = [
     "build_quest_journal_summary",
     "build_reward_payload",
     "build_rumor_summary",
+    "build_work_inquiry_narration_contract",
+    "classify_work_inquiry",
     "complete_objective",
     "complete_objective_lifecycle",
     "convert_rumor_to_quest_offer",
@@ -60,7 +68,9 @@ __all__ = [
     "propagate_backed_rumors",
     "register_rumor",
     "render_quest_journal_report_html",
+    "route_work_inquiry",
     "set_quest_stage",
     "start_quest",
+    "suggest_objectives",
     "update_objective_progress",
 ]
