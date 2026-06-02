@@ -16,7 +16,7 @@ from app.rpg.quests.objectives import (
     objective_from_template,
     update_objective_progress,
 )
-from app.rpg.quests.rewards import build_reward_payload, mark_reward_claimed
+from app.rpg.quests.rewards import build_reward_payload, claim_quest_rewards, mark_reward_claimed
 from app.rpg.quests.rumors import (
     back_rumor_with_evidence,
     build_rumor_summary,
@@ -50,6 +50,7 @@ __all__ = [
     "build_reward_payload",
     "build_rumor_summary",
     "build_work_inquiry_narration_contract",
+    "claim_quest_rewards",
     "classify_work_inquiry",
     "complete_objective",
     "complete_objective_lifecycle",
