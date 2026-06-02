@@ -262,7 +262,8 @@ def render_saved_100_turn_certification_report_html(payload: Dict[str, Any]) -> 
     return (
         f"{CERTIFICATION_SECTION_MARKER}\n"
         '<section id="phase7-real-autoplay-certification">'
-        "<h2>Phase 7 Saved Certification Diagnostics</h2>"
+        "<h2>Phase 7.7 Real Autoplay Certification</h2>"
+        "<h3>Phase 7 Saved Certification Diagnostics</h3>"
         f"<p><strong>Status:</strong> {escape(status)}</p>"
         f"<p><strong>Reason:</strong> {escape(reason)}</p>"
         f"<p><strong>Turns:</strong> {escape(turns)}</p>"
