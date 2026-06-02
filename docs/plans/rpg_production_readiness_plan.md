@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 8 — UI/UX Production Pass**.
 
-Next recommended slice: **Phase 8.2 — objective/journal detail panel and action-state visibility**.
+Next recommended slice: **Phase 8.3 — combat state and action affordance UI**.
 
 Latest completed PRs:
 
@@ -38,6 +38,7 @@ Latest completed PRs:
 | #222 Phase 7.19 saved artifact operator UX diagnostics | `b244b9e47e4790b860656f7b748e73786cdc6767` | Phase 7 | Complete | Added operator-facing nested artifact layout guidance, duplicate/partial-output diagnostics guidance, provider-free nested discovery and ambiguity source guards, and the saved artifact operator UX diagnostics gate; both required RPG checks passed. |
 | #224 Phase 7.20 closeout planning | `18041ebf17b51ed05940b91c4b502802a62863ef` | Phase 7 | Complete | Added Phase 7 closeout planning, routed remaining live/replay risks forward without overstating live-provider coverage, added the closeout planning gate, and kept required PR coverage provider-free; both required RPG checks passed. |
 | #226 Phase 8.1 player-visible state objective HUD foundation | `7604e1912d71b61bc93649da6d1edc24d14bb0ca` | Phase 8 | Complete | Added deterministic read-only `player_hud` extraction for current location, active objective, resources, party, time/weather, and major warnings; added a safe browser renderer and the Phase 8 HUD gate; both required RPG checks passed. |
+| #228 Phase 8.2 objective journal detail panel | `b43a41cc26129ea3197040132413098c19567adf` | Phase 8 | Complete | Added deterministic read-only objective/journal panel extraction, surfaced active/available/completed/blocked objective states, recent action state, warnings, and journal entries in turn/travel payloads, added escaped browser rendering and the Phase 8.2 gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -83,7 +84,7 @@ After every merged PR:
 - Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2: **Pending**.
 - Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
 - Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
-- Phase 8 — UI/UX Production Pass: **In progress; Phase 8.1 merged**.
+- Phase 8 — UI/UX Production Pass: **In progress; Phase 8.1 and Phase 8.2 merged**.
 - Phase 9 — 1000-Turn Endurance Systems: **Pending**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
 
@@ -131,15 +132,16 @@ Status: **In progress.**
 Completed:
 
 - [x] Phase 8.1 — player-visible state and objective HUD foundation: add deterministic read-only `player_hud` extraction for current location, active objective, resources, party summary, time/weather, and major warnings; surface it in turn/travel payloads; add a safe browser renderer and the `RPG CI Phase 8 player visible state objective HUD gate`.
+- [x] Phase 8.2 — objective/journal detail panel and action-state visibility: add deterministic read-only objective/journal panel payloads, show active/available/completed/blocked objective states with source-backed labels, surface recent action state and warning transitions, add escaped browser rendering, and add the `RPG CI Phase 8 objective journal detail panel gate`.
 
-Next recommended slice: **Phase 8.2 — objective/journal detail panel and action-state visibility**.
+Next recommended slice: **Phase 8.3 — combat state and action affordance UI**.
 
-Suggested Phase 8.2 scope:
+Suggested Phase 8.3 scope:
 
-- Add a player-visible objective and journal detail panel backed by deterministic runtime state.
-- Show active, available, completed, and blocked objective states with source-backed labels.
-- Surface recent action state and warning transitions without allowing UI presentation to mutate simulation state.
-- Add a provider-free deterministic CI guard for the objective/journal panel contract and browser escaping.
+- Show combat state, initiative/turn hints, target status, player status, and legal action affordances with deterministic source-backed payloads.
+- Keep combat runtime authoritative; UI must not decide combat truth or mutate state.
+- Surface rejected/illegal combat action states without treating rejected commands as success.
+- Add a provider-free deterministic CI guard for combat state/action affordance payloads and browser escaping.
 
 ## Definition of 8/10 Production Readiness
 
