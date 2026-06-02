@@ -1,6 +1,13 @@
 """Deterministic RPG quest state machine helpers."""
 
 from app.rpg.quests.conditions import evaluate_quest_condition
+from app.rpg.quests.journal import (
+    add_journal_entry,
+    add_journal_entry_from_objective_result,
+    build_quest_journal_summary,
+    ensure_journal_state,
+    render_quest_journal_report_html,
+)
 from app.rpg.quests.objectives import (
     complete_objective_lifecycle,
     create_objective,
@@ -21,12 +28,16 @@ from app.rpg.quests.state import (
 from app.rpg.quests.transitions import apply_quest_transition
 
 __all__ = [
+    "add_journal_entry",
+    "add_journal_entry_from_objective_result",
     "apply_quest_transition",
+    "build_quest_journal_summary",
     "build_reward_payload",
     "complete_objective",
     "complete_objective_lifecycle",
     "create_objective",
     "derive_quest_lifecycle",
+    "ensure_journal_state",
     "ensure_quest_state",
     "evaluate_quest_condition",
     "fail_objective",
@@ -34,6 +45,7 @@ __all__ = [
     "mark_reward_claimed",
     "normalize_quest_state",
     "objective_from_template",
+    "render_quest_journal_report_html",
     "set_quest_stage",
     "start_quest",
     "update_objective_progress",
