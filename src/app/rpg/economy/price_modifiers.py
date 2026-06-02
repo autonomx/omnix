@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.economy.currency import currency_to_copper, normalize_currency
+from app.rpg.economy.currency import currency_to_copper_value, normalize_currency
 
 SOURCE = "deterministic_price_modifiers"
 
@@ -93,8 +93,6 @@ def _scarcity_value(merchant_state: Dict[str, Any], item_id: str) -> int:
             return 5
         if qty == 1:
             return 3
-        if qty <= 3:
-            return 1
         if qty >= 8:
             return -1
         return 0
@@ -183,7 +181,7 @@ def apply_price_modifier(
     kind: str = "buy",
 ) -> Dict[str, Any]:
     normalized_base = normalize_currency(base_price)
-    base_copper = max(0, currency_to_copper(normalized_base))
+    base_copper = max(0, currency_to_copper_value(normalized_base))
     modifier = calculate_price_modifier(
         player_state=player_state,
         merchant_state=merchant_state,
