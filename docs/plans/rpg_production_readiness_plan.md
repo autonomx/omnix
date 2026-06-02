@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification**.
+Next recommended slice: **Phase 7.17 — real completion path smoke integration**.
 
 Latest completed PRs:
 
@@ -32,6 +32,7 @@ Latest completed PRs:
 | #210 Phase 7.13 live/manual saved artifact emission hook integration | `17dd28758b18bb25db7ff6c2757056e039f4fda3` | Phase 7 | Complete | Added deterministic completion-path emission hooks for manual/autoplay output directories, source-backed skipped/missing artifact diagnostics, saved certification JSON/HTML emission, and the live manual saved artifact emission hooks gate; both required RPG checks passed. |
 | #212 Phase 7.14 saved artifact bundle ZIP verification | `02e8f8519d3b81bc1ae922f53001575461adc253` | Phase 7 | Complete | Added deterministic saved artifact bundle and ZIP verification helpers for certification JSON, transcript rows, final/loadable state artifacts, report HTML bundle presence, source-backed missing artifact diagnostics, and the saved artifact bundle ZIP verification gate; both required RPG checks passed. |
 | #214 Phase 7.15 saved certification operator runbook | `e4d33ec2ac06946bc8199d060976f60c044419c9` | Phase 7 | Complete | Added operator-facing saved certification runbook guidance, deterministic source guards for helper names/artifact filenames/workflow gate names/source constants/JSON fields, documented provider-free CI versus optional live-provider local runs, and added the saved certification operator runbook gate; both required RPG checks passed. |
+| #216 Phase 7.16 end-to-end saved 100-turn fixture certification | `a8e3d5d6c7a3a67bc0a3107e7ac8686cdf930790` | Phase 7 | Complete | Added a provider-free end-to-end saved 100-turn fixture helper and gate that writes manual/autoplay-shaped outputs, emits saved certification JSON, appends report diagnostics, verifies disk bundle and ZIP inclusion, and covers digest drift blockers; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -104,17 +105,17 @@ Completed:
 - [x] Phase 7.13 — live/manual saved artifact emission hook integration: add deterministic manual/autoplay completion-path hooks that discover output directories, report HTML, transcript rows, and final/loadable state artifacts; emit saved certification JSON and appended diagnostics HTML when artifacts are available; surface source-backed skipped/missing diagnostics; and add the `RPG CI Phase 7 live manual saved artifact emission hooks gate`.
 - [x] Phase 7.14 — full saved artifact bundle and ZIP inclusion verification: add deterministic saved artifact bundle and ZIP verification helpers, verify certification JSON/transcript/final/loadable state artifacts in ZIPs, verify report HTML exists in saved bundles, surface source-backed missing artifact diagnostics, and add the `RPG CI Phase 7 saved artifact bundle ZIP verification gate`.
 - [x] Phase 7.15 — saved certification operator runbook and live/manual invocation guidance: add operator-facing manual/autoplay saved certification guidance, document expected artifacts, ZIP/report behavior, important JSON fields, diagnostics/blockers, provider-free CI versus optional live-provider local runs, deterministic source guard tests, and the `RPG CI Phase 7 saved certification operator runbook gate`.
+- [x] Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification: add a canonical tiny saved output fixture builder, exercise transcript rows, report bytes, final/loadable state digests, progress/loop diagnostics, saved certification payload writing, report HTML append, emission hooks, and bundle/ZIP verification together, and add the `RPG CI Phase 7 end-to-end saved 100-turn fixture certification gate`.
 
-Next recommended slice: **Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification**.
+Next recommended slice: **Phase 7.17 — real completion path smoke integration**.
 
-Suggested Phase 7.16 scope:
+Suggested Phase 7.17 scope:
 
-- Add one canonical tiny deterministic 100-turn saved output fixture builder that mirrors a real manual/autoplay saved output directory.
-- Exercise transcript rows, report bytes, final/loadable state digests, progress/loop diagnostics, saved certification payload writing, report HTML append, emission hooks, and bundle/ZIP verification together.
-- Verify saved certification JSON, appended HTML, disk bundle, and ZIP inclusion in one provider-free end-to-end gate.
-- Surface a clear blocker/warning contract for fixture drift, missing artifacts, digest drift, readiness blockers, certification blockers, and ZIP omissions.
-- Keep live-provider execution optional/outside required PR CI and keep helpers deterministic, idempotent, provider-free, and non-mutating where appropriate.
-- Avoid committing `resources/data/test-results` runtime artifacts.
+- Wire or smoke-test saved certification emission hooks in actual manual/autoplay completion path entry points without requiring a live provider in CI.
+- Confirm provider-free skip behavior when live artifacts are absent.
+- Confirm real completion paths call the saved certification emission hook when output directories and saved artifacts are available.
+- Keep tests deterministic and avoid committing `resources/data/test-results` runtime artifacts.
+- Keep live-provider execution optional/outside required PR CI.
 
 ## Definition of 8/10 Production Readiness
 
