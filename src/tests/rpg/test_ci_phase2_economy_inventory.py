@@ -128,3 +128,74 @@ def test_ci_phase2_sell_to_merchant_moves_item_and_logs_transaction():
     assert stock["combat_knife"]["qty"] == 3
     assert merchant["transaction_log"][-1]["kind"] == "sell"
     assert merchant["transaction_log"][-1]["item_id"] == "combat_knife"
+
+
+def test_ci_phase2_economy_report_collects_transactions_and_guardrails():
+    from app.rpg.economy.reporting import build_economy_transaction_report
+
+    data = {
+        "turns": [
+            {
+                "turn": 4,
+                "result": {
+                    "transaction_log_entry": {
+                        "kind": "buy",
+                        "item_id": "healing_potion",
+                        "qty": 1,
+                        "price": {"silver": 10},
+                        "reason": "transaction_completed",
+                        "source": "deterministic_merchant_transactions",
+                    }
+                },
+            }
+        ]
+    }
+    report = build_economy_transaction_report(data)
+    transaction = report["transactions"][0]
+    contract = report["presentation_contract"]
+
+    assert report["source"] == "deterministic_economy_report"
+    assert report["transaction_count"] == 1
+    assert transaction["turn"] == 4
+    assert transaction["kind"] == "buy"
+    assert transaction["item_id"] == "healing_potion"
+    assert transaction["price"] == {"gold": 0, "silver": 10, "copper": 0}
+    assert contract["source"] == "deterministic_economy_presentation_contract"
+    assert contract["allowed_transaction_claims"] == ["buy 1 x healing_potion for 10 silver"]
+    assert any("Do not invent merchant stock" in item for item in contract["forbidden_economy_claims"])
+    assert any("Do not invent prices" in item for item in contract["forbidden_economy_claims"])
+
+
+def test_ci_phase2_campaign_report_displays_economy_transactions():
+    from tests.rpg.autoplay.campaign_report import render_campaign_report_html
+
+    html = render_campaign_report_html(
+        {
+            "scenario_seed": "ci_phase2_economy_report",
+            "turns": [
+                {
+                    "turn": 4,
+                    "result": {
+                        "transaction_log_entry": {
+                            "kind": "buy",
+                            "item_id": "healing_potion",
+                            "qty": 1,
+                            "price": {"silver": 10},
+                            "reason": "transaction_completed",
+                            "source": "deterministic_merchant_transactions",
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    assert "Economy Transactions" in html
+    assert "healing_potion" in html
+    assert "10 silver" in html
+    assert "transaction_completed" in html
+    assert "deterministic_merchant_transactions" in html
+    assert "Economy Presentation Guardrails" in html
+    assert "deterministic_economy_presentation_contract" in html
+    assert "Do not invent merchant stock" in html
+    assert "Do not invent prices" in html
