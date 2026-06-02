@@ -34,15 +34,32 @@ def _ready_old_mill_session(session_id: str):
     return session
 
 
-def test_ci_phase4_session_runtime_routes_successful_travel_through_guarded_command_helper(tmp_path, monkeypatch):
+def _install_runtime_session(monkeypatch, runtime, session):
+    saved = {}
+
+    def load_runtime_session(session_id):
+        if session_id == session["manifest"]["session_id"]:
+            return deepcopy(session)
+        return None
+
+    def save_runtime_session(payload):
+        saved.clear()
+        saved.update(deepcopy(payload))
+        return payload
+
+    monkeypatch.setattr(runtime, "load_runtime_session", load_runtime_session)
+    monkeypatch.setattr(runtime, "save_runtime_session", save_runtime_session)
+    return saved
+
+
+def test_ci_phase4_session_runtime_routes_successful_travel_through_guarded_command_helper(monkeypatch):
     from app.rpg.locations import OLD_MILL
     from app.rpg.session import runtime
 
-    monkeypatch.setattr(runtime, "RPG_SESSION_DIR", tmp_path)
     session_id = _session_id("success")
-    runtime.save_runtime_session(_ready_old_mill_session(session_id))
+    saved = _install_runtime_session(monkeypatch, runtime, _ready_old_mill_session(session_id))
 
-    result = runtime.apply_turn(
+    result = runtime._apply_turn_authoritative(
         session_id=session_id,
         player_input="travel to the old mill",
         performance_override={"narration_mode": "deterministic"},
@@ -59,24 +76,21 @@ def test_ci_phase4_session_runtime_routes_successful_travel_through_guarded_comm
     assert result["runtime_travel_command_narration_contract"]["source"] == (
         "deterministic_phase4_runtime_travel_encounter_routing"
     )
-
-    saved = runtime.load_runtime_session(session_id)
     assert saved["simulation_state"]["travel_state"]["current_location_id"] == OLD_MILL
     assert saved["runtime_state"]["last_turn_result"]["source"] == (
         "deterministic_phase4_session_travel_command_integration"
     )
 
 
-def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_encounter(tmp_path, monkeypatch):
+def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_encounter(monkeypatch):
     from app.rpg.locations import RUSTY_FLAGON
     from app.rpg.session import runtime
 
-    monkeypatch.setattr(runtime, "RPG_SESSION_DIR", tmp_path)
     session_id = _session_id("missing_resources")
     original = _base_session(session_id, items=[])
-    runtime.save_runtime_session(deepcopy(original))
+    _install_runtime_session(monkeypatch, runtime, original)
 
-    result = runtime.apply_turn(
+    result = runtime._apply_turn_authoritative(
         session_id=session_id,
         player_input="go to old road",
         performance_override={"narration_mode": "deterministic"},
@@ -92,18 +106,27 @@ def test_ci_phase4_session_runtime_denies_missing_resources_before_travel_or_enc
     assert result["simulation_state"]["player_state"] == original["simulation_state"]["player_state"]
 
 
-def test_ci_phase4_session_runtime_leaves_non_travel_commands_on_existing_runtime_path(tmp_path, monkeypatch):
+def test_ci_phase4_session_runtime_leaves_non_travel_commands_on_existing_runtime_path(monkeypatch):
     from app.rpg.session import runtime
 
-    monkeypatch.setattr(runtime, "RPG_SESSION_DIR", tmp_path)
     session_id = _session_id("non_travel")
-    runtime.save_runtime_session(_base_session(session_id, items=[{"item_id": "ration", "qty": 1}]))
+    _install_runtime_session(
+        monkeypatch,
+        runtime,
+        _base_session(session_id, items=[{"item_id": "ration", "qty": 1}]),
+    )
 
-    result = runtime.apply_turn(
+    delegated = {
+        "ok": True,
+        "source": "existing_authoritative_runtime_path",
+        "travel_command_result": None,
+    }
+    monkeypatch.setattr(runtime, "_base_apply_turn_authoritative", lambda *args, **kwargs: delegated)
+
+    result = runtime._apply_turn_authoritative(
         session_id=session_id,
         player_input="ask bran about work",
         performance_override={"narration_mode": "deterministic"},
     )
 
-    assert result.get("source") != "deterministic_phase4_session_travel_command_integration"
-    assert result.get("travel_command_result") is None
+    assert result == delegated
