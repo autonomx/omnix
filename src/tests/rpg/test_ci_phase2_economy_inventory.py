@@ -181,6 +181,126 @@ def test_ci_phase2_inn_room_rest_rejects_insufficient_funds_without_mutation():
     assert "economy_state" not in state
 
 
+def test_ci_phase2_consume_ration_reduces_hunger_removes_item_and_logs_source():
+    from app.rpg.economy.survival import consume_food
+
+    state = {
+        "player_state": {
+            "inventory_state": {"items": [{"item_id": "ration", "qty": 2}]},
+            "survival_state": {"hunger": 70, "thirst": 20, "last_food_tick": 1},
+        }
+    }
+
+    result = consume_food(state, tick=12)
+    items = {item["item_id"]: item["qty"] for item in state["player_state"]["inventory_state"]["items"]}
+    survival_state = state["player_state"]["survival_state"]
+
+    assert result["resolved"] is True
+    assert result["reason"] == "food_consumed"
+    assert result["item_id"] == "ration"
+    assert items["ration"] == 1
+    assert survival_state["hunger"] == 35
+    assert survival_state["thirst"] == 20
+    assert survival_state["last_food_tick"] == 12
+    assert survival_state["source"] == "deterministic_survival_consumption"
+    assert state["economy_state"]["survival_log"][-1]["source"] == "deterministic_survival_consumption"
+
+
+def test_ci_phase2_consume_water_reduces_thirst_removes_item_and_logs_source():
+    from app.rpg.economy.survival import consume_water
+
+    state = {
+        "player_state": {
+            "inventory_state": {"items": [{"item_id": "water_skin", "qty": 1}]},
+            "survival_state": {"hunger": 10, "thirst": 75, "last_water_tick": 2},
+        }
+    }
+
+    result = consume_water(state, tick=14)
+    survival_state = state["player_state"]["survival_state"]
+
+    assert result["resolved"] is True
+    assert result["reason"] == "water_consumed"
+    assert result["item_id"] == "water_skin"
+    assert state["player_state"]["inventory_state"]["items"] == []
+    assert survival_state["hunger"] == 10
+    assert survival_state["thirst"] == 35
+    assert survival_state["last_water_tick"] == 14
+    assert result["log_entry"]["action_type"] == "consume_water"
+    assert result["log_entry"]["source"] == "deterministic_survival_consumption"
+
+
+def test_ci_phase2_consume_ration_rejects_missing_item_without_mutation():
+    from copy import deepcopy
+
+    from app.rpg.economy.survival import consume_food
+
+    state = {
+        "player_state": {
+            "inventory_state": {"items": [{"item_id": "water_skin", "qty": 1}]},
+            "survival_state": {"hunger": 80, "thirst": 10},
+        }
+    }
+    before = deepcopy(state)
+
+    result = consume_food(state, tick=20)
+
+    assert result["resolved"] is False
+    assert result["changed_state"] is False
+    assert result["reason"] == "no_food_item"
+    assert state == before
+
+
+def test_ci_phase2_consume_water_rejects_missing_item_without_mutation():
+    from copy import deepcopy
+
+    from app.rpg.economy.survival import consume_water
+
+    state = {
+        "player_state": {
+            "inventory_state": {"items": [{"item_id": "ration", "qty": 1}]},
+            "survival_state": {"hunger": 10, "thirst": 80},
+        }
+    }
+    before = deepcopy(state)
+
+    result = consume_water(state, tick=21)
+
+    assert result["resolved"] is False
+    assert result["changed_state"] is False
+    assert result["reason"] == "no_water_item"
+    assert state == before
+
+
+def test_ci_phase2_survival_pressure_tick_adds_hunger_thirst_fatigue_and_source_fields():
+    from app.rpg.economy.survival import apply_survival_pressure
+
+    state = {
+        "player_state": {
+            "fatigue": 1,
+            "inventory_state": {"items": []},
+            "survival_state": {"hunger": 55, "thirst": 58, "last_pressure_tick": 0},
+        }
+    }
+
+    result = apply_survival_pressure(state, tick=8)
+    survival_state = state["player_state"]["survival_state"]
+
+    assert result["resolved"] is True
+    assert result["reason"] == "pressure_applied"
+    assert survival_state["hunger"] == 67
+    assert survival_state["thirst"] == 74
+    assert survival_state["fatigue"] == 4
+    assert state["player_state"]["fatigue"] == 5
+    assert survival_state["last_pressure_tick"] == 8
+    assert survival_state["starvation_pressure"] == 7
+    assert survival_state["dehydration_pressure"] == 14
+    assert survival_state["warnings"] == ["hungry", "thirsty"]
+    assert survival_state["source"] == "deterministic_survival_consumption"
+    assert result["log_entry"]["pressure_intervals"] == 2
+    assert state["economy_state"]["survival_log"][-1]["source"] == "deterministic_survival_consumption"
+
+
 def test_ci_phase2_economy_report_collects_transactions_and_guardrails():
     from app.rpg.economy.reporting import build_economy_transaction_report
 
