@@ -1,0 +1,18 @@
+
+# Phase 2 economy transaction report extension.
+# This late-loaded fragment wraps the existing renderer without changing the
+# historical report fragment layout.
+
+from app.rpg.economy.reporting import render_economy_transactions_html
+
+_PRE_PHASE2_ECONOMY_RENDER_CAMPAIGN_REPORT_HTML = render_campaign_report_html
+
+
+def render_campaign_report_html(report_data):
+    html = _PRE_PHASE2_ECONOMY_RENDER_CAMPAIGN_REPORT_HTML(report_data)
+    economy_html = render_economy_transactions_html(report_data)
+    if not economy_html:
+        return html
+    if "</body>" in html:
+        return html.replace("</body>", economy_html + "</body>")
+    return html + economy_html
