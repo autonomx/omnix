@@ -97,7 +97,14 @@ def test_ci_phase8_objective_journal_panel_attaches_to_travel_payload(monkeypatc
         "setup_payload": {},
         "runtime_state": {"tick": 4, "narration_mode": "deterministic"},
         "simulation_state": {
-            "player_state": {"inventory_state": {"items": [{"item_id": "ration", "qty": 1}]}},
+            "player_state": {
+                "inventory_state": {
+                    "items": [
+                        {"item_id": "ration", "qty": 1},
+                        {"item_id": "water_skin", "qty": 1},
+                    ]
+                }
+            },
             "travel_state": {"current_location_id": "location:rusty_flagon"},
             "journal_state": {
                 "objectives": [{"title": "Reach the old road", "status": "active"}],
