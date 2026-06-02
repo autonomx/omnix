@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, Dict
+
 # Generated split module for app.rpg.session.runtime.
 # Phase 4.13: route session travel commands through guarded Phase 4 runtime helpers.
 from .runtime_part26 import *
