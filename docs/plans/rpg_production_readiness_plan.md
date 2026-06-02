@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.15 — frontend map/location UI panel wiring**.
+Next recommended slice: **Phase 4.16 — optional season/weather expansion**.
 
 Latest completed PRs:
 
@@ -48,6 +48,7 @@ Latest completed PRs:
 | #176 Phase 4.12 command routing session integration | `d34761b661b6972cb363276553fd561788e65956` | Phase 4 | Complete | Exported command-routing helpers through `app.rpg.locations`, facade/session follow-up tests, and Phase 4 command routing facade session gate. |
 | #178 Phase 4.13 runtime session travel command integration | `5633113e10688c6b9a96b1d452d70fd656eb6589` | Phase 4 | Complete | Added `runtime_part27` as the final authoritative runtime wrapper and routed session travel commands through the guarded Phase 4 command router. |
 | #180 Phase 4.14 campaign report map/location panel integration | `f9b46b4a8ff09a73e577cdee08eb2b43c742ad2c` | Phase 4 | Complete | Wired deterministic map/location panel helpers into the campaign report flow, kept rendering provider-free and non-mutating, added the Phase 4 campaign report map location gate, and both required RPG checks passed. |
+| #182 Phase 4.15 frontend map/location UI panel wiring | `f112d8db632e69416cc6823e033757330d0497fd` | Phase 4 | Complete | Surfaced deterministic map/location payloads through runtime travel turn results, wired a browser renderer into the existing RPG minimap panel, preserved hidden-state/block guardrails, added the Phase 4 frontend map location UI panel gate, and both required RPG checks passed. |
 
 After every merged PR:
 
@@ -113,7 +114,7 @@ Completed: quest template schema, giver state, objective lifecycle, journal/repo
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1 through 4.14 are merged; Phase 4.15 frontend map/location UI panel wiring is next.**
+Status: **In progress. Phase 4.1 through 4.15 are merged; Phase 4.16 optional season/weather expansion is next.**
 
 Completed or materially completed:
 
@@ -132,12 +133,12 @@ Completed or materially completed:
 - [~] Location history report model and escaped HTML.
 - [x] Deterministic map/location panel payload and escaped report HTML.
 - [x] Campaign report map/location panel integration using deterministic map/location helpers.
+- [x] Frontend map/location UI panel wiring using deterministic runtime map/location payloads.
 - [x] Deterministic time-of-day/day-count hooks and weather placeholder.
 
 Pending:
 
-- [ ] Phase 4.15 frontend map/location UI panel wiring.
-- [ ] Optional season/weather hooks beyond placeholder, if desired later.
+- [ ] Phase 4.16 optional season/weather expansion.
 
 ## Phase 4.14 — Campaign Report Map/Location Panel Integration
 
@@ -154,15 +155,26 @@ Completed in PR #180 (`f9b46b4a8ff09a73e577cdee08eb2b43c742ad2c`):
 
 ## Phase 4.15 — Frontend Map/Location UI Panel Wiring
 
+Status: **Complete.**
+
+Completed in PR #182 (`f112d8db632e69416cc6823e033757330d0497fd`):
+
+- Added a visible frontend map/location section by wiring a browser renderer into the existing RPG minimap panel.
+- Surfaced deterministic map/location panel payloads through runtime travel turn responses, resolved results, and narration context.
+- Reused `app.rpg.locations.build_map_location_panel_payload` rather than duplicating canonical graph logic in JavaScript.
+- Showed current location, description, time labels, visible exits, blocked route status/reason, and guarded undiscovered destination labels.
+- Preserved guardrails: hidden or undiscovered locations are not exposed as known, and blocked routes are not described as passable.
+- Kept rendering escaped, provider-free, and non-mutating.
+- Added the `RPG CI Phase 4 frontend map location UI panel gate`.
+
+## Phase 4.16 — Optional Season/Weather Expansion
+
 Recommended scope:
 
-- Add a visible frontend map/location section.
-- Show current location, visible routes, blocked route reasons, discovered/undiscovered status, and time/day labels from deterministic runtime/map payloads.
-- Reuse existing Phase 4 map/location helpers rather than duplicating map logic.
-- Do not expose hidden or undiscovered state as known.
-- Do not claim blocked routes are passable.
-- Keep UI rendering provider-free and non-mutating.
-- Add deterministic tests for visible UI panel wiring and hidden-state guardrails.
+- Expand the existing deterministic weather placeholder into source-backed season/weather state.
+- Keep time, season, weather, travel, and survival interactions deterministic and provider-free.
+- Surface weather/season effects in player-visible payloads and reports without mutating state during rendering.
+- Add tests for weather labels, season progression, travel/survival effects, hidden-state guardrails, and runtime/report/UI payload consistency.
 
 ## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
 
@@ -181,7 +193,7 @@ Current coverage:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel; Phase 4.10 adds encounter-to-world-event bridge and combat candidate payloads for combat-capable encounter hooks; Phase 4.11 adds deterministic command-level travel bridge for guarded travel, encounter rolling, encounter logging, and encounter runtime routing; Phase 4.12 exports command-routing helpers through the public locations facade; Phase 4.13 connects session travel commands through the final canonical runtime wrapper; Phase 4.14 wires the deterministic map/location panel into the campaign report flow without mutating gameplay state.
+- [~] Travel to old mill route. Phase 4.1 adds route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates; Phase 4.4 adds seeded encounter hooks; Phase 4.5 adds location-history/event reporting hooks; Phase 4.6 adds runtime travel access enforcement; Phase 4.7 adds deterministic time/day advancement hooks; Phase 4.8 adds map/location panel and report payloads; Phase 4.9 adds guarded ration/water preflight and survival API consumption after successful travel; Phase 4.10 adds encounter-to-world-event bridge and combat candidate payloads for combat-capable encounter hooks; Phase 4.11 adds deterministic command-level travel bridge for guarded travel, encounter rolling, encounter logging, and encounter runtime routing; Phase 4.12 exports command-routing helpers through the public locations facade; Phase 4.13 connects session travel commands through the final canonical runtime wrapper; Phase 4.14 wires the deterministic map/location panel into the campaign report flow without mutating gameplay state; Phase 4.15 wires the frontend map/location UI panel to deterministic payloads.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
@@ -198,7 +210,7 @@ Scope: save/load checkpoint validation, replay determinism, state diff validatio
 
 Status: **Pending.**
 
-Scope: objective panel, combat panel/log, party panel, journal panel, map/location panel wiring, NPC relationship/memory summary panel, save/load controls, provider/narration/media settings, error/retry/fallback user messages, accessibility/readability pass.
+Scope: objective panel, combat panel/log, party panel, journal panel, map/location panel polish, NPC relationship/memory summary panel, save/load controls, provider/narration/media settings, error/retry/fallback user messages, accessibility/readability pass.
 
 ## Phase 9 — 1000-Turn Endurance Systems
 
