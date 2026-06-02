@@ -194,8 +194,15 @@ def emit_live_manual_saved_artifact_completion_hooks(
         expected_turns=expected_turns,
         enabled=enabled,
     )
-    if hook_payload.get("reason") == "phase7_live_manual_saved_artifact_emission_skipped":
-        return hook_payload
+    if hook_payload.get("reason") in {
+        "phase7_live_manual_saved_artifact_emission_skipped",
+        "phase7_live_manual_saved_artifact_emission_blocked",
+    }:
+        result = dict(hook_payload)
+        result["emission_hook_source"] = SOURCE
+        result["emission_hook_diagnostics"] = hook_payload.get("diagnostics", [])
+        result["emission_hook_blockers"] = hook_payload.get("blockers", [])
+        return result
     if hook_payload.get("report_html_path"):
         resolved_report_html_path: Path | None = Path(str(hook_payload["report_html_path"]))
     else:
