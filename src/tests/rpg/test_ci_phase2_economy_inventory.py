@@ -149,7 +149,7 @@ def test_ci_phase2_inn_room_rest_charges_and_restores_player():
     assert result["resolved"] is True
     assert result["reason"] == "room_rest_completed"
     assert result["price"] == {"gold": 0, "silver": 5, "copper": 0}
-    assert get_player_currency(state) == {"gold": 0, "silver": 10, "copper": 0}
+    assert get_player_currency(state) == {"gold": 1, "silver": 0, "copper": 0}
     assert player_state["hp"] == 12
     assert player_state["fatigue"] == 0
     assert player_state["rest_state"]["rested"] is True
