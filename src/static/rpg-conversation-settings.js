@@ -141,6 +141,11 @@
     appendDeferredScript("rpg-objective-journal-panel-script", "/static/rpg/rpgObjectiveJournalPanel.js");
   }
 
+  function ensureCombatActionPanelScript() {
+    if (window.RpgCombatActionPanel || document.getElementById("rpg-combat-action-panel-script")) return;
+    appendDeferredScript("rpg-combat-action-panel-script", "/static/rpg/rpgCombatActionPanel.js");
+  }
+
   function ensureSurvivalInspectorScript() {
     if (window.RpgSurvivalInspector || document.getElementById("rpg-survival-inspector-script")) return;
     ensureCommandBridgeScript();
@@ -148,6 +153,7 @@
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
     ensureObjectiveJournalPanelScript();
+    ensureCombatActionPanelScript();
     appendDeferredScript("rpg-survival-inspector-script", "/static/rpg/rpg-survival-inspector.js");
   }
 
@@ -161,6 +167,7 @@
     ensureMapLocationPanelScript,
     ensurePlayerHudScript,
     ensureObjectiveJournalPanelScript,
+    ensureCombatActionPanelScript,
     ensureSurvivalInspectorScript,
   };
 
@@ -172,6 +179,7 @@
       ensureMapLocationPanelScript();
       ensurePlayerHudScript();
       ensureObjectiveJournalPanelScript();
+      ensureCombatActionPanelScript();
       ensureSurvivalInspectorScript();
     });
   } else {
@@ -181,6 +189,7 @@
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
     ensureObjectiveJournalPanelScript();
+    ensureCombatActionPanelScript();
     ensureSurvivalInspectorScript();
   }
 })();
