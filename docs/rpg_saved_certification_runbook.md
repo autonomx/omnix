@@ -47,7 +47,7 @@ This example assumes the output directory already exists. It is safe for determi
 The saved output directory should include these artifacts when a complete run is available:
 
 - `phase7_100_turn_certification.json` — canonical machine-readable saved certification payload emitted by `emit_saved_100_turn_certification_artifacts`.
-- Report HTML such as `campaign_report.html`, `autoplay_report.html`, `manual_report.html`, or the same names under `html/`.
+- Report HTML such as `campaign_report.html`, `autoplay_report.html`, `manual_report.html`, `html/campaign_report.html`, `html/autoplay_report.html`, or `html/manual_report.html`.
 - Transcript rows such as `autoplay_transcript.json`, `manual_transcript.json`, `turn_rows.json`, or `transcript_rows.json`.
 - Final saved state such as `final_session.json`, `final_state.json`, or `campaign_final_state.json`.
 - Loadable saved state such as `loadable_session.json`, `loaded_session.json`, `saved_session.json`, or `loadable_state.json`.
