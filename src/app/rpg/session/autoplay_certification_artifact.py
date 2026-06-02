@@ -3,6 +3,7 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Dict, List
 
+from .saved_autoplay_digest_sources import capture_saved_autoplay_digest_sources
 from .turn_certification import build_full_100_turn_certification_contract, build_full_100_turn_certification_result
 
 SOURCE = "deterministic_phase7_real_autoplay_certification_artifact_gate"
@@ -65,6 +66,10 @@ def _source_entry(kind: str, **fields: Any) -> Dict[str, Any]:
     return entry
 
 
+def _digest_from_capture(capture: Dict[str, Any], key: str, fallback: str) -> str:
+    return _safe_str(_safe_dict(capture.get("digests")).get(key) or fallback)
+
+
 def build_real_autoplay_certification_artifact(saved_artifacts: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize saved autoplay/report outputs into the Phase 7.6 certification shape."""
 
@@ -74,6 +79,7 @@ def build_real_autoplay_certification_artifact(saved_artifacts: Dict[str, Any]) 
     debug = _safe_dict(saved_artifacts.get("debug"))
     checkpoint = _safe_dict(saved_artifacts.get("checkpoint"))
     state = _safe_dict(saved_artifacts.get("state"))
+    digest_capture = capture_saved_autoplay_digest_sources(saved_artifacts)
 
     turns = _first_list(saved_artifacts, "turns", "turn_rows", "transcript_rows")
     if not turns:
@@ -101,27 +107,51 @@ def build_real_autoplay_certification_artifact(saved_artifacts: Dict[str, Any]) 
         "turns": [_safe_dict(row) for row in turns],
         "report_bytes": report_bytes,
         "transcript_debug_bytes": transcript_bytes,
-        "final_checkpoint_digest": _safe_str(
-            saved_artifacts.get("final_checkpoint_digest")
-            or checkpoint.get("final_checkpoint_digest")
-            or state.get("final_checkpoint_digest")
+        "final_checkpoint_digest": _digest_from_capture(
+            digest_capture,
+            "final_checkpoint_digest",
+            _safe_str(
+                saved_artifacts.get("final_checkpoint_digest")
+                or checkpoint.get("final_checkpoint_digest")
+                or state.get("final_checkpoint_digest")
+            ),
         ),
-        "loaded_checkpoint_digest": _safe_str(
-            saved_artifacts.get("loaded_checkpoint_digest")
-            or checkpoint.get("loaded_checkpoint_digest")
-            or state.get("loaded_checkpoint_digest")
+        "loaded_checkpoint_digest": _digest_from_capture(
+            digest_capture,
+            "loaded_checkpoint_digest",
+            _safe_str(
+                saved_artifacts.get("loaded_checkpoint_digest")
+                or checkpoint.get("loaded_checkpoint_digest")
+                or state.get("loaded_checkpoint_digest")
+            ),
         ),
-        "expected_final_checkpoint_digest": _safe_str(
-            saved_artifacts.get("expected_final_checkpoint_digest")
-            or checkpoint.get("expected_final_checkpoint_digest")
-            or state.get("expected_final_checkpoint_digest")
+        "expected_final_checkpoint_digest": _digest_from_capture(
+            digest_capture,
+            "expected_final_checkpoint_digest",
+            _safe_str(
+                saved_artifacts.get("expected_final_checkpoint_digest")
+                or checkpoint.get("expected_final_checkpoint_digest")
+                or state.get("expected_final_checkpoint_digest")
+            ),
         ),
-        "final_state_digest": _safe_str(saved_artifacts.get("final_state_digest") or state.get("final_state_digest")),
-        "loaded_state_digest": _safe_str(saved_artifacts.get("loaded_state_digest") or state.get("loaded_state_digest")),
-        "expected_final_state_digest": _safe_str(
-            saved_artifacts.get("expected_final_state_digest") or state.get("expected_final_state_digest")
+        "final_state_digest": _digest_from_capture(
+            digest_capture,
+            "final_state_digest",
+            _safe_str(saved_artifacts.get("final_state_digest") or state.get("final_state_digest")),
         ),
-        "state_diff_source": _safe_str(saved_artifacts.get("state_diff_source") or SOURCE),
+        "loaded_state_digest": _digest_from_capture(
+            digest_capture,
+            "loaded_state_digest",
+            _safe_str(saved_artifacts.get("loaded_state_digest") or state.get("loaded_state_digest")),
+        ),
+        "expected_final_state_digest": _digest_from_capture(
+            digest_capture,
+            "expected_final_state_digest",
+            _safe_str(saved_artifacts.get("expected_final_state_digest") or state.get("expected_final_state_digest")),
+        ),
+        "state_diff_source": _safe_str(saved_artifacts.get("state_diff_source") or digest_capture.get("state_diff_source") or SOURCE),
+        "digest_source_metadata": _safe_list(digest_capture.get("metadata")),
+        "digest_source_capture": digest_capture,
         "artifact_source": _safe_str(saved_artifacts.get("artifact_source") or SOURCE),
     }
     return normalized
