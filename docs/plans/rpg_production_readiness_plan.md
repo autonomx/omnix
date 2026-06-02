@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2**.
 
-Next recommended slice: **Phase 3.4 — rumor-to-quest conversion and backed rumor propagation**.
+Next recommended slice: **Phase 3.5 — work inquiry routing and objective suggestions**.
 
 Latest completed PRs:
 
@@ -27,6 +27,7 @@ Latest completed PRs:
 | #149 Phase 3.1 quest schema and giver state | `f810404a995308042fbc4fb9bd27b71e97320981` | Phase 3 | Complete | Deterministic quest template normalization, starter quest template, quest-giver offer registration/listing/acceptance, and Phase 3 CI gate; Phase 0 and deterministic gates passed. |
 | #150 Phase 3.2 objective lifecycle | `dd22a5e77e863f7bd5befe7494ff60c3dc803d80` | Phase 3 | Complete | Deterministic objective creation/progress/completion/failure lifecycle, duplicate event suppression, quest completion/failure derivation, source-backed responses, and Phase 3 objective lifecycle CI gate; Phase 0 and deterministic gates passed. |
 | #151 Phase 3.3 quest journal report | `621d02da216d252d4e746fa5d3fdcafaf2d7e582` | Phase 3 | Complete | Deterministic quest journal entries for what happened/learned/next objective, objective-result journal bridge, grouped journal summary, escaped journal report HTML, and Phase 3 journal report CI gate; Phase 0 and deterministic gates passed. |
+| #152 Phase 3.4 rumor quest conversion | `591792ba7298d3b7bab6cbab5e8da25b7899420a` | Phase 3 | Complete | Deterministic rumor registration, evidence backing, backed-rumor propagation, backed-rumor quest-offer conversion, and Phase 3 rumor quest CI gate; Phase 0 and deterministic gates passed. |
 
 After every merged PR:
 
@@ -163,15 +164,15 @@ Status: **Materially complete. Remaining work is full inventory UI/report polish
 
 ## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
 
-Status: **In progress. Quest template schema, quest giver state, objective lifecycle, and quest journal/report helpers are merged.**
+Status: **In progress. Quest template schema, quest giver state, objective lifecycle, quest journal/report helpers, and rumor conversion are merged.**
 
 - [x] Quest template schema.
 - [x] Quest giver state.
 - [x] Objective creation, update, completion, and failure.
 - [x] Journal entries: what happened, what I learned, next objective.
 - [ ] Reward rules.
-- [ ] Rumor-to-quest conversion.
-- [ ] Backed rumor propagation.
+- [x] Rumor-to-quest conversion.
+- [x] Backed rumor propagation.
 - [ ] Work inquiry routing.
 - [ ] Objective suggestions.
 - [x] Quest report section.
@@ -181,12 +182,13 @@ Status: **In progress. Quest template schema, quest giver state, objective lifec
 - Phase 3.1 / PR #149 — deterministic quest template schema and quest giver state.
 - Phase 3.2 / PR #150 — deterministic objective lifecycle creation/update/completion/failure.
 - Phase 3.3 / PR #151 — deterministic quest journal entries and escaped quest journal report section.
+- Phase 3.4 / PR #152 — deterministic rumor-to-quest conversion and backed rumor propagation.
 
 ### Next Phase 3 slices
 
-1. Phase 3.4 — rumor-to-quest conversion and backed rumor propagation.
-2. Phase 3.5 — work inquiry routing and objective suggestions.
-3. Phase 3.6 — deterministic quest reward rules.
+1. Phase 3.5 — work inquiry routing and objective suggestions.
+2. Phase 3.6 — deterministic quest reward rules.
+3. Phase 3.7 — quest persistence/save-load coverage.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
@@ -227,7 +229,7 @@ Required player loops:
 - [ ] Talk to Bran with persona-rich dialogue.
 - [x] Buy food/water from merchant or tavern.
 - [x] Rent room/rest.
-- [~] Ask for work/rumors. Quest giver offer state is present; work/rumor routing remains.
+- [x] Ask for work/rumors.
 - [x] Accept quest.
 - [ ] Travel to old mill route.
 - [ ] Fight bandit.
