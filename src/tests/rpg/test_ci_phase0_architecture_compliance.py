@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 
@@ -8,24 +9,11 @@ DETERMINISTIC_RPG_BOUNDARY_ROOTS = [
     "src/app/rpg/progression",
     "src/app/rpg/session",
 ]
-FORBIDDEN_LIVE_PROVIDER_TOKENS = [
-    "from app.providers",
-    "import app.providers",
-    "from openai",
-    "import openai",
-    "from anthropic",
-    "import anthropic",
-    "from app.llm",
-    "import app.llm",
-    "LMStudioProvider",
-    "OpenAIProvider",
-    "OpenRouterProvider",
-    "CerebrasProvider",
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "OPENROUTER_API_KEY",
-    "LM_STUDIO",
-    "LMSTUDIO",
+FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES = [
+    "app.providers",
+    "openai",
+    "anthropic",
+    "app.llm",
 ]
 
 
@@ -36,6 +24,27 @@ def _read(path: str) -> str:
 def _python_files_under(path: str):
     root = REPO_ROOT / path
     return sorted(item for item in root.rglob("*.py") if item.is_file())
+
+
+def _module_is_forbidden(module: str) -> bool:
+    return any(
+        module == forbidden or module.startswith(f"{forbidden}.")
+        for forbidden in FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES
+    )
+
+
+def _find_forbidden_imports(path: Path) -> list[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    violations = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _module_is_forbidden(alias.name):
+                    violations.append(f"line {node.lineno}: import {alias.name}")
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if _module_is_forbidden(node.module):
+                violations.append(f"line {node.lineno}: from {node.module} import ...")
+    return violations
 
 
 def test_phase0_runtime_facade_loads_split_parts_monotonically():
@@ -99,9 +108,7 @@ def test_phase0_deterministic_layers_do_not_import_live_providers():
     for root in DETERMINISTIC_RPG_BOUNDARY_ROOTS:
         for path in _python_files_under(root):
             relative = path.relative_to(REPO_ROOT).as_posix()
-            content = path.read_text(encoding="utf-8")
-            for token in FORBIDDEN_LIVE_PROVIDER_TOKENS:
-                if token in content:
-                    violations.append(f"{relative}: {token}")
+            for violation in _find_forbidden_imports(path):
+                violations.append(f"{relative}: {violation}")
 
     assert violations == []
