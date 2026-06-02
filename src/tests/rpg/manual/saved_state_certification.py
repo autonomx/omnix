@@ -92,9 +92,10 @@ def build_real_saved_state_certification_artifact(
     expected = _json_group(output_dir, "expected_state_artifact", EXPECTED_STATE_FILENAMES, required=False)
     blockers: List[Dict[str, Any]] = []
     metadata: List[Dict[str, Any]] = []
-    metadata.extend(final["diagnostics"])
-    metadata.extend(loaded["diagnostics"])
-    metadata.extend(expected["diagnostics"])
+    discovery_metadata: List[Dict[str, Any]] = []
+    discovery_metadata.extend(final["diagnostics"])
+    discovery_metadata.extend(loaded["diagnostics"])
+    discovery_metadata.extend(expected["diagnostics"])
 
     final_payload = _safe_dict(final.get("payload"))
     loaded_payload = _safe_dict(loaded.get("payload"))
@@ -149,6 +150,7 @@ def build_real_saved_state_certification_artifact(
     saved["state_diff_source"] = SOURCE
     saved["artifact_source"] = _safe_str(saved.get("artifact_source") or SOURCE)
     saved["saved_state_source_metadata"] = metadata
+    saved["saved_state_discovery_metadata"] = discovery_metadata
     return {
         "ok": not blockers,
         "reason": "phase7_real_saved_state_artifact_ready"
@@ -156,6 +158,7 @@ def build_real_saved_state_certification_artifact(
         else "phase7_real_saved_state_artifact_blocked",
         "saved_artifacts": saved,
         "metadata": metadata,
+        "discovery_metadata": discovery_metadata,
         "blockers": blockers,
         "source": SOURCE,
     }
@@ -178,6 +181,7 @@ def emit_real_saved_state_certification_artifacts(
     emitted = dict(emitted)
     emitted["saved_state_source"] = SOURCE
     emitted["saved_state_metadata"] = artifact["metadata"]
+    emitted["saved_state_discovery_metadata"] = artifact["discovery_metadata"]
     emitted["saved_state_blockers"] = artifact["blockers"]
     emitted["ok"] = emitted.get("ok") is True and artifact.get("ok") is True
     if artifact.get("ok") is not True:
