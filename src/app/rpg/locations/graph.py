@@ -75,20 +75,20 @@ CANONICAL_LOCATIONS: Dict[str, Dict[str, Any]] = {
 
 CANONICAL_EDGES: List[Dict[str, Any]] = [
     {
-        "edge_id": "route:rusty_flagon:market",
-        "from": RUSTY_FLAGON,
-        "to": MARKET,
-        "name": "Tavern lane",
-        "description": "The short lane between the Rusty Flagon and Market Square.",
-        "bidirectional": True,
-        "source": SOURCE,
-    },
-    {
         "edge_id": "route:rusty_flagon:old_road",
         "from": RUSTY_FLAGON,
         "to": OLD_ROAD,
         "name": "Town gate road",
         "description": "The road out from the Rusty Flagon toward the older trade route.",
+        "bidirectional": True,
+        "source": SOURCE,
+    },
+    {
+        "edge_id": "route:rusty_flagon:market",
+        "from": RUSTY_FLAGON,
+        "to": MARKET,
+        "name": "Tavern lane",
+        "description": "The short lane between the Rusty Flagon and Market Square.",
         "bidirectional": True,
         "source": SOURCE,
     },
@@ -161,7 +161,7 @@ def list_location_exits(location_id: str) -> List[Dict[str, Any]]:
             row = _copy_dict(edge)
             row["destination_id"] = start
             exits.append(row)
-    return sorted(exits, key=lambda item: _safe_str(item.get("destination_id")))
+    return exits
 
 
 def validate_location_graph() -> Dict[str, Any]:
