@@ -5,6 +5,15 @@ from .durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
+from .replay_checkpoint import (
+    assert_phase7_replay_checkpoint_foundation_ready,
+    build_replay_checkpoint_contract,
+    build_session_checkpoint,
+    canonical_session_json,
+    compare_session_checkpoints,
+    restore_session_from_checkpoint,
+    session_checkpoint_digest,
+)
 from .session_store import (
     archive_session,
     ensure_session_registry,
@@ -52,4 +61,12 @@ __all__ = [
     "list_sessions_from_disk",
     "load_session_from_disk",
     "save_session_to_disk",
+    # Phase 7.1
+    "assert_phase7_replay_checkpoint_foundation_ready",
+    "build_replay_checkpoint_contract",
+    "build_session_checkpoint",
+    "canonical_session_json",
+    "compare_session_checkpoints",
+    "restore_session_from_checkpoint",
+    "session_checkpoint_digest",
 ]
