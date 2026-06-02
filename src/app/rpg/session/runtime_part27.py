@@ -11,6 +11,7 @@ from .runtime_part26 import _apply_turn_authoritative as _base_apply_turn_author
 _PHASE4_SESSION_TRAVEL_SOURCE = "deterministic_phase4_session_travel_command_integration"
 _PHASE4_FRONTEND_MAP_LOCATION_SOURCE = "deterministic_phase4_frontend_map_location_ui_panel"
 _PHASE8_PLAYER_HUD_SOURCE = "deterministic_phase8_player_visible_state_objective_hud_gate"
+_PHASE8_OBJECTIVE_JOURNAL_SOURCE = "deterministic_phase8_objective_journal_detail_panel_gate"
 
 
 def _phase4_session_travel_turn_index(runtime_state: Dict[str, Any], simulation_state: Dict[str, Any]) -> int:
@@ -94,32 +95,12 @@ def _phase8_inventory_summary(player_state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _phase8_active_objective_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
-    journal = _safe_dict(simulation_state.get("journal_state") or simulation_state.get("journal"))
-    quest_state = _safe_dict(simulation_state.get("quest_state") or simulation_state.get("quests"))
-    candidates: List[Dict[str, Any]] = []
-    for raw in _safe_list(journal.get("objectives") or quest_state.get("objectives")):
-        objective = _safe_dict(raw)
-        status = _safe_str(objective.get("status") or objective.get("state") or "active")
-        if status in {"active", "in_progress", "available"}:
-            candidates.append(objective)
-    for raw in _safe_list(quest_state.get("active_quests") or quest_state.get("quests")):
-        quest = _safe_dict(raw)
-        status = _safe_str(quest.get("status") or quest.get("state") or "active")
-        if status in {"active", "in_progress", "available"}:
-            candidates.append(quest)
-    selected = candidates[0] if candidates else {}
-    title = _safe_str(
-        selected.get("title")
-        or selected.get("objective")
-        or selected.get("summary")
-        or selected.get("description")
-        or journal.get("active_objective")
-        or quest_state.get("active_objective")
-    )
+    panel = _phase8_objective_journal_panel_payload(simulation_state, {})
+    active_objective = _safe_dict(panel.get("active_objective"))
     return {
-        "title": title or "No active objective recorded",
-        "quest_id": _safe_str(selected.get("quest_id") or selected.get("id")),
-        "status": _safe_str(selected.get("status") or selected.get("state") or ("active" if title else "none")),
+        "title": _safe_str(active_objective.get("title") or "No active objective recorded"),
+        "quest_id": _safe_str(active_objective.get("quest_id") or active_objective.get("id")),
+        "status": _safe_str(active_objective.get("status") or "none"),
         "source": _PHASE8_PLAYER_HUD_SOURCE,
     }
 
@@ -163,6 +144,169 @@ def _phase8_major_warnings(simulation_state: Dict[str, Any], runtime_state: Dict
             }
         )
     return warnings
+
+
+def _phase8_objective_status(raw_status: Any) -> str:
+    status = _safe_str(raw_status or "available").strip().lower().replace("-", "_").replace(" ", "_")
+    status_aliases = {
+        "active": "active",
+        "in_progress": "active",
+        "current": "active",
+        "available": "available",
+        "offered": "available",
+        "open": "available",
+        "completed": "completed",
+        "complete": "completed",
+        "done": "completed",
+        "blocked": "blocked",
+        "locked": "blocked",
+        "failed": "blocked",
+        "unavailable": "blocked",
+    }
+    return status_aliases.get(status, "available")
+
+
+def _phase8_objective_label(status: str) -> str:
+    return {
+        "active": "Active",
+        "available": "Available",
+        "completed": "Completed",
+        "blocked": "Blocked",
+    }.get(_safe_str(status), "Available")
+
+
+def _phase8_objective_detail(raw: Dict[str, Any], fallback_index: int, source_name: str) -> Dict[str, Any]:
+    objective = _safe_dict(raw)
+    status = _phase8_objective_status(objective.get("status") or objective.get("state"))
+    objective_id = _safe_str(objective.get("objective_id") or objective.get("id") or objective.get("quest_id"))
+    title = _safe_str(
+        objective.get("title")
+        or objective.get("objective")
+        or objective.get("summary")
+        or objective.get("description")
+        or objective_id
+        or f"Objective {fallback_index + 1}"
+    )
+    return {
+        "id": objective_id or f"objective:{fallback_index + 1}",
+        "quest_id": _safe_str(objective.get("quest_id") or objective.get("quest") or objective_id),
+        "title": title,
+        "description": _safe_str(objective.get("description") or objective.get("details") or title),
+        "status": status,
+        "status_label": _phase8_objective_label(status),
+        "blocking_reason": _safe_str(objective.get("blocking_reason") or objective.get("reason")),
+        "source_name": source_name,
+        "source": _PHASE8_OBJECTIVE_JOURNAL_SOURCE,
+    }
+
+
+def _phase8_objective_candidates(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    journal = _safe_dict(simulation_state.get("journal_state") or simulation_state.get("journal"))
+    quest_state = _safe_dict(simulation_state.get("quest_state") or simulation_state.get("quests"))
+    candidates: List[Dict[str, Any]] = []
+    for raw in _safe_list(journal.get("objectives")):
+        candidates.append({"raw": _safe_dict(raw), "source_name": "journal_state.objectives"})
+    for raw in _safe_list(quest_state.get("objectives")):
+        candidates.append({"raw": _safe_dict(raw), "source_name": "quest_state.objectives"})
+    for raw in _safe_list(quest_state.get("active_quests") or quest_state.get("quests")):
+        candidates.append({"raw": _safe_dict(raw), "source_name": "quest_state.quests"})
+    active_text = _safe_str(journal.get("active_objective") or quest_state.get("active_objective"))
+    if active_text:
+        candidates.insert(0, {"raw": {"title": active_text, "status": "active"}, "source_name": "active_objective"})
+    return candidates
+
+
+def _phase8_grouped_objectives(simulation_state: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+    grouped: Dict[str, List[Dict[str, Any]]] = {"active": [], "available": [], "completed": [], "blocked": []}
+    for index, candidate in enumerate(_phase8_objective_candidates(simulation_state)):
+        detail = _phase8_objective_detail(
+            _safe_dict(candidate.get("raw")),
+            index,
+            _safe_str(candidate.get("source_name") or "unknown"),
+        )
+        grouped.setdefault(detail["status"], []).append(detail)
+    return {key: value[:8] for key, value in grouped.items()}
+
+
+def _phase8_journal_entries(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    journal = _safe_dict(simulation_state.get("journal_state") or simulation_state.get("journal"))
+    entries = []
+    for index, raw in enumerate(_safe_list(journal.get("entries") or journal.get("journal_entries"))):
+        entry = _safe_dict(raw)
+        title = _safe_str(entry.get("title") or entry.get("heading") or f"Journal entry {index + 1}")
+        body = _safe_str(entry.get("body") or entry.get("text") or entry.get("summary") or entry.get("description"))
+        entries.append(
+            {
+                "id": _safe_str(entry.get("id") or entry.get("entry_id") or f"journal:{index + 1}"),
+                "title": title,
+                "body": body,
+                "turn_index": _safe_int(entry.get("turn_index") or entry.get("turn"), 0),
+                "source_name": "journal_state.entries",
+                "source": _PHASE8_OBJECTIVE_JOURNAL_SOURCE,
+            }
+        )
+    learned = _safe_list(journal.get("what_i_learned") or journal.get("learned"))
+    for offset, raw in enumerate(learned):
+        value = _safe_str(raw)
+        if value:
+            entries.append(
+                {
+                    "id": f"learned:{offset + 1}",
+                    "title": "What I learned",
+                    "body": value,
+                    "turn_index": 0,
+                    "source_name": "journal_state.what_i_learned",
+                    "source": _PHASE8_OBJECTIVE_JOURNAL_SOURCE,
+                }
+            )
+    return entries[-8:]
+
+
+def _phase8_recent_action_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    last_turn = _safe_dict(runtime_state.get("last_turn_result") or runtime_state.get("last_result"))
+    last_action = _safe_dict(runtime_state.get("last_player_action") or runtime_state.get("last_action"))
+    return {
+        "ok": last_turn.get("ok") is True,
+        "action_id": _safe_str(last_action.get("action_id") or last_turn.get("turn_id")),
+        "action_type": _safe_str(last_action.get("action_type") or last_turn.get("action_type")),
+        "target_id": _safe_str(last_action.get("target_id")),
+        "reason": _safe_str(last_turn.get("reason")),
+        "summary": _safe_str(last_turn.get("summary") or last_turn.get("label")),
+        "source": _PHASE8_OBJECTIVE_JOURNAL_SOURCE,
+    }
+
+
+def _phase8_objective_journal_panel_payload(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Build the player-visible objective/journal panel without mutating state."""
+
+    simulation_copy = deepcopy(_safe_dict(simulation_state))
+    runtime_copy = deepcopy(_safe_dict(runtime_state))
+    objectives = _phase8_grouped_objectives(simulation_copy)
+    active_objective = (objectives.get("active") or objectives.get("available") or [{}])[0]
+    if not active_objective:
+        active_objective = {
+            "id": "",
+            "quest_id": "",
+            "title": "No active objective recorded",
+            "description": "",
+            "status": "none",
+            "status_label": "None",
+            "source_name": "none",
+            "source": _PHASE8_OBJECTIVE_JOURNAL_SOURCE,
+        }
+    return {
+        "source": _PHASE8_OBJECTIVE_JOURNAL_SOURCE,
+        "frontend_source": _PHASE8_OBJECTIVE_JOURNAL_SOURCE,
+        "active_objective": deepcopy(active_objective),
+        "objectives": objectives,
+        "journal_entries": _phase8_journal_entries(simulation_copy),
+        "recent_action_state": _phase8_recent_action_state(runtime_copy),
+        "major_warnings": _phase8_major_warnings(simulation_copy, runtime_copy),
+        "non_mutating": True,
+    }
 
 
 def _phase8_player_visible_hud_payload(
@@ -220,6 +364,7 @@ def _phase4_session_travel_payload(
     encounter_runtime_result = _safe_dict(command_result.get("encounter_runtime_result"))
     map_location_panel = _phase4_frontend_map_location_panel_payload(simulation_state)
     player_hud = _phase8_player_visible_hud_payload(simulation_state, runtime_state)
+    objective_journal_panel = _phase8_objective_journal_panel_payload(simulation_state, runtime_state)
 
     resolved_result: Dict[str, Any] = {
         "ok": command_result.get("ok") is True,
@@ -234,6 +379,7 @@ def _phase4_session_travel_payload(
         "runtime_travel_command_narration_contract": contract,
         "map_location_panel": map_location_panel,
         "player_hud": player_hud,
+        "objective_journal_panel": objective_journal_panel,
         "meaningful_progress": command_result.get("ok") is True,
         "progress_category": "location_progression" if command_result.get("ok") is True else "blocked_travel",
         "source": _PHASE4_SESSION_TRAVEL_SOURCE,
@@ -279,6 +425,7 @@ def _phase4_session_travel_payload(
         "runtime_travel_command_narration_contract": contract,
         "map_location_panel": map_location_panel,
         "player_hud": player_hud,
+        "objective_journal_panel": objective_journal_panel,
         "forbidden_narration": list(_safe_list(contract.get("forbidden_runtime_travel_command_claims"))),
         "settings": runtime_state.get("runtime_settings", {}),
         "conversation_threads": [],
@@ -298,6 +445,7 @@ def _phase4_session_travel_payload(
         "runtime_travel_command_narration_contract": contract,
         "map_location_panel": map_location_panel,
         "player_hud": player_hud,
+        "objective_journal_panel": objective_journal_panel,
         "narration_context": narration_context,
         "narration": summary,
         "final_narration": summary,
@@ -366,6 +514,10 @@ def _apply_turn_authoritative(
     base_payload = _base_apply_turn_authoritative(session_id, player_input, action, performance_override=performance_override)
     if isinstance(base_payload, dict):
         base_payload.setdefault("player_hud", _phase8_player_visible_hud_payload(simulation_state, runtime_state))
+        base_payload.setdefault(
+            "objective_journal_panel",
+            _phase8_objective_journal_panel_payload(simulation_state, runtime_state),
+        )
     return base_payload
 
 
