@@ -6,6 +6,8 @@ from typing import Any, Dict, List
 from app.rpg.economy.currency import (
     add_currency,
     can_afford,
+    copper_to_currency,
+    currency_to_copper_value,
     get_player_currency,
     normalize_currency,
     set_player_currency,
@@ -226,19 +228,16 @@ def _sell_price_for_item(player_item: Dict[str, Any], stock_entry: Dict[str, Any
     if stock_entry:
         return _half_currency(stock_entry.get("price"))
     value = _safe_int(player_item.get("value"), 0)
-    return normalize_currency({"copper": max(1, value // 2)})
+    return copper_to_currency(max(1, value // 2))
 
 
 def _multiply_currency(currency: Any, qty: int) -> Dict[str, int]:
-    normalized = normalize_currency(currency)
     qty = max(1, _safe_int(qty, 1))
-    return normalize_currency({key: value * qty for key, value in normalized.items()})
+    return copper_to_currency(currency_to_copper_value(currency) * qty)
 
 
 def _half_currency(currency: Any) -> Dict[str, int]:
-    normalized = normalize_currency(currency)
-    copper = normalized["gold"] * 100 + normalized["silver"] * 10 + normalized["copper"]
-    return normalize_currency({"copper": max(1, copper // 2)})
+    return copper_to_currency(max(1, currency_to_copper_value(currency) // 2))
 
 
 def _transaction_log_entry(kind: str, item_id: str, qty: int, price: Any, *, tick: int, reason: str) -> Dict[str, Any]:
