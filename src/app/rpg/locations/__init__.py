@@ -1,5 +1,11 @@
 """Deterministic RPG location and travel helpers."""
 
+from app.rpg.locations.command_routing import (
+    apply_runtime_travel_command,
+    assert_phase4_runtime_travel_encounter_routing_ready,
+    build_runtime_travel_command_narration_contract,
+    resolve_travel_command,
+)
 from app.rpg.locations.discovery import (
     DEFAULT_ROUTE_BLOCKS,
     STARTER_DISCOVERED_LOCATIONS,
@@ -128,6 +134,7 @@ __all__ = [
     "STARTER_DISCOVERED_ROUTES",
     "advance_time",
     "apply_runtime_travel",
+    "apply_runtime_travel_command",
     "apply_runtime_travel_with_resource_consumption",
     "apply_seeded_encounter_runtime",
     "apply_travel",
@@ -138,6 +145,7 @@ __all__ = [
     "assert_phase4_location_graph_ready",
     "assert_phase4_map_location_report_ready",
     "assert_phase4_runtime_travel_access_ready",
+    "assert_phase4_runtime_travel_encounter_routing_ready",
     "assert_phase4_seeded_encounters_ready",
     "assert_phase4_time_day_hooks_ready",
     "assert_phase4_travel_costs_ready",
@@ -153,6 +161,7 @@ __all__ = [
     "build_location_narration_contract",
     "build_map_location_narration_contract",
     "build_map_location_panel_payload",
+    "build_runtime_travel_command_narration_contract",
     "build_runtime_travel_narration_contract",
     "build_time_narration_contract",
     "build_travel_narration_contract",
@@ -184,6 +193,7 @@ __all__ = [
     "record_world_event",
     "render_location_history_report_html",
     "render_map_location_report_html",
+    "resolve_travel_command",
     "roll_seeded_encounter",
     "unblock_route",
     "validate_location_graph",
