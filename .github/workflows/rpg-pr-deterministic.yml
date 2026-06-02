@@ -53,7 +53,7 @@ jobs:
         run: python scripts/check_rpg_file_lines.py
 
       - name: Ruff generated runtime bridge checks
-        run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py
+        run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py src/app/rpg/session/runtime_part27.py
 
       - name: RPG narration queue deterministic tests
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
@@ -174,6 +174,9 @@ jobs:
 
       - name: RPG CI Phase 4 command routing facade session gate
         run: python -m pytest src/tests/rpg/test_ci_phase4_command_routing_facade_session.py -q --tb=short
+
+      - name: RPG CI Phase 4 runtime session travel command gate
+        run: python -m pytest src/tests/rpg/test_ci_phase4_runtime_session_travel_command.py -q --tb=short
 
       - name: RPG CI runtime facade manifest gate
         run: python -m pytest src/tests/rpg/test_ci_runtime_wrapper_manifest.py -q --tb=short
