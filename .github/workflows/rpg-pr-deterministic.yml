@@ -214,5 +214,8 @@ jobs:
       - name: RPG CI Phase 7 saved autoplay digest source gate
         run: python -m pytest src/tests/rpg/test_ci_phase7_saved_autoplay_digest_source_integration.py -q --tb=short
 
+      - name: RPG CI Phase 7 real saved state certification gate
+        run: python -m pytest src/tests/rpg/test_ci_phase7_real_saved_state_certification_integration.py -q --tb=short
+
       - name: RPG CI runtime facade manifest gate
         run: python -m pytest src/tests/rpg/test_ci_runtime_wrapper_manifest.py -q --tb=short
