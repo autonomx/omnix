@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.1 — canonical location graph foundation**.
+Next recommended slice: **Phase 4.2 — travel time, fatigue, and resource costs**.
 
 Latest completed PRs:
 
@@ -34,6 +34,7 @@ Latest completed PRs:
 | #156 Phase 3.8 quest report matrix coverage | `521676dc75ec790bdc66e825a6619e8a6ead45f6` | Phase 3 | Complete | Source-backed Phase 3 quest report model, escaped HTML report rendering, matrix lifecycle payload coverage, and Phase 3 quest report matrix CI gate; Phase 0 and deterministic gates passed. |
 | #157 Phase 3.9 quest return report flow | `b1831eb237a32818486b84ef61371781bd81d383` | Phase 3 | Complete | Deterministic quest return/report-result helpers, idempotent reward claiming, source-backed report logs, journal closure entries, and Phase 3 quest return flow CI gate; Phase 0 and deterministic gates passed. |
 | #158 Phase 3.10 completion audit and scorecard refresh | `07f2c1c2c6a3277c4fc42949d807c0c5a7a888f6` | Phase 3 | Complete | Deterministic Phase 3 completion audit helpers, audit doc, runtime-matrix evidence, advisory scorecard refresh, and Phase 3.10 CI gate; Phase 0 and deterministic gates passed. |
+| #159 Phase 4.1 canonical location graph foundation | `3e72a19b7255e32af3ffe323fed79cedd169d154` | Phase 4 | Complete | Deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers; source-backed location metadata, exits, map payload, narration contract, and Phase 4 location graph CI gate passed. |
 
 After every merged PR:
 
@@ -202,17 +203,17 @@ Status: **Complete enough to proceed to Phase 4. Quest lifecycle, reporting, per
 
 ### Next recommended Phase 4 slices
 
-1. Phase 4.1 — canonical location graph foundation.
-2. Phase 4.2 — travel time, fatigue, and resource costs.
-3. Phase 4.3 — location discovery and route blocking.
+1. Phase 4.2 — travel time, fatigue, and resource costs.
+2. Phase 4.3 — location discovery and route blocking.
+3. Phase 4.4 — random/seeded encounters.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **Starting. Phase 4.1 is the active slice for canonical location graph foundation.**
+Status: **In progress. Phase 4.1 is merged; Phase 4.2 is the active slice for travel time, fatigue, and resource costs.**
 
-- [~] Canonical location graph. Phase 4.1 adds deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers.
-- [~] Location IDs, names, descriptions, services, NPCs, hazards, exits. Phase 4.1 defines source-backed metadata for the starter vertical slice.
-- [ ] Travel time and fatigue/resource costs.
+- [x] Canonical location graph. Phase 4.1 added deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers.
+- [x] Location IDs, names, descriptions, services, NPCs, hazards, exits. Phase 4.1 defined source-backed metadata for the starter vertical slice.
+- [~] Travel time and fatigue/resource costs. Phase 4.2 adds deterministic route costs, travel-state mutation, and source-backed narration contracts; inventory consumption wiring remains pending.
 - [ ] Discovery state.
 - [ ] Random/seeded encounters.
 - [ ] Route blocking/unblocking.
@@ -247,7 +248,7 @@ Required player loops:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; travel runtime remains pending.
+- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
