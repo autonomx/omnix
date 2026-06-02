@@ -98,6 +98,18 @@
     `;
   }
 
+  function weatherLabelFromPayload(panelPayload, timeState) {
+    const weatherState = safeObj(panelPayload.weather_state);
+    const season = safeStr(weatherState.season || timeState.season).replace(/_/g, " ");
+    const weather = safeStr(weatherState.weather_label || timeState.weather_label);
+    const visibility = safeStr(weatherState.weather_visibility || timeState.weather_visibility);
+    return [
+      season ? "Season: " + season : "",
+      weather ? "Weather: " + weather : "",
+      visibility ? "Visibility: " + visibility : "",
+    ].filter(Boolean).join(" · ");
+  }
+
   function renderMapLocationPanel(payload) {
     const panelPayload = panelPayloadFromTurnPayload(payload);
     if (!Object.keys(panelPayload).length) return false;
@@ -114,6 +126,7 @@
       safeStr(timeState.clock_time),
       timeState.time_of_day_label ? "(" + safeStr(timeState.time_of_day_label) + ")" : "",
     ].filter(Boolean).join(" ");
+    const weatherLabel = weatherLabelFromPayload(panelPayload, timeState);
 
     target.innerHTML = `
       <div class="rpg-map-location-panel" data-source="${escapeHtml(source)}">
@@ -123,6 +136,7 @@
         </div>
         ${description ? `<p class="rpg-map-location-description">${escapeHtml(description)}</p>` : ""}
         ${timeLabel ? `<div class="rpg-map-location-time">${escapeHtml(timeLabel)}</div>` : ""}
+        ${weatherLabel ? `<div class="rpg-map-location-weather">${escapeHtml(weatherLabel)}</div>` : ""}
         <div class="rpg-map-location-exits-title">Visible exits</div>
         ${exits.length ? `<ul class="rpg-map-location-exits">${exits.map(renderExit).join("")}</ul>` : `<div class="rpg-map-location-empty">No visible exits.</div>`}
         <div class="rpg-map-location-source">Source: ${escapeHtml(source)}</div>
