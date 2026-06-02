@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2**.
 
-Next recommended slice: **Phase 3.8 — quest report integration polish and matrix scenario coverage**.
+Next recommended slice: **Phase 3.9 — vertical-slice quest return/report-result flow**.
 
 Latest completed PRs:
 
@@ -31,6 +31,7 @@ Latest completed PRs:
 | #153 Phase 3.5 work inquiry objective suggestions | `991e0b03df19a6ea73a988c599d58ee5d50d26d4` | Phase 3 | Complete | Deterministic work inquiry classification/routing, quest-giver offer registration, active objective suggestions, source-backed narration claim contract, and Phase 3 work objective CI gate; Phase 0 and deterministic gates passed. |
 | #154 Phase 3.6 deterministic quest reward rules | `d7d866523d8199d4bb64a534dccd250caf265b0a` | Phase 3 | Complete | Deterministic completed-quest reward claiming, idempotent reward grants, currency/item/relationship effects, source-backed reward logs, and Phase 3 quest reward CI gate; Phase 0 and deterministic gates passed. |
 | #155 Phase 3.7 quest persistence save-load coverage | `bc69af0225b821a8cb373ad6b67d8a07e9804bf7` | Phase 3 | Complete | Deterministic quest/giver/journal/rumor/reward persistence snapshots, restore/roundtrip verification, source/version validation, and Phase 3 quest persistence CI gate; Phase 0 and deterministic gates passed. |
+| #156 Phase 3.8 quest report matrix coverage | `521676dc75ec790bdc66e825a6619e8a6ead45f6` | Phase 3 | Complete | Source-backed Phase 3 quest report model, escaped HTML report rendering, matrix lifecycle payload coverage, and Phase 3 quest report matrix CI gate; Phase 0 and deterministic gates passed. |
 
 After every merged PR:
 
@@ -167,7 +168,7 @@ Status: **Materially complete. Remaining work is full inventory UI/report polish
 
 ## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
 
-Status: **Mostly complete. Quest template schema, giver state, objective lifecycle, journal/report, rumor conversion, work routing, reward rules, and persistence are merged.**
+Status: **Mostly complete. Quest template schema, giver state, objective lifecycle, journal/report, rumor conversion, work routing, reward rules, persistence, and report matrix coverage are merged.**
 
 - [x] Quest template schema.
 - [x] Quest giver state.
@@ -180,6 +181,7 @@ Status: **Mostly complete. Quest template schema, giver state, objective lifecyc
 - [x] Objective suggestions.
 - [x] Quest report section.
 - [x] Quest persistence/save-load coverage.
+- [x] Quest report matrix coverage.
 
 ### Completed Phase 3 slices
 
@@ -190,12 +192,13 @@ Status: **Mostly complete. Quest template schema, giver state, objective lifecyc
 - Phase 3.5 / PR #153 — deterministic work inquiry routing and objective suggestions.
 - Phase 3.6 / PR #154 — deterministic completed-quest reward claiming rules.
 - Phase 3.7 / PR #155 — deterministic quest/giver/journal/rumor/reward persistence roundtrip coverage.
+- Phase 3.8 / PR #156 — deterministic Phase 3 quest report model, escaped HTML, and matrix lifecycle coverage.
 
 ### Next Phase 3 slices
 
-1. Phase 3.8 — quest report integration polish and matrix scenario coverage.
-2. Phase 3.9 — vertical-slice quest return/report-result flow.
-3. Phase 3.10 — Phase 3 completion audit and scorecard refresh.
+1. Phase 3.9 — vertical-slice quest return/report-result flow.
+2. Phase 3.10 — Phase 3 completion audit and scorecard refresh.
+3. Phase 4.1 — canonical location graph foundation.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
