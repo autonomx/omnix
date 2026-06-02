@@ -107,40 +107,38 @@
     return payload;
   }
 
-  function ensureCommandBridgeScript() {
-    if (window.RpgCommandBridge || document.getElementById("rpg-command-bridge-script")) return;
+  function appendDeferredScript(id, src) {
+    if (document.getElementById(id)) return;
     const script = document.createElement("script");
-    script.id = "rpg-command-bridge-script";
-    script.src = "/static/rpg/rpg-command-bridge.js";
+    script.id = id;
+    script.src = src;
     script.defer = true;
     document.head.appendChild(script);
+  }
+
+  function ensureCommandBridgeScript() {
+    if (window.RpgCommandBridge || document.getElementById("rpg-command-bridge-script")) return;
+    appendDeferredScript("rpg-command-bridge-script", "/static/rpg/rpg-command-bridge.js");
   }
 
   function ensureLivePayloadBridgeScript() {
     if (window.RpgLivePayloadBridge || document.getElementById("rpg-live-payload-bridge-script")) return;
-    const script = document.createElement("script");
-    script.id = "rpg-live-payload-bridge-script";
-    script.src = "/static/rpg/rpg-live-payload-bridge.js";
-    script.defer = true;
-    document.head.appendChild(script);
+    appendDeferredScript("rpg-live-payload-bridge-script", "/static/rpg/rpg-live-payload-bridge.js");
   }
 
   function ensureMapLocationPanelScript() {
     if (window.RpgMapLocationPanel || document.getElementById("rpg-map-location-panel-script")) return;
-    const script = document.createElement("script");
-    script.id = "rpg-map-location-panel-script";
-    script.src = "/static/rpg/rpgMapLocationPanel.js";
-    script.defer = true;
-    document.head.appendChild(script);
+    appendDeferredScript("rpg-map-location-panel-script", "/static/rpg/rpgMapLocationPanel.js");
   }
 
   function ensurePlayerHudScript() {
     if (window.RpgPlayerHud || document.getElementById("rpg-player-hud-script")) return;
-    const script = document.createElement("script");
-    script.id = "rpg-player-hud-script";
-    script.src = "/static/rpg/rpgPlayerHud.js";
-    script.defer = true;
-    document.head.appendChild(script);
+    appendDeferredScript("rpg-player-hud-script", "/static/rpg/rpgPlayerHud.js");
+  }
+
+  function ensureObjectiveJournalPanelScript() {
+    if (window.RpgObjectiveJournalPanel || document.getElementById("rpg-objective-journal-panel-script")) return;
+    appendDeferredScript("rpg-objective-journal-panel-script", "/static/rpg/rpgObjectiveJournalPanel.js");
   }
 
   function ensureSurvivalInspectorScript() {
@@ -149,11 +147,8 @@
     ensureLivePayloadBridgeScript();
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
-    const script = document.createElement("script");
-    script.id = "rpg-survival-inspector-script";
-    script.src = "/static/rpg/rpg-survival-inspector.js";
-    script.defer = true;
-    document.head.appendChild(script);
+    ensureObjectiveJournalPanelScript();
+    appendDeferredScript("rpg-survival-inspector-script", "/static/rpg/rpg-survival-inspector.js");
   }
 
   window.RpgConversationSettings = {
@@ -165,6 +160,7 @@
     ensureLivePayloadBridgeScript,
     ensureMapLocationPanelScript,
     ensurePlayerHudScript,
+    ensureObjectiveJournalPanelScript,
     ensureSurvivalInspectorScript,
   };
 
@@ -175,6 +171,7 @@
       ensureLivePayloadBridgeScript();
       ensureMapLocationPanelScript();
       ensurePlayerHudScript();
+      ensureObjectiveJournalPanelScript();
       ensureSurvivalInspectorScript();
     });
   } else {
@@ -183,6 +180,7 @@
     ensureLivePayloadBridgeScript();
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
+    ensureObjectiveJournalPanelScript();
     ensureSurvivalInspectorScript();
   }
 })();
