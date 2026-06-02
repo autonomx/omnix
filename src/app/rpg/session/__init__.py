@@ -38,6 +38,13 @@ from .turn_readiness import (
     build_100_turn_readiness_contract,
     build_100_turn_readiness_result,
 )
+from .turn_readiness_report import (
+    append_100_turn_readiness_report_to_campaign_report_html,
+    assert_phase7_100_turn_readiness_report_ready,
+    build_100_turn_readiness_report_contract,
+    build_100_turn_readiness_report_payload,
+    render_100_turn_readiness_report_html,
+)
 
 
 def _install_optional_fast_runtime_hooks() -> None:
@@ -100,4 +107,10 @@ __all__ = [
     "assert_phase7_100_turn_readiness_ready",
     "build_100_turn_readiness_contract",
     "build_100_turn_readiness_result",
+    # Phase 7.5
+    "append_100_turn_readiness_report_to_campaign_report_html",
+    "assert_phase7_100_turn_readiness_report_ready",
+    "build_100_turn_readiness_report_contract",
+    "build_100_turn_readiness_report_payload",
+    "render_100_turn_readiness_report_html",
 ]
