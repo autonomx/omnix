@@ -26,6 +26,11 @@ from app.rpg.quests.reporting import (
     build_phase3_quest_report_model,
     render_phase3_quest_report_html,
 )
+from app.rpg.quests.return_flow import (
+    build_quest_return_narration_contract,
+    classify_quest_return,
+    report_completed_quest_to_giver,
+)
 from app.rpg.quests.rewards import build_reward_payload, claim_quest_rewards, mark_reward_claimed
 from app.rpg.quests.rumors import (
     back_rumor_with_evidence,
@@ -61,10 +66,12 @@ __all__ = [
     "build_phase3_quest_report_model",
     "build_quest_journal_summary",
     "build_quest_persistence_snapshot",
+    "build_quest_return_narration_contract",
     "build_reward_payload",
     "build_rumor_summary",
     "build_work_inquiry_narration_contract",
     "claim_quest_rewards",
+    "classify_quest_return",
     "classify_work_inquiry",
     "complete_objective",
     "complete_objective_lifecycle",
@@ -84,6 +91,7 @@ __all__ = [
     "register_rumor",
     "render_phase3_quest_report_html",
     "render_quest_journal_report_html",
+    "report_completed_quest_to_giver",
     "restore_quest_persistence_snapshot",
     "route_work_inquiry",
     "set_quest_stage",
