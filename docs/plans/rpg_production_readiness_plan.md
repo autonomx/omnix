@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 4 — Travel Graph, Locations, Time, and Encounters v2**.
 
-Next recommended slice: **Phase 4.2 — travel time, fatigue, and resource costs**.
+Next recommended slice: **Phase 4.3 — location discovery and route blocking**.
 
 Latest completed PRs:
 
@@ -35,6 +35,7 @@ Latest completed PRs:
 | #157 Phase 3.9 quest return report flow | `b1831eb237a32818486b84ef61371781bd81d383` | Phase 3 | Complete | Deterministic quest return/report-result helpers, idempotent reward claiming, source-backed report logs, journal closure entries, and Phase 3 quest return flow CI gate; Phase 0 and deterministic gates passed. |
 | #158 Phase 3.10 completion audit and scorecard refresh | `07f2c1c2c6a3277c4fc42949d807c0c5a7a888f6` | Phase 3 | Complete | Deterministic Phase 3 completion audit helpers, audit doc, runtime-matrix evidence, advisory scorecard refresh, and Phase 3.10 CI gate; Phase 0 and deterministic gates passed. |
 | #159 Phase 4.1 canonical location graph foundation | `3e72a19b7255e32af3ffe323fed79cedd169d154` | Phase 4 | Complete | Deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers; source-backed location metadata, exits, map payload, narration contract, and Phase 4 location graph CI gate passed. |
+| #160 Phase 4.2 deterministic travel time and fatigue costs | `d23f1ec7e00c45d797466d0cfe4f32c37e7b089d` | Phase 4 | Complete | Deterministic route travel minutes, fatigue deltas, resource-cost accounting, risk flags, travel-state mutation, narration guardrails, and Phase 4 travel costs CI gate passed. |
 
 After every merged PR:
 
@@ -203,23 +204,23 @@ Status: **Complete enough to proceed to Phase 4. Quest lifecycle, reporting, per
 
 ### Next recommended Phase 4 slices
 
-1. Phase 4.2 — travel time, fatigue, and resource costs.
-2. Phase 4.3 — location discovery and route blocking.
-3. Phase 4.4 — random/seeded encounters.
+1. Phase 4.3 — location discovery and route blocking.
+2. Phase 4.4 — random/seeded encounters.
+3. Phase 4.5 — local world events and location history report.
 
 ## Phase 4 — Travel Graph, Locations, Time, and Encounters v2
 
-Status: **In progress. Phase 4.1 is merged; Phase 4.2 is the active slice for travel time, fatigue, and resource costs.**
+Status: **In progress. Phase 4.1 and 4.2 are merged; Phase 4.3 is the active slice for location discovery and route blocking.**
 
 - [x] Canonical location graph. Phase 4.1 added deterministic Rusty Flagon, market, old road, old mill, and nearby wilderness graph helpers.
 - [x] Location IDs, names, descriptions, services, NPCs, hazards, exits. Phase 4.1 defined source-backed metadata for the starter vertical slice.
 - [~] Travel time and fatigue/resource costs. Phase 4.2 adds deterministic route costs, travel-state mutation, and source-backed narration contracts; inventory consumption wiring remains pending.
-- [ ] Discovery state.
+- [~] Discovery state. Phase 4.3 adds deterministic starter discovered locations/routes and discovery log helpers.
 - [ ] Random/seeded encounters.
-- [ ] Route blocking/unblocking.
+- [~] Route blocking/unblocking. Phase 4.3 adds deterministic route block state, block/unblock helpers, and route-access validation.
 - [ ] Local world events by location.
 - [~] Location history in report. Phase 4.1 adds the map payload foundation; report history remains for Phase 4.5.
-- [~] Map/location UI payload. Phase 4.1 adds source-backed map payload helpers; UI wiring remains pending.
+- [~] Map/location UI payload. Phase 4.1 adds source-backed map payload helpers; Phase 4.3 adds discovered/blocked visible-exit payloads; UI wiring remains pending.
 - [ ] Time of day, day count, optional season/weather hooks.
 
 ## Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2
@@ -248,7 +249,7 @@ Required player loops:
 - [x] Rent room/rest.
 - [x] Ask for work/rumors.
 - [x] Accept quest.
-- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting.
+- [~] Travel to old mill route. Phase 4.1 adds Rusty Flagon -> Old Road -> Old Mill route validation; Phase 4.2 records deterministic travel time, fatigue, and resource-cost accounting; Phase 4.3 adds discovery/blocking gates.
 - [ ] Fight bandit.
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
