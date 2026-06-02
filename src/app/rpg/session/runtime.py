@@ -62,6 +62,17 @@ _RUNTIME_WRAPPER_MANIFEST = {
         "app.rpg.session.runtime_part26",
     ],
 }
+_EXPECTED_RUNTIME_WRAPPER_MANIFEST = {
+    "combat_contract_modules": [
+        "app.rpg.session.runtime_part22",
+        "app.rpg.session.runtime_part23",
+        "app.rpg.session.runtime_part24",
+        "app.rpg.session.runtime_part25",
+        "app.rpg.session.runtime_part26",
+    ],
+    "final_apply_turn_authoritative_module": "app.rpg.session.runtime_part26",
+    "final_apply_attack_combat_action_module": "app.rpg.session.runtime_part23",
+}
 
 
 def get_runtime_wrapper_manifest(_manifest: dict = _RUNTIME_WRAPPER_MANIFEST) -> dict:
@@ -74,7 +85,46 @@ def get_runtime_wrapper_manifest(_manifest: dict = _RUNTIME_WRAPPER_MANIFEST) ->
     }
 
 
+def get_runtime_wrapper_drift_report(
+    _manifest: dict = _RUNTIME_WRAPPER_MANIFEST,
+    _expected: dict = _EXPECTED_RUNTIME_WRAPPER_MANIFEST,
+) -> dict:
+    """Return a JSON-safe report describing runtime wrapper manifest drift."""
+    current_modules = list(_manifest["combat_contract_modules"])
+    expected_modules = list(_expected["combat_contract_modules"])
+    return {
+        "ok": (
+            current_modules == expected_modules
+            and _manifest["final_apply_turn_authoritative_module"]
+            == _expected["final_apply_turn_authoritative_module"]
+            and _manifest["final_apply_attack_combat_action_module"]
+            == _expected["final_apply_attack_combat_action_module"]
+        ),
+        "expected_combat_contract_modules": expected_modules,
+        "actual_combat_contract_modules": current_modules,
+        "missing_combat_contract_modules": [
+            module for module in expected_modules if module not in current_modules
+        ],
+        "unexpected_combat_contract_modules": [
+            module for module in current_modules if module not in expected_modules
+        ],
+        "final_apply_turn_authoritative_module": _manifest[
+            "final_apply_turn_authoritative_module"
+        ],
+        "expected_final_apply_turn_authoritative_module": _expected[
+            "final_apply_turn_authoritative_module"
+        ],
+        "final_apply_attack_combat_action_module": _manifest[
+            "final_apply_attack_combat_action_module"
+        ],
+        "expected_final_apply_attack_combat_action_module": _expected[
+            "final_apply_attack_combat_action_module"
+        ],
+    }
+
+
 _RUNTIME_GLOBALS["get_runtime_wrapper_manifest"] = get_runtime_wrapper_manifest
+_RUNTIME_GLOBALS["get_runtime_wrapper_drift_report"] = get_runtime_wrapper_drift_report
 
 for _module in _PART_MODULES:
     _module.__dict__.update(_RUNTIME_GLOBALS)
@@ -99,6 +149,7 @@ for _name in (
     "_value",
     "_RUNTIME_GLOBALS",
     "_RUNTIME_WRAPPER_MANIFEST",
+    "_EXPECTED_RUNTIME_WRAPPER_MANIFEST",
     "_ModuleType",
     "_RuntimeFacadeModule",
     "_sys",
