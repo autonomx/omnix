@@ -16,17 +16,17 @@ STARTER_CURRENCY: Dict[str, int] = {
 
 STARTER_ITEMS: List[Dict[str, Any]] = [
     {
-        "item_id": "item:small_knife",
+        "item_id": "combat_knife",
         "qty": 1,
         "source": SOURCE,
     },
     {
-        "item_id": "item:torch",
-        "qty": 2,
+        "item_id": "healing_potion",
+        "qty": 1,
         "source": SOURCE,
     },
     {
-        "item_id": "item:minor_healing_potion",
+        "item_id": "bandit_token",
         "qty": 1,
         "source": SOURCE,
     },
