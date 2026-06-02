@@ -34,9 +34,13 @@ def emit_saved_100_turn_certification_artifacts(
     output_root = output_dir or TEST_RESULTS_ROOT
     output_root.mkdir(parents=True, exist_ok=True)
 
-    payload = build_saved_100_turn_certification_payload(_safe_dict(saved_artifacts), expected_turns=expected_turns)
+    safe_artifacts = _safe_dict(saved_artifacts)
+    payload = build_saved_100_turn_certification_payload(safe_artifacts, expected_turns=expected_turns)
     payload = dict(payload)
     payload["artifact_writer_source"] = SOURCE
+    for key in ("emission_hook_source", "emission_hook_diagnostics", "emission_hook_blockers"):
+        if key in safe_artifacts:
+            payload[key] = safe_artifacts[key]
 
     payload_path = output_root / CERTIFICATION_PAYLOAD_FILENAME
     payload_text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False)

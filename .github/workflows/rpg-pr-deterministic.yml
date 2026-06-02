@@ -223,5 +223,8 @@ jobs:
       - name: RPG CI Phase 7 saved certification report diagnostics gate
         run: python -m pytest src/tests/rpg/test_ci_phase7_saved_certification_report_diagnostics.py -q --tb=short
 
+      - name: RPG CI Phase 7 live manual saved artifact emission hooks gate
+        run: python -m pytest src/tests/rpg/test_ci_phase7_live_manual_saved_artifact_emission_hooks.py -q --tb=short
+
       - name: RPG CI runtime facade manifest gate
         run: python -m pytest src/tests/rpg/test_ci_runtime_wrapper_manifest.py -q --tb=short
