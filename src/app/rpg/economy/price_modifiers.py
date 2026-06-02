@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.economy.currency import currency_to_copper_value, normalize_currency
+from app.rpg.economy.currency import copper_to_currency, currency_to_copper_value, normalize_currency
 
 SOURCE = "deterministic_price_modifiers"
 
@@ -36,15 +36,6 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, int(value)))
-
-
-def _copper_to_currency(copper: int) -> Dict[str, int]:
-    copper = max(0, _safe_int(copper, 0))
-    gold = copper // 100
-    copper %= 100
-    silver = copper // 10
-    copper %= 10
-    return {"gold": gold, "silver": silver, "copper": copper}
 
 
 def _relationship_value(player_state: Dict[str, Any], merchant_id: str) -> int:
@@ -196,7 +187,7 @@ def apply_price_modifier(
     return {
         "base_price": normalized_base,
         "base_price_copper": base_copper,
-        "adjusted_price": _copper_to_currency(adjusted_copper),
+        "adjusted_price": copper_to_currency(adjusted_copper),
         "adjusted_price_copper": adjusted_copper,
         "price_modifier": deepcopy(modifier),
         "source": SOURCE,
