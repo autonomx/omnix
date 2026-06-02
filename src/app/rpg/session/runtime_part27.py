@@ -12,6 +12,7 @@ _PHASE4_SESSION_TRAVEL_SOURCE = "deterministic_phase4_session_travel_command_int
 _PHASE4_FRONTEND_MAP_LOCATION_SOURCE = "deterministic_phase4_frontend_map_location_ui_panel"
 _PHASE8_PLAYER_HUD_SOURCE = "deterministic_phase8_player_visible_state_objective_hud_gate"
 _PHASE8_OBJECTIVE_JOURNAL_SOURCE = "deterministic_phase8_objective_journal_detail_panel_gate"
+_PHASE8_COMBAT_PANEL_SOURCE = "deterministic_phase8_combat_state_action_affordance_gate"
 
 
 def _phase4_session_travel_turn_index(runtime_state: Dict[str, Any], simulation_state: Dict[str, Any]) -> int:
@@ -309,6 +310,143 @@ def _phase8_objective_journal_panel_payload(
     }
 
 
+def _phase8_combat_source_state(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    return _safe_dict(
+        runtime_state.get("combat_state")
+        or simulation_state.get("combat_state")
+        or _safe_dict(simulation_state.get("player_state")).get("combat_state")
+    )
+
+
+def _phase8_actor_is_player(actor_id: str, actor: Dict[str, Any]) -> bool:
+    side = _safe_str(actor.get("side") or actor.get("team") or actor.get("faction")).lower()
+    actor_type = _safe_str(actor.get("actor_type") or actor.get("type") or actor.get("kind")).lower()
+    return actor_id == "player" or side == "player" or actor_type == "player"
+
+
+def _phase8_combat_participant_detail(actor_id: str, raw: Dict[str, Any]) -> Dict[str, Any]:
+    actor = _safe_dict(raw)
+    hp = _safe_int(actor.get("hp") or actor.get("current_hp") or actor.get("health"), 0)
+    max_hp = _safe_int(actor.get("max_hp") or actor.get("maximum_hp") or actor.get("hp_max"), hp)
+    side = _safe_str(actor.get("side") or actor.get("team") or ("player" if _phase8_actor_is_player(actor_id, actor) else "enemy"))
+    return {
+        "actor_id": actor_id,
+        "name": _safe_str(actor.get("name") or actor.get("label") or actor_id),
+        "side": side,
+        "is_player": _phase8_actor_is_player(actor_id, actor),
+        "hp": hp,
+        "max_hp": max_hp,
+        "defeated": bool(actor.get("defeated") or actor.get("is_defeated") or (max_hp > 0 and hp <= 0)),
+        "source": _PHASE8_COMBAT_PANEL_SOURCE,
+    }
+
+
+def _phase8_combat_participants(combat_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    participants = _safe_dict(combat_state.get("participants"))
+    rows: List[Dict[str, Any]] = []
+    if participants:
+        for actor_id in sorted(participants):
+            rows.append(_phase8_combat_participant_detail(_safe_str(actor_id), _safe_dict(participants.get(actor_id))))
+    else:
+        for index, raw in enumerate(_safe_list(combat_state.get("actors") or combat_state.get("combatants"))):
+            actor = _safe_dict(raw)
+            actor_id = _safe_str(actor.get("actor_id") or actor.get("id") or f"actor:{index + 1}")
+            rows.append(_phase8_combat_participant_detail(actor_id, actor))
+    return rows[:12]
+
+
+def _phase8_player_actor_id(combat_state: Dict[str, Any], participants: List[Dict[str, Any]]) -> str:
+    configured = _safe_str(combat_state.get("player_actor_id") or combat_state.get("player_id"))
+    if configured:
+        return configured
+    for participant in participants:
+        if participant.get("is_player"):
+            return _safe_str(participant.get("actor_id"))
+    return "player"
+
+
+def _phase8_combat_legal_actions(combat_state: Dict[str, Any], participants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if combat_state.get("active") is not True:
+        return []
+    current_actor_id = _safe_str(combat_state.get("current_actor_id") or combat_state.get("turn_actor_id"))
+    player_actor_id = _phase8_player_actor_id(combat_state, participants)
+    if current_actor_id and current_actor_id != player_actor_id:
+        return []
+    targets = [row for row in participants if not row.get("is_player") and not row.get("defeated")]
+    actions: List[Dict[str, Any]] = []
+    for target in targets[:6]:
+        actions.append(
+            {
+                "action_type": "attack",
+                "target_id": _safe_str(target.get("actor_id")),
+                "label": f"Attack {_safe_str(target.get('name') or target.get('actor_id'))}",
+                "enabled": True,
+                "source": _PHASE8_COMBAT_PANEL_SOURCE,
+            }
+        )
+    actions.append({"action_type": "defend", "target_id": player_actor_id, "label": "Defend", "enabled": True, "source": _PHASE8_COMBAT_PANEL_SOURCE})
+    return actions
+
+
+def _phase8_combat_panel_warnings(combat_state: Dict[str, Any], runtime_state: Dict[str, Any], participants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    warnings: List[Dict[str, Any]] = []
+    if combat_state.get("active") is True:
+        current_actor_id = _safe_str(combat_state.get("current_actor_id") or combat_state.get("turn_actor_id"))
+        player_actor_id = _phase8_player_actor_id(combat_state, participants)
+        if current_actor_id and current_actor_id != player_actor_id:
+            warnings.append(
+                {
+                    "kind": "waiting_for_npc_turn",
+                    "label": "Waiting for a non-player combat turn",
+                    "severity": "info",
+                    "source": _PHASE8_COMBAT_PANEL_SOURCE,
+                }
+            )
+    last_turn = _safe_dict(runtime_state.get("last_turn_result") or runtime_state.get("last_result"))
+    if last_turn and last_turn.get("ok") is False:
+        warnings.append(
+            {
+                "kind": "last_combat_action_rejected",
+                "label": _safe_str(last_turn.get("reason") or "Last combat action was rejected"),
+                "severity": "warning",
+                "source": _PHASE8_COMBAT_PANEL_SOURCE,
+            }
+        )
+    return warnings
+
+
+def _phase8_combat_panel_payload(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Build player-visible combat state/action affordances without mutating state."""
+
+    simulation_copy = deepcopy(_safe_dict(simulation_state))
+    runtime_copy = deepcopy(_safe_dict(runtime_state))
+    combat_state = _phase8_combat_source_state(simulation_copy, runtime_copy)
+    participants = _phase8_combat_participants(combat_state)
+    current_actor_id = _safe_str(combat_state.get("current_actor_id") or combat_state.get("turn_actor_id"))
+    player_actor_id = _phase8_player_actor_id(combat_state, participants)
+    legal_actions = _phase8_combat_legal_actions(combat_state, participants)
+    active = combat_state.get("active") is True
+    return {
+        "source": _PHASE8_COMBAT_PANEL_SOURCE,
+        "frontend_source": _PHASE8_COMBAT_PANEL_SOURCE,
+        "active": active,
+        "combat_id": _safe_str(combat_state.get("combat_id") or combat_state.get("id")),
+        "status_label": "In combat" if active else "Not in combat",
+        "current_actor_id": current_actor_id,
+        "player_actor_id": player_actor_id,
+        "is_player_turn": bool(active and (not current_actor_id or current_actor_id == player_actor_id)),
+        "participants": participants,
+        "legal_actions": legal_actions,
+        "target_summary": [row for row in participants if not row.get("is_player")][:6],
+        "recent_action_state": _phase8_recent_action_state(runtime_copy),
+        "major_warnings": _phase8_combat_panel_warnings(combat_state, runtime_copy, participants),
+        "non_mutating": True,
+    }
+
+
 def _phase8_player_visible_hud_payload(
     simulation_state: Dict[str, Any],
     runtime_state: Dict[str, Any] | None = None,
@@ -365,6 +503,7 @@ def _phase4_session_travel_payload(
     map_location_panel = _phase4_frontend_map_location_panel_payload(simulation_state)
     player_hud = _phase8_player_visible_hud_payload(simulation_state, runtime_state)
     objective_journal_panel = _phase8_objective_journal_panel_payload(simulation_state, runtime_state)
+    combat_action_panel = _phase8_combat_panel_payload(simulation_state, runtime_state)
 
     resolved_result: Dict[str, Any] = {
         "ok": command_result.get("ok") is True,
@@ -380,6 +519,7 @@ def _phase4_session_travel_payload(
         "map_location_panel": map_location_panel,
         "player_hud": player_hud,
         "objective_journal_panel": objective_journal_panel,
+        "combat_action_panel": combat_action_panel,
         "meaningful_progress": command_result.get("ok") is True,
         "progress_category": "location_progression" if command_result.get("ok") is True else "blocked_travel",
         "source": _PHASE4_SESSION_TRAVEL_SOURCE,
@@ -426,6 +566,7 @@ def _phase4_session_travel_payload(
         "map_location_panel": map_location_panel,
         "player_hud": player_hud,
         "objective_journal_panel": objective_journal_panel,
+        "combat_action_panel": combat_action_panel,
         "forbidden_narration": list(_safe_list(contract.get("forbidden_runtime_travel_command_claims"))),
         "settings": runtime_state.get("runtime_settings", {}),
         "conversation_threads": [],
@@ -446,6 +587,7 @@ def _phase4_session_travel_payload(
         "map_location_panel": map_location_panel,
         "player_hud": player_hud,
         "objective_journal_panel": objective_journal_panel,
+        "combat_action_panel": combat_action_panel,
         "narration_context": narration_context,
         "narration": summary,
         "final_narration": summary,
@@ -518,6 +660,7 @@ def _apply_turn_authoritative(
             "objective_journal_panel",
             _phase8_objective_journal_panel_payload(simulation_state, runtime_state),
         )
+        base_payload.setdefault("combat_action_panel", _phase8_combat_panel_payload(simulation_state, runtime_state))
     return base_payload
 
 
