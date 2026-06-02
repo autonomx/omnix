@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate**.
 
-Next recommended slice: **Phase 7.2 — replay turn sequence validation against checkpoint digests**.
+Next recommended slice: **Phase 7.3 — save/load replay persistence roundtrip gate**.
 
 Latest completed PRs:
 
@@ -19,6 +19,7 @@ Latest completed PRs:
 | #182 Phase 4.15 frontend map/location UI panel wiring | `f112d8db632e69416cc6823e033757330d0497fd` | Phase 4 | Complete | Surfaced deterministic map/location payloads through runtime travel turn results, wired a browser renderer into the RPG minimap panel, preserved hidden-state/block guardrails, added the Phase 4 frontend map location UI panel gate, and both required RPG checks passed. |
 | #184 Phase 4.16 optional season/weather expansion | `74409e87ad5fffabf4f894bfa246aa5596616daa` | Phase 4 | Complete | Replaced the deterministic weather placeholder with source-backed season/weather helpers, surfaced weather fields in time/map/report/UI payloads, added weather narration guardrails, and both required RPG checks passed. |
 | #186 Phase 7.1 save load replay checkpoint foundation | `2e73cdd29b40d023e88e777514ec1c14b4552f81` | Phase 7 | Complete | Added deterministic replay checkpoint helpers, canonical session digests, restore validation, drift comparison, exports, and the Phase 7 replay checkpoint foundation gate; both required RPG checks passed. |
+| #188 Phase 7.2 replay turn sequence validation | `468463f545b4069b755eb73002516260cc50a59c` | Phase 7 | Complete | Added deterministic replay turn-sequence helpers that restore from checkpoints, apply provider-free command steps through canonical runtime command helpers, compare per-turn/final checkpoint digests, cover rejected commands without hidden mutation, and added the Phase 7 replay turn sequence gate; both required RPG checks passed. |
 
 After every merged PR:
 
@@ -173,7 +174,7 @@ Current coverage:
 - [x] Return/report result.
 - [ ] Recruit companion or deepen relationship.
 - [x] See journal/objective updates.
-- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival and Phase 3 quest persistence are covered; Phase 7.1 adds canonical checkpoint digest/restore comparison foundation; full combat/NPC/travel/time/weather replay sequence gates remain.
+- [~] Save/load without losing state. Phase 2 economy/inventory/rest/survival and Phase 3 quest persistence are covered; Phase 7.1 adds canonical checkpoint digest/restore comparison foundation; Phase 7.2 adds deterministic replay turn-sequence validation through canonical runtime command helpers; full combat/NPC/travel/time/weather persistence roundtrip gates remain.
 
 ## Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate
 
@@ -184,15 +185,19 @@ Scope: save/load checkpoint validation, replay determinism, state diff validatio
 Completed:
 
 - [x] Phase 7.1 — replay checkpoint foundation: canonical session JSON, deterministic checkpoint digests, restore validation, drift comparison, volatile runtime diagnostic filtering, exports, and `RPG CI Phase 7 replay checkpoint foundation gate`.
+- [x] Phase 7.2 — replay turn sequence validation against checkpoint digests: restore from checkpoint inputs, apply provider-free command steps through canonical runtime command helpers, build per-turn checkpoint digests, compare final checkpoint digests, cover rejected commands without hidden mutation, emit source-backed replay drift details, and add the `RPG CI Phase 7 replay turn sequence gate`.
 
-Next recommended slice: **Phase 7.2 — replay turn sequence validation against checkpoint digests**.
+Next recommended slice: **Phase 7.3 — save/load replay persistence roundtrip gate**.
 
-Suggested Phase 7.2 scope:
+Suggested Phase 7.3 scope:
 
-- Build a small deterministic replay runner that restores from a checkpoint, applies a fixed provider-free command sequence, and compares final checkpoint digests.
-- Cover successful route/travel and a rejected/blocked action without hidden state mutation.
-- Emit source-backed replay drift details when checkpoint digests differ.
-- Add a `RPG CI Phase 7 replay turn sequence gate` after the checkpoint foundation gate and before runtime manifest gate.
+- Validate deterministic checkpoint/session packages can be saved, loaded, restored, replayed, and compared without digest drift.
+- Use existing durable store/package bridge paths where possible rather than inventing a new persistence layer.
+- Cover persistence roundtrip of manifest/session identity, installed packs, simulation state, runtime state after volatile diagnostic filtering, travel/time/weather state, and quest/economy/survival state if present in the seed.
+- Emit source-backed drift details if disk/package roundtrip changes authoritative state.
+- Keep the gate provider-free and deterministic.
+- Add `src/tests/rpg/test_ci_phase7_save_load_replay_roundtrip.py`.
+- Add an `RPG CI Phase 7 save load replay roundtrip gate` after the replay turn sequence gate and before the runtime facade manifest gate.
 
 ## Phase 8 — UI/UX Production Pass
 
