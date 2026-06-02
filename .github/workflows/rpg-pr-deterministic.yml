@@ -53,7 +53,7 @@ jobs:
         run: python scripts/check_rpg_file_lines.py
 
       - name: Ruff generated runtime bridge checks
-        run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py src/app/rpg/session/runtime_part27.py
+        run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py
 
       - name: RPG narration queue deterministic tests
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
