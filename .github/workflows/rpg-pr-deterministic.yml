@@ -94,3 +94,6 @@ jobs:
 
       - name: RPG CI quest contract report visibility gate
         run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_displays_quest_narrative_contract -q --tb=short
+
+      - name: RPG CI runtime facade manifest gate
+        run: python -m pytest src/tests/rpg/test_ci_runtime_wrapper_manifest.py -q --tb=short
