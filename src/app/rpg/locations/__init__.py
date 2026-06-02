@@ -90,6 +90,14 @@ from app.rpg.locations.travel import (
     get_route_travel_cost,
     validate_route_travel_costs,
 )
+from app.rpg.locations.travel_resources import (
+    apply_runtime_travel_with_resource_consumption,
+    apply_travel_resource_consumption,
+    assert_phase4_travel_resource_consumption_ready,
+    build_travel_resource_narration_contract,
+    build_travel_resource_requirement,
+    validate_travel_resources_available,
+)
 
 __all__ = [
     "CANONICAL_EDGES",
@@ -114,7 +122,9 @@ __all__ = [
     "STARTER_DISCOVERED_ROUTES",
     "advance_time",
     "apply_runtime_travel",
+    "apply_runtime_travel_with_resource_consumption",
     "apply_travel",
+    "apply_travel_resource_consumption",
     "apply_travel_time",
     "assert_phase4_discovery_route_blocking_ready",
     "assert_phase4_location_graph_ready",
@@ -123,6 +133,7 @@ __all__ = [
     "assert_phase4_seeded_encounters_ready",
     "assert_phase4_time_day_hooks_ready",
     "assert_phase4_travel_costs_ready",
+    "assert_phase4_travel_resource_consumption_ready",
     "assert_phase4_world_events_location_history_ready",
     "block_route",
     "build_accessible_location_map_payload",
@@ -136,6 +147,8 @@ __all__ = [
     "build_runtime_travel_narration_contract",
     "build_time_narration_contract",
     "build_travel_narration_contract",
+    "build_travel_resource_narration_contract",
+    "build_travel_resource_requirement",
     "build_world_event_narration_contract",
     "calculate_route_travel_cost",
     "derive_world_events_from_logs",
@@ -166,4 +179,5 @@ __all__ = [
     "validate_location_graph",
     "validate_route_access",
     "validate_route_travel_costs",
+    "validate_travel_resources_available",
 ]
