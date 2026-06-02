@@ -4,12 +4,14 @@ import argparse
 
 from tests.rpg.manual import output_artifacts
 from tests.rpg.manual.code_diff import write_code_diff_snapshot
+from tests.rpg.manual.completion_path_smoke import emit_phase7_saved_certification_from_completion_path
 from tests.rpg.manual.constants import (
     DEFAULT_CODE_DIFF_ROOTS,
     DEFAULT_MANAGED_SERVER_HEALTH_URLS,
     MANUAL_LOG_MAX_CHUNK_BYTES,
     MANUAL_TEST_TURNS,
     RESULTS_ZIP_PATH,
+    TEST_RESULTS_ROOT,
 )
 from tests.rpg.manual.managed_servers import ManagedServerGroup
 from tests.rpg.manual.output_state import (
@@ -86,6 +88,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-results-zip", action="store_true")
     parser.add_argument("--no-token-usage", action="store_true")
+    parser.add_argument(
+        "--no-saved-certification",
+        action="store_true",
+        help="Skip provider-free Phase 7 saved certification emission from completion outputs.",
+    )
     parser.add_argument(
         "--managed-server-health-url",
         action="append",
@@ -202,6 +209,13 @@ def main(argv: list[str] | None = None) -> None:
 
         if not getattr(args, "no_code_diff", False):
             write_code_diff_snapshot(roots=getattr(args, "code_diff_root", None))
+
+        if not getattr(args, "no_saved_certification", False):
+            emit_phase7_saved_certification_from_completion_path(
+                {},
+                output_dir=TEST_RESULTS_ROOT,
+                expected_turns=100,
+            )
 
         if not getattr(args, "no_results_zip", False):
             output_artifacts.write_results_zip(RESULTS_ZIP_PATH)
