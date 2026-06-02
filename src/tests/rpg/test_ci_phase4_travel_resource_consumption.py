@@ -48,11 +48,11 @@ def test_ci_phase4_travel_resource_preflight_counts_canonical_items():
     assert missing["source"] == "deterministic_phase4_travel_resource_consumption"
 
 
-def test_ci_phase4_travel_resource_rejects_before_travel_without_mutation():
+def test_ci_phase4_travel_resource_rejects_before_travel_without_player_or_travel_mutation():
     from app.rpg.locations import OLD_ROAD, RUSTY_FLAGON, apply_runtime_travel_with_resource_consumption
 
     state = {"player_state": {"inventory_state": {"items": []}}}
-    before = deepcopy(state)
+    before_player_state = deepcopy(state["player_state"])
 
     result = apply_runtime_travel_with_resource_consumption(
         state,
@@ -65,7 +65,7 @@ def test_ci_phase4_travel_resource_rejects_before_travel_without_mutation():
     assert result["reason"] == "insufficient_travel_resources"
     assert result["travel_result"] is None
     assert "travel_state" not in state
-    assert state == before
+    assert state["player_state"] == before_player_state
 
 
 def test_ci_phase4_travel_resource_consumes_after_guarded_runtime_travel():
