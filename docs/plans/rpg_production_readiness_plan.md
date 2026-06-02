@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 8 — UI/UX Production Pass**.
 
-Next recommended slice: **Phase 8.3 — combat state and action affordance UI**.
+Next recommended slice: **Phase 8.4 — combat state action affordance UI polish**.
 
 Latest completed PRs:
 
@@ -20,7 +20,7 @@ Latest completed PRs:
 | #186 Phase 7.1 save load replay checkpoint foundation | `2e73cdd29b40d023e88e777514ec1c14b4552f81` | Phase 7 | Complete | Added deterministic replay checkpoint helpers, canonical session digests, restore validation, drift comparison, exports, and checkpoint gate; both required RPG checks passed. |
 | #188 Phase 7.2 replay turn sequence validation | `468463f545b4069b755eb73002516260cc50a59c` | Phase 7 | Complete | Added deterministic replay turn-sequence helpers through canonical runtime command helpers and replay drift checks; both required RPG checks passed. |
 | #190 Phase 7.3 save load replay persistence roundtrip | `f3b2255973f305cc2e8e471b7a6e00b33a36b27f` | Phase 7 | Complete | Added provider-free package/disk save-load replay roundtrip validation and drift details; both required RPG checks passed. |
-| #192 Phase 7.4 100-turn readiness loop progress report gate | `767b40863b30ad0d05e651ce26c6b81e48bfcda9` | Phase 7 | Complete | Added provider-free advisory 100-turn readiness analysis for turn count, loops, progress, and report/transcript budgets; both required RPG checks passed. |
+| #192 Phase 7.4 100-turn readiness loop progress report gate | `767b40863b30ad0d05e651ce26c6b81e48bfcda9` | Phase 7 | Complete | Added provider-free advisory 100-turn readiness analysis for turn count, loops, progress signals, and report/transcript budgets; both required RPG checks passed. |
 | #194 Phase 7.5 100-turn readiness report integration | `687cb8cd2d519f5ab2d8c19bc82cd8371e0c51eb` | Phase 7 | Complete | Added deterministic readiness report payloads, severity categories, escaped HTML, idempotent report append helpers, and advisory certification guardrails; both required RPG checks passed. |
 | #196 Phase 7.6 full 100-turn autoplay certification gate | `79adb4326f896c44ab9544b27786aca762211c95` | Phase 7 | Complete | Added deterministic full 100-turn artifact certification helpers with exact turn count, readiness critical blocker, and optional state/checkpoint digest mismatch enforcement; both required RPG checks passed. |
 | #198 Phase 7.7 real autoplay certification artifact wiring | `fe4d6d8ae20981199c0799d338301a1dfd8e50fc` | Phase 7 | Complete | Added deterministic saved artifact normalization into the Phase 7.6 certification shape, escaped/idempotent certification report rendering, session exports, and CI gate; both required RPG checks passed. |
@@ -39,6 +39,7 @@ Latest completed PRs:
 | #224 Phase 7.20 closeout planning | `18041ebf17b51ed05940b91c4b502802a62863ef` | Phase 7 | Complete | Added Phase 7 closeout planning, routed remaining live/replay risks forward without overstating live-provider coverage, added the closeout planning gate, and kept required PR coverage provider-free; both required RPG checks passed. |
 | #226 Phase 8.1 player-visible state objective HUD foundation | `7604e1912d71b61bc93649da6d1edc24d14bb0ca` | Phase 8 | Complete | Added deterministic read-only `player_hud` extraction for current location, active objective, resources, party, time/weather, and major warnings; added a safe browser renderer and the Phase 8 HUD gate; both required RPG checks passed. |
 | #228 Phase 8.2 objective journal detail panel | `b43a41cc26129ea3197040132413098c19567adf` | Phase 8 | Complete | Added deterministic read-only objective/journal panel extraction, surfaced active/available/completed/blocked objective states, recent action state, warnings, and journal entries in turn/travel payloads, added escaped browser rendering and the Phase 8.2 gate; both required RPG checks passed. |
+| #230 Phase 8.3 combat state action affordance UI | `f7caa182e36f1fe2ee9164afa626f44190625896` | Phase 8 | Complete | Added deterministic read-only combat action panel payloads, legal action affordances, warning states, travel/base payload wiring, escaped browser rendering, and the Phase 8.3 combat action affordance gate; both required RPG checks passed on head `5d21d775be43252daa02a49259d0b1a681247942`. |
 
 After every merged PR:
 
@@ -84,7 +85,7 @@ After every merged PR:
 - Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2: **Pending**.
 - Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
 - Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
-- Phase 8 — UI/UX Production Pass: **In progress; Phase 8.1 and Phase 8.2 merged**.
+- Phase 8 — UI/UX Production Pass: **In progress; Phase 8.1 through Phase 8.3 merged**.
 - Phase 9 — 1000-Turn Endurance Systems: **Pending**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
 
@@ -133,15 +134,16 @@ Completed:
 
 - [x] Phase 8.1 — player-visible state and objective HUD foundation: add deterministic read-only `player_hud` extraction for current location, active objective, resources, party summary, time/weather, and major warnings; surface it in turn/travel payloads; add a safe browser renderer and the `RPG CI Phase 8 player visible state objective HUD gate`.
 - [x] Phase 8.2 — objective/journal detail panel and action-state visibility: add deterministic read-only objective/journal panel payloads, show active/available/completed/blocked objective states with source-backed labels, surface recent action state and warning transitions, add escaped browser rendering, and add the `RPG CI Phase 8 objective journal detail panel gate`.
+- [x] Phase 8.3 — combat state and action affordance UI: add deterministic read-only `combat_action_panel` extraction for combat status, participants, player-turn state, legal attack/defend affordances, target summaries, recent action state, and major warnings; surface it in base turn and travel payloads; add escaped browser rendering; and add the `RPG CI Phase 8 combat state action affordance gate`.
 
-Next recommended slice: **Phase 8.3 — combat state and action affordance UI**.
+Next recommended slice: **Phase 8.4 — combat state action affordance UI polish**.
 
-Suggested Phase 8.3 scope:
+Suggested Phase 8.4 scope:
 
-- Show combat state, initiative/turn hints, target status, player status, and legal action affordances with deterministic source-backed payloads.
-- Keep combat runtime authoritative; UI must not decide combat truth or mutate state.
-- Surface rejected/illegal combat action states without treating rejected commands as success.
-- Add a provider-free deterministic CI guard for combat state/action affordance payloads and browser escaping.
+- Confirm the exact next unchecked roadmap item before implementing.
+- Polish player-facing combat action affordance layout and status wording without moving combat authority into the UI.
+- Keep the combat panel deterministic, read-only, source-backed, and provider-free.
+- Preserve canonical runtime command helpers, combat action helpers, replay/save-load/determinism guardrails, and runtime wrapper authority.
 
 ## Definition of 8/10 Production Readiness
 
