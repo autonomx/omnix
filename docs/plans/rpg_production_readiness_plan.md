@@ -10,7 +10,7 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 2 — Economy, Inventory, Services, and Survival v2**.
 
-Next recommended slice: **Phase 2.4 — Inn room/rest service effects**.
+Next recommended slice: **Phase 2.5 — Ration/water consumption and survival pressure tuning**.
 
 Latest completed PRs:
 
@@ -20,6 +20,7 @@ Latest completed PRs:
 | #142 Phase 2 starter loadout economy gate | `792451adabda3bdf96f18b41d135052b91285eac` | Phase 2 | Complete | Starter loadout, canonical starting 15 silver, starter items, idempotency/preservation, Phase 2 CI gate. |
 | #143 Phase 2.2 merchant commerce runtime | `ab26de192e8f3536756b42a218135e1fdb2a8834` | Phase 2 | Complete | Merchant inventory, deterministic buy/sell runtime, player currency/inventory changes, transaction logs. |
 | #144 Phase 2.3 economy report guardrails | `de8d2e06713b57e7eeceef116d11ebc4e7bf1340` | Phase 2 | Complete | Economy transaction report rows, campaign report injection, deterministic price/merchant-state presentation guardrails. |
+| #145 Phase 2.4 inn room rest services | `8b472d9511ed752a51e793eb61cfb5123722dfb8` | Phase 2 | Complete | Deterministic inn room/rest runtime, Bran/Rusty Flagon 5 silver room price, HP/fatigue/rest state effects, insufficient-funds rejection, Phase 2 economy gate passed. |
 
 After every merged PR:
 
@@ -106,7 +107,7 @@ Status: **Materially complete enough to proceed to Phase 2; remaining items are 
 
 ## Phase 2 — Economy, Inventory, Services, and Survival v2
 
-Status: **In progress. Starter loadout, merchant commerce, and economy report guardrails are merged.**
+Status: **In progress. Starter loadout, merchant commerce, economy report guardrails, and inn/rest services are merged.**
 
 ### Scope
 
@@ -114,7 +115,7 @@ Status: **In progress. Starter loadout, merchant commerce, and economy report gu
 - [x] Item IDs, display names, tags, stackability, value, weight if used.
 - [x] Merchant stock and quantities.
 - [x] Buy/sell rules.
-- [ ] Room/rest service effects.
+- [x] Room/rest service effects.
 - [ ] Food/water consumption effects.
 - [x] Currency normalization: gold/silver/copper.
 - [ ] Price modifiers from charisma, reputation, relationship, scarcity.
@@ -128,7 +129,7 @@ Status: **In progress. Starter loadout, merchant commerce, and economy report gu
 - [x] Buy/sell success/failure.
 - [x] Insufficient funds.
 - [x] Stock depletion.
-- [ ] Inn room purchase and rest effect.
+- [x] Inn room purchase and rest effect.
 - [ ] Ration/water consumption.
 - [x] Currency normalization.
 - [ ] Inventory persistence through save/load.
@@ -139,7 +140,7 @@ Status: **In progress. Starter loadout, merchant commerce, and economy report gu
 
 ### Exit Criteria
 
-- [~] Player can buy food, rent a room, rest, consume food/water, sell item, and see inventory/currency changes. Commerce/report deltas are covered; rest and consumption remain.
+- [~] Player can buy food, rent a room, rest, consume food/water, sell item, and see inventory/currency changes. Commerce/report/rest deltas are covered; consumption remains.
 - [x] Economy report shows transactions and deltas.
 - [x] No LLM-invented prices or stock in economy report guardrails.
 
@@ -148,13 +149,13 @@ Status: **In progress. Starter loadout, merchant commerce, and economy report gu
 - Phase 2.1 / PR #142 — deterministic starter loadout runtime and CI gate.
 - Phase 2.2 / PR #143 — merchant inventory and commerce runtime.
 - Phase 2.3 / PR #144 — economy transaction report rows and deterministic presentation guardrails.
+- Phase 2.4 / PR #145 — deterministic inn room/rest service effects.
 
 ### Next Phase 2 slices
 
-1. Phase 2.4 — inn room/rest service effects.
-2. Phase 2.5 — ration/water consumption and survival pressure tuning.
-3. Phase 2.6 — inventory persistence through save/load.
-4. Phase 2.7 — price modifiers from charisma/reputation/relationship/scarcity.
+1. Phase 2.5 — ration/water consumption and survival pressure tuning.
+2. Phase 2.6 — inventory persistence through save/load.
+3. Phase 2.7 — price modifiers from charisma/reputation/relationship/scarcity.
 
 ## Phase 3 — Quest, Journal, Rumor, and Objective Lifecycle v2
 
@@ -209,7 +210,7 @@ Required player loops:
 
 - [ ] Talk to Bran with persona-rich dialogue.
 - [ ] Buy food/water from merchant or tavern.
-- [ ] Rent room/rest.
+- [x] Rent room/rest.
 - [ ] Ask for work/rumors.
 - [ ] Accept quest.
 - [ ] Travel to old mill route.
@@ -304,7 +305,7 @@ Status: **Pending.**
 - [x] Add deterministic commerce runtime.
 - [x] Add economy report rows.
 - [x] Add deterministic price and merchant-state presentation guardrails.
-- [ ] Add inn/rest service effects.
+- [x] Add inn/rest service effects.
 - [ ] Add ration/water consumption.
 
 ### Bundle PR.3 — Vertical Slice Content Skeleton
