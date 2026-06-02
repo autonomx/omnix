@@ -3,8 +3,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-from app.rpg.quests.state import get_quest
-
 SOURCE = "deterministic_quest_objective_lifecycle"
 
 
@@ -27,6 +25,12 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _existing_quest(simulation_state: Dict[str, Any], quest_id: str) -> Dict[str, Any]:
+    quest_state = _safe_dict(_safe_dict(simulation_state).get("quest_state"))
+    quests = _safe_dict(quest_state.get("quests"))
+    return _safe_dict(quests.get(quest_id))
+
+
 def objective_from_template(template: Dict[str, Any]) -> Dict[str, Any]:
     template = _safe_dict(template)
     objective_id = _safe_str(template.get("objective_id"))
@@ -43,7 +47,11 @@ def objective_from_template(template: Dict[str, Any]) -> Dict[str, Any]:
         "event_ids": [],
         "metadata": {
             "type": _safe_str(template.get("type")) or "generic",
-            "target_ids": [_safe_str(row) for row in _safe_list(template.get("target_ids")) if _safe_str(row)],
+            "target_ids": [
+                _safe_str(row)
+                for row in _safe_list(template.get("target_ids"))
+                if _safe_str(row)
+            ],
             "required": required,
             **dict(_safe_dict(template.get("metadata"))),
         },
@@ -57,7 +65,7 @@ def create_objective(
     quest_id: str,
     objective_template: Dict[str, Any],
 ) -> Dict[str, Any]:
-    quest = get_quest(simulation_state, quest_id, create=False)
+    quest = _existing_quest(simulation_state, quest_id)
     objective = objective_from_template(objective_template)
     objective_id = _safe_str(objective.get("objective_id"))
     if not quest:
@@ -150,7 +158,7 @@ def fail_objective(
 
 
 def derive_quest_lifecycle(simulation_state: Dict[str, Any], *, quest_id: str, turn_index: int = 0) -> Dict[str, Any]:
-    quest = get_quest(simulation_state, quest_id, create=False)
+    quest = _existing_quest(simulation_state, quest_id)
     if not quest:
         return _reject("quest_missing", quest_id=quest_id, objective_id="")
     return {"ok": True, "reason": _derive_quest_state(quest, turn_index=turn_index), "quest_id": quest_id, "quest": deepcopy(quest), "source": SOURCE}
@@ -159,10 +167,10 @@ def derive_quest_lifecycle(simulation_state: Dict[str, Any], *, quest_id: str, t
 def _get_objective(
     simulation_state: Dict[str, Any], quest_id: str, objective_id: str
 ) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any] | None]:
-    quest = get_quest(simulation_state, quest_id, create=False)
+    quest = _existing_quest(simulation_state, quest_id)
     if not quest:
         return {}, {}, _reject("quest_missing", quest_id=quest_id, objective_id=objective_id)
-    objective = _safe_dict(quest.setdefault("objectives", {}).get(objective_id))
+    objective = _safe_dict(_safe_dict(quest.get("objectives")).get(objective_id))
     if not objective:
         return quest, {}, _reject("objective_missing", quest_id=quest_id, objective_id=objective_id)
     return quest, objective, None
