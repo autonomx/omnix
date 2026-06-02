@@ -59,6 +59,54 @@
     return panel;
   }
 
+  function healthPercent(participant) {
+    participant = safeObj(participant);
+    const hp = Number(participant.hp || 0);
+    const maxHp = Number(participant.max_hp || participant.hp || 0);
+    if (!Number.isFinite(hp) || !Number.isFinite(maxHp) || maxHp <= 0) return 0;
+    return Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+  }
+
+  function participantStateLabel(participant) {
+    participant = safeObj(participant);
+    if (participant.defeated === true) return "Defeated";
+    const percent = healthPercent(participant);
+    if (percent <= 25) return "Critical";
+    if (percent <= 50) return "Wounded";
+    return "Ready";
+  }
+
+  function targetThreatLabel(target) {
+    target = safeObj(target);
+    if (target.defeated === true) return "Defeated target";
+    const percent = healthPercent(target);
+    if (percent <= 25) return "Near defeat";
+    if (percent <= 50) return "Wounded target";
+    return "Active target";
+  }
+
+  function actionCommand(action) {
+    action = safeObj(action);
+    const actionType = safeStr(action.action_type || "action").trim() || "action";
+    const target = safeStr(action.target_id).trim();
+    return target ? `${actionType} ${target}` : actionType;
+  }
+
+  function turnGuidance(panelPayload) {
+    panelPayload = safeObj(panelPayload);
+    if (panelPayload.active !== true) {
+      return "No active combat. Continue exploring or pursue your current objective.";
+    }
+    if (panelPayload.is_player_turn === true) {
+      const count = safeArr(panelPayload.legal_actions).length;
+      return count
+        ? "Choose a listed combat action; the runtime still validates the command."
+        : "It is your turn, but no deterministic combat actions are currently available.";
+    }
+    const current = safeStr(panelPayload.current_actor_id || "another combatant");
+    return `Waiting for ${current}; player combat commands should not be treated as accepted yet.`;
+  }
+
   function renderParticipant(participant) {
     participant = safeObj(participant);
     const actorId = safeStr(participant.actor_id);
@@ -66,13 +114,32 @@
     const hp = safeStr(participant.hp ?? "");
     const maxHp = safeStr(participant.max_hp ?? "");
     const side = safeStr(participant.side || "unknown");
-    const defeated = participant.defeated === true ? "Defeated" : "Ready";
+    const stateLabel = participantStateLabel(participant);
+    const percent = healthPercent(participant);
     return `
-      <li class="rpg-combat-participant is-${escapeHtml(side)}">
-        <strong>${escapeHtml(name)}</strong>
-        <span>${escapeHtml(side)}</span>
+      <li class="rpg-combat-participant is-${escapeHtml(side)}" data-actor-id="${escapeHtml(actorId)}">
+        <div class="rpg-combat-participant-main">
+          <strong>${escapeHtml(name)}</strong>
+          <span>${escapeHtml(side)}</span>
+        </div>
+        <div class="rpg-combat-health" aria-label="${escapeHtml(name)} health ${escapeHtml(percent)} percent">
+          <span class="rpg-combat-health-bar" style="width: ${escapeHtml(percent)}%"></span>
+        </div>
         <em>${escapeHtml(hp)}${maxHp ? `/${escapeHtml(maxHp)}` : ""} HP</em>
-        <small>${escapeHtml(defeated)}</small>
+        <small>${escapeHtml(stateLabel)}</small>
+      </li>
+    `;
+  }
+
+  function renderTarget(target) {
+    target = safeObj(target);
+    const actorId = safeStr(target.actor_id);
+    const name = safeStr(target.name || actorId || "Target");
+    return `
+      <li class="rpg-combat-target" data-target-id="${escapeHtml(actorId)}">
+        <strong>${escapeHtml(name)}</strong>
+        <span>${escapeHtml(targetThreatLabel(target))}</span>
+        <em>${escapeHtml(healthPercent(target))}% HP</em>
       </li>
     `;
   }
@@ -82,10 +149,12 @@
     const label = safeStr(action.label || action.action_type || "Action");
     const target = safeStr(action.target_id || "");
     const disabled = action.enabled === false ? " disabled" : "";
+    const command = actionCommand(action);
     return `
-      <li class="rpg-combat-action-affordance${disabled}">
+      <li class="rpg-combat-action-affordance${disabled}" data-action-type="${escapeHtml(action.action_type || "action")}">
         <span>${escapeHtml(label)}</span>
         ${target ? `<em>${escapeHtml(target)}</em>` : ""}
+        <code class="rpg-combat-action-command">${escapeHtml(command)}</code>
       </li>
     `;
   }
@@ -105,13 +174,15 @@
     const source = safeStr(panelPayload.frontend_source || panelPayload.source);
     const participants = safeArr(panelPayload.participants);
     const legalActions = safeArr(panelPayload.legal_actions);
+    const targets = safeArr(panelPayload.target_summary);
     const warnings = safeArr(panelPayload.major_warnings);
     const currentActorId = safeStr(panelPayload.current_actor_id || "none");
     const statusLabel = safeStr(panelPayload.status_label || (panelPayload.active ? "In combat" : "Not in combat"));
     const turnLabel = panelPayload.is_player_turn === true ? "Player turn" : "Waiting";
+    const guidance = turnGuidance(panelPayload);
 
     target.innerHTML = `
-      <div class="rpg-combat-action" data-source="${escapeHtml(source)}">
+      <div class="rpg-combat-action" data-source="${escapeHtml(source)}" data-active="${panelPayload.active === true ? "true" : "false"}">
         <div class="rpg-combat-action-header">
           <span>Combat</span>
           <em>Source: ${escapeHtml(source)}</em>
@@ -121,9 +192,14 @@
           <span>${escapeHtml(turnLabel)}</span>
           <em>Current actor: ${escapeHtml(currentActorId)}</em>
         </section>
+        <p class="rpg-combat-turn-guidance">${escapeHtml(guidance)}</p>
         <section class="rpg-combat-participants">
           <h4>Participants</h4>
           ${participants.length ? `<ul>${participants.map(renderParticipant).join("")}</ul>` : "<p>No combat participants recorded.</p>"}
+        </section>
+        <section class="rpg-combat-targets">
+          <h4>Targets</h4>
+          ${targets.length ? `<ul>${targets.map(renderTarget).join("")}</ul>` : "<p>No target summary is currently available.</p>"}
         </section>
         <section class="rpg-combat-actions">
           <h4>Legal action affordances</h4>
@@ -138,6 +214,11 @@
   window.RpgCombatActionPanel = {
     render: renderCombatActionPanel,
     combatActionPayloadFromTurnPayload,
+    healthPercent,
+    participantStateLabel,
+    targetThreatLabel,
+    actionCommand,
+    turnGuidance,
   };
 
   const previousInspector = window.RpgLivingWorldInspector;
