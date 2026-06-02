@@ -152,7 +152,8 @@ def build_map_location_narration_contract(panel_payload: Dict[str, Any]) -> Dict
         "source": SOURCE,
         "allowed_map_location_claims": allowed,
         "forbidden_map_location_claims": [
-            "Do not invent locations, exits, route blocks, services, NPCs, hazards, map state, weather, or seasons.",
+            "Do not invent locations, exits, route blocks, services, NPCs, hazards, or map state.",
+            "Do not invent weather or seasons beyond the deterministic panel payload.",
             "Do not reveal undiscovered destinations as known unless the panel payload marks them discovered.",
             "Do not claim blocked routes are passable unless the panel payload marks blocked=false.",
             "Only claim season/weather details present in the panel weather_state payload.",
