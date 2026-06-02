@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, List
 
 from app.rpg.session import build_100_turn_readiness_result
+from tests.rpg.manual.artifact_discovery import read_json_artifact_group
 from tests.rpg.manual.certification_artifacts import emit_saved_100_turn_certification_artifacts
 
 SOURCE = "deterministic_phase7_real_autoplay_progress_metrics_gate"
@@ -46,24 +46,6 @@ def _source_entry(kind: str, **fields: Any) -> Dict[str, Any]:
     return entry
 
 
-def _read_json(path: Path) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def _find_first_json(output_dir: Path, names: tuple[str, ...]) -> tuple[Path | None, Any]:
-    for name in names:
-        path = output_dir / name
-        if not path.is_file():
-            continue
-        payload = _read_json(path)
-        if payload is not None:
-            return path, payload
-    return None, None
-
-
 def _rows_from_payload(payload: Any) -> List[Dict[str, Any]]:
     if isinstance(payload, list):
         return [_safe_dict(row) for row in payload]
@@ -88,9 +70,10 @@ def _report_bytes(report_payload: Any, output_dir: Path) -> int:
     for key in ("campaign_report_html", "report_html", "html", "body"):
         if report.get(key) is not None:
             return len(str(report.get(key)).encode("utf-8"))
-    html_path = output_dir / "campaign_report.html"
-    if html_path.is_file():
-        return len(html_path.read_text(encoding="utf-8").encode("utf-8"))
+    for html_candidate in ("campaign_report.html", "reports/campaign_report.html", "html/campaign_report.html"):
+        html_path = output_dir / html_candidate
+        if html_path.is_file():
+            return len(html_path.read_text(encoding="utf-8").encode("utf-8"))
     return 0
 
 
@@ -114,19 +97,42 @@ def build_real_autoplay_progress_metrics_artifact(
 
     output_dir = Path(output_dir)
     saved = dict(_safe_dict(saved_artifacts))
-    transcript_path, transcript_payload = _find_first_json(output_dir, TRANSCRIPT_FILENAMES)
-    report_path, report_payload = _find_first_json(output_dir, REPORT_FILENAMES)
+    transcript = read_json_artifact_group(
+        output_dir=output_dir,
+        group="transcript_artifact",
+        names=TRANSCRIPT_FILENAMES,
+        required=False,
+        source=SOURCE,
+    )
+    report = read_json_artifact_group(
+        output_dir=output_dir,
+        group="report_json",
+        names=REPORT_FILENAMES,
+        required=False,
+        source=SOURCE,
+    )
+    transcript_path = transcript.get("path") if isinstance(transcript.get("path"), Path) else None
+    transcript_payload = transcript.get("payload")
+    report_payload = report.get("payload")
     rows = _rows_from_payload(transcript_payload)
     if not rows:
         rows = _rows_from_payload(report_payload)
 
     blockers: List[Dict[str, Any]] = []
     metadata: List[Dict[str, Any]] = []
+    metadata.extend(transcript["diagnostics"])
+    metadata.extend(report["diagnostics"])
     if not rows:
         blockers.append(_source_entry("missing_real_autoplay_progress_rows", output_dir=str(output_dir)))
     else:
         saved["turns"] = rows
-        metadata.append(_source_entry("real_autoplay_progress_rows", path=str(transcript_path or report_path), rows=len(rows)))
+        metadata.append(
+            _source_entry(
+                "real_autoplay_progress_rows",
+                path=str(transcript.get("relative_path") or report.get("relative_path")),
+                rows=len(rows),
+            )
+        )
 
     report_bytes = _report_bytes(report_payload, output_dir)
     transcript_debug_bytes = _transcript_bytes(transcript_payload, transcript_path)
