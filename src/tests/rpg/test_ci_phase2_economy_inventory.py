@@ -130,6 +130,57 @@ def test_ci_phase2_sell_to_merchant_moves_item_and_logs_transaction():
     assert merchant["transaction_log"][-1]["item_id"] == "combat_knife"
 
 
+def test_ci_phase2_inn_room_rest_charges_and_restores_player():
+    from app.rpg.economy.currency import get_player_currency
+    from app.rpg.economy.inn_services import rent_room_and_rest
+
+    state = {
+        "player_state": {
+            "hp": 3,
+            "max_hp": 12,
+            "fatigue": 4,
+            "inventory_state": {"currency": {"silver": 15}},
+        }
+    }
+
+    result = rent_room_and_rest(state, tick=10)
+    player_state = state["player_state"]
+
+    assert result["resolved"] is True
+    assert result["reason"] == "room_rest_completed"
+    assert result["price"] == {"gold": 0, "silver": 5, "copper": 0}
+    assert get_player_currency(state) == {"gold": 0, "silver": 10, "copper": 0}
+    assert player_state["hp"] == 12
+    assert player_state["fatigue"] == 0
+    assert player_state["rest_state"]["rested"] is True
+    assert player_state["rest_state"]["last_rest_tick"] == 10
+    assert player_state["rest_state"]["rested_until_tick"] == 18
+    assert state["economy_state"]["service_transaction_log"][-1]["source"] == "deterministic_inn_services"
+
+
+def test_ci_phase2_inn_room_rest_rejects_insufficient_funds_without_mutation():
+    from app.rpg.economy.currency import get_player_currency
+    from app.rpg.economy.inn_services import rent_room_and_rest
+
+    state = {
+        "player_state": {
+            "hp": 3,
+            "max_hp": 12,
+            "fatigue": 4,
+            "inventory_state": {"currency": {"silver": 4}},
+        }
+    }
+
+    result = rent_room_and_rest(state, tick=10)
+
+    assert result["resolved"] is False
+    assert result["reason"] == "insufficient_funds"
+    assert get_player_currency(state) == {"gold": 0, "silver": 4, "copper": 0}
+    assert state["player_state"]["hp"] == 3
+    assert state["player_state"]["fatigue"] == 4
+    assert "economy_state" not in state
+
+
 def test_ci_phase2_economy_report_collects_transactions_and_guardrails():
     from app.rpg.economy.reporting import build_economy_transaction_report
 
