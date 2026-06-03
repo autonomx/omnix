@@ -6,6 +6,7 @@ on:
       - rpg
     paths:
       - "src/app/rpg/**"
+      - "src/static/rpg/**"
       - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
@@ -16,6 +17,7 @@ on:
       - rpg
     paths:
       - "src/app/rpg/**"
+      - "src/static/rpg/**"
       - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
