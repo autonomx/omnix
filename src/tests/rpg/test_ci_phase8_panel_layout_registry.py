@@ -116,6 +116,27 @@ def test_panel_chrome_exports_accessibility_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_state_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_STATES",
+        "panelChromeState",
+        "panelStateAttrs",
+        "applyPanelState",
+        "data-panel-state",
+        "data-panel-state-source",
+        "source_backed",
+        "advisory",
+        "empty",
+        "ready",
+        "panelStateAttrs(\"source_backed\")",
+        "panelStateAttrs(\"empty\")",
+        "panelStateAttrs(\"advisory\")",
+        "applyPanelState(attached, state || \"ready\")",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
