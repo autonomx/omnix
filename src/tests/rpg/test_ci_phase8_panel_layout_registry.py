@@ -34,6 +34,25 @@ def test_panel_layout_registry_exports_ordered_slots():
         assert expected in registry
 
 
+def test_panel_layout_registry_exports_accessibility_metadata():
+    registry = REGISTRY.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_LABELS",
+        "panelLabels",
+        "panelLabel",
+        "panelIndex",
+        "RPG status panels",
+        "Conversation settings panel",
+        "Map and location panel",
+        "Player HUD panel",
+        "Survival inspector panel",
+        "role", "region",
+        "aria-label",
+        "data-panel-order",
+    ):
+        assert expected in registry
+
+
 def test_panel_layout_registry_is_provider_free():
     registry = REGISTRY.read_text(encoding="utf-8").lower()
     for forbidden in ("fetch(", "xmlhttprequest", "provider", "llm", "apply_turn", "math.random"):
