@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "rpgConversationSettings";
+  const SOURCE = "deterministic_conversation_settings";
   const DEFAULT_SETTINGS = {
     interactionPersistence: "until_next_command",
     backgroundSoftAudit: true,
@@ -16,6 +17,20 @@
     }
   }
 
+  function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;");
+  }
+
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function loadSettings() {
     const stored = safeJsonParse(window.localStorage.getItem(STORAGE_KEY) || "{}");
     return { ...DEFAULT_SETTINGS, ...(stored || {}) };
@@ -25,6 +40,20 @@
     const merged = { ...loadSettings(), ...(settings || {}) };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     return merged;
+  }
+
+  function settingsSourceBadge() {
+    const chrome = chromeHelper();
+    if (chrome && typeof chrome.panelSourceBadge === "function") return chrome.panelSourceBadge(SOURCE, "local-settings");
+    return `<span class="rpg-panel-source-badge">${escapeHtml(SOURCE)}</span>`;
+  }
+
+  function settingsRuntimeNotice() {
+    const chrome = chromeHelper();
+    if (chrome && typeof chrome.runtimeValidationNotice === "function") {
+      return chrome.runtimeValidationNotice("Conversation settings only affect presentation/audit preferences; gameplay state changes still go through runtime validation.");
+    }
+    return '<p class="rpg-conversation-settings-notice">Conversation settings only affect presentation/audit preferences; gameplay state changes still go through runtime validation.</p>';
   }
 
   function ensurePanel() {
@@ -41,9 +70,11 @@
     panel.id = "rpgConversationSettingsPanel";
     panel.className = "rpg-conversation-settings-panel";
     panel.innerHTML = `
-      <div class="rpg-panel-header">
+      <div class="rpg-panel-header" data-panel-chrome="deterministic_phase8_panel_chrome">
         <span>Conversation settings</span>
+        ${settingsSourceBadge()}
       </div>
+      ${settingsRuntimeNotice()}
       <div class="rpg-panel-content">
         <label class="rpg-setting-row">
           <span>Interaction memory</span>
@@ -61,11 +92,12 @@
           <input type="checkbox" id="rpgCanUpdateStateToggle" />
           <span>Allow audit state updates</span>
         </label>
+        <div class="rpg-conversation-settings-source">Source: ${escapeHtml(SOURCE)}</div>
       </div>
     `;
-    const chrome = window.RpgPanelChrome;
+    const chrome = chromeHelper();
     if (chrome && typeof chrome.decoratePanel === "function") {
-      chrome.decoratePanel(panel, "conversation-settings", "deterministic_conversation_settings");
+      chrome.decoratePanel(panel, "conversation-settings", SOURCE);
     } else {
       host.appendChild(panel);
     }
@@ -75,9 +107,16 @@
   function render() {
     const panel = ensurePanel();
     const settings = loadSettings();
+    const chrome = chromeHelper();
     const persistence = panel.querySelector("#rpgInteractionPersistenceSelect");
     const audit = panel.querySelector("#rpgBackgroundSoftAuditToggle");
     const updateState = panel.querySelector("#rpgCanUpdateStateToggle");
+
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(panel, "conversation-settings", SOURCE);
+    }
+    panel.dataset.source = SOURCE;
+    panel.dataset.panelChrome = "deterministic_phase8_panel_chrome";
 
     if (persistence) persistence.value = settings.interactionPersistence || DEFAULT_SETTINGS.interactionPersistence;
     if (audit) audit.checked = settings.backgroundSoftAudit !== false;
