@@ -14,6 +14,8 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -40,6 +42,10 @@
     ]);
   }
 
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function ensureCombatActionHost() {
     let panel = document.getElementById("rpgCombatActionPanel");
     const host =
@@ -52,7 +58,12 @@
       panel = document.createElement("section");
       panel.id = "rpgCombatActionPanel";
       panel.className = "rpg-combat-action-panel";
-      host.appendChild(panel);
+      const chrome = chromeHelper();
+      if (chrome && typeof chrome.decoratePanel === "function") {
+        chrome.decoratePanel(panel, "combat-action", "deterministic_phase8_combat_action_panel");
+      } else {
+        host.appendChild(panel);
+      }
     }
 
     panel.style.display = "block";
@@ -171,7 +182,7 @@
     if (!Object.keys(panelPayload).length) return false;
 
     const target = ensureCombatActionHost();
-    const source = safeStr(panelPayload.frontend_source || panelPayload.source);
+    const source = safeStr(panelPayload.frontend_source || panelPayload.source || "deterministic_phase8_combat_action_panel");
     const participants = safeArr(panelPayload.participants);
     const legalActions = safeArr(panelPayload.legal_actions);
     const targets = safeArr(panelPayload.target_summary);
@@ -180,30 +191,42 @@
     const statusLabel = safeStr(panelPayload.status_label || (panelPayload.active ? "In combat" : "Not in combat"));
     const turnLabel = panelPayload.is_player_turn === true ? "Player turn" : "Waiting";
     const guidance = turnGuidance(panelPayload);
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(source, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Combat action affordances are read-only; commands still go through runtime validation.") : "<p class=\"rpg-combat-action-guidance\">Combat action affordances are read-only; commands still go through runtime validation.</p>";
+    const emptyParticipants = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No combat participants are currently visible.", "Runtime payloads have not supplied source-backed combat participants yet.") : "<p>No combat participants recorded.</p>";
+    const emptyTargets = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No target summary is currently available.", "Runtime payloads have not supplied source-backed target information yet.") : "<p>No target summary is currently available.</p>";
+    const emptyActions = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No legal player combat actions are currently available.", "Runtime payloads have not supplied source-backed legal combat actions yet.") : "<p>No legal player combat actions are currently available.</p>";
+
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(target, "combat-action", source);
+    }
 
     target.innerHTML = `
-      <div class="rpg-combat-action" data-source="${escapeHtml(source)}" data-active="${panelPayload.active === true ? "true" : "false"}">
+      <div class="rpg-combat-action" data-source="${escapeHtml(source)}" data-active="${panelPayload.active === true ? "true" : "false"}" data-panel-chrome="deterministic_phase8_panel_chrome">
         <div class="rpg-combat-action-header">
           <span>Combat</span>
-          <em>Source: ${escapeHtml(source)}</em>
+          ${sourceBadge}
+          <em>Read-only combat state and action affordances from deterministic runtime payloads.</em>
         </div>
         <section class="rpg-combat-status">
           <strong>${escapeHtml(statusLabel)}</strong>
           <span>${escapeHtml(turnLabel)}</span>
           <em>Current actor: ${escapeHtml(currentActorId)}</em>
         </section>
+        ${runtimeNotice}
         <p class="rpg-combat-turn-guidance">${escapeHtml(guidance)}</p>
         <section class="rpg-combat-participants">
           <h4>Participants</h4>
-          ${participants.length ? `<ul>${participants.map(renderParticipant).join("")}</ul>` : "<p>No combat participants recorded.</p>"}
+          ${participants.length ? `<ul>${participants.map(renderParticipant).join("")}</ul>` : emptyParticipants}
         </section>
         <section class="rpg-combat-targets">
           <h4>Targets</h4>
-          ${targets.length ? `<ul>${targets.map(renderTarget).join("")}</ul>` : "<p>No target summary is currently available.</p>"}
+          ${targets.length ? `<ul>${targets.map(renderTarget).join("")}</ul>` : emptyTargets}
         </section>
         <section class="rpg-combat-actions">
           <h4>Legal action affordances</h4>
-          ${legalActions.length ? `<ul>${legalActions.map(renderAction).join("")}</ul>` : "<p>No legal player combat actions are currently available.</p>"}
+          ${legalActions.length ? `<ul>${legalActions.map(renderAction).join("")}</ul>` : emptyActions}
         </section>
         ${warnings.length ? `<ul class="rpg-combat-warnings">${warnings.map(renderWarning).join("")}</ul>` : ""}
       </div>

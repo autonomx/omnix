@@ -7,6 +7,7 @@ SETTINGS = ROOT / "src" / "static" / "rpg-conversation-settings.js"
 RECENT_ACTIVITY = ROOT / "src" / "static" / "rpg" / "rpgRecentActivityPanel.js"
 SUGGESTED_ACTIONS = ROOT / "src" / "static" / "rpg" / "rpgSuggestedActionsPanel.js"
 INVENTORY_PARTY = ROOT / "src" / "static" / "rpg" / "rpgInventoryPartyPanel.js"
+COMBAT_ACTION = ROOT / "src" / "static" / "rpg" / "rpgCombatActionPanel.js"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-pr-deterministic.yml"
 
 
@@ -121,6 +122,23 @@ def test_inventory_party_uses_panel_chrome_without_runtime_authority():
         assert expected in inventory
     assert "Inventory and party details are read-only" in inventory
     assert "commands still go through runtime validation" in inventory
+
+
+def test_combat_action_uses_panel_chrome_without_runtime_authority():
+    combat = COMBAT_ACTION.read_text(encoding="utf-8")
+    for expected in (
+        "window.RpgPanelChrome",
+        "panelSourceBadge",
+        "panelEmptyState",
+        "runtimeValidationNotice",
+        "decoratePanel(target, \"combat-action\", source)",
+        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+    ):
+        assert expected in combat
+    assert "Combat action affordances are read-only" in combat
+    assert "commands still go through runtime validation" in combat
+    assert "sendCommand" not in combat
+    assert "executeCommand" not in combat
 
 
 def test_panel_layout_registry_gate_is_ordered():
