@@ -10,6 +10,7 @@ INVENTORY_PARTY = ROOT / "src" / "static" / "rpg" / "rpgInventoryPartyPanel.js"
 COMBAT_ACTION = ROOT / "src" / "static" / "rpg" / "rpgCombatActionPanel.js"
 OBJECTIVE_JOURNAL = ROOT / "src" / "static" / "rpg" / "rpgObjectiveJournalPanel.js"
 PLAYER_HUD = ROOT / "src" / "static" / "rpg" / "rpgPlayerHud.js"
+MAP_LOCATION = ROOT / "src" / "static" / "rpg" / "rpgMapLocationPanel.js"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-pr-deterministic.yml"
 
 
@@ -175,6 +176,23 @@ def test_player_hud_uses_panel_chrome_without_runtime_authority():
     assert "commands still go through runtime validation" in hud
     assert "sendCommand" not in hud
     assert "executeCommand" not in hud
+
+
+def test_map_location_uses_panel_chrome_without_runtime_authority():
+    map_location = MAP_LOCATION.read_text(encoding="utf-8")
+    for expected in (
+        "window.RpgPanelChrome",
+        "panelSourceBadge",
+        "panelEmptyState",
+        "runtimeValidationNotice",
+        "decoratePanel(target, \"map-location\", source)",
+        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+    ):
+        assert expected in map_location
+    assert "Map and location details are read-only" in map_location
+    assert "commands still go through runtime validation" in map_location
+    assert "sendCommand" not in map_location
+    assert "executeCommand" not in map_location
 
 
 def test_panel_layout_registry_gate_is_ordered():
