@@ -14,6 +14,8 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -40,6 +42,10 @@
     ]);
   }
 
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function ensureObjectiveJournalHost() {
     let panel = document.getElementById("rpgObjectiveJournalPanel");
     const host =
@@ -52,7 +58,12 @@
       panel = document.createElement("section");
       panel.id = "rpgObjectiveJournalPanel";
       panel.className = "rpg-objective-journal-panel";
-      host.appendChild(panel);
+      const chrome = chromeHelper();
+      if (chrome && typeof chrome.decoratePanel === "function") {
+        chrome.decoratePanel(panel, "objective-journal", "deterministic_phase8_objective_journal_panel");
+      } else {
+        host.appendChild(panel);
+      }
     }
 
     panel.style.display = "block";
@@ -76,12 +87,12 @@
     `;
   }
 
-  function renderObjectiveGroup(label, items) {
+  function renderObjectiveGroup(label, items, emptyState) {
     items = safeArr(items);
     return `
       <section class="rpg-objective-journal-group">
         <h4>${escapeHtml(label)}</h4>
-        ${items.length ? `<ul>${items.map(renderObjective).join("")}</ul>` : `<p>No ${escapeHtml(label.toLowerCase())} objectives.</p>`}
+        ${items.length ? `<ul>${items.map(renderObjective).join("")}</ul>` : emptyState}
       </section>
     `;
   }
@@ -129,28 +140,42 @@
     const objectives = safeObj(panelPayload.objectives);
     const journalEntries = safeArr(panelPayload.journal_entries);
     const warnings = safeArr(panelPayload.major_warnings);
-    const source = safeStr(panelPayload.frontend_source || panelPayload.source);
+    const source = safeStr(panelPayload.frontend_source || panelPayload.source || "deterministic_phase8_objective_journal_panel");
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(source, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Objectives and journal entries are read-only; commands still go through runtime validation.") : "<p class=\"rpg-objective-journal-guidance\">Objectives and journal entries are read-only; commands still go through runtime validation.</p>";
+    const emptyActive = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No active objectives are currently visible.", "Runtime payloads have not supplied source-backed active objectives yet.") : "<p>No active objectives.</p>";
+    const emptyAvailable = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No available objectives are currently visible.", "Runtime payloads have not supplied source-backed available objectives yet.") : "<p>No available objectives.</p>";
+    const emptyCompleted = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No completed objectives are currently visible.", "Runtime payloads have not supplied source-backed completed objectives yet.") : "<p>No completed objectives.</p>";
+    const emptyBlocked = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No blocked objectives are currently visible.", "Runtime payloads have not supplied source-backed blocked objectives yet.") : "<p>No blocked objectives.</p>";
+    const emptyJournal = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No journal entries are currently visible.", "Runtime payloads have not supplied source-backed journal entries yet.") : "<p>No journal entries recorded.</p>";
+
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(target, "objective-journal", source);
+    }
 
     target.innerHTML = `
-      <div class="rpg-objective-journal" data-source="${escapeHtml(source)}">
+      <div class="rpg-objective-journal" data-source="${escapeHtml(source)}" data-panel-chrome="deterministic_phase8_panel_chrome">
         <div class="rpg-objective-journal-header">
           <span>Objectives & Journal</span>
-          <em>Source: ${escapeHtml(source)}</em>
+          ${sourceBadge}
+          <em>Read-only objectives, journal entries, and recent action state from deterministic payloads.</em>
         </div>
+        ${runtimeNotice}
         <section class="rpg-objective-journal-active">
           <span>Active objective</span>
           <strong>${escapeHtml(activeObjective.title || "No active objective recorded")}</strong>
           <em>${escapeHtml(activeObjective.status_label || activeObjective.status || "None")}</em>
         </section>
         <div class="rpg-objective-journal-groups">
-          ${renderObjectiveGroup("Active", safeArr(objectives.active))}
-          ${renderObjectiveGroup("Available", safeArr(objectives.available))}
-          ${renderObjectiveGroup("Completed", safeArr(objectives.completed))}
-          ${renderObjectiveGroup("Blocked", safeArr(objectives.blocked))}
+          ${renderObjectiveGroup("Active", safeArr(objectives.active), emptyActive)}
+          ${renderObjectiveGroup("Available", safeArr(objectives.available), emptyAvailable)}
+          ${renderObjectiveGroup("Completed", safeArr(objectives.completed), emptyCompleted)}
+          ${renderObjectiveGroup("Blocked", safeArr(objectives.blocked), emptyBlocked)}
         </div>
         <section class="rpg-objective-journal-entries">
           <h4>Recent journal</h4>
-          ${journalEntries.length ? `<ul>${journalEntries.map(renderJournalEntry).join("")}</ul>` : "<p>No journal entries recorded.</p>"}
+          ${journalEntries.length ? `<ul>${journalEntries.map(renderJournalEntry).join("")}</ul>` : emptyJournal}
         </section>
         ${renderRecentAction(panelPayload.recent_action_state)}
         ${warnings.length ? `<ul class="rpg-objective-journal-warnings">${warnings.map(renderWarning).join("")}</ul>` : ""}
