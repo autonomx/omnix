@@ -11,6 +11,7 @@ on:
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
       - "docs/plans/rpg_phase8_7_completion_note.md"
+      - "docs/plans/rpg_phase8_8_completion_note.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
@@ -23,6 +24,7 @@ on:
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
       - "docs/plans/rpg_phase8_7_completion_note.md"
+      - "docs/plans/rpg_phase8_8_completion_note.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
