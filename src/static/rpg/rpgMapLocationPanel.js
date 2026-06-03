@@ -14,6 +14,8 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -40,6 +42,10 @@
     ]);
   }
 
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function ensurePanelHost() {
     let panel = document.getElementById("rpgMinimapPanel");
     const host =
@@ -60,7 +66,12 @@
           <div class="rpg-minimap" id="rpgMinimap"></div>
         </div>
       `;
-      host.appendChild(panel);
+      const chrome = chromeHelper();
+      if (chrome && typeof chrome.decoratePanel === "function") {
+        chrome.decoratePanel(panel, "map-location", "deterministic_phase8_map_location_panel");
+      } else {
+        host.appendChild(panel);
+      }
     }
 
     let target = document.getElementById("rpgMinimap");
@@ -118,7 +129,11 @@
     const location = safeObj(panelPayload.current_location);
     const exits = safeArr(panelPayload.visible_exits);
     const timeState = safeObj(panelPayload.time_state);
-    const source = safeStr(panelPayload.frontend_source || panelPayload.source);
+    const source = safeStr(panelPayload.frontend_source || panelPayload.source || "deterministic_phase8_map_location_panel");
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(source, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Map and location details are read-only; commands still go through runtime validation.") : "<p class=\"rpg-map-location-guidance\">Map and location details are read-only; commands still go through runtime validation.</p>";
+    const emptyExits = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No visible exits are currently recorded.", "Runtime payloads have not supplied source-backed route details yet.") : "<div class=\"rpg-map-location-empty\">No visible exits.</div>";
     const name = safeStr(location.name || panelPayload.current_location_id || "Unknown location");
     const description = safeStr(location.description);
     const timeLabel = [
@@ -128,8 +143,18 @@
     ].filter(Boolean).join(" ");
     const weatherLabel = weatherLabelFromPayload(panelPayload, timeState);
 
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(target, "map-location", source);
+    }
+
     target.innerHTML = `
-      <div class="rpg-map-location-panel" data-source="${escapeHtml(source)}">
+      <div class="rpg-map-location-panel" data-source="${escapeHtml(source)}" data-panel-chrome="deterministic_phase8_panel_chrome">
+        <div class="rpg-map-location-header">
+          <span>Map & Location</span>
+          ${sourceBadge}
+          <em>Read-only location, travel, time, weather, and route state from deterministic payloads.</em>
+        </div>
+        ${runtimeNotice}
         <div class="rpg-map-location-current">
           <div class="rpg-map-location-label">Current location</div>
           <strong>${escapeHtml(name)}</strong>
@@ -138,7 +163,7 @@
         ${timeLabel ? `<div class="rpg-map-location-time">${escapeHtml(timeLabel)}</div>` : ""}
         ${weatherLabel ? `<div class="rpg-map-location-weather">${escapeHtml(weatherLabel)}</div>` : ""}
         <div class="rpg-map-location-exits-title">Visible exits</div>
-        ${exits.length ? `<ul class="rpg-map-location-exits">${exits.map(renderExit).join("")}</ul>` : `<div class="rpg-map-location-empty">No visible exits.</div>`}
+        ${exits.length ? `<ul class="rpg-map-location-exits">${exits.map(renderExit).join("")}</ul>` : emptyExits}
         <div class="rpg-map-location-source">Source: ${escapeHtml(source)}</div>
       </div>
     `;
