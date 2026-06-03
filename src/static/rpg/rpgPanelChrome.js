@@ -15,17 +15,31 @@
       .replace(/\"/g, "&quot;");
   }
 
+  function panelChromeLabel(panelId, fallbackLabel) {
+    const registry = window.RpgPanelLayoutRegistry;
+    if (registry && typeof registry.panelLabel === "function") {
+      const registryLabel = registry.panelLabel(panelId);
+      if (registryLabel) return safeStr(registryLabel);
+    }
+    return safeStr(fallbackLabel || "RPG panel");
+  }
+
+  function panelChromeA11yAttrs(panelId, fallbackLabel) {
+    const label = panelChromeLabel(panelId, fallbackLabel);
+    return `role="region" aria-label="${escapeHtml(label)}" data-panel-a11y-source="${escapeHtml(SOURCE)}"`;
+  }
+
   function panelSourceBadge(source, label) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -34,7 +48,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -53,12 +67,18 @@
     if (!attached) return null;
     attached.setAttribute("data-panel-chrome-source", SOURCE);
     attached.setAttribute("data-panel-payload-source", safeStr(source || SOURCE));
+    attached.setAttribute("data-panel-a11y-source", SOURCE);
+    if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
+    if (!attached.getAttribute("aria-label")) attached.setAttribute("aria-label", panelChromeLabel(panelId));
+    if (!attached.hasAttribute("tabindex")) attached.setAttribute("tabindex", "-1");
     return attached;
   }
 
   window.RpgPanelChrome = {
     SOURCE,
     escapeHtml,
+    panelChromeLabel,
+    panelChromeA11yAttrs,
     panelSourceBadge,
     panelEmptyState,
     runtimeValidationNotice,
