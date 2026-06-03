@@ -23,12 +23,18 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return safeStr(value)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/\"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
   }
 
   function clampPct(value) {
@@ -247,7 +253,12 @@
     panel = document.createElement("section");
     panel.id = PANEL_ID;
     panel.className = "rpg-survival-inspector-panel rpg-inspector-section";
-    findHost().appendChild(panel);
+    const chrome = chromeHelper();
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(panel, "survival-inspector", SOURCE);
+    } else {
+      findHost().appendChild(panel);
+    }
     return panel;
   }
 
@@ -302,8 +313,11 @@
   }
 
   function renderActions(actions, inventory) {
+    const chrome = chromeHelper();
     if (!actions.length) {
-      return '<div class="rpg-survival-empty">No survival action pressure right now.</div>';
+      return chrome && typeof chrome.panelEmptyState === "function"
+        ? chrome.panelEmptyState("No survival action pressure right now.", "Runtime payloads have not supplied source-backed survival actions yet.")
+        : '<div class="rpg-survival-empty">No survival action pressure right now.</div>';
     }
     return actions.map((row) => {
       const command = actionCommand(row);
@@ -331,7 +345,12 @@
   }
 
   function renderEvents(events) {
-    if (!events.length) return '<div class="rpg-survival-empty">No survival events recorded yet.</div>';
+    const chrome = chromeHelper();
+    if (!events.length) {
+      return chrome && typeof chrome.panelEmptyState === "function"
+        ? chrome.panelEmptyState("No survival events recorded yet.", "Runtime payloads have not supplied source-backed survival events yet.")
+        : '<div class="rpg-survival-empty">No survival events recorded yet.</div>';
+    }
     return events.map((event) => `
       <div class="rpg-survival-event" title="${escapeHtml(eventLabel(event))}">
         <strong>${escapeHtml(eventLabel(event))}</strong>
@@ -401,29 +420,40 @@
     const inventory = survivalInventorySummary(payload);
     const panel = ensurePanel();
     const enabled = survival.enabled !== false;
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(SOURCE, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Survival inspector actions still submit commands through runtime validation.") : '<p class="rpg-survival-guidance">Survival inspector actions still submit commands through runtime validation.</p>';
+
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(panel, "survival-inspector", SOURCE);
+    }
 
     panel.innerHTML = `
-      <div class="rpg-survival-header">
-        <div>
-          <h3>Survival</h3>
-          <div class="rpg-survival-meta">${enabled ? "Runtime pressure" : "Disabled"}${tick.reason ? " · " + escapeHtml(tick.reason) : ""}</div>
+      <div class="rpg-survival-inspector" data-source="${escapeHtml(SOURCE)}" data-panel-chrome="deterministic_phase8_panel_chrome">
+        <div class="rpg-survival-header">
+          <div>
+            <h3>Survival</h3>
+            <div class="rpg-survival-meta">${enabled ? "Runtime pressure" : "Disabled"}${tick.reason ? " · " + escapeHtml(tick.reason) : ""}</div>
+          </div>
+          ${sourceBadge}
+          <span class="rpg-survival-source">${escapeHtml(SOURCE)}</span>
         </div>
-        <span class="rpg-survival-source">${escapeHtml(SOURCE)}</span>
+        ${runtimeNotice}
+        <div class="rpg-survival-needs">
+          ${renderNeed("Hunger", survival.hunger, pressure.hunger)}
+          ${renderNeed("Thirst", survival.thirst, pressure.thirst)}
+          ${renderNeed("Fatigue", survival.fatigue, pressure.fatigue)}
+        </div>
+        ${renderInventorySummary(inventory)}
+        <details class="rpg-survival-details" open>
+          <summary>Suggested survival actions (${actions.length})</summary>
+          <div class="rpg-survival-actions">${renderActions(actions, inventory)}</div>
+        </details>
+        <details class="rpg-survival-details">
+          <summary>Recent survival events (${events.length})</summary>
+          <div class="rpg-survival-events">${renderEvents(events)}</div>
+        </details>
       </div>
-      <div class="rpg-survival-needs">
-        ${renderNeed("Hunger", survival.hunger, pressure.hunger)}
-        ${renderNeed("Thirst", survival.thirst, pressure.thirst)}
-        ${renderNeed("Fatigue", survival.fatigue, pressure.fatigue)}
-      </div>
-      ${renderInventorySummary(inventory)}
-      <details class="rpg-survival-details" open>
-        <summary>Suggested survival actions (${actions.length})</summary>
-        <div class="rpg-survival-actions">${renderActions(actions, inventory)}</div>
-      </details>
-      <details class="rpg-survival-details">
-        <summary>Recent survival events (${events.length})</summary>
-        <div class="rpg-survival-events">${renderEvents(events)}</div>
-      </details>
     `;
     bindActionButtons(panel);
     panel.dataset.hasSurvival = Object.keys(survival).length ? "true" : "false";
