@@ -6,6 +6,7 @@ CHROME = ROOT / "src" / "static" / "rpg" / "rpgPanelChrome.js"
 SETTINGS = ROOT / "src" / "static" / "rpg-conversation-settings.js"
 RECENT_ACTIVITY = ROOT / "src" / "static" / "rpg" / "rpgRecentActivityPanel.js"
 SUGGESTED_ACTIONS = ROOT / "src" / "static" / "rpg" / "rpgSuggestedActionsPanel.js"
+INVENTORY_PARTY = ROOT / "src" / "static" / "rpg" / "rpgInventoryPartyPanel.js"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-pr-deterministic.yml"
 
 
@@ -105,6 +106,21 @@ def test_suggested_actions_uses_panel_chrome_without_runtime_authority():
     ):
         assert expected in suggested
     assert "Suggestions are not accepted actions until runtime validates the command" in suggested
+
+
+def test_inventory_party_uses_panel_chrome_without_runtime_authority():
+    inventory = INVENTORY_PARTY.read_text(encoding="utf-8")
+    for expected in (
+        "window.RpgPanelChrome",
+        "panelSourceBadge",
+        "panelEmptyState",
+        "runtimeValidationNotice",
+        "decoratePanel(target, \"inventory-party\", source)",
+        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+    ):
+        assert expected in inventory
+    assert "Inventory and party details are read-only" in inventory
+    assert "commands still go through runtime validation" in inventory
 
 
 def test_panel_layout_registry_gate_is_ordered():

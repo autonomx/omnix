@@ -14,6 +14,8 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -47,6 +49,10 @@
     ]);
   }
 
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function ensureInventoryPartyHost() {
     let panel = document.getElementById("rpgInventoryPartyPanel");
     const host =
@@ -59,7 +65,12 @@
       panel = document.createElement("section");
       panel.id = "rpgInventoryPartyPanel";
       panel.className = "rpg-inventory-party-panel";
-      host.appendChild(panel);
+      const chrome = chromeHelper();
+      if (chrome && typeof chrome.decoratePanel === "function") {
+        chrome.decoratePanel(panel, "inventory-party", "deterministic_phase8_inventory_party_detail_panel");
+      } else {
+        host.appendChild(panel);
+      }
     }
 
     panel.style.display = "block";
@@ -158,25 +169,35 @@
     const currency = normalizeCurrency(panelPayload);
     const items = normalizeInventoryItems(panelPayload);
     const members = normalizePartyMembers(panelPayload);
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(source, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Inventory and party details are read-only; commands still go through runtime validation.") : "<p class=\"rpg-inventory-party-guidance\">Commands still go through runtime validation.</p>";
+    const emptyItems = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No inventory items are currently visible.", "Runtime payloads have not supplied source-backed inventory entries yet.") : "<p>No inventory items are currently visible.</p>";
+    const emptyMembers = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No party members are currently visible.", "Runtime payloads have not supplied source-backed party entries yet.") : "<p>No party members are currently visible.</p>";
+
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(target, "inventory-party", source);
+    }
 
     target.innerHTML = `
-      <div class="rpg-inventory-party" data-source="${escapeHtml(source)}">
+      <div class="rpg-inventory-party" data-source="${escapeHtml(source)}" data-panel-chrome="deterministic_phase8_panel_chrome">
         <div class="rpg-inventory-party-header">
           <span>Inventory & Party</span>
+          ${sourceBadge}
           <em>Read-only inventory and party details from deterministic turn payloads.</em>
         </div>
-        <p class="rpg-inventory-party-guidance">Commands still go through runtime validation.</p>
+        ${runtimeNotice}
         <section class="rpg-inventory-currency-section">
           <h4>Currency</h4>
           ${renderCurrency(currency)}
         </section>
         <section class="rpg-inventory-items">
           <h4>Inventory</h4>
-          ${items.length ? `<ul>${items.map(renderItem).join("")}</ul>` : "<p>No inventory items are currently visible.</p>"}
+          ${items.length ? `<ul>${items.map(renderItem).join("")}</ul>` : emptyItems}
         </section>
         <section class="rpg-party-members">
           <h4>Party</h4>
-          ${members.length ? `<ul>${members.map(renderPartyMember).join("")}</ul>` : "<p>No party members are currently visible.</p>"}
+          ${members.length ? `<ul>${members.map(renderPartyMember).join("")}</ul>` : emptyMembers}
         </section>
       </div>
     `;
