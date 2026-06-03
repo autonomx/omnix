@@ -126,6 +126,11 @@
     appendDeferredScript("rpg-live-payload-bridge-script", "/static/rpg/rpg-live-payload-bridge.js");
   }
 
+  function ensurePanelLayoutRegistryScript() {
+    if (window.RpgPanelLayoutRegistry || document.getElementById("rpg-panel-layout-registry-script")) return;
+    appendDeferredScript("rpg-panel-layout-registry-script", "/static/rpg/rpgPanelLayoutRegistry.js");
+  }
+
   function ensureMapLocationPanelScript() {
     if (window.RpgMapLocationPanel || document.getElementById("rpg-map-location-panel-script")) return;
     appendDeferredScript("rpg-map-location-panel-script", "/static/rpg/rpgMapLocationPanel.js");
@@ -165,6 +170,7 @@
     if (window.RpgSurvivalInspector || document.getElementById("rpg-survival-inspector-script")) return;
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
+    ensurePanelLayoutRegistryScript();
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
     ensureObjectiveJournalPanelScript();
@@ -182,6 +188,7 @@
     attachToPayload,
     ensureCommandBridgeScript,
     ensureLivePayloadBridgeScript,
+    ensurePanelLayoutRegistryScript,
     ensureMapLocationPanelScript,
     ensurePlayerHudScript,
     ensureObjectiveJournalPanelScript,
@@ -197,6 +204,7 @@
       render();
       ensureCommandBridgeScript();
       ensureLivePayloadBridgeScript();
+      ensurePanelLayoutRegistryScript();
       ensureMapLocationPanelScript();
       ensurePlayerHudScript();
       ensureObjectiveJournalPanelScript();
@@ -210,6 +218,7 @@
     render();
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
+    ensurePanelLayoutRegistryScript();
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
     ensureObjectiveJournalPanelScript();
