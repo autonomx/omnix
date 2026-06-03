@@ -152,6 +152,7 @@
         </div>
         ${weatherLabel ? `<div class="rpg-player-hud-weather">${escapeHtml(weatherLabel)}</div>` : ""}
         ${warnings.length ? `<ul class="rpg-player-hud-warnings">${warnings.map(renderWarning).join("")}</ul>` : ""}
+        <div class="rpg-player-hud-source">Source: ${escapeHtml(source)}</div>
       </div>
     `;
     return true;
