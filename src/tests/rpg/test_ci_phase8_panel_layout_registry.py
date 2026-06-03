@@ -98,6 +98,24 @@ def test_panel_chrome_exports_read_only_visibility_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_accessibility_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "panelChromeLabel",
+        "panelChromeA11yAttrs",
+        "data-panel-a11y-source",
+        "role=\"region\"",
+        "aria-label",
+        "role=\"note\"",
+        "Runtime validation notice",
+        "role=\"status\"",
+        "aria-live=\"polite\"",
+        "tabindex",
+        "window.RpgPanelLayoutRegistry",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
