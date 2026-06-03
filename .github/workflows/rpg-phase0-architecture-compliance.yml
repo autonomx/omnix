@@ -14,6 +14,7 @@ on:
       - "src/tests/rpg/test_ci_phase8_12_note.py"
       - "src/tests/rpg/test_ci_phase8_13_note.py"
       - "src/tests/rpg/test_ci_phase8_14_note.py"
+      - "src/tests/rpg/test_ci_phase8_15_note.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
       - "docs/plans/rpg_phase8_7_completion_note.md"
@@ -24,6 +25,7 @@ on:
       - "docs/plans/rpg_phase8_12_completion_note.md"
       - "docs/plans/rpg_phase8_13_completion_note.md"
       - "docs/plans/rpg_phase8_14_completion_note.md"
+      - "docs/plans/rpg_phase8_15_completion_note.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
@@ -39,6 +41,7 @@ on:
       - "src/tests/rpg/test_ci_phase8_12_note.py"
       - "src/tests/rpg/test_ci_phase8_13_note.py"
       - "src/tests/rpg/test_ci_phase8_14_note.py"
+      - "src/tests/rpg/test_ci_phase8_15_note.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
       - "docs/plans/rpg_phase8_7_completion_note.md"
@@ -49,6 +52,7 @@ on:
       - "docs/plans/rpg_phase8_12_completion_note.md"
       - "docs/plans/rpg_phase8_13_completion_note.md"
       - "docs/plans/rpg_phase8_14_completion_note.md"
+      - "docs/plans/rpg_phase8_15_completion_note.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
