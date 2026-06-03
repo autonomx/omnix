@@ -11,6 +11,7 @@ COMBAT_ACTION = ROOT / "src" / "static" / "rpg" / "rpgCombatActionPanel.js"
 OBJECTIVE_JOURNAL = ROOT / "src" / "static" / "rpg" / "rpgObjectiveJournalPanel.js"
 PLAYER_HUD = ROOT / "src" / "static" / "rpg" / "rpgPlayerHud.js"
 MAP_LOCATION = ROOT / "src" / "static" / "rpg" / "rpgMapLocationPanel.js"
+SURVIVAL_INSPECTOR = ROOT / "src" / "static" / "rpg" / "rpg-survival-inspector.js"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-pr-deterministic.yml"
 
 
@@ -193,6 +194,24 @@ def test_map_location_uses_panel_chrome_without_runtime_authority():
     assert "commands still go through runtime validation" in map_location
     assert "sendCommand" not in map_location
     assert "executeCommand" not in map_location
+
+
+def test_survival_inspector_uses_panel_chrome_with_runtime_validation():
+    survival = SURVIVAL_INSPECTOR.read_text(encoding="utf-8")
+    for expected in (
+        "window.RpgPanelChrome",
+        "panelSourceBadge",
+        "panelEmptyState",
+        "runtimeValidationNotice",
+        "decoratePanel(panel, \"survival-inspector\", SOURCE)",
+        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+    ):
+        assert expected in survival
+    assert "Survival inspector actions still submit commands through runtime validation" in survival
+    assert "RpgCommandBridge.submitCommand" in survival
+    assert "window.rpgSendMessage" in survival
+    assert "provider" not in survival.lower()
+    assert "llm" not in survival.lower()
 
 
 def test_panel_layout_registry_gate_is_ordered():
