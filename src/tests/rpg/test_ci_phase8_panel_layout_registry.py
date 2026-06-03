@@ -47,6 +47,24 @@ def test_panel_layout_registry_is_loaded_before_panels():
     assert settings.index("rpgPanelLayoutRegistry.js") < settings.index("rpgSuggestedActionsPanel.js")
 
 
+def test_conversation_settings_uses_panel_chrome_without_runtime_authority():
+    settings = SETTINGS.read_text(encoding="utf-8")
+    for expected in (
+        "window.RpgPanelChrome",
+        "panelSourceBadge",
+        "runtimeValidationNotice",
+        "decoratePanel(panel, \"conversation-settings\", SOURCE)",
+        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+        "deterministic_conversation_settings",
+    ):
+        assert expected in settings
+    assert "Conversation settings only affect presentation/audit preferences" in settings
+    assert "gameplay state changes still go through runtime validation" in settings
+    assert "apply_turn" not in settings
+    assert "provider" not in settings.lower()
+    assert "llm" not in settings.lower()
+
+
 def test_panel_chrome_exports_read_only_visibility_helpers():
     chrome = CHROME.read_text(encoding="utf-8")
     for expected in (
