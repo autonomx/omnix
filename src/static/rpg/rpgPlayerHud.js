@@ -14,6 +14,8 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -40,6 +42,10 @@
     ]);
   }
 
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function ensureHudHost() {
     let panel = document.getElementById("rpgPlayerHudPanel");
     const host =
@@ -52,7 +58,12 @@
       panel = document.createElement("section");
       panel.id = "rpgPlayerHudPanel";
       panel.className = "rpg-player-hud-panel";
-      host.insertBefore(panel, host.firstChild || null);
+      const chrome = chromeHelper();
+      if (chrome && typeof chrome.decoratePanel === "function") {
+        chrome.decoratePanel(panel, "player-hud", "deterministic_phase8_player_hud_panel");
+      } else {
+        host.insertBefore(panel, host.firstChild || null);
+      }
     }
 
     panel.style.display = "block";
@@ -92,7 +103,12 @@
     const party = safeObj(hud.party_summary);
     const timeState = safeObj(hud.time_state);
     const warnings = safeArr(hud.major_warnings);
-    const source = safeStr(hud.frontend_source || hud.source);
+    const source = safeStr(hud.frontend_source || hud.source || "deterministic_phase8_player_hud_panel");
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(source, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Player HUD details are read-only; commands still go through runtime validation.") : "<p class=\"rpg-player-hud-guidance\">Player HUD details are read-only; commands still go through runtime validation.</p>";
+    const emptyItems = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No visible items are currently recorded.", "Runtime payloads have not supplied source-backed player inventory details yet.") : "<div class=\"rpg-player-hud-empty\">No visible items.</div>";
+    const emptyParty = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No companions are currently visible.", "Runtime payloads have not supplied source-backed party details yet.") : "<div class=\"rpg-player-hud-empty\">No companions.</div>";
     const locationName = safeStr(location.name || hud.current_location_id || "Unknown location");
     const objectiveTitle = safeStr(objective.title || "No active objective recorded");
     const weatherLabel = [
@@ -100,8 +116,18 @@
       timeState.weather_label ? "Weather: " + safeStr(timeState.weather_label) : "",
     ].filter(Boolean).join(" · ");
 
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(target, "player-hud", source);
+    }
+
     target.innerHTML = `
-      <div class="rpg-player-hud" data-source="${escapeHtml(source)}">
+      <div class="rpg-player-hud" data-source="${escapeHtml(source)}" data-panel-chrome="deterministic_phase8_panel_chrome">
+        <div class="rpg-player-hud-header">
+          <span>Player HUD</span>
+          ${sourceBadge}
+          <em>Read-only player, location, objective, resource, and party state from deterministic payloads.</em>
+        </div>
+        ${runtimeNotice}
         <div class="rpg-player-hud-row">
           <div class="rpg-player-hud-card rpg-player-hud-location">
             <span class="rpg-player-hud-label">Location</span>
@@ -117,16 +143,15 @@
           <div class="rpg-player-hud-card rpg-player-hud-resources">
             <span class="rpg-player-hud-label">Resources</span>
             <div class="rpg-player-hud-currency">${escapeHtml(currency.gold || 0)}g ${escapeHtml(currency.silver || 0)}s ${escapeHtml(currency.copper || 0)}c</div>
-            ${safeArr(resources.items).length ? `<ul>${safeArr(resources.items).map(renderItem).join("")}</ul>` : `<div class="rpg-player-hud-empty">No visible items.</div>`}
+            ${safeArr(resources.items).length ? `<ul>${safeArr(resources.items).map(renderItem).join("")}</ul>` : emptyItems}
           </div>
           <div class="rpg-player-hud-card rpg-player-hud-party">
             <span class="rpg-player-hud-label">Party</span>
-            ${safeArr(party.members).length ? `<ul>${safeArr(party.members).map(renderPartyMember).join("")}</ul>` : `<div class="rpg-player-hud-empty">No companions.</div>`}
+            ${safeArr(party.members).length ? `<ul>${safeArr(party.members).map(renderPartyMember).join("")}</ul>` : emptyParty}
           </div>
         </div>
         ${weatherLabel ? `<div class="rpg-player-hud-weather">${escapeHtml(weatherLabel)}</div>` : ""}
         ${warnings.length ? `<ul class="rpg-player-hud-warnings">${warnings.map(renderWarning).join("")}</ul>` : ""}
-        <div class="rpg-player-hud-source">Source: ${escapeHtml(source)}</div>
       </div>
     `;
     return true;
