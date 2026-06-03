@@ -14,6 +14,8 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -46,6 +48,10 @@
     ]);
   }
 
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function ensureSuggestedActionsHost() {
     let panel = document.getElementById("rpgSuggestedActionsPanel");
     const host =
@@ -58,7 +64,12 @@
       panel = document.createElement("section");
       panel.id = "rpgSuggestedActionsPanel";
       panel.className = "rpg-suggested-actions-panel";
-      host.appendChild(panel);
+      const chrome = chromeHelper();
+      if (chrome && typeof chrome.decoratePanel === "function") {
+        chrome.decoratePanel(panel, "suggested-actions", "deterministic_phase8_suggested_actions_panel");
+      } else {
+        host.appendChild(panel);
+      }
     }
 
     panel.style.display = "block";
@@ -136,15 +147,24 @@
     const target = ensureSuggestedActionsHost();
     const source = safeStr(panelPayload.frontend_source || panelPayload.source || "deterministic_phase8_suggested_actions_panel");
     const actions = normalizeSuggestedActions(panelPayload);
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(source, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Suggestions are not accepted actions until runtime validates the command.") : "<p class=\"rpg-suggested-actions-guidance\">Suggestions are not accepted actions until runtime validates the command.</p>";
+    const emptyState = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No suggested actions are currently visible.", "Runtime payloads have not supplied objective, legal-action, or recommendation hints yet.") : "<p>No suggested actions are currently visible.</p>";
+
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(target, "suggested-actions", source);
+    }
 
     target.innerHTML = `
-      <div class="rpg-suggested-actions" data-source="${escapeHtml(source)}">
+      <div class="rpg-suggested-actions" data-source="${escapeHtml(source)}" data-panel-chrome="deterministic_phase8_panel_chrome">
         <div class="rpg-suggested-actions-header">
           <span>Suggested actions</span>
+          ${sourceBadge}
           <em>Read-only command hints from deterministic payloads.</em>
         </div>
-        <p class="rpg-suggested-actions-guidance">Suggestions are not accepted actions until runtime validates the command.</p>
-        ${actions.length ? `<ol>${actions.map(renderSuggestedAction).join("")}</ol>` : "<p>No suggested actions are currently visible.</p>"}
+        ${runtimeNotice}
+        ${actions.length ? `<ol>${actions.map(renderSuggestedAction).join("")}</ol>` : emptyState}
       </div>
     `;
     return true;

@@ -5,6 +5,7 @@ REGISTRY = ROOT / "src" / "static" / "rpg" / "rpgPanelLayoutRegistry.js"
 CHROME = ROOT / "src" / "static" / "rpg" / "rpgPanelChrome.js"
 SETTINGS = ROOT / "src" / "static" / "rpg-conversation-settings.js"
 RECENT_ACTIVITY = ROOT / "src" / "static" / "rpg" / "rpgRecentActivityPanel.js"
+SUGGESTED_ACTIONS = ROOT / "src" / "static" / "rpg" / "rpgSuggestedActionsPanel.js"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-pr-deterministic.yml"
 
 
@@ -90,6 +91,20 @@ def test_recent_activity_uses_panel_chrome_without_runtime_authority():
     ):
         assert expected in recent
     assert "commands still go through runtime validation" in recent
+
+
+def test_suggested_actions_uses_panel_chrome_without_runtime_authority():
+    suggested = SUGGESTED_ACTIONS.read_text(encoding="utf-8")
+    for expected in (
+        "window.RpgPanelChrome",
+        "panelSourceBadge",
+        "panelEmptyState",
+        "runtimeValidationNotice",
+        "decoratePanel(target, \"suggested-actions\", source)",
+        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+    ):
+        assert expected in suggested
+    assert "Suggestions are not accepted actions until runtime validates the command" in suggested
 
 
 def test_panel_layout_registry_gate_is_ordered():
