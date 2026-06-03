@@ -63,7 +63,12 @@
         </label>
       </div>
     `;
-    host.appendChild(panel);
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(panel, "conversation-settings", "deterministic_conversation_settings");
+    } else {
+      host.appendChild(panel);
+    }
     return panel;
   }
 
@@ -131,6 +136,11 @@
     appendDeferredScript("rpg-panel-layout-registry-script", "/static/rpg/rpgPanelLayoutRegistry.js");
   }
 
+  function ensurePanelChromeScript() {
+    if (window.RpgPanelChrome || document.getElementById("rpg-panel-chrome-script")) return;
+    appendDeferredScript("rpg-panel-chrome-script", "/static/rpg/rpgPanelChrome.js");
+  }
+
   function ensureMapLocationPanelScript() {
     if (window.RpgMapLocationPanel || document.getElementById("rpg-map-location-panel-script")) return;
     appendDeferredScript("rpg-map-location-panel-script", "/static/rpg/rpgMapLocationPanel.js");
@@ -171,6 +181,7 @@
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
     ensurePanelLayoutRegistryScript();
+    ensurePanelChromeScript();
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
     ensureObjectiveJournalPanelScript();
@@ -189,6 +200,7 @@
     ensureCommandBridgeScript,
     ensureLivePayloadBridgeScript,
     ensurePanelLayoutRegistryScript,
+    ensurePanelChromeScript,
     ensureMapLocationPanelScript,
     ensurePlayerHudScript,
     ensureObjectiveJournalPanelScript,
@@ -201,10 +213,11 @@
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
-      render();
       ensureCommandBridgeScript();
       ensureLivePayloadBridgeScript();
       ensurePanelLayoutRegistryScript();
+      ensurePanelChromeScript();
+      render();
       ensureMapLocationPanelScript();
       ensurePlayerHudScript();
       ensureObjectiveJournalPanelScript();
@@ -215,10 +228,11 @@
       ensureSurvivalInspectorScript();
     });
   } else {
-    render();
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
     ensurePanelLayoutRegistryScript();
+    ensurePanelChromeScript();
+    render();
     ensureMapLocationPanelScript();
     ensurePlayerHudScript();
     ensureObjectiveJournalPanelScript();
