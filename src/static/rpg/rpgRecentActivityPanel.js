@@ -14,6 +14,8 @@
   }
 
   function escapeHtml(value) {
+    const chrome = window.RpgPanelChrome;
+    if (chrome && typeof chrome.escapeHtml === "function") return chrome.escapeHtml(value);
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -46,6 +48,10 @@
     ]);
   }
 
+  function chromeHelper() {
+    return window.RpgPanelChrome || null;
+  }
+
   function ensureRecentActivityHost() {
     let panel = document.getElementById("rpgRecentActivityPanel");
     const host =
@@ -58,7 +64,12 @@
       panel = document.createElement("section");
       panel.id = "rpgRecentActivityPanel";
       panel.className = "rpg-recent-activity-panel";
-      host.appendChild(panel);
+      const chrome = chromeHelper();
+      if (chrome && typeof chrome.decoratePanel === "function") {
+        chrome.decoratePanel(panel, "recent-activity", "deterministic_phase8_recent_activity_panel");
+      } else {
+        host.appendChild(panel);
+      }
     }
 
     panel.style.display = "block";
@@ -137,15 +148,24 @@
     const target = ensureRecentActivityHost();
     const source = safeStr(panelPayload.frontend_source || panelPayload.source || "deterministic_phase8_recent_activity_panel");
     const entries = normalizeActivityEntries(panelPayload);
+    const chrome = chromeHelper();
+    const sourceBadge = chrome && typeof chrome.panelSourceBadge === "function" ? chrome.panelSourceBadge(source, "source-backed") : "";
+    const runtimeNotice = chrome && typeof chrome.runtimeValidationNotice === "function" ? chrome.runtimeValidationNotice("Recent activity is context only; commands still go through runtime validation.") : "<p class=\"rpg-recent-activity-guidance\">Use this as context only; commands still go through runtime validation.</p>";
+    const emptyState = chrome && typeof chrome.panelEmptyState === "function" ? chrome.panelEmptyState("No recent activity is currently visible.", "Runtime, journal, warning, and world-event payloads have not supplied entries yet.") : "<p>No recent activity is currently visible.</p>";
+
+    if (chrome && typeof chrome.decoratePanel === "function") {
+      chrome.decoratePanel(target, "recent-activity", source);
+    }
 
     target.innerHTML = `
-      <div class="rpg-recent-activity" data-source="${escapeHtml(source)}">
+      <div class="rpg-recent-activity" data-source="${escapeHtml(source)}" data-panel-chrome="deterministic_phase8_panel_chrome">
         <div class="rpg-recent-activity-header">
           <span>Recent activity</span>
+          ${sourceBadge}
           <em>Read-only world, journal, warning, and action signals from deterministic payloads.</em>
         </div>
-        <p class="rpg-recent-activity-guidance">Use this as context only; commands still go through runtime validation.</p>
-        ${entries.length ? `<ol>${entries.map(renderActivityEntry).join("")}</ol>` : "<p>No recent activity is currently visible.</p>"}
+        ${runtimeNotice}
+        ${entries.length ? `<ol>${entries.map(renderActivityEntry).join("")}</ol>` : emptyState}
       </div>
     `;
     return true;
