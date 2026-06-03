@@ -9,6 +9,7 @@ SUGGESTED_ACTIONS = ROOT / "src" / "static" / "rpg" / "rpgSuggestedActionsPanel.
 INVENTORY_PARTY = ROOT / "src" / "static" / "rpg" / "rpgInventoryPartyPanel.js"
 COMBAT_ACTION = ROOT / "src" / "static" / "rpg" / "rpgCombatActionPanel.js"
 OBJECTIVE_JOURNAL = ROOT / "src" / "static" / "rpg" / "rpgObjectiveJournalPanel.js"
+PLAYER_HUD = ROOT / "src" / "static" / "rpg" / "rpgPlayerHud.js"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-pr-deterministic.yml"
 
 
@@ -157,6 +158,23 @@ def test_objective_journal_uses_panel_chrome_without_runtime_authority():
     assert "commands still go through runtime validation" in journal
     assert "sendCommand" not in journal
     assert "executeCommand" not in journal
+
+
+def test_player_hud_uses_panel_chrome_without_runtime_authority():
+    hud = PLAYER_HUD.read_text(encoding="utf-8")
+    for expected in (
+        "window.RpgPanelChrome",
+        "panelSourceBadge",
+        "panelEmptyState",
+        "runtimeValidationNotice",
+        "decoratePanel(target, \"player-hud\", source)",
+        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+    ):
+        assert expected in hud
+    assert "Player HUD details are read-only" in hud
+    assert "commands still go through runtime validation" in hud
+    assert "sendCommand" not in hud
+    assert "executeCommand" not in hud
 
 
 def test_panel_layout_registry_gate_is_ordered():
