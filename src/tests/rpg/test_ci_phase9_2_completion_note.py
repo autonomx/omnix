@@ -1,0 +1,40 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+NOTE = ROOT / "docs" / "plans" / "rpg_phase9_2_completion_note.md"
+WORKFLOW = ROOT / ".github" / "workflows" / "rpg-phase0-architecture-compliance.yml"
+
+
+def test_phase9_2_completion_note_records_artifact_contract_guard():
+    note = NOTE.read_text(encoding="utf-8")
+    for expected in (
+        "Phase 9.2 deterministic endurance artifact contract guard is complete.",
+        "Implementation PR: #298",
+        "36f29983f3ed0a3006365abd35d07bba19d6a03d",
+        "a72952ca26a33648230bdbf6f3a6a04ec5e2701a",
+        "RPG Phase 0 architecture compliance",
+        "RPG deterministic PR gates",
+        "docs/plans/rpg_phase9_2_endurance_artifact_contract.md",
+        "src/tests/rpg/test_ci_phase9_2_endurance_artifact_contract.py",
+        "src/tests/rpg/test_ci_runtime_wrapper_manifest.py",
+        "autoplay-summary.json",
+        "autoplay-transcript.json",
+        "autoplay-campaign-results.zip",
+        "summary.json",
+        "artifact_paths",
+        "provider-free guard",
+        "No live/provider 1000-turn campaign added to CI.",
+        "Phase 9.3 — endurance checkpoint and replay taxonomy guard",
+    ):
+        assert expected in note
+
+
+def test_phase9_2_completion_note_is_wired_into_architecture_workflow():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    for expected in (
+        "src/tests/rpg/test_ci_phase9_2_endurance_artifact_contract.py",
+        "src/tests/rpg/test_ci_phase9_2_completion_note.py",
+        "docs/plans/rpg_phase9_2_endurance_artifact_contract.md",
+        "docs/plans/rpg_phase9_2_completion_note.md",
+    ):
+        assert expected in workflow
