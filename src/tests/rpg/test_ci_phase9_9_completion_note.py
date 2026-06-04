@@ -68,16 +68,19 @@ def test_phase9_9_roadmap_and_architecture_workflow_are_aligned():
     roadmap = ROADMAP.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
     for expected in (
-        "Current slice: **Phase 9.9 — targeted endurance hardening from concrete evidence**.",
-        "Next recommended slice after Phase 9.9: **Phase 10 — production packaging, stability, and release readiness**.",
-        "Phase 9.1 through Phase 9.8 are complete",
-        "Phase 9.9 scope:",
-        "docs/plans/rpg_phase9_9_targeted_endurance_hardening_decision_gate.md",
-        "src/tests/rpg/test_ci_phase9_9_targeted_endurance_hardening_decision_gate.py",
+        "Current phase focus: **Phase 10 — production packaging, stability, and release readiness**.",
+        "Current slice: **Phase 10.1 — production readiness baseline and packaging evidence plan**.",
+        "Next recommended slice after Phase 10.1: **Phase 10.2 — install/run configuration evidence envelope**.",
+        "Phase 9.1 through Phase 9.9 are complete",
+        "Phase 9.9 — targeted endurance hardening decision gate.",
+        "#312 Phase 9.9 hardening decision gate",
+        "ef76e019679900b3c2b2f96307eef6bcec5a3f8c",
     ):
         assert expected in roadmap
     for expected in (
         "src/tests/rpg/test_ci_phase9_9_targeted_endurance_hardening_decision_gate.py",
+        "src/tests/rpg/test_ci_phase9_9_completion_note.py",
         "docs/plans/rpg_phase9_9_targeted_endurance_hardening_decision_gate.md",
+        "docs/plans/rpg_phase9_9_completion_note.md",
     ):
         assert expected in workflow
