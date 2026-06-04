@@ -10,11 +10,11 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 10 — production packaging, stability, and release readiness**.
 
-Current slice: **Phase 10.1 — production readiness baseline and packaging evidence plan**.
+Current slice: **Phase 10.2 — install/run configuration evidence envelope**.
 
-Next recommended slice after Phase 10.1: **Phase 10.2 — install/run configuration evidence envelope**.
+Next recommended slice after Phase 10.2: **Phase 10.3 — persistence and diagnostics evidence envelope**.
 
-Latest source-of-truth SHA before Phase 10.1: `154c8076a59d9fa82f40e76ba08310f0e52dee21`.
+Latest source-of-truth SHA before Phase 10.2: `12efbe0baa16bed4c5336fdf76ff6422081a910f`.
 
 Latest completed Phase 9 work:
 
@@ -39,6 +39,7 @@ Latest completed Phase 9 work:
 | #312 Phase 9.9 hardening decision gate | `ef76e019679900b3c2b2f96307eef6bcec5a3f8c` | Phase 9.9 | Complete | Added deterministic hardening decision gate requiring concrete evidence before targeted runtime changes. |
 | #313 Phase 9.9 completion note | `447648e05ee32ef8ed63af10f9b90a2209d7f6bf` | Phase 9.9 | Complete | Added Phase 9.9 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 | #314 Phase 10.1 action coverage | `154c8076a59d9fa82f40e76ba08310f0e52dee21` | Phase 10.1 prep | Complete | Added exact Phase 10.1 workflow path coverage before the Phase 10.1 implementation slice. |
+| #315 Phase 10.1 production readiness baseline | `12efbe0baa16bed4c5336fdf76ff6422081a910f` | Phase 10.1 | Complete | Added production readiness baseline and packaging evidence plan. |
 
 After every merged PR:
 
@@ -86,7 +87,7 @@ After every merged PR:
 - Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
 - Phase 8 — UI/UX Production Pass: **Closed as provider-free UI/UX foundation**.
 - Phase 9 — 1000-Turn Endurance Systems: **Complete as deterministic evidence framework; live/operator validation remains pending**.
-- Phase 10 — Production Packaging, Stability, and Release Readiness: **In progress; Phase 10.1 current**.
+- Phase 10 — Production Packaging, Stability, and Release Readiness: **In progress; Phase 10.2 current**.
 
 ## Phase 8 — UI/UX Production Pass
 
@@ -120,21 +121,23 @@ Completed:
 
 Status: **In progress.**
 
+Completed:
+
+- [x] Phase 10.1 — production readiness baseline and packaging evidence plan.
+
 Current:
-
-- [ ] Phase 10.1 — production readiness baseline and packaging evidence plan.
-
-Next:
 
 - [ ] Phase 10.2 — install/run configuration evidence envelope.
 
-Phase 10.1 scope:
+Next:
 
-- Add `docs/plans/rpg_phase10_1_production_readiness_baseline.md`.
-- Add deterministic source guards proving production readiness requires concrete packaging/install/run evidence.
-- Establish production packaging, install/run, config, persistence, logs, and player-safe error handling evidence categories.
-- Keep the first Phase 10 slice documentation/test-only and provider-free.
-- Do not claim external release readiness until concrete install/run evidence exists.
+- [ ] Phase 10.3 — persistence and diagnostics evidence envelope.
+
+Phase 10.2 scope:
+
+- Define install/run evidence fields for commands, environment variables, config files, model/resource paths, data paths, and reproducible operator transcripts.
+- Keep the slice documentation/test-only and provider-free unless concrete install/run evidence identifies a narrow failure.
+- Do not claim release readiness until concrete install/run evidence exists.
 
 ## Active Phase 9 taxonomy
 
