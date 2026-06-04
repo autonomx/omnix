@@ -156,6 +156,22 @@ def test_panel_chrome_exports_read_only_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_focus_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "FOCUS_TARGET",
+        "panel_region",
+        "focusAttrs",
+        "applyFocusMetadata",
+        "data-panel-focus-target",
+        "data-panel-focus-source",
+        "data-panel-focus-label",
+        "Panel region focus target",
+        "applyFocusMetadata(attached, panelChromeLabel(panelId))",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
@@ -169,6 +185,7 @@ def test_panel_chrome_is_provider_free_and_non_mutating():
         "math.random",
     ):
         assert forbidden not in chrome
+    assert ".focus(" not in chrome
 
 
 def test_panel_chrome_loads_after_layout_registry_before_panels():
