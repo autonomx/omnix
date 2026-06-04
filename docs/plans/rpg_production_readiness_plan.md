@@ -10,11 +10,11 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 9 — 1000-Turn Endurance Systems**.
 
-Current slice: **Phase 9.6 — targeted endurance hardening from concrete evidence**.
+Current slice: **Phase 9.7 — operator evidence intake contract**.
 
-Next recommended slice after Phase 9.6: **Phase 9.7 — operator evidence intake contract**.
+Next recommended slice after Phase 9.7: **Phase 9.8 — long-run continuity evidence envelope**.
 
-Latest source-of-truth SHA before Phase 9.6: `08eda228111ac5482e16e06712ae89fe878cde47`.
+Latest source-of-truth SHA before Phase 9.7: `21d658a01877d8e735819dc3a727e4d8e8137eb9`.
 
 Latest completed Phase 9 work:
 
@@ -30,6 +30,8 @@ Latest completed Phase 9 work:
 | #303 Phase 9.4 completion note | `3dd2fb3060d5158817b652a36ea205c0b3bf1160` | Phase 9.4 | Complete | Added Phase 9.4 completion note and guard. |
 | #304 Phase 9.5 performance evidence envelope | `a6bb22007976dca1c0f3f92899cc05846588adf1` | Phase 9.5 | Complete | Added performance evidence envelope docs and guards for timing, drain, background job, production resource, and operator evidence labels. |
 | #305 Phase 9.5 completion note | `08eda228111ac5482e16e06712ae89fe878cde47` | Phase 9.5 | Complete | Added Phase 9.5 completion note and guard. |
+| #306 Phase 9.6 targeted endurance hardening plan | `90aaf03214071d93b693bc5c41b484350b89d2fb` | Phase 9.6 | Complete | Added concrete-evidence hardening intake rules and refreshed this production readiness plan. |
+| #307 Phase 9.6 completion note | `21d658a01877d8e735819dc3a727e4d8e8137eb9` | Phase 9.6 | Complete | Added Phase 9.6 completion note and guard. |
 
 After every merged PR:
 
@@ -76,7 +78,7 @@ After every merged PR:
 - Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
 - Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
 - Phase 8 — UI/UX Production Pass: **Closed as provider-free UI/UX foundation**.
-- Phase 9 — 1000-Turn Endurance Systems: **In progress; Phase 9.1 through Phase 9.5 complete; Phase 9.6 current**.
+- Phase 9 — 1000-Turn Endurance Systems: **In progress; Phase 9.1 through Phase 9.6 complete; Phase 9.7 current**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
 
 ## Phase 8 — UI/UX Production Pass
@@ -93,7 +95,7 @@ Phase 8 completed as a provider-free UI/UX foundation pass. It should not be ext
 
 Status: **In progress.**
 
-Phase 9.1 through Phase 9.5 are complete. These slices established deterministic repo-side baselines, artifact contracts, checkpoint/replay taxonomy, progress-quality taxonomy, and performance evidence envelopes. They did not run or prove a live/provider 1000-turn campaign in CI.
+Phase 9.1 through Phase 9.6 are complete. These slices established deterministic repo-side baselines, artifact contracts, checkpoint/replay taxonomy, progress-quality taxonomy, performance evidence envelopes, and concrete-evidence hardening intake rules. They did not run or prove a live/provider 1000-turn campaign in CI.
 
 Completed:
 
@@ -102,22 +104,23 @@ Completed:
 - [x] Phase 9.3 — endurance checkpoint and replay taxonomy guard.
 - [x] Phase 9.4 — endurance progress-quality loop taxonomy guard.
 - [x] Phase 9.5 — endurance performance/evidence envelope.
+- [x] Phase 9.6 — targeted endurance hardening from concrete evidence.
 
 Current:
 
-- [ ] Phase 9.6 — targeted endurance hardening from concrete evidence.
+- [ ] Phase 9.7 — operator evidence intake contract.
 
 Next:
 
-- [ ] Phase 9.7 — operator evidence intake contract.
 - [ ] Phase 9.8 — long-run continuity evidence envelope.
+- [ ] Phase 9.9 — targeted endurance hardening from concrete evidence.
 
-Phase 9.6 scope:
+Phase 9.7 scope:
 
-- Update this production readiness plan so it no longer reports stale Phase 8 or pending Phase 9 state.
-- Add `docs/plans/rpg_phase9_6_targeted_endurance_hardening.md`.
-- Add deterministic source guards proving that future hardening must cite concrete evidence from Phase 9.1 through Phase 9.5 envelopes.
+- Add `docs/plans/rpg_phase9_7_operator_evidence_intake_contract.md`.
+- Add deterministic source guards proving required operator evidence sections, artifact references, timing/checkpoint/replay/transcript review fields, and missing-evidence classifications.
 - Keep the slice documentation/test-only and provider-free.
+- Make clear that CI source guards do not prove live/provider 1000-turn performance.
 
 Do not start runtime hardening until a concrete evidence source identifies the target failure mode.
 
