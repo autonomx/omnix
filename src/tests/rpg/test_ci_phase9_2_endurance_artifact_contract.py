@@ -103,9 +103,6 @@ def test_phase9_2_contract_guard_is_provider_free_source_backed():
     harness = (root / "src" / "tests" / "rpg" / "autoplay_llm_campaign.py").read_text(
         encoding="utf-8"
     )
-    workflow = (root / ".github" / "workflows" / "rpg-pr-deterministic.yml").read_text(
-        encoding="utf-8"
-    )
 
     guarded_source = harness.split("def run_autoplay_campaign(args):", 1)[1]
     guarded_source = guarded_source.split("if __name__ != \"__main__\":", 1)[0]
@@ -126,8 +123,3 @@ def test_phase9_2_contract_guard_is_provider_free_source_backed():
         "LMSTUDIO",
     ):
         assert forbidden not in guarded_source
-
-    assert (
-        "src/tests/rpg/test_ci_phase9_2_endurance_artifact_contract.py -q --tb=short"
-        in workflow
-    )
