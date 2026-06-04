@@ -306,6 +306,22 @@ def test_panel_chrome_exports_tone_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_schema_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_SCHEMA_VERSION",
+        "phase8_panel_chrome_v1",
+        "panelChromeSchemaVersion",
+        "schemaAttrs",
+        "applySchemaMetadata",
+        "data-panel-schema-version",
+        "data-panel-schema-source",
+        "schemaAttrs()",
+        "applySchemaMetadata(attached)",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
