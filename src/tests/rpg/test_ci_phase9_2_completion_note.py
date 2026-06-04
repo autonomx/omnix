@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 NOTE = ROOT / "docs" / "plans" / "rpg_phase9_2_completion_note.md"
+PHASE9_3 = ROOT / "docs" / "plans" / "rpg_phase9_3_checkpoint_replay_taxonomy.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-phase0-architecture-compliance.yml"
 
 
@@ -38,3 +39,15 @@ def test_phase9_2_completion_note_is_wired_into_architecture_workflow():
         "docs/plans/rpg_phase9_2_completion_note.md",
     ):
         assert expected in workflow
+
+
+def test_phase9_3_taxonomy_doc_is_covered_by_existing_phase9_architecture_gate():
+    doc = PHASE9_3.read_text(encoding="utf-8")
+    for expected in (
+        "Phase 9.3 Checkpoint and Replay Taxonomy Guard",
+        "save_load_checkpoint_failure",
+        "artifact_contract_failure",
+        "operator_evidence_gap",
+        "Simulation/runtime remains authoritative",
+    ):
+        assert expected in doc
