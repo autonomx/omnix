@@ -65,7 +65,10 @@ def test_ci_campaign_report_displays_runtime_wrapper_manifest():
     assert "app.rpg.session.runtime_part23" in html
 
 
-def test_ci_phase9_2_endurance_artifact_contract_guard_runs_from_deterministic_gate(tmp_path):
+def test_ci_phase9_2_endurance_artifact_contract_guard_runs_from_deterministic_gate(
+    tmp_path,
+    monkeypatch,
+):
     from tests.rpg.test_ci_phase9_2_endurance_artifact_contract import (
         test_phase9_2_contract_guard_is_provider_free_source_backed,
         test_phase9_2_endurance_artifact_contract_doc_records_required_outputs,
@@ -74,4 +77,7 @@ def test_ci_phase9_2_endurance_artifact_contract_guard_runs_from_deterministic_g
 
     test_phase9_2_endurance_artifact_contract_doc_records_required_outputs()
     test_phase9_2_contract_guard_is_provider_free_source_backed()
-    test_phase9_2_run_autoplay_campaign_writes_summary_transcript_and_zip(tmp_path)
+    test_phase9_2_run_autoplay_campaign_writes_summary_transcript_and_zip(
+        tmp_path,
+        monkeypatch,
+    )
