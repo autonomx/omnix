@@ -14,7 +14,7 @@ Current slice: **Phase 10.2 — install/run configuration evidence envelope**.
 
 Next recommended slice after Phase 10.2: **Phase 10.3 — persistence and diagnostics evidence envelope**.
 
-Latest source-of-truth SHA before Phase 10.2: `12efbe0baa16bed4c5336fdf76ff6422081a910f`.
+Latest source-of-truth SHA before Phase 10.2: `c158b80e77768f819c8405dc14976eeaf42c2169`.
 
 Latest completed Phase 9 work:
 
@@ -40,6 +40,7 @@ Latest completed Phase 9 work:
 | #313 Phase 9.9 completion note | `447648e05ee32ef8ed63af10f9b90a2209d7f6bf` | Phase 9.9 | Complete | Added Phase 9.9 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 | #314 Phase 10.1 action coverage | `154c8076a59d9fa82f40e76ba08310f0e52dee21` | Phase 10.1 prep | Complete | Added exact Phase 10.1 workflow path coverage before the Phase 10.1 implementation slice. |
 | #315 Phase 10.1 production readiness baseline | `12efbe0baa16bed4c5336fdf76ff6422081a910f` | Phase 10.1 | Complete | Added production readiness baseline and packaging evidence plan. |
+| #316 Phase 10.1 completion note | `c158b80e77768f819c8405dc14976eeaf42c2169` | Phase 10.1 | Complete | Added Phase 10.1 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 
 After every merged PR:
 
@@ -135,6 +136,8 @@ Next:
 
 Phase 10.2 scope:
 
+- Add `docs/plans/rpg_phase10_2_install_run_configuration_evidence_envelope.md`.
+- Add deterministic source guards proving install/run readiness requires concrete operator transcripts.
 - Define install/run evidence fields for commands, environment variables, config files, model/resource paths, data paths, and reproducible operator transcripts.
 - Keep the slice documentation/test-only and provider-free unless concrete install/run evidence identifies a narrow failure.
 - Do not claim release readiness until concrete install/run evidence exists.
