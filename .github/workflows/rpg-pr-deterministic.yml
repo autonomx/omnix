@@ -12,9 +12,11 @@ on:
       - "docs/plans/rpg_phase8_4_completion_note.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
       - "docs/plans/rpg_phase8_6_completion_note.md"
+      - "docs/plans/rpg_phase10_1_production_readiness_baseline.md"
       - "docs/rpg_saved_certification_runbook.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
+      - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
     branches:
@@ -27,9 +29,11 @@ on:
       - "docs/plans/rpg_phase8_4_completion_note.md"
       - "docs/plans/rpg_phase8_5_completion_note.md"
       - "docs/plans/rpg_phase8_6_completion_note.md"
+      - "docs/plans/rpg_phase10_1_production_readiness_baseline.md"
       - "docs/rpg_saved_certification_runbook.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
+      - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
 
