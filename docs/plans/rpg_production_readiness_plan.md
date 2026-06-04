@@ -14,7 +14,7 @@ Current slice: **Phase 10.1 — production readiness baseline and packaging evid
 
 Next recommended slice after Phase 10.1: **Phase 10.2 — install/run configuration evidence envelope**.
 
-Latest source-of-truth SHA before Phase 10.1: `ef76e019679900b3c2b2f96307eef6bcec5a3f8c`.
+Latest source-of-truth SHA before Phase 10.1: `154c8076a59d9fa82f40e76ba08310f0e52dee21`.
 
 Latest completed Phase 9 work:
 
@@ -37,6 +37,8 @@ Latest completed Phase 9 work:
 | #310 Phase 9.8 long-run continuity evidence envelope | `7b4c1a944ecd1e522681c155efe0df0acc689e1f` | Phase 9.8 | Complete | Added deterministic long-run continuity evidence envelope, provider-free guard, production readiness refresh, and architecture path coverage. |
 | #311 Phase 9.8 completion note | `57660270175598e6c407727893fc9ae3e325947e` | Phase 9.8 | Complete | Added Phase 9.8 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 | #312 Phase 9.9 hardening decision gate | `ef76e019679900b3c2b2f96307eef6bcec5a3f8c` | Phase 9.9 | Complete | Added deterministic hardening decision gate requiring concrete evidence before targeted runtime changes. |
+| #313 Phase 9.9 completion note | `447648e05ee32ef8ed63af10f9b90a2209d7f6bf` | Phase 9.9 | Complete | Added Phase 9.9 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
+| #314 Phase 10.1 action coverage | `154c8076a59d9fa82f40e76ba08310f0e52dee21` | Phase 10.1 prep | Complete | Added exact Phase 10.1 workflow path coverage before the Phase 10.1 implementation slice. |
 
 After every merged PR:
 
@@ -128,6 +130,8 @@ Next:
 
 Phase 10.1 scope:
 
+- Add `docs/plans/rpg_phase10_1_production_readiness_baseline.md`.
+- Add deterministic source guards proving production readiness requires concrete packaging/install/run evidence.
 - Establish production packaging, install/run, config, persistence, logs, and player-safe error handling evidence categories.
 - Keep the first Phase 10 slice documentation/test-only and provider-free.
 - Do not claim external release readiness until concrete install/run evidence exists.
