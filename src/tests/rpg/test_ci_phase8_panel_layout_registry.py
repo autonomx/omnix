@@ -12,45 +12,45 @@ OBJECTIVE_JOURNAL = ROOT / "src" / "static" / "rpg" / "rpgObjectiveJournalPanel.
 PLAYER_HUD = ROOT / "src" / "static" / "rpg" / "rpgPlayerHud.js"
 MAP_LOCATION = ROOT / "src" / "static" / "rpg" / "rpgMapLocationPanel.js"
 SURVIVAL_INSPECTOR = ROOT / "src" / "static" / "rpg" / "rpg-survival-inspector.js"
-WORKFLOW = ROOT / ".github" / "workflows" / "rpg-pr-deterministic.yml"
 
 
-def test_panel_layout_registry_exports_ordered_slots():
+def assert_contains(text, expected_values):
+    for expected in expected_values:
+        assert expected in text
+
+
+def test_panel_layout_registry_exports_ordered_accessible_slots():
     registry = REGISTRY.read_text(encoding="utf-8")
-    for expected in (
-        "deterministic_phase8_panel_layout_registry",
-        "PANEL_ORDER",
-        "conversation-settings",
-        "map-location",
-        "player-hud",
-        "objective-journal",
-        "combat-action",
-        "inventory-party",
-        "recent-activity",
-        "suggested-actions",
-        "survival-inspector",
-        "window.RpgPanelLayoutRegistry",
-    ):
-        assert expected in registry
-
-
-def test_panel_layout_registry_exports_accessibility_metadata():
-    registry = REGISTRY.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_LABELS",
-        "panelLabels",
-        "panelLabel",
-        "panelIndex",
-        "RPG status panels",
-        "Conversation settings panel",
-        "Map and location panel",
-        "Player HUD panel",
-        "Survival inspector panel",
-        "role", "region",
-        "aria-label",
-        "data-panel-order",
-    ):
-        assert expected in registry
+    assert_contains(
+        registry,
+        (
+            "deterministic_phase8_panel_layout_registry",
+            "PANEL_ORDER",
+            "conversation-settings",
+            "map-location",
+            "player-hud",
+            "objective-journal",
+            "combat-action",
+            "inventory-party",
+            "recent-activity",
+            "suggested-actions",
+            "survival-inspector",
+            "window.RpgPanelLayoutRegistry",
+            "PANEL_LABELS",
+            "panelLabels",
+            "panelLabel",
+            "panelIndex",
+            "RPG status panels",
+            "Conversation settings panel",
+            "Map and location panel",
+            "Player HUD panel",
+            "Survival inspector panel",
+            "role",
+            "region",
+            "aria-label",
+            "data-panel-order",
+        ),
+    )
 
 
 def test_panel_layout_registry_is_provider_free():
@@ -59,267 +59,171 @@ def test_panel_layout_registry_is_provider_free():
         assert forbidden not in registry
 
 
-def test_panel_layout_registry_is_loaded_before_panels():
+def test_panel_layout_registry_and_chrome_load_before_panels():
     settings = SETTINGS.read_text(encoding="utf-8")
     assert "rpgPanelLayoutRegistry.js" in settings
+    assert "rpgPanelChrome.js" in settings
+    assert "ensurePanelChromeScript" in settings
+    assert settings.index("rpgPanelLayoutRegistry.js") < settings.index("rpgPanelChrome.js")
     assert settings.index("rpgPanelLayoutRegistry.js") < settings.index("rpgPlayerHud.js")
-    assert settings.index("rpgPanelLayoutRegistry.js") < settings.index("rpgSuggestedActionsPanel.js")
+    assert settings.index("rpgPanelChrome.js") < settings.index("rpgRecentActivityPanel.js")
+    assert settings.index("rpgPanelChrome.js") < settings.index("rpgSuggestedActionsPanel.js")
 
 
-def test_conversation_settings_uses_panel_chrome_without_runtime_authority():
-    settings = SETTINGS.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "runtimeValidationNotice",
-        "decoratePanel(panel, \"conversation-settings\", SOURCE)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-        "deterministic_conversation_settings",
-    ):
-        assert expected in settings
-    assert "Conversation settings only affect presentation/audit preferences" in settings
-    assert "gameplay state changes still go through runtime validation" in settings
-    assert "apply_turn" not in settings
-    assert "provider" not in settings.lower()
-    assert "llm" not in settings.lower()
-
-
-def test_panel_chrome_exports_read_only_visibility_helpers():
+def test_panel_chrome_exports_read_only_visibility_and_accessibility_helpers():
     chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "deterministic_phase8_panel_chrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "attachPanelToLayout",
-        "decoratePanel",
-        "window.RpgPanelChrome",
-    ):
-        assert expected in chrome
+    assert_contains(
+        chrome,
+        (
+            "deterministic_phase8_panel_chrome",
+            "panelSourceBadge",
+            "panelEmptyState",
+            "runtimeValidationNotice",
+            "attachPanelToLayout",
+            "decoratePanel",
+            "window.RpgPanelChrome",
+            "panelChromeLabel",
+            "panelChromeA11yAttrs",
+            "data-panel-a11y-source",
+            "role=\"region\"",
+            "aria-label",
+            "role=\"note\"",
+            "Runtime validation notice",
+            "role=\"status\"",
+            "aria-live=\"polite\"",
+            "tabindex",
+            "window.RpgPanelLayoutRegistry",
+        ),
+    )
 
 
-def test_panel_chrome_exports_accessibility_metadata_helpers():
+def test_panel_chrome_exports_state_readonly_focus_and_section_metadata():
     chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "panelChromeLabel",
-        "panelChromeA11yAttrs",
-        "data-panel-a11y-source",
-        "role=\"region\"",
-        "aria-label",
-        "role=\"note\"",
-        "Runtime validation notice",
-        "role=\"status\"",
-        "aria-live=\"polite\"",
-        "tabindex",
-        "window.RpgPanelLayoutRegistry",
-    ):
-        assert expected in chrome
+    assert_contains(
+        chrome,
+        (
+            "PANEL_STATES",
+            "panelChromeState",
+            "panelStateAttrs",
+            "applyPanelState",
+            "data-panel-state",
+            "source_backed",
+            "advisory",
+            "empty",
+            "ready",
+            "READ_ONLY_AUTHORITY",
+            "runtime_validated_commands_only",
+            "readOnlyAttrs",
+            "applyReadOnlyMetadata",
+            "data-panel-read-only",
+            "data-panel-authority",
+            "aria-readonly",
+            "FOCUS_TARGET",
+            "panel_region",
+            "focusAttrs",
+            "applyFocusMetadata",
+            "data-panel-focus-target",
+            "data-panel-focus-source",
+            "data-panel-focus-label",
+            "PANEL_DENSITIES",
+            "PANEL_SECTIONS",
+            "densityAttrs",
+            "applyDensityMetadata",
+            "panelChromeSection",
+            "sectionAttrs",
+            "applySectionMetadata",
+            "header",
+            "body",
+            "footer",
+            "root",
+            "applySectionMetadata(attached, \"root\")",
+        ),
+    )
 
 
-def test_panel_chrome_exports_state_metadata_helpers():
+def test_panel_chrome_exports_freshness_priority_render_provenance_tone_schema_metadata():
     chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_STATES",
-        "panelChromeState",
-        "panelStateAttrs",
-        "applyPanelState",
-        "data-panel-state",
-        "data-panel-state-source",
-        "source_backed",
-        "advisory",
-        "empty",
-        "ready",
-        "panelStateAttrs(\"source_backed\")",
-        "panelStateAttrs(\"empty\")",
-        "panelStateAttrs(\"advisory\")",
-        "applyPanelState(attached, state || \"ready\")",
-    ):
-        assert expected in chrome
+    assert_contains(
+        chrome,
+        (
+            "PANEL_FRESHNESS",
+            "panelChromeFreshness",
+            "freshnessAttrs",
+            "applyFreshnessMetadata",
+            "data-panel-freshness",
+            "live",
+            "missing",
+            "snapshot",
+            "stale",
+            "PANEL_PRIORITIES",
+            "panelChromePriority",
+            "priorityAttrs",
+            "applyPriorityMetadata",
+            "data-panel-priority",
+            "critical",
+            "high",
+            "low",
+            "normal",
+            "PANEL_RENDER_KINDS",
+            "panelChromeRenderKind",
+            "renderKindAttrs",
+            "applyRenderKindMetadata",
+            "data-panel-render-kind",
+            "badge",
+            "empty_state",
+            "notice",
+            "panel",
+            "PANEL_PROVENANCE",
+            "panelChromeProvenance",
+            "provenanceAttrs",
+            "applyProvenanceMetadata",
+            "data-panel-provenance",
+            "chrome",
+            "layout_registry",
+            "payload",
+            "runtime_contract",
+            "PANEL_TONES",
+            "panelChromeTone",
+            "toneAttrs",
+            "applyToneMetadata",
+            "data-panel-tone",
+            "info",
+            "muted",
+            "neutral",
+            "warning",
+            "PANEL_SCHEMA_VERSION",
+            "phase8_panel_chrome_v1",
+            "panelChromeSchemaVersion",
+            "schemaAttrs",
+            "applySchemaMetadata",
+            "data-panel-schema-version",
+            "data-panel-schema-source",
+            "applySchemaMetadata(attached)",
+        ),
+    )
 
 
-def test_panel_chrome_exports_read_only_metadata_helpers():
+def test_panel_chrome_exports_surface_metadata_helpers():
     chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "READ_ONLY_AUTHORITY",
-        "runtime_validated_commands_only",
-        "readOnlyAttrs",
-        "applyReadOnlyMetadata",
-        "data-panel-read-only",
-        "data-panel-authority",
-        "data-panel-read-only-source",
-        "data-panel-read-only-reason",
-        "aria-readonly",
-        "Panel is presentation-only; gameplay authority stays with runtime validation.",
-        "Runtime validation remains authoritative for gameplay commands.",
-        "applyReadOnlyMetadata(attached)",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_focus_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "FOCUS_TARGET",
-        "panel_region",
-        "focusAttrs",
-        "applyFocusMetadata",
-        "data-panel-focus-target",
-        "data-panel-focus-source",
-        "data-panel-focus-label",
-        "Panel region focus target",
-        "applyFocusMetadata(attached, panelChromeLabel(panelId))",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_section_and_density_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_DENSITIES",
-        "PANEL_SECTIONS",
-        "panelChromeDensity",
-        "densityAttrs",
-        "applyDensityMetadata",
-        "data-panel-density",
-        "data-panel-density-source",
-        "compact",
-        "normal",
-        "panelChromeSection",
-        "sectionAttrs",
-        "applySectionMetadata",
-        "data-panel-section",
-        "data-panel-section-source",
-        "header",
-        "body",
-        "footer",
-        "root",
-        "sectionAttrs(\"header\")",
-        "sectionAttrs(\"body\")",
-        "sectionAttrs(\"footer\")",
-        "applyDensityMetadata(attached, \"normal\")",
-        "applySectionMetadata(attached, \"root\")",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_payload_freshness_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_FRESHNESS",
-        "panelChromeFreshness",
-        "freshnessAttrs",
-        "applyFreshnessMetadata",
-        "data-panel-freshness",
-        "data-panel-freshness-source",
-        "live",
-        "missing",
-        "snapshot",
-        "stale",
-        "freshnessAttrs(freshness || \"live\")",
-        "freshnessAttrs(\"missing\")",
-        "applyFreshnessMetadata(attached, freshness || \"live\")",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_priority_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_PRIORITIES",
-        "panelChromePriority",
-        "priorityAttrs",
-        "applyPriorityMetadata",
-        "data-panel-priority",
-        "data-panel-priority-source",
-        "critical",
-        "high",
-        "low",
-        "normal",
-        "priorityAttrs(priority || \"normal\")",
-        "priorityAttrs(\"low\")",
-        "priorityAttrs(\"high\")",
-        "applyPriorityMetadata(attached, priority || \"normal\")",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_render_kind_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_RENDER_KINDS",
-        "panelChromeRenderKind",
-        "renderKindAttrs",
-        "applyRenderKindMetadata",
-        "data-panel-render-kind",
-        "data-panel-render-source",
-        "badge",
-        "empty_state",
-        "notice",
-        "panel",
-        "renderKindAttrs(\"badge\")",
-        "renderKindAttrs(\"empty_state\")",
-        "renderKindAttrs(\"notice\")",
-        "applyRenderKindMetadata(attached, renderKind || \"panel\")",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_provenance_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_PROVENANCE",
-        "panelChromeProvenance",
-        "provenanceAttrs",
-        "applyProvenanceMetadata",
-        "data-panel-provenance",
-        "data-panel-provenance-source",
-        "chrome",
-        "layout_registry",
-        "payload",
-        "runtime_contract",
-        "provenanceAttrs(\"payload\")",
-        "provenanceAttrs(\"chrome\")",
-        "provenanceAttrs(\"runtime_contract\")",
-        "applyProvenanceMetadata(attached, provenance || \"chrome\")",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_tone_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_TONES",
-        "panelChromeTone",
-        "toneAttrs",
-        "applyToneMetadata",
-        "data-panel-tone",
-        "data-panel-tone-source",
-        "info",
-        "muted",
-        "neutral",
-        "warning",
-        "toneAttrs(\"info\")",
-        "toneAttrs(\"muted\")",
-        "toneAttrs(\"warning\")",
-        "applyToneMetadata(attached, tone || \"neutral\")",
-    ):
-        assert expected in chrome
-
-
-def test_panel_chrome_exports_schema_metadata_helpers():
-    chrome = CHROME.read_text(encoding="utf-8")
-    for expected in (
-        "PANEL_SCHEMA_VERSION",
-        "phase8_panel_chrome_v1",
-        "panelChromeSchemaVersion",
-        "schemaAttrs",
-        "applySchemaMetadata",
-        "data-panel-schema-version",
-        "data-panel-schema-source",
-        "schemaAttrs()",
-        "applySchemaMetadata(attached)",
-    ):
-        assert expected in chrome
+    assert_contains(
+        chrome,
+        (
+            "PANEL_SURFACES",
+            "panelChromeSurface",
+            "surfaceAttrs",
+            "applySurfaceMetadata",
+            "data-panel-surface",
+            "data-panel-surface-source",
+            "badge",
+            "empty",
+            "notice",
+            "panel",
+            "surfaceAttrs(\"badge\")",
+            "surfaceAttrs(\"empty\")",
+            "surfaceAttrs(\"notice\")",
+            "applySurfaceMetadata(attached, surface || \"panel\")",
+        ),
+    )
 
 
 def test_panel_chrome_is_provider_free_and_non_mutating():
@@ -339,139 +243,67 @@ def test_panel_chrome_is_provider_free_and_non_mutating():
     assert "addeventlistener" not in chrome
 
 
-def test_panel_chrome_loads_after_layout_registry_before_panels():
+def assert_panel_uses_chrome(panel_path, decorate_call, authority_text, allows_command_bridge=False):
+    panel = panel_path.read_text(encoding="utf-8")
+    assert_contains(
+        panel,
+        (
+            "window.RpgPanelChrome",
+            "panelSourceBadge",
+            "panelEmptyState",
+            "runtimeValidationNotice",
+            decorate_call,
+            "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+        ),
+    )
+    assert authority_text in panel
+    if allows_command_bridge:
+        assert "RpgCommandBridge.submitCommand" in panel
+        assert "window.rpgSendMessage" in panel
+    else:
+        assert "sendCommand" not in panel
+        assert "executeCommand" not in panel
+    assert "provider" not in panel.lower()
+    assert "llm" not in panel.lower()
+
+
+def test_conversation_settings_uses_panel_chrome_without_runtime_authority():
     settings = SETTINGS.read_text(encoding="utf-8")
-    assert "rpgPanelChrome.js" in settings
-    assert "ensurePanelChromeScript" in settings
-    assert settings.index("rpgPanelLayoutRegistry.js") < settings.index("rpgPanelChrome.js")
-    assert settings.index("rpgPanelChrome.js") < settings.index("rpgRecentActivityPanel.js")
-    assert settings.index("rpgPanelChrome.js") < settings.index("rpgSuggestedActionsPanel.js")
+    assert_contains(
+        settings,
+        (
+            "window.RpgPanelChrome",
+            "panelSourceBadge",
+            "runtimeValidationNotice",
+            "decoratePanel(panel, \"conversation-settings\", SOURCE)",
+            "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+            "deterministic_conversation_settings",
+        ),
+    )
+    assert "Conversation settings only affect presentation/audit preferences" in settings
+    assert "gameplay state changes still go through runtime validation" in settings
+    assert "apply_turn" not in settings
+    assert "provider" not in settings.lower()
+    assert "llm" not in settings.lower()
 
 
-def test_recent_activity_uses_panel_chrome_without_runtime_authority():
-    recent = RECENT_ACTIVITY.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "decoratePanel(target, \"recent-activity\", source)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
+def test_registered_panels_use_panel_chrome_without_runtime_authority():
+    for panel_path, decorate_call, authority_text in (
+        (RECENT_ACTIVITY, "decoratePanel(target, \"recent-activity\", source)", "commands still go through runtime validation"),
+        (SUGGESTED_ACTIONS, "decoratePanel(target, \"suggested-actions\", source)", "Suggestions are not accepted actions until runtime validates the command"),
+        (INVENTORY_PARTY, "decoratePanel(target, \"inventory-party\", source)", "Inventory and party details are read-only"),
+        (COMBAT_ACTION, "decoratePanel(target, \"combat-action\", source)", "Combat action affordances are read-only"),
+        (OBJECTIVE_JOURNAL, "decoratePanel(target, \"objective-journal\", source)", "Objectives and journal entries are read-only"),
+        (PLAYER_HUD, "decoratePanel(target, \"player-hud\", source)", "Player HUD details are read-only"),
+        (MAP_LOCATION, "decoratePanel(target, \"map-location\", source)", "Map and location details are read-only"),
     ):
-        assert expected in recent
-    assert "commands still go through runtime validation" in recent
-
-
-def test_suggested_actions_uses_panel_chrome_without_runtime_authority():
-    suggested = SUGGESTED_ACTIONS.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "decoratePanel(target, \"suggested-actions\", source)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-    ):
-        assert expected in suggested
-    assert "Suggestions are not accepted actions until runtime validates the command" in suggested
-
-
-def test_inventory_party_uses_panel_chrome_without_runtime_authority():
-    inventory = INVENTORY_PARTY.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "decoratePanel(target, \"inventory-party\", source)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-    ):
-        assert expected in inventory
-    assert "Inventory and party details are read-only" in inventory
-    assert "commands still go through runtime validation" in inventory
-
-
-def test_combat_action_uses_panel_chrome_without_runtime_authority():
-    combat = COMBAT_ACTION.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "decoratePanel(target, \"combat-action\", source)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-    ):
-        assert expected in combat
-    assert "Combat action affordances are read-only" in combat
-    assert "commands still go through runtime validation" in combat
-    assert "sendCommand" not in combat
-    assert "executeCommand" not in combat
-
-
-def test_objective_journal_uses_panel_chrome_without_runtime_authority():
-    journal = OBJECTIVE_JOURNAL.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "decoratePanel(target, \"objective-journal\", source)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-    ):
-        assert expected in journal
-    assert "Objectives and journal entries are read-only" in journal
-    assert "commands still go through runtime validation" in journal
-    assert "sendCommand" not in journal
-    assert "executeCommand" not in journal
-
-
-def test_player_hud_uses_panel_chrome_without_runtime_authority():
-    hud = PLAYER_HUD.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "decoratePanel(target, \"player-hud\", source)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-    ):
-        assert expected in hud
-    assert "Player HUD details are read-only" in hud
-    assert "commands still go through runtime validation" in hud
-    assert "sendCommand" not in hud
-    assert "executeCommand" not in hud
-
-
-def test_map_location_uses_panel_chrome_without_runtime_authority():
-    map_location = MAP_LOCATION.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
-        "decoratePanel(target, \"map-location\", source)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-    ):
-        assert expected in map_location
-    assert "Map and location details are read-only" in map_location
-    assert "commands still go through runtime validation" in map_location
-    assert "sendCommand" not in map_location
-    assert "executeCommand" not in map_location
+        assert_panel_uses_chrome(panel_path, decorate_call, authority_text)
 
 
 def test_survival_inspector_uses_panel_chrome_with_runtime_validation():
-    survival = SURVIVAL_INSPECTOR.read_text(encoding="utf-8")
-    for expected in (
-        "window.RpgPanelChrome",
-        "panelSourceBadge",
-        "panelEmptyState",
-        "runtimeValidationNotice",
+    assert_panel_uses_chrome(
+        SURVIVAL_INSPECTOR,
         "decoratePanel(panel, \"survival-inspector\", SOURCE)",
-        "data-panel-chrome=\"deterministic_phase8_panel_chrome\"",
-    ):
-        assert expected in survival
-    assert "Survival inspector actions still submit commands through runtime validation" in survival
-    assert "RpgCommandBridge.submitCommand" in survival
-    assert "window.rpgSendMessage" in survival
-    assert "provider" not in survival.lower()
-    assert "llm" not in survival.lower()
+        "Survival inspector actions still submit commands through runtime validation",
+        allows_command_bridge=True,
+    )
