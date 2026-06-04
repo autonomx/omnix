@@ -202,6 +202,26 @@ def test_panel_chrome_exports_section_and_density_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_payload_freshness_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_FRESHNESS",
+        "panelChromeFreshness",
+        "freshnessAttrs",
+        "applyFreshnessMetadata",
+        "data-panel-freshness",
+        "data-panel-freshness-source",
+        "live",
+        "missing",
+        "snapshot",
+        "stale",
+        "freshnessAttrs(freshness || \"live\")",
+        "freshnessAttrs(\"missing\")",
+        "applyFreshnessMetadata(attached, freshness || \"live\")",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
