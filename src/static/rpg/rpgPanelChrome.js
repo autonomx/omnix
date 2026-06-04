@@ -8,6 +8,12 @@
     compact: "compact",
     normal: "normal",
   };
+  const PANEL_FRESHNESS = {
+    live: "live",
+    missing: "missing",
+    snapshot: "snapshot",
+    stale: "stale",
+  };
   const PANEL_SECTIONS = {
     body: "body",
     footer: "footer",
@@ -59,6 +65,16 @@
   function densityAttrs(density) {
     const safeDensity = panelChromeDensity(density);
     return `data-panel-density="${escapeHtml(safeDensity)}" data-panel-density-source="${escapeHtml(SOURCE)}"`;
+  }
+
+  function panelChromeFreshness(freshness) {
+    const safeFreshness = safeToken(freshness, PANEL_FRESHNESS.live);
+    return Object.prototype.hasOwnProperty.call(PANEL_FRESHNESS, safeFreshness) ? PANEL_FRESHNESS[safeFreshness] : PANEL_FRESHNESS.live;
+  }
+
+  function freshnessAttrs(freshness) {
+    const safeFreshness = panelChromeFreshness(freshness);
+    return `data-panel-freshness="${escapeHtml(safeFreshness)}" data-panel-freshness-source="${escapeHtml(SOURCE)}"`;
   }
 
   function panelChromeSection(section) {
@@ -120,6 +136,14 @@
     return panelElement;
   }
 
+  function applyFreshnessMetadata(panelElement, freshness) {
+    if (!panelElement) return null;
+    const safeFreshness = panelChromeFreshness(freshness);
+    panelElement.setAttribute("data-panel-freshness", safeFreshness);
+    panelElement.setAttribute("data-panel-freshness-source", SOURCE);
+    return panelElement;
+  }
+
   function applySectionMetadata(sectionElement, section) {
     if (!sectionElement) return null;
     const safeSection = panelChromeSection(section);
@@ -136,17 +160,17 @@
     return panelElement;
   }
 
-  function panelSourceBadge(source, label) {
+  function panelSourceBadge(source, label, freshness) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -155,7 +179,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -169,7 +193,7 @@
     return panelElement;
   }
 
-  function decoratePanel(panelElement, panelId, source, state) {
+  function decoratePanel(panelElement, panelId, source, state, freshness) {
     const attached = attachPanelToLayout(panelElement, panelId);
     if (!attached) return null;
     attached.setAttribute("data-panel-chrome-source", SOURCE);
@@ -178,6 +202,7 @@
     applyPanelState(attached, state || "ready");
     applyReadOnlyMetadata(attached);
     applyDensityMetadata(attached, "normal");
+    applyFreshnessMetadata(attached, freshness || "live");
     applySectionMetadata(attached, "root");
     applyFocusMetadata(attached, panelChromeLabel(panelId));
     if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
@@ -190,6 +215,7 @@
     READ_ONLY_AUTHORITY,
     FOCUS_TARGET,
     PANEL_DENSITIES,
+    PANEL_FRESHNESS,
     PANEL_SECTIONS,
     PANEL_STATES,
     escapeHtml,
@@ -197,6 +223,8 @@
     panelChromeA11yAttrs,
     panelChromeDensity,
     densityAttrs,
+    panelChromeFreshness,
+    freshnessAttrs,
     panelChromeSection,
     sectionAttrs,
     panelChromeState,
@@ -206,6 +234,7 @@
     applyFocusMetadata,
     applyReadOnlyMetadata,
     applyDensityMetadata,
+    applyFreshnessMetadata,
     applySectionMetadata,
     applyPanelState,
     panelSourceBadge,
