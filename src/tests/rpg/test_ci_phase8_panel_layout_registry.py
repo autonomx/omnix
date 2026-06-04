@@ -264,6 +264,27 @@ def test_panel_chrome_exports_render_kind_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_provenance_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_PROVENANCE",
+        "panelChromeProvenance",
+        "provenanceAttrs",
+        "applyProvenanceMetadata",
+        "data-panel-provenance",
+        "data-panel-provenance-source",
+        "chrome",
+        "layout_registry",
+        "payload",
+        "runtime_contract",
+        "provenanceAttrs(\"payload\")",
+        "provenanceAttrs(\"chrome\")",
+        "provenanceAttrs(\"runtime_contract\")",
+        "applyProvenanceMetadata(attached, provenance || \"chrome\")",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
