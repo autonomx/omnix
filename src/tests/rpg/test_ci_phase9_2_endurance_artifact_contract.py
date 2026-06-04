@@ -68,15 +68,15 @@ def test_phase9_2_run_autoplay_campaign_writes_summary_transcript_and_zip(
         session_id,
         simulation_state,
         turn_index,
-        command,
-        narration_mode,
+        player_action,
+        runtime_narration,
     ):
         turns = list(simulation_state.get("turns", []))
         turns.append(
             {
                 "turn_index": turn_index,
-                "command": command,
-                "narration_mode": narration_mode,
+                "player_action": player_action,
+                "runtime_narration": runtime_narration,
                 "session_id": session_id,
             }
         )
