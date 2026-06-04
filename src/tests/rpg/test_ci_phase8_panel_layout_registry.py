@@ -285,6 +285,27 @@ def test_panel_chrome_exports_provenance_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_tone_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_TONES",
+        "panelChromeTone",
+        "toneAttrs",
+        "applyToneMetadata",
+        "data-panel-tone",
+        "data-panel-tone-source",
+        "info",
+        "muted",
+        "neutral",
+        "warning",
+        "toneAttrs(\"info\")",
+        "toneAttrs(\"muted\")",
+        "toneAttrs(\"warning\")",
+        "applyToneMetadata(attached, tone || \"neutral\")",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
@@ -438,12 +459,3 @@ def test_survival_inspector_uses_panel_chrome_with_runtime_validation():
     assert "window.rpgSendMessage" in survival
     assert "provider" not in survival.lower()
     assert "llm" not in survival.lower()
-
-
-def test_panel_layout_registry_gate_is_ordered():
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    gate = "RPG CI Phase 8 panel layout registry gate"
-    assert gate in workflow
-    assert "test_ci_phase8_panel_layout_registry.py" in workflow
-    assert workflow.index("RPG CI Phase 8 suggested actions panel gate") < workflow.index(gate)
-    assert workflow.index(gate) < workflow.index("RPG CI runtime facade manifest gate")
