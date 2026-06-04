@@ -3,6 +3,7 @@
 
   const SOURCE = "deterministic_phase8_panel_chrome";
   const READ_ONLY_AUTHORITY = "runtime_validated_commands_only";
+  const FOCUS_TARGET = "panel_region";
   const PANEL_STATES = {
     advisory: "advisory",
     empty: "empty",
@@ -49,6 +50,21 @@
   function readOnlyAttrs(reason) {
     const safeReason = safeStr(reason || "Panel is presentation-only; gameplay authority stays with runtime validation.");
     return `data-panel-read-only="true" data-panel-authority="${escapeHtml(READ_ONLY_AUTHORITY)}" data-panel-read-only-source="${escapeHtml(SOURCE)}" aria-readonly="true" data-panel-read-only-reason="${escapeHtml(safeReason)}"`;
+  }
+
+  function focusAttrs(focusLabel) {
+    const safeLabel = safeStr(focusLabel || "Panel region focus target");
+    return `data-panel-focus-target="${escapeHtml(FOCUS_TARGET)}" data-panel-focus-source="${escapeHtml(SOURCE)}" data-panel-focus-label="${escapeHtml(safeLabel)}" tabindex="-1"`;
+  }
+
+  function applyFocusMetadata(panelElement, focusLabel) {
+    if (!panelElement) return null;
+    const safeLabel = safeStr(focusLabel || "Panel region focus target");
+    panelElement.setAttribute("data-panel-focus-target", FOCUS_TARGET);
+    panelElement.setAttribute("data-panel-focus-source", SOURCE);
+    panelElement.setAttribute("data-panel-focus-label", safeLabel);
+    if (!panelElement.hasAttribute("tabindex")) panelElement.setAttribute("tabindex", "-1");
+    return panelElement;
   }
 
   function applyReadOnlyMetadata(panelElement, reason) {
@@ -111,15 +127,16 @@
     attached.setAttribute("data-panel-a11y-source", SOURCE);
     applyPanelState(attached, state || "ready");
     applyReadOnlyMetadata(attached);
+    applyFocusMetadata(attached, panelChromeLabel(panelId));
     if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
     if (!attached.getAttribute("aria-label")) attached.setAttribute("aria-label", panelChromeLabel(panelId));
-    if (!attached.hasAttribute("tabindex")) attached.setAttribute("tabindex", "-1");
     return attached;
   }
 
   window.RpgPanelChrome = {
     SOURCE,
     READ_ONLY_AUTHORITY,
+    FOCUS_TARGET,
     PANEL_STATES,
     escapeHtml,
     panelChromeLabel,
@@ -127,6 +144,8 @@
     panelChromeState,
     panelStateAttrs,
     readOnlyAttrs,
+    focusAttrs,
+    applyFocusMetadata,
     applyReadOnlyMetadata,
     applyPanelState,
     panelSourceBadge,
