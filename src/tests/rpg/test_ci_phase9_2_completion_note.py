@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 NOTE = ROOT / "docs" / "plans" / "rpg_phase9_2_completion_note.md"
 PHASE9_3 = ROOT / "docs" / "plans" / "rpg_phase9_3_checkpoint_replay_taxonomy.md"
+PHASE9_3_NOTE = ROOT / "docs" / "plans" / "rpg_phase9_3_completion_note.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-phase0-architecture-compliance.yml"
 
 
@@ -51,3 +52,17 @@ def test_phase9_3_taxonomy_doc_is_covered_by_existing_phase9_architecture_gate()
         "Simulation/runtime remains authoritative",
     ):
         assert expected in doc
+
+
+def test_phase9_3_completion_note_is_covered_by_existing_phase9_architecture_gate():
+    note = PHASE9_3_NOTE.read_text(encoding="utf-8")
+    for expected in (
+        "Phase 9.3 checkpoint and replay taxonomy guard is complete.",
+        "Implementation PR: #300",
+        "71d8ba3a0f2d0ee181fb0b525b7db3e9b7ce663b",
+        "save_load_checkpoint_failure",
+        "artifact_contract_failure",
+        "operator_evidence_gap",
+        "Phase 9.4 — endurance progress-quality loop taxonomy guard",
+    ):
+        assert expected in note
