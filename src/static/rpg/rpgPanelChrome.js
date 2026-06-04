@@ -44,6 +44,12 @@
     ready: "ready",
     source_backed: "source_backed",
   };
+  const PANEL_TONES = {
+    info: "info",
+    muted: "muted",
+    neutral: "neutral",
+    warning: "warning",
+  };
 
   function safeStr(value) {
     return value == null ? "" : String(value);
@@ -145,6 +151,16 @@
     return `data-panel-state="${escapeHtml(safeState)}" data-panel-state-source="${escapeHtml(SOURCE)}"`;
   }
 
+  function panelChromeTone(tone) {
+    const safeTone = safeToken(tone, PANEL_TONES.neutral);
+    return Object.prototype.hasOwnProperty.call(PANEL_TONES, safeTone) ? PANEL_TONES[safeTone] : PANEL_TONES.neutral;
+  }
+
+  function toneAttrs(tone) {
+    const safeTone = panelChromeTone(tone);
+    return `data-panel-tone="${escapeHtml(safeTone)}" data-panel-tone-source="${escapeHtml(SOURCE)}"`;
+  }
+
   function readOnlyAttrs(reason) {
     const safeReason = safeStr(reason || "Panel is presentation-only; gameplay authority stays with runtime validation.");
     return `data-panel-read-only="true" data-panel-authority="${escapeHtml(READ_ONLY_AUTHORITY)}" data-panel-read-only-source="${escapeHtml(SOURCE)}" aria-readonly="true" data-panel-read-only-reason="${escapeHtml(safeReason)}"`;
@@ -232,17 +248,25 @@
     return panelElement;
   }
 
+  function applyToneMetadata(panelElement, tone) {
+    if (!panelElement) return null;
+    const safeTone = panelChromeTone(tone);
+    panelElement.setAttribute("data-panel-tone", safeTone);
+    panelElement.setAttribute("data-panel-tone-source", SOURCE);
+    return panelElement;
+  }
+
   function panelSourceBadge(source, label, freshness, priority) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${provenanceAttrs("payload")} ${renderKindAttrs("badge")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${provenanceAttrs("payload")} ${toneAttrs("info")} ${renderKindAttrs("badge")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${provenanceAttrs("chrome")} ${renderKindAttrs("empty_state")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${provenanceAttrs("chrome")} ${toneAttrs("muted")} ${renderKindAttrs("empty_state")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -251,7 +275,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${provenanceAttrs("runtime_contract")} ${renderKindAttrs("notice")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${provenanceAttrs("runtime_contract")} ${toneAttrs("warning")} ${renderKindAttrs("notice")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -265,7 +289,7 @@
     return panelElement;
   }
 
-  function decoratePanel(panelElement, panelId, source, state, freshness, priority, renderKind, provenance) {
+  function decoratePanel(panelElement, panelId, source, state, freshness, priority, renderKind, provenance, tone) {
     const attached = attachPanelToLayout(panelElement, panelId);
     if (!attached) return null;
     attached.setAttribute("data-panel-chrome-source", SOURCE);
@@ -277,6 +301,7 @@
     applyFreshnessMetadata(attached, freshness || "live");
     applyPriorityMetadata(attached, priority || "normal");
     applyProvenanceMetadata(attached, provenance || "chrome");
+    applyToneMetadata(attached, tone || "neutral");
     applyRenderKindMetadata(attached, renderKind || "panel");
     applySectionMetadata(attached, "root");
     applyFocusMetadata(attached, panelChromeLabel(panelId));
@@ -296,6 +321,7 @@
     PANEL_RENDER_KINDS,
     PANEL_SECTIONS,
     PANEL_STATES,
+    PANEL_TONES,
     escapeHtml,
     panelChromeLabel,
     panelChromeA11yAttrs,
@@ -313,6 +339,8 @@
     sectionAttrs,
     panelChromeState,
     panelStateAttrs,
+    panelChromeTone,
+    toneAttrs,
     readOnlyAttrs,
     focusAttrs,
     applyFocusMetadata,
@@ -324,6 +352,7 @@
     applyRenderKindMetadata,
     applySectionMetadata,
     applyPanelState,
+    applyToneMetadata,
     panelSourceBadge,
     panelEmptyState,
     runtimeValidationNotice,
