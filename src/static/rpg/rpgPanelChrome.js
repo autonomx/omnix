@@ -2,6 +2,7 @@
   "use strict";
 
   const SOURCE = "deterministic_phase8_panel_chrome";
+  const READ_ONLY_AUTHORITY = "runtime_validated_commands_only";
   const PANEL_STATES = {
     advisory: "advisory",
     empty: "empty",
@@ -45,6 +46,22 @@
     return `data-panel-state="${escapeHtml(safeState)}" data-panel-state-source="${escapeHtml(SOURCE)}"`;
   }
 
+  function readOnlyAttrs(reason) {
+    const safeReason = safeStr(reason || "Panel is presentation-only; gameplay authority stays with runtime validation.");
+    return `data-panel-read-only="true" data-panel-authority="${escapeHtml(READ_ONLY_AUTHORITY)}" data-panel-read-only-source="${escapeHtml(SOURCE)}" aria-readonly="true" data-panel-read-only-reason="${escapeHtml(safeReason)}"`;
+  }
+
+  function applyReadOnlyMetadata(panelElement, reason) {
+    if (!panelElement) return null;
+    const safeReason = safeStr(reason || "Panel is presentation-only; gameplay authority stays with runtime validation.");
+    panelElement.setAttribute("data-panel-read-only", "true");
+    panelElement.setAttribute("data-panel-authority", READ_ONLY_AUTHORITY);
+    panelElement.setAttribute("data-panel-read-only-source", SOURCE);
+    panelElement.setAttribute("aria-readonly", "true");
+    panelElement.setAttribute("data-panel-read-only-reason", safeReason);
+    return panelElement;
+  }
+
   function applyPanelState(panelElement, state) {
     if (!panelElement) return null;
     const safeState = panelChromeState(state);
@@ -63,7 +80,7 @@
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -72,7 +89,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -93,6 +110,7 @@
     attached.setAttribute("data-panel-payload-source", safeStr(source || SOURCE));
     attached.setAttribute("data-panel-a11y-source", SOURCE);
     applyPanelState(attached, state || "ready");
+    applyReadOnlyMetadata(attached);
     if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
     if (!attached.getAttribute("aria-label")) attached.setAttribute("aria-label", panelChromeLabel(panelId));
     if (!attached.hasAttribute("tabindex")) attached.setAttribute("tabindex", "-1");
@@ -101,12 +119,15 @@
 
   window.RpgPanelChrome = {
     SOURCE,
+    READ_ONLY_AUTHORITY,
     PANEL_STATES,
     escapeHtml,
     panelChromeLabel,
     panelChromeA11yAttrs,
     panelChromeState,
     panelStateAttrs,
+    readOnlyAttrs,
+    applyReadOnlyMetadata,
     applyPanelState,
     panelSourceBadge,
     panelEmptyState,
