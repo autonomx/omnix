@@ -8,13 +8,13 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 ## Current Handoff Status
 
-Current phase focus: **Phase 9 — 1000-Turn Endurance Systems**.
+Current phase focus: **Phase 10 — production packaging, stability, and release readiness**.
 
-Current slice: **Phase 9.9 — targeted endurance hardening from concrete evidence**.
+Current slice: **Phase 10.1 — production readiness baseline and packaging evidence plan**.
 
-Next recommended slice after Phase 9.9: **Phase 10 — production packaging, stability, and release readiness**.
+Next recommended slice after Phase 10.1: **Phase 10.2 — install/run configuration evidence envelope**.
 
-Latest source-of-truth SHA before Phase 9.9: `57660270175598e6c407727893fc9ae3e325947e`.
+Latest source-of-truth SHA before Phase 10.1: `ef76e019679900b3c2b2f96307eef6bcec5a3f8c`.
 
 Latest completed Phase 9 work:
 
@@ -36,6 +36,7 @@ Latest completed Phase 9 work:
 | #309 Phase 9.7 completion note | `979414346a99a635916875455447bfe59e81202e` | Phase 9.7 | Complete | Added Phase 9.7 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 | #310 Phase 9.8 long-run continuity evidence envelope | `7b4c1a944ecd1e522681c155efe0df0acc689e1f` | Phase 9.8 | Complete | Added deterministic long-run continuity evidence envelope, provider-free guard, production readiness refresh, and architecture path coverage. |
 | #311 Phase 9.8 completion note | `57660270175598e6c407727893fc9ae3e325947e` | Phase 9.8 | Complete | Added Phase 9.8 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
+| #312 Phase 9.9 hardening decision gate | `ef76e019679900b3c2b2f96307eef6bcec5a3f8c` | Phase 9.9 | Complete | Added deterministic hardening decision gate requiring concrete evidence before targeted runtime changes. |
 
 After every merged PR:
 
@@ -82,8 +83,8 @@ After every merged PR:
 - Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
 - Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
 - Phase 8 — UI/UX Production Pass: **Closed as provider-free UI/UX foundation**.
-- Phase 9 — 1000-Turn Endurance Systems: **In progress; Phase 9.1 through Phase 9.8 complete; Phase 9.9 current**.
-- Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
+- Phase 9 — 1000-Turn Endurance Systems: **Complete as deterministic evidence framework; live/operator validation remains pending**.
+- Phase 10 — Production Packaging, Stability, and Release Readiness: **In progress; Phase 10.1 current**.
 
 ## Phase 8 — UI/UX Production Pass
 
@@ -97,9 +98,9 @@ Phase 8 completed as a provider-free UI/UX foundation pass. It should not be ext
 
 ## Phase 9 — 1000-Turn Endurance Systems
 
-Status: **In progress.**
+Status: **Complete as deterministic evidence framework; live/operator validation remains pending.**
 
-Phase 9.1 through Phase 9.8 are complete. These slices established deterministic repo-side baselines, artifact contracts, checkpoint/replay taxonomy, progress-quality taxonomy, performance evidence envelopes, concrete-evidence hardening intake rules, operator evidence intake, and long-run continuity evidence envelopes. They did not run or prove a live/provider 1000-turn campaign in CI.
+Phase 9.1 through Phase 9.9 are complete. These slices established deterministic repo-side baselines, artifact contracts, checkpoint/replay taxonomy, progress-quality taxonomy, performance evidence envelopes, concrete-evidence hardening intake rules, operator evidence intake, long-run continuity evidence envelopes, and a hardening decision gate. They did not run or prove a live/provider 1000-turn campaign in CI.
 
 Completed:
 
@@ -111,23 +112,25 @@ Completed:
 - [x] Phase 9.6 — targeted endurance hardening from concrete evidence.
 - [x] Phase 9.7 — operator evidence intake contract.
 - [x] Phase 9.8 — long-run continuity evidence envelope.
+- [x] Phase 9.9 — targeted endurance hardening decision gate.
+
+## Phase 10 — Production Packaging, Stability, and Release Readiness
+
+Status: **In progress.**
 
 Current:
 
-- [ ] Phase 9.9 — targeted endurance hardening from concrete evidence.
+- [ ] Phase 10.1 — production readiness baseline and packaging evidence plan.
 
 Next:
 
-- [ ] Phase 10 — production packaging, stability, and release readiness.
+- [ ] Phase 10.2 — install/run configuration evidence envelope.
 
-Phase 9.9 scope:
+Phase 10.1 scope:
 
-- Add `docs/plans/rpg_phase9_9_targeted_endurance_hardening_decision_gate.md`.
-- Add deterministic source guards proving targeted hardening requires concrete evidence before runtime, harness, gameplay, save/load, replay, UI, or provider-boundary code changes.
-- If no concrete evidence is attached, classify the next action as `operator_evidence_gap` instead of changing runtime behavior.
-- Keep the slice documentation/test-only and provider-free.
-
-Do not start runtime hardening until a concrete evidence source identifies the target failure mode.
+- Establish production packaging, install/run, config, persistence, logs, and player-safe error handling evidence categories.
+- Keep the first Phase 10 slice documentation/test-only and provider-free.
+- Do not claim external release readiness until concrete install/run evidence exists.
 
 ## Active Phase 9 taxonomy
 
@@ -149,8 +152,9 @@ Do not start runtime hardening until a concrete evidence source identifies the t
 - Full package/disk replay evidence remains pending.
 - Live/provider save/load checkpoint evidence remains pending.
 - Progress-quality and continuity judgments still require live/operator transcript review.
-- Long-run continuity risks remain across combat, NPC memory, party, travel, time, weather, quest/reward state, save/load, replay, progress-quality interpretation, and performance interpretation.
+- No Phase 9 targeted runtime hardening was performed because no concrete operator evidence was attached.
 - Phase 8 UI work was a provider-free foundation pass, not a full visual/gameplay UI overhaul.
+- Phase 10 still needs concrete install/run/package evidence before external release readiness can be claimed.
 
 ## Definition of 8/10 Production Readiness
 
