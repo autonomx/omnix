@@ -2,44 +2,34 @@
 
 Date: 2026-05-30
 Branch: `rpg`
-Last updated: 2026-06-02
+Last updated: 2026-06-04
 
 Goal: reach 8/10 or better across architecture, grounding, performance, mechanics, game design, long-run readiness, production readiness, and commercial/game-quality readiness.
 
 ## Current Handoff Status
 
-Current phase focus: **Phase 8 — UI/UX Production Pass**.
+Current phase focus: **Phase 9 — 1000-Turn Endurance Systems**.
 
-Next recommended slice: **Phase 8.4 — combat state action affordance UI polish**.
+Current slice: **Phase 9.6 — targeted endurance hardening from concrete evidence**.
 
-Latest completed PRs:
+Next recommended slice after Phase 9.6: **Phase 9.7 — operator evidence intake contract**.
+
+Latest source-of-truth SHA before Phase 9.6: `08eda228111ac5482e16e06712ae89fe878cde47`.
+
+Latest completed Phase 9 work:
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #184 Phase 4.16 optional season/weather expansion | `74409e87ad5fffabf4f894bfa246aa5596616daa` | Phase 4 | Complete | Added source-backed deterministic season/weather state and weather/report/UI hooks; both required RPG checks passed. |
-| #186 Phase 7.1 save load replay checkpoint foundation | `2e73cdd29b40d023e88e777514ec1c14b4552f81` | Phase 7 | Complete | Added deterministic replay checkpoint helpers, canonical session digests, restore validation, drift comparison, exports, and checkpoint gate; both required RPG checks passed. |
-| #188 Phase 7.2 replay turn sequence validation | `468463f545b4069b755eb73002516260cc50a59c` | Phase 7 | Complete | Added deterministic replay turn-sequence helpers through canonical runtime command helpers and replay drift checks; both required RPG checks passed. |
-| #190 Phase 7.3 save load replay persistence roundtrip | `f3b2255973f305cc2e8e471b7a6e00b33a36b27f` | Phase 7 | Complete | Added provider-free package/disk save-load replay roundtrip validation and drift details; both required RPG checks passed. |
-| #192 Phase 7.4 100-turn readiness loop progress report gate | `767b40863b30ad0d05e651ce26c6b81e48bfcda9` | Phase 7 | Complete | Added provider-free advisory 100-turn readiness analysis for turn count, loops, progress signals, and report/transcript budgets; both required RPG checks passed. |
-| #194 Phase 7.5 100-turn readiness report integration | `687cb8cd2d519f5ab2d8c19bc82cd8371e0c51eb` | Phase 7 | Complete | Added deterministic readiness report payloads, severity categories, escaped HTML, idempotent report append helpers, and advisory certification guardrails; both required RPG checks passed. |
-| #196 Phase 7.6 full 100-turn autoplay certification gate | `79adb4326f896c44ab9544b27786aca762211c95` | Phase 7 | Complete | Added deterministic full 100-turn artifact certification helpers with exact turn count, readiness critical blocker, and optional state/checkpoint digest mismatch enforcement; both required RPG checks passed. |
-| #198 Phase 7.7 real autoplay certification artifact wiring | `fe4d6d8ae20981199c0799d338301a1dfd8e50fc` | Phase 7 | Complete | Added deterministic saved artifact normalization into the Phase 7.6 certification shape, escaped/idempotent certification report rendering, session exports, and CI gate; both required RPG checks passed. |
-| #200 Phase 7.8 saved certification artifact writer integration | `d369b3ced3cdd622f3865165f271b2fafee95e6b` | Phase 7 | Complete | Added deterministic saved 100-turn certification artifact writer helpers, emits `phase7_100_turn_certification.json` next to manual/autoplay-style result artifacts, optionally appends escaped/idempotent certification HTML, and added the saved certification artifact writer gate; both required RPG checks passed. |
-| #202 Phase 7.9 saved autoplay digest source integration | `047fb0a6e9ca27e800188ea7f171101829c5cec7` | Phase 7 | Complete | Added provider-free saved autoplay/manual checkpoint and state digest source capture, threaded source metadata into saved certification payloads, separated checkpoint/state mismatch blockers, and added the saved autoplay digest source gate; both required RPG checks passed. |
-| #204 Phase 7.10 real saved state certification integration | `39f24306418e8d7127e24e32ad6936609ed424ba` | Phase 7 | Complete | Added deterministic real saved/loadable state certification bridge for manual/autoplay output directories, computes provider-free checkpoint/state digests from tiny persisted JSON fixtures, feeds the saved certification writer path, and added the real saved state certification gate; both required RPG checks passed. |
-| #206 Phase 7.11 real autoplay progress metrics integration | `a17dbbe404d5dcf58ed1cb1460e6df415bac0db7` | Phase 7 | Complete | Added deterministic saved output progress metrics bridge, normalizes real transcript/report rows into readiness analysis, threads progress/loop/budget diagnostics into saved certification artifacts, and added the real autoplay progress metrics gate; both required RPG checks passed. |
-| #208 Phase 7.12 saved certification report diagnostics visibility | `002ca914930f48ea966536e428dd193687bf64a4` | Phase 7 | Complete | Added source-backed saved certification report diagnostics in JSON/HTML for readiness, progress, loop, budget, state/checkpoint checks, blockers, and warnings; both required RPG checks passed. |
-| #210 Phase 7.13 live/manual saved artifact emission hook integration | `17dd28758b18bb25db7ff6c2757056e039f4fda3` | Phase 7 | Complete | Added deterministic completion-path emission hooks for manual/autoplay output directories, source-backed skipped/missing artifact diagnostics, saved certification JSON/HTML emission, and the live manual saved artifact emission hooks gate; both required RPG checks passed. |
-| #212 Phase 7.14 saved artifact bundle ZIP verification | `02e8f8519d3b81bc1ae922f53001575461adc253` | Phase 7 | Complete | Added deterministic saved artifact bundle and ZIP verification helpers for certification JSON, transcript rows, final/loadable state artifacts, report HTML bundle presence, source-backed missing artifact diagnostics, and the saved artifact bundle ZIP verification gate; both required RPG checks passed. |
-| #214 Phase 7.15 saved certification operator runbook | `e4d33ec2ac06946bc8199d060976f60c044419c9` | Phase 7 | Complete | Added operator-facing saved certification runbook guidance, deterministic source guards for helper names/artifact filenames/workflow gate names/source constants/JSON fields, documented provider-free CI versus optional live-provider local runs, and added the saved certification operator runbook gate; both required RPG checks passed. |
-| #216 Phase 7.16 end-to-end saved 100-turn fixture certification | `a8e3d5d6c7a3a67bc0a3107e7ac8686cdf930790` | Phase 7 | Complete | Added a provider-free end-to-end saved 100-turn fixture helper and gate that writes manual/autoplay-shaped outputs, emits saved certification JSON, appends report diagnostics, verifies disk bundle and ZIP inclusion, and covers digest drift blockers; both required RPG checks passed. |
-| #218 Phase 7.17 real completion path smoke integration | `5a974b237325443c802fa5dbc36551924585b061` | Phase 7 | Complete | Added provider-free real completion path smoke integration, wired manual CLI saved certification emission before ZIP creation with an opt-out flag, covered skipped/missing artifact diagnostics and complete saved-output emission, and added the real completion path smoke gate; both required RPG checks passed. |
-| #220 Phase 7.18 real artifact discovery hardening | `a8660c7f32af4647c0e2cba0c21b76b605eb0333` | Phase 7 | Complete | Added provider-free hardened saved artifact discovery for flat/nested manual/autoplay output layouts, wired progress/state/emission/bundle helpers through shared discovery diagnostics, preserved saved-state metadata compatibility, and added the real artifact discovery hardening gate; both required RPG checks passed. |
-| #222 Phase 7.19 saved artifact operator UX diagnostics | `b244b9e47e4790b860656f7b748e73786cdc6767` | Phase 7 | Complete | Added operator-facing nested artifact layout guidance, duplicate/partial-output diagnostics guidance, provider-free nested discovery and ambiguity source guards, and the saved artifact operator UX diagnostics gate; both required RPG checks passed. |
-| #224 Phase 7.20 closeout planning | `18041ebf17b51ed05940b91c4b502802a62863ef` | Phase 7 | Complete | Added Phase 7 closeout planning, routed remaining live/replay risks forward without overstating live-provider coverage, added the closeout planning gate, and kept required PR coverage provider-free; both required RPG checks passed. |
-| #226 Phase 8.1 player-visible state objective HUD foundation | `7604e1912d71b61bc93649da6d1edc24d14bb0ca` | Phase 8 | Complete | Added deterministic read-only `player_hud` extraction for current location, active objective, resources, party, time/weather, and major warnings; added a safe browser renderer and the Phase 8 HUD gate; both required RPG checks passed. |
-| #228 Phase 8.2 objective journal detail panel | `b43a41cc26129ea3197040132413098c19567adf` | Phase 8 | Complete | Added deterministic read-only objective/journal panel extraction, surfaced active/available/completed/blocked objective states, recent action state, warnings, and journal entries in turn/travel payloads, added escaped browser rendering and the Phase 8.2 gate; both required RPG checks passed. |
-| #230 Phase 8.3 combat state action affordance UI | `f7caa182e36f1fe2ee9164afa626f44190625896` | Phase 8 | Complete | Added deterministic read-only combat action panel payloads, legal action affordances, warning states, travel/base payload wiring, escaped browser rendering, and the Phase 8.3 combat action affordance gate; both required RPG checks passed on head `5d21d775be43252daa02a49259d0b1a681247942`. |
+| #296 Phase 9.1 endurance baseline | `69b48f60c0b55ab6784c7ccafdfb4ea8f1a0ee99` | Phase 9.1 | Complete | Added source-backed endurance harness baseline, taxonomy, runtime wrapper authority guard, and CI/operator evidence split. |
+| #297 Phase 9.1 completion note | `ee1e20d37aae0592125f7e2c0b27212e085cb6d6` | Phase 9.1 | Complete | Added Phase 9.1 completion note and guard. |
+| #298 Phase 9.2 artifact contract guard | `a72952ca26a33648230bdbf6f3a6a04ec5e2701a` | Phase 9.2 | Complete | Added deterministic artifact contract checks for summary, transcript, ZIP, summary fields, artifact path keys, and ZIP members. |
+| #299 Phase 9.2 completion note | `036fedee91850e21cc7483c5605cbca01547f035` | Phase 9.2 | Complete | Added Phase 9.2 completion note and guard. |
+| #300 Phase 9.3 checkpoint/replay taxonomy guard | `71d8ba3a0f2d0ee181fb0b525b7db3e9b7ce663b` | Phase 9.3 | Complete | Added checkpoint/replay taxonomy documentation and guards for save/load checkpoint, artifact contract, and operator evidence gaps. |
+| #301 Phase 9.3 completion note | `eef332e0ad954e18172a8ae8ff531bf7cf63b28e` | Phase 9.3 | Complete | Added Phase 9.3 completion note and guard. |
+| #302 Phase 9.4 progress-quality taxonomy guard | `a50978c140a333983fef93cf49d8115ef94d43e7` | Phase 9.4 | Complete | Added progress-quality taxonomy documentation and guards for false progress, weak progress, repeated no-op loops, turn execution, and operator evidence gaps. |
+| #303 Phase 9.4 completion note | `3dd2fb3060d5158817b652a36ea205c0b3bf1160` | Phase 9.4 | Complete | Added Phase 9.4 completion note and guard. |
+| #304 Phase 9.5 performance evidence envelope | `a6bb22007976dca1c0f3f92899cc05846588adf1` | Phase 9.5 | Complete | Added performance evidence envelope docs and guards for timing, drain, background job, production resource, and operator evidence labels. |
+| #305 Phase 9.5 completion note | `08eda228111ac5482e16e06712ae89fe878cde47` | Phase 9.5 | Complete | Added Phase 9.5 completion note and guard. |
 
 After every merged PR:
 
@@ -60,7 +50,7 @@ After every merged PR:
 | Game design / player experience | 5.7 | 8.0+ | 30-60 minute vertical slice is coherent, fun, visible, and replayable. |
 | NPC roleplay potential | 6.5 | 8.5+ | NPC profiles, memory, relationships, schedules, and evolution persist and affect play. |
 | 100-turn readiness | 6.0 | 8.0+ | 100-turn run completes with zero critical warnings and useful progression. |
-| 1000-turn readiness | 2.5 | 8.0+ | 1000-turn run completes with bounded reports, compression, memory aging, and no collapse. |
+| 1000-turn readiness | 3.5 | 8.0+ | 1000-turn run completes with bounded reports, replay/checkpoint evidence, progress-quality evidence, performance evidence, compression, memory aging, and no collapse. |
 | Production readiness | 3.8 | 8.0+ | Install/run/config/save/load/error handling are player-safe. |
 | Commercial/game-quality readiness | 2.9 | 8.0+ | Enough content, polish, UX, stability, and onboarding for external users. |
 
@@ -85,65 +75,74 @@ After every merged PR:
 - Phase 5 — NPC Profiles, Memory, Relationships, Schedules, and Evolution v2: **Pending**.
 - Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
 - Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
-- Phase 8 — UI/UX Production Pass: **In progress; Phase 8.1 through Phase 8.3 merged**.
-- Phase 9 — 1000-Turn Endurance Systems: **Pending**.
+- Phase 8 — UI/UX Production Pass: **Closed as provider-free UI/UX foundation**.
+- Phase 9 — 1000-Turn Endurance Systems: **In progress; Phase 9.1 through Phase 9.5 complete; Phase 9.6 current**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
-
-## Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate
-
-Status: **Materially complete for provider-free PR gate coverage.**
-
-Scope: save/load checkpoint validation, replay determinism, state diff validation, loop detection, progress metrics, report growth budget enforcement, critical warning severity categories, and 100-turn readiness/certification reporting.
-
-Completed:
-
-- [x] Phase 7.1 — replay checkpoint foundation: canonical session JSON, deterministic checkpoint digests, restore validation, drift comparison, volatile runtime diagnostic filtering, exports, and `RPG CI Phase 7 replay checkpoint foundation gate`.
-- [x] Phase 7.2 — replay turn sequence validation against checkpoint digests: restore from checkpoint inputs, apply provider-free command steps through canonical runtime command helpers, build per-turn checkpoint digests, compare final checkpoint digests, cover rejected commands without hidden mutation, and add the `RPG CI Phase 7 replay turn sequence gate`.
-- [x] Phase 7.3 — save/load replay persistence roundtrip gate: use existing package bridge and durable store paths, validate package/disk checkpoint digest stability, replay from loaded checkpoint state, surface source-backed drift details, and add the `RPG CI Phase 7 save load replay roundtrip gate`.
-- [x] Phase 7.4 — 100-turn readiness loop, progress, and report gate: add provider-free advisory analysis for turn count, loop risks, progress signals, report/transcript budgets, source-backed blockers/warnings, and add the `RPG CI Phase 7 100-turn readiness gate`.
-- [x] Phase 7.5 — critical warning severity and 100-turn readiness report integration: add deterministic report-facing payloads, severity categories, escaped HTML, idempotent append helpers, advisory certification guardrails, and the `RPG CI Phase 7 100-turn readiness report gate`.
-- [x] Phase 7.6 — full 100-turn autoplay certification gate: add deterministic artifact-shaped 100-turn certification helpers, exact turn count enforcement, readiness critical blocker enforcement, optional state/checkpoint digest mismatch enforcement, and the `RPG CI Phase 7 full 100-turn certification gate`.
-- [x] Phase 7.7 — real autoplay certification artifact wiring: normalize saved report/transcript/checkpoint-shaped artifacts into the Phase 7.6 certifier, add saved payload helpers, render escaped/idempotent certification report sections, export helpers, and add the `RPG CI Phase 7 real autoplay certification artifact gate`.
-- [x] Phase 7.8 — saved 100-turn certification payload emission and artifact writer integration: add deterministic writer helpers that emit `phase7_100_turn_certification.json` beside manual/autoplay-style result artifacts, optionally append safe certification HTML to saved reports, preserve ZIP inclusion for the JSON payload, and add the `RPG CI Phase 7 saved certification artifact writer gate`.
-- [x] Phase 7.9 — saved autoplay checkpoint/state digest source integration: add deterministic digest source capture for saved autoplay/manual artifact shapes, thread captured metadata into Phase 7.7/7.8 certification payloads, report checkpoint and state digest mismatches separately, and add the `RPG CI Phase 7 saved autoplay digest source gate`.
-- [x] Phase 7.10 — real saved/loadable campaign state certification integration: add deterministic manual/autoplay output-directory state discovery, compute provider-free checkpoint/state digests from persisted JSON state files, thread digests through the saved certification writer, report saved/loadable mismatches, and add the `RPG CI Phase 7 real saved state certification gate`.
-- [x] Phase 7.11 — real autoplay progress and loop metrics certification integration: add deterministic saved output progress metrics extraction, normalize real transcript/report rows into Phase 7.4 readiness analysis, thread progress/loop/budget diagnostics through saved certification artifacts, and add the `RPG CI Phase 7 real autoplay progress metrics gate`.
-- [x] Phase 7.12 — saved certification report diagnostics visibility integration: add escaped source-backed saved certification diagnostics in JSON and report HTML for digest mismatches, progress/loop warnings, readiness blockers, and report/transcript budget blockers, and add the `RPG CI Phase 7 saved certification report diagnostics gate`.
-- [x] Phase 7.13 — live/manual saved artifact emission hook integration: add deterministic manual/autoplay completion-path hooks that discover output directories, report HTML, transcript rows, and final/loadable state artifacts; emit saved certification JSON and appended diagnostics HTML when artifacts are available; surface source-backed skipped/missing diagnostics; and add the `RPG CI Phase 7 live manual saved artifact emission hooks gate`.
-- [x] Phase 7.14 — full saved artifact bundle and ZIP inclusion verification: add deterministic saved artifact bundle and ZIP verification helpers, verify certification JSON/transcript/final/loadable state artifacts in ZIPs, verify report HTML exists in saved bundles, surface source-backed missing artifact diagnostics, and add the `RPG CI Phase 7 saved artifact bundle ZIP verification gate`.
-- [x] Phase 7.15 — saved certification operator runbook and live/manual invocation guidance: add operator-facing manual/autoplay saved certification guidance, document expected artifacts, ZIP/report behavior, important JSON fields, diagnostics/blockers, provider-free CI versus optional live-provider local runs, deterministic source guard tests, and the `RPG CI Phase 7 saved certification operator runbook gate`.
-- [x] Phase 7.16 — end-to-end deterministic saved 100-turn fixture certification: add a canonical tiny saved output fixture builder, exercise transcript rows, report bytes, final/loadable state digests, progress/loop diagnostics, saved certification payload writing, report HTML append, emission hooks, and bundle/ZIP verification together, and add the `RPG CI Phase 7 end-to-end saved 100-turn fixture certification gate`.
-- [x] Phase 7.17 — real completion path smoke integration: add a provider-free completion-path smoke bridge, wire manual CLI completion to attempt saved certification emission before results ZIP creation, skip without mutation when live artifacts are absent or incomplete, emit saved certification JSON/HTML when complete saved outputs exist, and add the `RPG CI Phase 7 real completion path smoke gate`.
-- [x] Phase 7.18 — optional real artifact discovery hardening: add shared provider-free discovery for flat and nested saved artifact layouts, cover ambiguous/duplicate candidates with source-backed diagnostics, wire progress metrics/state certification/emission hooks/bundle verification through hardened discovery, preserve payload/report/ZIP guardrails, and add the `RPG CI Phase 7 real artifact discovery hardening gate`.
-- [x] Phase 7.19 — optional saved artifact operator UX and diagnostics polish: update operator runbook guidance for nested saved output layouts, duplicate/ambiguous candidate diagnostics, partial-output behavior, provider-free CI boundaries, add nested discovery/ambiguity source guards, and add the `RPG CI Phase 7 saved artifact operator UX diagnostics gate`.
-- [x] Phase 7.20 — Phase 7 closeout planning and remaining-risk routing: add `docs/plans/rpg_phase7_closeout_plan.md`, record provider-free Phase 7 coverage, route remaining live/replay risks forward, preserve architecture boundaries, recommend Phase 8 entry, and add the `RPG CI Phase 7 closeout planning gate`.
-
-Remaining risks routed forward:
-
-- Full live-provider 100-turn campaign execution is still not required in PR CI.
-- Long multi-turn campaign replay, combat replay, quest reward replay, NPC memory replay, party/companion replay, and full package/disk replay of an actual 100-turn campaign still need broader coverage.
-- Real saved/loadable campaign state diff validation in live completion paths needs more evidence.
-- NPC file-backed profiles/persona/memory remain pending under Phase 5 or later follow-up.
-- UI/UX production pass, 1000-turn endurance, and production packaging remain pending.
 
 ## Phase 8 — UI/UX Production Pass
 
+Status: **Closed.**
+
+Final closeout/handoff document: `docs/plans/rpg_phase8_final_closeout_handoff.md`.
+
+Final completion note: `docs/plans/rpg_phase8_35_completion_note.md`.
+
+Phase 8 completed as a provider-free UI/UX foundation pass. It should not be extended unless a required gate exposes a concrete regression in Phase 8 closeout artifacts. Future UI/UX work should either be routed into a new explicit UI phase with a bounded checklist or handled as a targeted fix required by Phase 9 endurance evidence.
+
+## Phase 9 — 1000-Turn Endurance Systems
+
 Status: **In progress.**
+
+Phase 9.1 through Phase 9.5 are complete. These slices established deterministic repo-side baselines, artifact contracts, checkpoint/replay taxonomy, progress-quality taxonomy, and performance evidence envelopes. They did not run or prove a live/provider 1000-turn campaign in CI.
 
 Completed:
 
-- [x] Phase 8.1 — player-visible state and objective HUD foundation: add deterministic read-only `player_hud` extraction for current location, active objective, resources, party summary, time/weather, and major warnings; surface it in turn/travel payloads; add a safe browser renderer and the `RPG CI Phase 8 player visible state objective HUD gate`.
-- [x] Phase 8.2 — objective/journal detail panel and action-state visibility: add deterministic read-only objective/journal panel payloads, show active/available/completed/blocked objective states with source-backed labels, surface recent action state and warning transitions, add escaped browser rendering, and add the `RPG CI Phase 8 objective journal detail panel gate`.
-- [x] Phase 8.3 — combat state and action affordance UI: add deterministic read-only `combat_action_panel` extraction for combat status, participants, player-turn state, legal attack/defend affordances, target summaries, recent action state, and major warnings; surface it in base turn and travel payloads; add escaped browser rendering; and add the `RPG CI Phase 8 combat state action affordance gate`.
+- [x] Phase 9.1 — endurance harness baseline and failure taxonomy.
+- [x] Phase 9.2 — deterministic endurance artifact contract guard.
+- [x] Phase 9.3 — endurance checkpoint and replay taxonomy guard.
+- [x] Phase 9.4 — endurance progress-quality loop taxonomy guard.
+- [x] Phase 9.5 — endurance performance/evidence envelope.
 
-Next recommended slice: **Phase 8.4 — combat state action affordance UI polish**.
+Current:
 
-Suggested Phase 8.4 scope:
+- [ ] Phase 9.6 — targeted endurance hardening from concrete evidence.
 
-- Confirm the exact next unchecked roadmap item before implementing.
-- Polish player-facing combat action affordance layout and status wording without moving combat authority into the UI.
-- Keep the combat panel deterministic, read-only, source-backed, and provider-free.
-- Preserve canonical runtime command helpers, combat action helpers, replay/save-load/determinism guardrails, and runtime wrapper authority.
+Next:
+
+- [ ] Phase 9.7 — operator evidence intake contract.
+- [ ] Phase 9.8 — long-run continuity evidence envelope.
+
+Phase 9.6 scope:
+
+- Update this production readiness plan so it no longer reports stale Phase 8 or pending Phase 9 state.
+- Add `docs/plans/rpg_phase9_6_targeted_endurance_hardening.md`.
+- Add deterministic source guards proving that future hardening must cite concrete evidence from Phase 9.1 through Phase 9.5 envelopes.
+- Keep the slice documentation/test-only and provider-free.
+
+Do not start runtime hardening until a concrete evidence source identifies the target failure mode.
+
+## Active Phase 9 taxonomy
+
+1. `harness_entrypoint_failure`
+2. `runtime_authority_failure`
+3. `turn_execution_failure`
+4. `save_load_checkpoint_failure`
+5. `artifact_contract_failure`
+6. `progress_quality_failure`
+7. `performance_budget_failure`
+8. `provider_boundary_failure`
+9. `world_continuity_failure`
+10. `operator_evidence_gap`
+
+## Remaining risks
+
+- Live/provider 1000-turn execution remains pending.
+- Operator/manual evidence is still needed for live/provider endurance, wall-clock timing, blocking or human-equivalent turn timing, final drain timing, background job drain behavior, production resource limits, and long-run narrative quality review.
+- Full package/disk replay evidence remains pending.
+- Live/provider save/load checkpoint evidence remains pending.
+- Progress-quality and continuity judgments still require live/operator transcript review.
+- Long-run continuity risks remain across combat, NPC memory, party, travel, time, weather, quest/reward state, save/load, replay, progress-quality interpretation, and performance interpretation.
+- Phase 8 UI work was a provider-free foundation pass, not a full visual/gameplay UI overhaul.
 
 ## Definition of 8/10 Production Readiness
 
