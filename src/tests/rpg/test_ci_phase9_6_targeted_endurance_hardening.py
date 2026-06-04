@@ -107,12 +107,17 @@ def test_phase9_6_updates_main_production_readiness_plan_current_state():
 def test_phase9_6_roadmap_aligns_with_phase9_5_completion_note():
     roadmap = ROADMAP.read_text(encoding="utf-8")
     note = PHASE9_5_NOTE.read_text(encoding="utf-8")
+
     for expected in (
         "#304 Phase 9.5 performance evidence envelope",
         "#305 Phase 9.5 completion note",
         "08eda228111ac5482e16e06712ae89fe878cde47",
-        "Phase 9.6 — targeted endurance hardening from concrete evidence",
     ):
         assert expected in roadmap
-        assert expected in note or expected == "#304 Phase 9.5 performance evidence envelope"
-    assert "Phase 9.6 — targeted endurance hardening from concrete evidence" in note
+
+    for expected in (
+        "Implementation PR: #304",
+        "a6bb22007976dca1c0f3f92899cc05846588adf1",
+        "Phase 9.6 — targeted endurance hardening from concrete evidence",
+    ):
+        assert expected in note
