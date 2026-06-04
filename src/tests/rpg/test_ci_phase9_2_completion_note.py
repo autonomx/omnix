@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[3]
 NOTE = ROOT / "docs" / "plans" / "rpg_phase9_2_completion_note.md"
 PHASE9_3 = ROOT / "docs" / "plans" / "rpg_phase9_3_checkpoint_replay_taxonomy.md"
 PHASE9_3_NOTE = ROOT / "docs" / "plans" / "rpg_phase9_3_completion_note.md"
+PHASE9_4 = ROOT / "docs" / "plans" / "rpg_phase9_4_progress_quality_loop_taxonomy.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-phase0-architecture-compliance.yml"
 
 
@@ -66,3 +67,15 @@ def test_phase9_3_completion_note_is_covered_by_existing_phase9_architecture_gat
         "Phase 9.4 — endurance progress-quality loop taxonomy guard",
     ):
         assert expected in note
+
+
+def test_phase9_4_progress_quality_doc_is_covered_by_existing_phase9_architecture_gate():
+    doc = PHASE9_4.read_text(encoding="utf-8")
+    for expected in (
+        "Phase 9.4 Progress-Quality Loop Taxonomy Guard",
+        "progress_quality_failure",
+        "turn_execution_failure",
+        "operator_evidence_gap",
+        "Simulation/runtime remains authoritative",
+    ):
+        assert expected in doc
