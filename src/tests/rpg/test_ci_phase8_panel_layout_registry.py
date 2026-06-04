@@ -172,6 +172,36 @@ def test_panel_chrome_exports_focus_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_section_and_density_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_DENSITIES",
+        "PANEL_SECTIONS",
+        "panelChromeDensity",
+        "densityAttrs",
+        "applyDensityMetadata",
+        "data-panel-density",
+        "data-panel-density-source",
+        "compact",
+        "normal",
+        "panelChromeSection",
+        "sectionAttrs",
+        "applySectionMetadata",
+        "data-panel-section",
+        "data-panel-section-source",
+        "header",
+        "body",
+        "footer",
+        "root",
+        "sectionAttrs(\"header\")",
+        "sectionAttrs(\"body\")",
+        "sectionAttrs(\"footer\")",
+        "applyDensityMetadata(attached, \"normal\")",
+        "applySectionMetadata(attached, \"root\")",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
@@ -186,6 +216,7 @@ def test_panel_chrome_is_provider_free_and_non_mutating():
     ):
         assert forbidden not in chrome
     assert ".focus(" not in chrome
+    assert "addeventlistener" not in chrome
 
 
 def test_panel_chrome_loads_after_layout_registry_before_panels():

@@ -4,6 +4,16 @@
   const SOURCE = "deterministic_phase8_panel_chrome";
   const READ_ONLY_AUTHORITY = "runtime_validated_commands_only";
   const FOCUS_TARGET = "panel_region";
+  const PANEL_DENSITIES = {
+    compact: "compact",
+    normal: "normal",
+  };
+  const PANEL_SECTIONS = {
+    body: "body",
+    footer: "footer",
+    header: "header",
+    root: "root",
+  };
   const PANEL_STATES = {
     advisory: "advisory",
     empty: "empty",
@@ -23,6 +33,10 @@
       .replace(/\"/g, "&quot;");
   }
 
+  function safeToken(value, fallback) {
+    return safeStr(value || fallback).toLowerCase().replace(/-/g, "_");
+  }
+
   function panelChromeLabel(panelId, fallbackLabel) {
     const registry = window.RpgPanelLayoutRegistry;
     if (registry && typeof registry.panelLabel === "function") {
@@ -37,8 +51,28 @@
     return `role="region" aria-label="${escapeHtml(label)}" data-panel-a11y-source="${escapeHtml(SOURCE)}"`;
   }
 
+  function panelChromeDensity(density) {
+    const safeDensity = safeToken(density, PANEL_DENSITIES.normal);
+    return Object.prototype.hasOwnProperty.call(PANEL_DENSITIES, safeDensity) ? PANEL_DENSITIES[safeDensity] : PANEL_DENSITIES.normal;
+  }
+
+  function densityAttrs(density) {
+    const safeDensity = panelChromeDensity(density);
+    return `data-panel-density="${escapeHtml(safeDensity)}" data-panel-density-source="${escapeHtml(SOURCE)}"`;
+  }
+
+  function panelChromeSection(section) {
+    const safeSection = safeToken(section, PANEL_SECTIONS.body);
+    return Object.prototype.hasOwnProperty.call(PANEL_SECTIONS, safeSection) ? PANEL_SECTIONS[safeSection] : PANEL_SECTIONS.body;
+  }
+
+  function sectionAttrs(section) {
+    const safeSection = panelChromeSection(section);
+    return `data-panel-section="${escapeHtml(safeSection)}" data-panel-section-source="${escapeHtml(SOURCE)}"`;
+  }
+
   function panelChromeState(state) {
-    const safeState = safeStr(state || PANEL_STATES.source_backed).toLowerCase().replace(/-/g, "_");
+    const safeState = safeToken(state, PANEL_STATES.source_backed);
     return Object.prototype.hasOwnProperty.call(PANEL_STATES, safeState) ? PANEL_STATES[safeState] : PANEL_STATES.source_backed;
   }
 
@@ -78,6 +112,22 @@
     return panelElement;
   }
 
+  function applyDensityMetadata(panelElement, density) {
+    if (!panelElement) return null;
+    const safeDensity = panelChromeDensity(density);
+    panelElement.setAttribute("data-panel-density", safeDensity);
+    panelElement.setAttribute("data-panel-density-source", SOURCE);
+    return panelElement;
+  }
+
+  function applySectionMetadata(sectionElement, section) {
+    if (!sectionElement) return null;
+    const safeSection = panelChromeSection(section);
+    sectionElement.setAttribute("data-panel-section", safeSection);
+    sectionElement.setAttribute("data-panel-section-source", SOURCE);
+    return sectionElement;
+  }
+
   function applyPanelState(panelElement, state) {
     if (!panelElement) return null;
     const safeState = panelChromeState(state);
@@ -89,14 +139,14 @@
   function panelSourceBadge(source, label) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -105,7 +155,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -127,6 +177,8 @@
     attached.setAttribute("data-panel-a11y-source", SOURCE);
     applyPanelState(attached, state || "ready");
     applyReadOnlyMetadata(attached);
+    applyDensityMetadata(attached, "normal");
+    applySectionMetadata(attached, "root");
     applyFocusMetadata(attached, panelChromeLabel(panelId));
     if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
     if (!attached.getAttribute("aria-label")) attached.setAttribute("aria-label", panelChromeLabel(panelId));
@@ -137,16 +189,24 @@
     SOURCE,
     READ_ONLY_AUTHORITY,
     FOCUS_TARGET,
+    PANEL_DENSITIES,
+    PANEL_SECTIONS,
     PANEL_STATES,
     escapeHtml,
     panelChromeLabel,
     panelChromeA11yAttrs,
+    panelChromeDensity,
+    densityAttrs,
+    panelChromeSection,
+    sectionAttrs,
     panelChromeState,
     panelStateAttrs,
     readOnlyAttrs,
     focusAttrs,
     applyFocusMetadata,
     applyReadOnlyMetadata,
+    applyDensityMetadata,
+    applySectionMetadata,
     applyPanelState,
     panelSourceBadge,
     panelEmptyState,
