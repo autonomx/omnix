@@ -14,7 +14,7 @@ Current slice: **Phase 9.8 — long-run continuity evidence envelope**.
 
 Next recommended slice after Phase 9.8: **Phase 9.9 — targeted endurance hardening from concrete evidence**.
 
-Latest source-of-truth SHA before Phase 9.8: `d3f00250efdef5898cc23e7cf94a936875939837`.
+Latest source-of-truth SHA before Phase 9.8: `979414346a99a635916875455447bfe59e81202e`.
 
 Latest completed Phase 9 work:
 
@@ -33,6 +33,7 @@ Latest completed Phase 9 work:
 | #306 Phase 9.6 targeted endurance hardening plan | `90aaf03214071d93b693bc5c41b484350b89d2fb` | Phase 9.6 | Complete | Added concrete-evidence hardening intake rules and refreshed this production readiness plan. |
 | #307 Phase 9.6 completion note | `21d658a01877d8e735819dc3a727e4d8e8137eb9` | Phase 9.6 | Complete | Added Phase 9.6 completion note and guard. |
 | #308 Phase 9.7 operator evidence intake contract | `d3f00250efdef5898cc23e7cf94a936875939837` | Phase 9.7 | Complete | Added deterministic operator evidence intake contract, provider-free guard, production readiness refresh, and architecture path coverage. |
+| #309 Phase 9.7 completion note | `979414346a99a635916875455447bfe59e81202e` | Phase 9.7 | Complete | Added Phase 9.7 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 
 After every merged PR:
 
@@ -121,6 +122,7 @@ Phase 9.8 scope:
 - Define long-run continuity evidence categories and required fields for combat, NPC memory, party, travel, time, weather, quest, reward, save/load, and replay continuity.
 - Keep the slice evidence-contract oriented unless concrete operator evidence identifies a narrow runtime failure.
 - Keep the slice documentation/test-only and provider-free.
+- Make clear that CI source guards do not prove live/provider 1000-turn continuity.
 
 Do not start runtime hardening until a concrete evidence source identifies the target failure mode.
 
