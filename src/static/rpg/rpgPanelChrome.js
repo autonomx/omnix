@@ -20,6 +20,12 @@
     low: "low",
     normal: "normal",
   };
+  const PANEL_RENDER_KINDS = {
+    badge: "badge",
+    empty_state: "empty_state",
+    notice: "notice",
+    panel: "panel",
+  };
   const PANEL_SECTIONS = {
     body: "body",
     footer: "footer",
@@ -91,6 +97,16 @@
   function priorityAttrs(priority) {
     const safePriority = panelChromePriority(priority);
     return `data-panel-priority="${escapeHtml(safePriority)}" data-panel-priority-source="${escapeHtml(SOURCE)}"`;
+  }
+
+  function panelChromeRenderKind(renderKind) {
+    const safeRenderKind = safeToken(renderKind, PANEL_RENDER_KINDS.panel);
+    return Object.prototype.hasOwnProperty.call(PANEL_RENDER_KINDS, safeRenderKind) ? PANEL_RENDER_KINDS[safeRenderKind] : PANEL_RENDER_KINDS.panel;
+  }
+
+  function renderKindAttrs(renderKind) {
+    const safeRenderKind = panelChromeRenderKind(renderKind);
+    return `data-panel-render-kind="${escapeHtml(safeRenderKind)}" data-panel-render-source="${escapeHtml(SOURCE)}"`;
   }
 
   function panelChromeSection(section) {
@@ -168,6 +184,14 @@
     return panelElement;
   }
 
+  function applyRenderKindMetadata(panelElement, renderKind) {
+    if (!panelElement) return null;
+    const safeRenderKind = panelChromeRenderKind(renderKind);
+    panelElement.setAttribute("data-panel-render-kind", safeRenderKind);
+    panelElement.setAttribute("data-panel-render-source", SOURCE);
+    return panelElement;
+  }
+
   function applySectionMetadata(sectionElement, section) {
     if (!sectionElement) return null;
     const safeSection = panelChromeSection(section);
@@ -187,14 +211,14 @@
   function panelSourceBadge(source, label, freshness, priority) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${renderKindAttrs("badge")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${renderKindAttrs("empty_state")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -203,7 +227,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${renderKindAttrs("notice")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -217,7 +241,7 @@
     return panelElement;
   }
 
-  function decoratePanel(panelElement, panelId, source, state, freshness, priority) {
+  function decoratePanel(panelElement, panelId, source, state, freshness, priority, renderKind) {
     const attached = attachPanelToLayout(panelElement, panelId);
     if (!attached) return null;
     attached.setAttribute("data-panel-chrome-source", SOURCE);
@@ -228,6 +252,7 @@
     applyDensityMetadata(attached, "normal");
     applyFreshnessMetadata(attached, freshness || "live");
     applyPriorityMetadata(attached, priority || "normal");
+    applyRenderKindMetadata(attached, renderKind || "panel");
     applySectionMetadata(attached, "root");
     applyFocusMetadata(attached, panelChromeLabel(panelId));
     if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
@@ -242,6 +267,7 @@
     PANEL_DENSITIES,
     PANEL_FRESHNESS,
     PANEL_PRIORITIES,
+    PANEL_RENDER_KINDS,
     PANEL_SECTIONS,
     PANEL_STATES,
     escapeHtml,
@@ -253,6 +279,8 @@
     freshnessAttrs,
     panelChromePriority,
     priorityAttrs,
+    panelChromeRenderKind,
+    renderKindAttrs,
     panelChromeSection,
     sectionAttrs,
     panelChromeState,
@@ -264,6 +292,7 @@
     applyDensityMetadata,
     applyFreshnessMetadata,
     applyPriorityMetadata,
+    applyRenderKindMetadata,
     applySectionMetadata,
     applyPanelState,
     panelSourceBadge,
