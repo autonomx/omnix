@@ -6,6 +6,7 @@ PHASE9_3 = ROOT / "docs" / "plans" / "rpg_phase9_3_checkpoint_replay_taxonomy.md
 PHASE9_3_NOTE = ROOT / "docs" / "plans" / "rpg_phase9_3_completion_note.md"
 PHASE9_4 = ROOT / "docs" / "plans" / "rpg_phase9_4_progress_quality_loop_taxonomy.md"
 PHASE9_4_NOTE = ROOT / "docs" / "plans" / "rpg_phase9_4_completion_note.md"
+PHASE9_5 = ROOT / "docs" / "plans" / "rpg_phase9_5_performance_evidence_envelope.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-phase0-architecture-compliance.yml"
 
 
@@ -94,3 +95,16 @@ def test_phase9_4_completion_note_is_covered_by_existing_phase9_architecture_gat
         "Phase 9.5 — endurance performance/evidence envelope",
     ):
         assert expected in note
+
+
+def test_phase9_5_performance_doc_is_covered_by_existing_phase9_architecture_gate():
+    doc = PHASE9_5.read_text(encoding="utf-8")
+    for expected in (
+        "Phase 9.5 Performance Evidence Envelope",
+        "performance_budget_failure",
+        "operator_evidence_gap",
+        "progress_quality_failure",
+        "Simulation/runtime remains authoritative",
+        "Phase 9.6 — targeted endurance hardening from concrete evidence",
+    ):
+        assert expected in doc
