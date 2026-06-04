@@ -4,6 +4,7 @@
   const SOURCE = "deterministic_phase8_panel_chrome";
   const READ_ONLY_AUTHORITY = "runtime_validated_commands_only";
   const FOCUS_TARGET = "panel_region";
+  const PANEL_SCHEMA_VERSION = "phase8_panel_chrome_v1";
   const PANEL_DENSITIES = {
     compact: "compact",
     normal: "normal",
@@ -131,6 +132,14 @@
     return `data-panel-render-kind="${escapeHtml(safeRenderKind)}" data-panel-render-source="${escapeHtml(SOURCE)}"`;
   }
 
+  function panelChromeSchemaVersion() {
+    return PANEL_SCHEMA_VERSION;
+  }
+
+  function schemaAttrs() {
+    return `data-panel-schema-version="${escapeHtml(PANEL_SCHEMA_VERSION)}" data-panel-schema-source="${escapeHtml(SOURCE)}"`;
+  }
+
   function panelChromeSection(section) {
     const safeSection = safeToken(section, PANEL_SECTIONS.body);
     return Object.prototype.hasOwnProperty.call(PANEL_SECTIONS, safeSection) ? PANEL_SECTIONS[safeSection] : PANEL_SECTIONS.body;
@@ -232,6 +241,13 @@
     return panelElement;
   }
 
+  function applySchemaMetadata(panelElement) {
+    if (!panelElement) return null;
+    panelElement.setAttribute("data-panel-schema-version", PANEL_SCHEMA_VERSION);
+    panelElement.setAttribute("data-panel-schema-source", SOURCE);
+    return panelElement;
+  }
+
   function applySectionMetadata(sectionElement, section) {
     if (!sectionElement) return null;
     const safeSection = panelChromeSection(section);
@@ -259,14 +275,14 @@
   function panelSourceBadge(source, label, freshness, priority) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${provenanceAttrs("payload")} ${toneAttrs("info")} ${renderKindAttrs("badge")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${provenanceAttrs("payload")} ${toneAttrs("info")} ${renderKindAttrs("badge")} ${schemaAttrs()} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${provenanceAttrs("chrome")} ${toneAttrs("muted")} ${renderKindAttrs("empty_state")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${provenanceAttrs("chrome")} ${toneAttrs("muted")} ${renderKindAttrs("empty_state")} ${schemaAttrs()} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -275,7 +291,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${provenanceAttrs("runtime_contract")} ${toneAttrs("warning")} ${renderKindAttrs("notice")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${provenanceAttrs("runtime_contract")} ${toneAttrs("warning")} ${renderKindAttrs("notice")} ${schemaAttrs()} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -303,6 +319,7 @@
     applyProvenanceMetadata(attached, provenance || "chrome");
     applyToneMetadata(attached, tone || "neutral");
     applyRenderKindMetadata(attached, renderKind || "panel");
+    applySchemaMetadata(attached);
     applySectionMetadata(attached, "root");
     applyFocusMetadata(attached, panelChromeLabel(panelId));
     if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
@@ -314,6 +331,7 @@
     SOURCE,
     READ_ONLY_AUTHORITY,
     FOCUS_TARGET,
+    PANEL_SCHEMA_VERSION,
     PANEL_DENSITIES,
     PANEL_FRESHNESS,
     PANEL_PRIORITIES,
@@ -335,6 +353,8 @@
     provenanceAttrs,
     panelChromeRenderKind,
     renderKindAttrs,
+    panelChromeSchemaVersion,
+    schemaAttrs,
     panelChromeSection,
     sectionAttrs,
     panelChromeState,
@@ -350,6 +370,7 @@
     applyPriorityMetadata,
     applyProvenanceMetadata,
     applyRenderKindMetadata,
+    applySchemaMetadata,
     applySectionMetadata,
     applyPanelState,
     applyToneMetadata,
