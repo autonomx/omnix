@@ -222,6 +222,27 @@ def test_panel_chrome_exports_payload_freshness_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_priority_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_PRIORITIES",
+        "panelChromePriority",
+        "priorityAttrs",
+        "applyPriorityMetadata",
+        "data-panel-priority",
+        "data-panel-priority-source",
+        "critical",
+        "high",
+        "low",
+        "normal",
+        "priorityAttrs(priority || \"normal\")",
+        "priorityAttrs(\"low\")",
+        "priorityAttrs(\"high\")",
+        "applyPriorityMetadata(attached, priority || \"normal\")",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
