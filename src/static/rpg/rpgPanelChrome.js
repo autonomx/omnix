@@ -20,6 +20,12 @@
     low: "low",
     normal: "normal",
   };
+  const PANEL_PROVENANCE = {
+    chrome: "chrome",
+    layout_registry: "layout_registry",
+    payload: "payload",
+    runtime_contract: "runtime_contract",
+  };
   const PANEL_RENDER_KINDS = {
     badge: "badge",
     empty_state: "empty_state",
@@ -97,6 +103,16 @@
   function priorityAttrs(priority) {
     const safePriority = panelChromePriority(priority);
     return `data-panel-priority="${escapeHtml(safePriority)}" data-panel-priority-source="${escapeHtml(SOURCE)}"`;
+  }
+
+  function panelChromeProvenance(provenance) {
+    const safeProvenance = safeToken(provenance, PANEL_PROVENANCE.chrome);
+    return Object.prototype.hasOwnProperty.call(PANEL_PROVENANCE, safeProvenance) ? PANEL_PROVENANCE[safeProvenance] : PANEL_PROVENANCE.chrome;
+  }
+
+  function provenanceAttrs(provenance) {
+    const safeProvenance = panelChromeProvenance(provenance);
+    return `data-panel-provenance="${escapeHtml(safeProvenance)}" data-panel-provenance-source="${escapeHtml(SOURCE)}"`;
   }
 
   function panelChromeRenderKind(renderKind) {
@@ -184,6 +200,14 @@
     return panelElement;
   }
 
+  function applyProvenanceMetadata(panelElement, provenance) {
+    if (!panelElement) return null;
+    const safeProvenance = panelChromeProvenance(provenance);
+    panelElement.setAttribute("data-panel-provenance", safeProvenance);
+    panelElement.setAttribute("data-panel-provenance-source", SOURCE);
+    return panelElement;
+  }
+
   function applyRenderKindMetadata(panelElement, renderKind) {
     if (!panelElement) return null;
     const safeRenderKind = panelChromeRenderKind(renderKind);
@@ -211,14 +235,14 @@
   function panelSourceBadge(source, label, freshness, priority) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${renderKindAttrs("badge")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${provenanceAttrs("payload")} ${renderKindAttrs("badge")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${renderKindAttrs("empty_state")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${provenanceAttrs("chrome")} ${renderKindAttrs("empty_state")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -227,7 +251,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${renderKindAttrs("notice")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${provenanceAttrs("runtime_contract")} ${renderKindAttrs("notice")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -241,7 +265,7 @@
     return panelElement;
   }
 
-  function decoratePanel(panelElement, panelId, source, state, freshness, priority, renderKind) {
+  function decoratePanel(panelElement, panelId, source, state, freshness, priority, renderKind, provenance) {
     const attached = attachPanelToLayout(panelElement, panelId);
     if (!attached) return null;
     attached.setAttribute("data-panel-chrome-source", SOURCE);
@@ -252,6 +276,7 @@
     applyDensityMetadata(attached, "normal");
     applyFreshnessMetadata(attached, freshness || "live");
     applyPriorityMetadata(attached, priority || "normal");
+    applyProvenanceMetadata(attached, provenance || "chrome");
     applyRenderKindMetadata(attached, renderKind || "panel");
     applySectionMetadata(attached, "root");
     applyFocusMetadata(attached, panelChromeLabel(panelId));
@@ -267,6 +292,7 @@
     PANEL_DENSITIES,
     PANEL_FRESHNESS,
     PANEL_PRIORITIES,
+    PANEL_PROVENANCE,
     PANEL_RENDER_KINDS,
     PANEL_SECTIONS,
     PANEL_STATES,
@@ -279,6 +305,8 @@
     freshnessAttrs,
     panelChromePriority,
     priorityAttrs,
+    panelChromeProvenance,
+    provenanceAttrs,
     panelChromeRenderKind,
     renderKindAttrs,
     panelChromeSection,
@@ -292,6 +320,7 @@
     applyDensityMetadata,
     applyFreshnessMetadata,
     applyPriorityMetadata,
+    applyProvenanceMetadata,
     applyRenderKindMetadata,
     applySectionMetadata,
     applyPanelState,
