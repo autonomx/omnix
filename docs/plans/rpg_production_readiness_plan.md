@@ -14,7 +14,7 @@ Current slice: **Phase 9.9 — targeted endurance hardening from concrete eviden
 
 Next recommended slice after Phase 9.9: **Phase 10 — production packaging, stability, and release readiness**.
 
-Latest source-of-truth SHA before Phase 9.9: `7b4c1a944ecd1e522681c155efe0df0acc689e1f`.
+Latest source-of-truth SHA before Phase 9.9: `57660270175598e6c407727893fc9ae3e325947e`.
 
 Latest completed Phase 9 work:
 
@@ -35,6 +35,7 @@ Latest completed Phase 9 work:
 | #308 Phase 9.7 operator evidence intake contract | `d3f00250efdef5898cc23e7cf94a936875939837` | Phase 9.7 | Complete | Added deterministic operator evidence intake contract, provider-free guard, production readiness refresh, and architecture path coverage. |
 | #309 Phase 9.7 completion note | `979414346a99a635916875455447bfe59e81202e` | Phase 9.7 | Complete | Added Phase 9.7 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 | #310 Phase 9.8 long-run continuity evidence envelope | `7b4c1a944ecd1e522681c155efe0df0acc689e1f` | Phase 9.8 | Complete | Added deterministic long-run continuity evidence envelope, provider-free guard, production readiness refresh, and architecture path coverage. |
+| #311 Phase 9.8 completion note | `57660270175598e6c407727893fc9ae3e325947e` | Phase 9.8 | Complete | Added Phase 9.8 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
 
 After every merged PR:
 
@@ -121,9 +122,10 @@ Next:
 
 Phase 9.9 scope:
 
-- Select narrow hardening only from concrete operator evidence, artifact evidence, checkpoint/replay evidence, performance evidence, or CI failure evidence.
+- Add `docs/plans/rpg_phase9_9_targeted_endurance_hardening_decision_gate.md`.
+- Add deterministic source guards proving targeted hardening requires concrete evidence before runtime, harness, gameplay, save/load, replay, UI, or provider-boundary code changes.
 - If no concrete evidence is attached, classify the next action as `operator_evidence_gap` instead of changing runtime behavior.
-- Keep simulation/runtime authoritative and provider-free unless the concrete evidence identifies a provider-boundary documentation issue.
+- Keep the slice documentation/test-only and provider-free.
 
 Do not start runtime hardening until a concrete evidence source identifies the target failure mode.
 
