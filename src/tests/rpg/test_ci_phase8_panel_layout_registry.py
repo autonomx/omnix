@@ -137,6 +137,25 @@ def test_panel_chrome_exports_state_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_read_only_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "READ_ONLY_AUTHORITY",
+        "runtime_validated_commands_only",
+        "readOnlyAttrs",
+        "applyReadOnlyMetadata",
+        "data-panel-read-only",
+        "data-panel-authority",
+        "data-panel-read-only-source",
+        "data-panel-read-only-reason",
+        "aria-readonly",
+        "Panel is presentation-only; gameplay authority stays with runtime validation.",
+        "Runtime validation remains authoritative for gameplay commands.",
+        "applyReadOnlyMetadata(attached)",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
