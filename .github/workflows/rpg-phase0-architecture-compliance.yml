@@ -14,6 +14,7 @@ on:
       - "src/tests/rpg/test_ci_phase9_2_endurance_artifact_contract.py"
       - "src/tests/rpg/test_ci_phase9_2_completion_note.py"
       - "src/tests/rpg/test_ci_phase9_6_completion_note.py"
+      - "src/tests/rpg/test_ci_phase9_7_operator_evidence_intake_contract.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_*_completion_note.md"
       - "docs/plans/rpg_phase9_1_endurance_baseline.md"
@@ -21,6 +22,7 @@ on:
       - "docs/plans/rpg_phase9_2_endurance_artifact_contract.md"
       - "docs/plans/rpg_phase9_2_completion_note.md"
       - "docs/plans/rpg_phase9_6_completion_note.md"
+      - "docs/plans/rpg_phase9_7_operator_evidence_intake_contract.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
@@ -36,6 +38,7 @@ on:
       - "src/tests/rpg/test_ci_phase9_2_endurance_artifact_contract.py"
       - "src/tests/rpg/test_ci_phase9_2_completion_note.py"
       - "src/tests/rpg/test_ci_phase9_6_completion_note.py"
+      - "src/tests/rpg/test_ci_phase9_7_operator_evidence_intake_contract.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_*_completion_note.md"
       - "docs/plans/rpg_phase9_1_endurance_baseline.md"
@@ -43,6 +46,7 @@ on:
       - "docs/plans/rpg_phase9_2_endurance_artifact_contract.md"
       - "docs/plans/rpg_phase9_2_completion_note.md"
       - "docs/plans/rpg_phase9_6_completion_note.md"
+      - "docs/plans/rpg_phase9_7_operator_evidence_intake_contract.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
