@@ -5,6 +5,7 @@ NOTE = ROOT / "docs" / "plans" / "rpg_phase9_2_completion_note.md"
 PHASE9_3 = ROOT / "docs" / "plans" / "rpg_phase9_3_checkpoint_replay_taxonomy.md"
 PHASE9_3_NOTE = ROOT / "docs" / "plans" / "rpg_phase9_3_completion_note.md"
 PHASE9_4 = ROOT / "docs" / "plans" / "rpg_phase9_4_progress_quality_loop_taxonomy.md"
+PHASE9_4_NOTE = ROOT / "docs" / "plans" / "rpg_phase9_4_completion_note.md"
 WORKFLOW = ROOT / ".github" / "workflows" / "rpg-phase0-architecture-compliance.yml"
 
 
@@ -79,3 +80,17 @@ def test_phase9_4_progress_quality_doc_is_covered_by_existing_phase9_architectur
         "Simulation/runtime remains authoritative",
     ):
         assert expected in doc
+
+
+def test_phase9_4_completion_note_is_covered_by_existing_phase9_architecture_gate():
+    note = PHASE9_4_NOTE.read_text(encoding="utf-8")
+    for expected in (
+        "Phase 9.4 progress-quality loop taxonomy guard is complete.",
+        "Implementation PR: #302",
+        "a50978c140a333983fef93cf49d8115ef94d43e7",
+        "progress_quality_failure",
+        "turn_execution_failure",
+        "operator_evidence_gap",
+        "Phase 9.5 — endurance performance/evidence envelope",
+    ):
+        assert expected in note
