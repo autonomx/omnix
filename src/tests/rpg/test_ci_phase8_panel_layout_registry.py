@@ -243,6 +243,27 @@ def test_panel_chrome_exports_priority_metadata_helpers():
         assert expected in chrome
 
 
+def test_panel_chrome_exports_render_kind_metadata_helpers():
+    chrome = CHROME.read_text(encoding="utf-8")
+    for expected in (
+        "PANEL_RENDER_KINDS",
+        "panelChromeRenderKind",
+        "renderKindAttrs",
+        "applyRenderKindMetadata",
+        "data-panel-render-kind",
+        "data-panel-render-source",
+        "badge",
+        "empty_state",
+        "notice",
+        "panel",
+        "renderKindAttrs(\"badge\")",
+        "renderKindAttrs(\"empty_state\")",
+        "renderKindAttrs(\"notice\")",
+        "applyRenderKindMetadata(attached, renderKind || \"panel\")",
+    ):
+        assert expected in chrome
+
+
 def test_panel_chrome_is_provider_free_and_non_mutating():
     chrome = CHROME.read_text(encoding="utf-8").lower()
     for forbidden in (
