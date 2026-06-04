@@ -10,11 +10,11 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 9 — 1000-Turn Endurance Systems**.
 
-Current slice: **Phase 9.8 — long-run continuity evidence envelope**.
+Current slice: **Phase 9.9 — targeted endurance hardening from concrete evidence**.
 
-Next recommended slice after Phase 9.8: **Phase 9.9 — targeted endurance hardening from concrete evidence**.
+Next recommended slice after Phase 9.9: **Phase 10 — production packaging, stability, and release readiness**.
 
-Latest source-of-truth SHA before Phase 9.8: `979414346a99a635916875455447bfe59e81202e`.
+Latest source-of-truth SHA before Phase 9.9: `7b4c1a944ecd1e522681c155efe0df0acc689e1f`.
 
 Latest completed Phase 9 work:
 
@@ -34,6 +34,7 @@ Latest completed Phase 9 work:
 | #307 Phase 9.6 completion note | `21d658a01877d8e735819dc3a727e4d8e8137eb9` | Phase 9.6 | Complete | Added Phase 9.6 completion note and guard. |
 | #308 Phase 9.7 operator evidence intake contract | `d3f00250efdef5898cc23e7cf94a936875939837` | Phase 9.7 | Complete | Added deterministic operator evidence intake contract, provider-free guard, production readiness refresh, and architecture path coverage. |
 | #309 Phase 9.7 completion note | `979414346a99a635916875455447bfe59e81202e` | Phase 9.7 | Complete | Added Phase 9.7 completion note, completion guard, roadmap refresh, and cleanup architecture path coverage. |
+| #310 Phase 9.8 long-run continuity evidence envelope | `7b4c1a944ecd1e522681c155efe0df0acc689e1f` | Phase 9.8 | Complete | Added deterministic long-run continuity evidence envelope, provider-free guard, production readiness refresh, and architecture path coverage. |
 
 After every merged PR:
 
@@ -80,7 +81,7 @@ After every merged PR:
 - Phase 6 — Vertical Slice: Rusty Flagon Production Loop: **Pending / partially covered by earlier systems**.
 - Phase 7 — Save/Load, Replay, Determinism, and 100-Turn Gate: **Materially complete; remaining live/replay risks routed forward**.
 - Phase 8 — UI/UX Production Pass: **Closed as provider-free UI/UX foundation**.
-- Phase 9 — 1000-Turn Endurance Systems: **In progress; Phase 9.1 through Phase 9.7 complete; Phase 9.8 current**.
+- Phase 9 — 1000-Turn Endurance Systems: **In progress; Phase 9.1 through Phase 9.8 complete; Phase 9.9 current**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Pending**.
 
 ## Phase 8 — UI/UX Production Pass
@@ -97,7 +98,7 @@ Phase 8 completed as a provider-free UI/UX foundation pass. It should not be ext
 
 Status: **In progress.**
 
-Phase 9.1 through Phase 9.7 are complete. These slices established deterministic repo-side baselines, artifact contracts, checkpoint/replay taxonomy, progress-quality taxonomy, performance evidence envelopes, concrete-evidence hardening intake rules, and an operator evidence intake contract. They did not run or prove a live/provider 1000-turn campaign in CI.
+Phase 9.1 through Phase 9.8 are complete. These slices established deterministic repo-side baselines, artifact contracts, checkpoint/replay taxonomy, progress-quality taxonomy, performance evidence envelopes, concrete-evidence hardening intake rules, operator evidence intake, and long-run continuity evidence envelopes. They did not run or prove a live/provider 1000-turn campaign in CI.
 
 Completed:
 
@@ -108,21 +109,21 @@ Completed:
 - [x] Phase 9.5 — endurance performance/evidence envelope.
 - [x] Phase 9.6 — targeted endurance hardening from concrete evidence.
 - [x] Phase 9.7 — operator evidence intake contract.
+- [x] Phase 9.8 — long-run continuity evidence envelope.
 
 Current:
 
-- [ ] Phase 9.8 — long-run continuity evidence envelope.
+- [ ] Phase 9.9 — targeted endurance hardening from concrete evidence.
 
 Next:
 
-- [ ] Phase 9.9 — targeted endurance hardening from concrete evidence.
+- [ ] Phase 10 — production packaging, stability, and release readiness.
 
-Phase 9.8 scope:
+Phase 9.9 scope:
 
-- Define long-run continuity evidence categories and required fields for combat, NPC memory, party, travel, time, weather, quest, reward, save/load, and replay continuity.
-- Keep the slice evidence-contract oriented unless concrete operator evidence identifies a narrow runtime failure.
-- Keep the slice documentation/test-only and provider-free.
-- Make clear that CI source guards do not prove live/provider 1000-turn continuity.
+- Select narrow hardening only from concrete operator evidence, artifact evidence, checkpoint/replay evidence, performance evidence, or CI failure evidence.
+- If no concrete evidence is attached, classify the next action as `operator_evidence_gap` instead of changing runtime behavior.
+- Keep simulation/runtime authoritative and provider-free unless the concrete evidence identifies a provider-boundary documentation issue.
 
 Do not start runtime hardening until a concrete evidence source identifies the target failure mode.
 
