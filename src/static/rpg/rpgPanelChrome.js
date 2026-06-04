@@ -45,6 +45,12 @@
     ready: "ready",
     source_backed: "source_backed",
   };
+  const PANEL_SURFACES = {
+    badge: "badge",
+    empty: "empty",
+    notice: "notice",
+    panel: "panel",
+  };
   const PANEL_TONES = {
     info: "info",
     muted: "muted",
@@ -160,6 +166,16 @@
     return `data-panel-state="${escapeHtml(safeState)}" data-panel-state-source="${escapeHtml(SOURCE)}"`;
   }
 
+  function panelChromeSurface(surface) {
+    const safeSurface = safeToken(surface, PANEL_SURFACES.panel);
+    return Object.prototype.hasOwnProperty.call(PANEL_SURFACES, safeSurface) ? PANEL_SURFACES[safeSurface] : PANEL_SURFACES.panel;
+  }
+
+  function surfaceAttrs(surface) {
+    const safeSurface = panelChromeSurface(surface);
+    return `data-panel-surface="${escapeHtml(safeSurface)}" data-panel-surface-source="${escapeHtml(SOURCE)}"`;
+  }
+
   function panelChromeTone(tone) {
     const safeTone = safeToken(tone, PANEL_TONES.neutral);
     return Object.prototype.hasOwnProperty.call(PANEL_TONES, safeTone) ? PANEL_TONES[safeTone] : PANEL_TONES.neutral;
@@ -264,6 +280,14 @@
     return panelElement;
   }
 
+  function applySurfaceMetadata(panelElement, surface) {
+    if (!panelElement) return null;
+    const safeSurface = panelChromeSurface(surface);
+    panelElement.setAttribute("data-panel-surface", safeSurface);
+    panelElement.setAttribute("data-panel-surface-source", SOURCE);
+    return panelElement;
+  }
+
   function applyToneMetadata(panelElement, tone) {
     if (!panelElement) return null;
     const safeTone = panelChromeTone(tone);
@@ -275,14 +299,14 @@
   function panelSourceBadge(source, label, freshness, priority) {
     const safeSource = safeStr(source || SOURCE);
     const safeLabel = safeStr(label || "source-backed");
-    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${provenanceAttrs("payload")} ${toneAttrs("info")} ${renderKindAttrs("badge")} ${schemaAttrs()} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
+    return `<span class="rpg-panel-source-badge" data-source="${escapeHtml(safeSource)}" ${panelStateAttrs("source_backed")} ${sectionAttrs("header")} ${freshnessAttrs(freshness || "live")} ${priorityAttrs(priority || "normal")} ${provenanceAttrs("payload")} ${toneAttrs("info")} ${renderKindAttrs("badge")} ${schemaAttrs()} ${surfaceAttrs("badge")} role="note" aria-label="Panel source: ${escapeHtml(safeLabel)}">${escapeHtml(safeLabel)}</span>`;
   }
 
   function panelEmptyState(message, detail) {
     const safeMessage = safeStr(message || "No source-backed entries are currently visible.");
     const safeDetail = safeStr(detail || "This panel is read-only and will update when deterministic runtime payloads include data.");
     return `
-      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${provenanceAttrs("chrome")} ${toneAttrs("muted")} ${renderKindAttrs("empty_state")} ${schemaAttrs()} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
+      <p class="rpg-panel-empty-state" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("empty")} ${sectionAttrs("body")} ${freshnessAttrs("missing")} ${priorityAttrs("low")} ${provenanceAttrs("chrome")} ${toneAttrs("muted")} ${renderKindAttrs("empty_state")} ${schemaAttrs()} ${surfaceAttrs("empty")} ${readOnlyAttrs("Empty panel content is presentation-only and source-backed.")} role="status" aria-live="polite">
         <strong>${escapeHtml(safeMessage)}</strong>
         <span>${escapeHtml(safeDetail)}</span>
       </p>
@@ -291,7 +315,7 @@
 
   function runtimeValidationNotice(message) {
     const safeMessage = safeStr(message || "Panel content is advisory; commands still require runtime validation.");
-    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${provenanceAttrs("runtime_contract")} ${toneAttrs("warning")} ${renderKindAttrs("notice")} ${schemaAttrs()} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
+    return `<p class="rpg-panel-runtime-notice" data-source="${escapeHtml(SOURCE)}" ${panelStateAttrs("advisory")} ${sectionAttrs("footer")} ${freshnessAttrs("live")} ${priorityAttrs("high")} ${provenanceAttrs("runtime_contract")} ${toneAttrs("warning")} ${renderKindAttrs("notice")} ${schemaAttrs()} ${surfaceAttrs("notice")} ${readOnlyAttrs("Runtime validation remains authoritative for gameplay commands.")} role="note" aria-label="Runtime validation notice">${escapeHtml(safeMessage)}</p>`;
   }
 
   function attachPanelToLayout(panelElement, panelId) {
@@ -305,7 +329,7 @@
     return panelElement;
   }
 
-  function decoratePanel(panelElement, panelId, source, state, freshness, priority, renderKind, provenance, tone) {
+  function decoratePanel(panelElement, panelId, source, state, freshness, priority, renderKind, provenance, tone, surface) {
     const attached = attachPanelToLayout(panelElement, panelId);
     if (!attached) return null;
     attached.setAttribute("data-panel-chrome-source", SOURCE);
@@ -320,6 +344,7 @@
     applyToneMetadata(attached, tone || "neutral");
     applyRenderKindMetadata(attached, renderKind || "panel");
     applySchemaMetadata(attached);
+    applySurfaceMetadata(attached, surface || "panel");
     applySectionMetadata(attached, "root");
     applyFocusMetadata(attached, panelChromeLabel(panelId));
     if (!attached.getAttribute("role")) attached.setAttribute("role", "region");
@@ -339,6 +364,7 @@
     PANEL_RENDER_KINDS,
     PANEL_SECTIONS,
     PANEL_STATES,
+    PANEL_SURFACES,
     PANEL_TONES,
     escapeHtml,
     panelChromeLabel,
@@ -359,6 +385,8 @@
     sectionAttrs,
     panelChromeState,
     panelStateAttrs,
+    panelChromeSurface,
+    surfaceAttrs,
     panelChromeTone,
     toneAttrs,
     readOnlyAttrs,
@@ -373,6 +401,7 @@
     applySchemaMetadata,
     applySectionMetadata,
     applyPanelState,
+    applySurfaceMetadata,
     applyToneMetadata,
     panelSourceBadge,
     panelEmptyState,
