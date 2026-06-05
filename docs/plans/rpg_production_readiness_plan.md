@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 11 — evidence-driven production hardening**.
 
-Current slice: **Phase 11.2 — operator evidence backfill or narrow hardening from concrete failures**.
+Current slice: **Phase 11.3 — operator runbook for first package/install/run evidence capture**.
 
-Next recommended slice after Phase 11.2: **Phase 11.3 — operator runbook for first package/install/run evidence capture**.
+Next recommended slice after Phase 11.3: **Phase 11.4 — first persistence and diagnostics evidence capture runbook**.
 
-Latest source-of-truth SHA before Phase 11.2: `bdcd7a4e12c9f38c0d8c2a5d041620f4d3fabaa2`.
+Latest source-of-truth SHA before Phase 11.3: `475ee40de83017911a17ed12382b7a9ed7512abb`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #325 Phase 10.6 checklist | `9f0a9dbe65c3da5f7335e742a9740386cb338d46` | Phase 10.6 | Complete | Added operator release evidence intake checklist and deterministic guard. |
-| #326 Phase 10.6 completion note | `d4eb75096f99abd36aee2989d1128764fdb8924d` | Phase 10.6 | Complete | Added Phase 10.6 completion note and cleanup guard. |
 | #327 Phase 10.7 closeout gate | `045a8755736535211848caa0950a888d3bca43c7` | Phase 10.7 | Complete | Added production readiness closeout decision gate and deterministic guard. |
 | #328 Phase 10.7 completion note | `83db1f8e5c6e9d11f926ae93e3c2a8be30f7a81c` | Phase 10.7 | Complete | Added Phase 10.7 completion note, cleanup guard, and roadmap advancement to Phase 11. |
 | #329 Phase 11.1 hardening triage | `33bc5ce073b027a213ba28eec56f198fd2e14d25` | Phase 11.1 | Complete | Added evidence-driven production hardening triage and deterministic guard. |
 | #330 Phase 11.1 completion note | `bdcd7a4e12c9f38c0d8c2a5d041620f4d3fabaa2` | Phase 11.1 | Complete | Added Phase 11.1 completion note and cleanup guard. |
+| #331 Phase 11.2 evidence backfill plan | `7ae0c7565f9ecd90a1909014ad45afa15cae429f` | Phase 11.2 | Complete | Added operator evidence backfill plan and deterministic guard. |
+| #332 Phase 11.2 completion note | `475ee40de83017911a17ed12382b7a9ed7512abb` | Phase 11.2 | Complete | Added Phase 11.2 completion note and cleanup guard. |
 
 ## Roadmap Principles
 
@@ -63,19 +63,20 @@ Status: **Current.**
 Completed:
 
 - [x] Phase 11.1 — evidence-driven production hardening triage.
+- [x] Phase 11.2 — operator evidence backfill or narrow hardening from concrete failures.
 
 Current:
 
-- [ ] Phase 11.2 — operator evidence backfill or narrow hardening from concrete failures.
+- [ ] Phase 11.3 — operator runbook for first package/install/run evidence capture.
 
 Next:
 
-- [ ] Phase 11.3 — operator runbook for first package/install/run evidence capture.
+- [ ] Phase 11.4 — first persistence and diagnostics evidence capture runbook.
 
-Phase 11.2 scope:
+Phase 11.3 scope:
 
-- Convert Phase 11.1 `operator_evidence_backfill_required` into an ordered evidence collection plan.
-- Define package, install/run, configuration, persistence, diagnostics, player-safe error, release candidate, redaction, operator signoff, live endurance, checkpoint, transcript review, continuity, timing, drain, and resource-limit evidence backfill tasks.
+- Convert Phase 11.2 evidence backfill ordering into the first concrete operator runbook.
+- Define package artifact inventory, install transcript, run transcript, configuration snapshot, startup health, runtime smoke, shutdown, diagnostic collection, redaction review, and evidence bundle manifest capture steps.
 - Keep the slice documentation/test-only because no concrete operator evidence is attached.
 - Do not select runtime, provider, packaging, UI, or gameplay hardening without concrete evidence.
 
