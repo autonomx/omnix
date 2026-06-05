@@ -14,7 +14,7 @@ Current slice: **Phase 12.1 — concrete hardening implementation from accepted 
 
 Next recommended slice after Phase 12.1: **Phase 12.2 — package/install/run evidence capture or hardening**.
 
-Latest source-of-truth SHA before Phase 12.1: `764eccb922229c6b0045f77e63bc219f62948fee`.
+Latest source-of-truth SHA before Phase 12.1: `ac0290d848e8a73325b027b1258a681d394e3278`.
 
 ## Latest completed work
 
@@ -89,6 +89,7 @@ Phase 12.1 scope:
 - Inspect attached evidence bundles, CI failure logs, or source-backed diagnostics.
 - Implement a concrete bounded hardening fix only if accepted evidence identifies a target with reproduction steps, affected component, player impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
 - If no accepted evidence is attached, keep Phase 12.1 blocked by `operator_evidence_backfill_required` and select no runtime, provider, packaging, diagnostics, player-safe error, endurance, checkpoint/replay, UI, or gameplay hardening.
+- Add a deterministic evidence-decision record and guard proving implementation is blocked without accepted evidence.
 - Do not implement speculative hardening without accepted evidence.
 
 ## Remaining risks
