@@ -10,22 +10,21 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 11 — evidence-driven production hardening**.
 
-Current slice: **Phase 11.7 — first live/provider 1000-turn evidence capture runbook**.
+Current slice: **Phase 11.8 — first checkpoint/replay evidence capture runbook**.
 
-Next recommended slice after Phase 11.7: **Phase 11.8 — first checkpoint/replay evidence capture runbook**.
+Next recommended slice after Phase 11.8: **Phase 11.9 — first hardening target selection from attached evidence**.
 
-Latest source-of-truth SHA before Phase 11.7: `6424b60897ac0a90520e090f23a6868ff1932a73`.
+Latest source-of-truth SHA before Phase 11.8: `70d10433f38d9549a4422fd2091404d041f85b2c`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #335 Phase 11.4 persistence diagnostics runbook | `f89796ea864397d6fc47510d11a1541b1d7d97aa` | Phase 11.4 | Complete | Added persistence and diagnostics evidence runbook and deterministic guard. |
-| #336 Phase 11.4 completion note | `146a3224c6b6d7a1c82dbb56232cf517d9f14a22` | Phase 11.4 | Complete | Added Phase 11.4 completion note and cleanup guard. |
 | #337 Phase 11.5 player safe error runbook | `eed911801166bdb7c1f2876d1e02bc6afe6f69d7` | Phase 11.5 | Complete | Added player-safe error and redaction evidence runbook and deterministic guard. |
 | #338 Phase 11.5 completion note | `7b38a3bb77ab7eea3db477095d5e94024f490fcb` | Phase 11.5 | Complete | Added Phase 11.5 completion note and cleanup guard. |
 | #339 Phase 11.6 live provider 100 turn runbook | `4ff39ee4e6e9166c6e105afc726dca3fa08b7d5a` | Phase 11.6 | Complete | Added live/provider 100-turn evidence runbook and deterministic guard. |
 | #340 Phase 11.6 completion note | `6424b60897ac0a90520e090f23a6868ff1932a73` | Phase 11.6 | Complete | Added Phase 11.6 completion note and cleanup guard. |
+| #341 Phase 11.7 live provider 1000 turn runbook | `70d10433f38d9549a4422fd2091404d041f85b2c` | Phase 11.7 | Complete | Added live/provider 1000-turn evidence runbook and deterministic guard. |
 
 ## Roadmap Principles
 
@@ -68,19 +67,20 @@ Completed:
 - [x] Phase 11.4 — first persistence and diagnostics evidence capture runbook.
 - [x] Phase 11.5 — first player-safe error and redaction evidence capture runbook.
 - [x] Phase 11.6 — first live/provider 100-turn evidence capture runbook.
+- [x] Phase 11.7 — first live/provider 1000-turn evidence capture runbook.
 
 Current:
 
-- [ ] Phase 11.7 — first live/provider 1000-turn evidence capture runbook.
+- [ ] Phase 11.8 — first checkpoint/replay evidence capture runbook.
 
 Next:
 
-- [ ] Phase 11.8 — first checkpoint/replay evidence capture runbook.
+- [ ] Phase 11.9 — first hardening target selection from attached evidence.
 
-Phase 11.7 scope:
+Phase 11.8 scope:
 
-- Convert Phase 11.2 evidence backfill ordering into the first live/provider 1000-turn operator runbook.
-- Define provider/model/config capture, command capture, autoplay artifact capture, checkpoint/replay evidence, timing metrics, final drain behavior, background job behavior, progress-quality review, continuity review, failure classification, hardening handoff, redaction review, and evidence bundle classification steps.
+- Convert Phase 11.2 evidence backfill ordering into the checkpoint/replay operator runbook.
+- Define save/load checkpoint artifact capture, replay verification, package/disk replay references, determinism notes, failure classification, hardening handoff, redaction review, and evidence bundle classification steps.
 - Keep the slice documentation/test-only because no concrete operator evidence is attached.
 - Do not select runtime, provider, packaging, UI, or gameplay hardening without concrete evidence.
 
