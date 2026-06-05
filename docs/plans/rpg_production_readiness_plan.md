@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 11 — evidence-driven production hardening**.
 
-Current slice: **Phase 11.3 — operator runbook for first package/install/run evidence capture**.
+Current slice: **Phase 11.4 — first persistence and diagnostics evidence capture runbook**.
 
-Next recommended slice after Phase 11.3: **Phase 11.4 — first persistence and diagnostics evidence capture runbook**.
+Next recommended slice after Phase 11.4: **Phase 11.5 — first player-safe error and redaction evidence capture runbook**.
 
-Latest source-of-truth SHA before Phase 11.3: `475ee40de83017911a17ed12382b7a9ed7512abb`.
+Latest source-of-truth SHA before Phase 11.4: `b444fdbc83f65a7ce7d18234752c2132227b3494`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #327 Phase 10.7 closeout gate | `045a8755736535211848caa0950a888d3bca43c7` | Phase 10.7 | Complete | Added production readiness closeout decision gate and deterministic guard. |
-| #328 Phase 10.7 completion note | `83db1f8e5c6e9d11f926ae93e3c2a8be30f7a81c` | Phase 10.7 | Complete | Added Phase 10.7 completion note, cleanup guard, and roadmap advancement to Phase 11. |
 | #329 Phase 11.1 hardening triage | `33bc5ce073b027a213ba28eec56f198fd2e14d25` | Phase 11.1 | Complete | Added evidence-driven production hardening triage and deterministic guard. |
 | #330 Phase 11.1 completion note | `bdcd7a4e12c9f38c0d8c2a5d041620f4d3fabaa2` | Phase 11.1 | Complete | Added Phase 11.1 completion note and cleanup guard. |
 | #331 Phase 11.2 evidence backfill plan | `7ae0c7565f9ecd90a1909014ad45afa15cae429f` | Phase 11.2 | Complete | Added operator evidence backfill plan and deterministic guard. |
 | #332 Phase 11.2 completion note | `475ee40de83017911a17ed12382b7a9ed7512abb` | Phase 11.2 | Complete | Added Phase 11.2 completion note and cleanup guard. |
+| #333 Phase 11.3 package install runbook | `78bcba7fb8c6e9aef3966a7a661d55b157d70d62` | Phase 11.3 | Complete | Added package/install/run evidence runbook and deterministic guard. |
+| #334 Phase 11.3 completion note | `b444fdbc83f65a7ce7d18234752c2132227b3494` | Phase 11.3 | Complete | Added Phase 11.3 completion note and cleanup guard. |
 
 ## Roadmap Principles
 
@@ -64,19 +64,20 @@ Completed:
 
 - [x] Phase 11.1 — evidence-driven production hardening triage.
 - [x] Phase 11.2 — operator evidence backfill or narrow hardening from concrete failures.
+- [x] Phase 11.3 — operator runbook for first package/install/run evidence capture.
 
 Current:
 
-- [ ] Phase 11.3 — operator runbook for first package/install/run evidence capture.
+- [ ] Phase 11.4 — first persistence and diagnostics evidence capture runbook.
 
 Next:
 
-- [ ] Phase 11.4 — first persistence and diagnostics evidence capture runbook.
+- [ ] Phase 11.5 — first player-safe error and redaction evidence capture runbook.
 
-Phase 11.3 scope:
+Phase 11.4 scope:
 
-- Convert Phase 11.2 evidence backfill ordering into the first concrete operator runbook.
-- Define package artifact inventory, install transcript, run transcript, configuration snapshot, startup health, runtime smoke, shutdown, diagnostic collection, redaction review, and evidence bundle manifest capture steps.
+- Convert Phase 11.2 evidence backfill ordering into the persistence and diagnostics operator runbook.
+- Define save/session/data/report path capture, save/load roundtrip, replay/package artifact capture, diagnostic log capture, diagnostic bundle manifest, failure reproduction, redaction review, and evidence classification steps.
 - Keep the slice documentation/test-only because no concrete operator evidence is attached.
 - Do not select runtime, provider, packaging, UI, or gameplay hardening without concrete evidence.
 
