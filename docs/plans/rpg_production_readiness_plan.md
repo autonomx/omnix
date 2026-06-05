@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 11 — evidence-driven production hardening**.
 
-Current slice: **Phase 11.5 — first player-safe error and redaction evidence capture runbook**.
+Current slice: **Phase 11.6 — first live/provider 100-turn evidence capture runbook**.
 
-Next recommended slice after Phase 11.5: **Phase 11.6 — first live/provider 100-turn evidence capture runbook**.
+Next recommended slice after Phase 11.6: **Phase 11.7 — first live/provider 1000-turn evidence capture runbook**.
 
-Latest source-of-truth SHA before Phase 11.5: `146a3224c6b6d7a1c82dbb56232cf517d9f14a22`.
+Latest source-of-truth SHA before Phase 11.6: `7b38a3bb77ab7eea3db477095d5e94024f490fcb`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #331 Phase 11.2 evidence backfill plan | `7ae0c7565f9ecd90a1909014ad45afa15cae429f` | Phase 11.2 | Complete | Added operator evidence backfill plan and deterministic guard. |
-| #332 Phase 11.2 completion note | `475ee40de83017911a17ed12382b7a9ed7512abb` | Phase 11.2 | Complete | Added Phase 11.2 completion note and cleanup guard. |
 | #333 Phase 11.3 package install runbook | `78bcba7fb8c6e9aef3966a7a661d55b157d70d62` | Phase 11.3 | Complete | Added package/install/run evidence runbook and deterministic guard. |
 | #334 Phase 11.3 completion note | `b444fdbc83f65a7ce7d18234752c2132227b3494` | Phase 11.3 | Complete | Added Phase 11.3 completion note and cleanup guard. |
 | #335 Phase 11.4 persistence diagnostics runbook | `f89796ea864397d6fc47510d11a1541b1d7d97aa` | Phase 11.4 | Complete | Added persistence and diagnostics evidence runbook and deterministic guard. |
 | #336 Phase 11.4 completion note | `146a3224c6b6d7a1c82dbb56232cf517d9f14a22` | Phase 11.4 | Complete | Added Phase 11.4 completion note and cleanup guard. |
+| #337 Phase 11.5 player safe error runbook | `eed911801166bdb7c1f2876d1e02bc6afe6f69d7` | Phase 11.5 | Complete | Added player-safe error and redaction evidence runbook and deterministic guard. |
+| #338 Phase 11.5 completion note | `7b38a3bb77ab7eea3db477095d5e94024f490fcb` | Phase 11.5 | Complete | Added Phase 11.5 completion note and cleanup guard. |
 
 ## Roadmap Principles
 
@@ -66,25 +66,26 @@ Completed:
 - [x] Phase 11.2 — operator evidence backfill or narrow hardening from concrete failures.
 - [x] Phase 11.3 — operator runbook for first package/install/run evidence capture.
 - [x] Phase 11.4 — first persistence and diagnostics evidence capture runbook.
+- [x] Phase 11.5 — first player-safe error and redaction evidence capture runbook.
 
 Current:
 
-- [ ] Phase 11.5 — first player-safe error and redaction evidence capture runbook.
+- [ ] Phase 11.6 — first live/provider 100-turn evidence capture runbook.
 
 Next:
 
-- [ ] Phase 11.6 — first live/provider 100-turn evidence capture runbook.
+- [ ] Phase 11.7 — first live/provider 1000-turn evidence capture runbook.
 
-Phase 11.5 scope:
+Phase 11.6 scope:
 
-- Convert Phase 11.2 evidence backfill ordering into the player-safe error and redaction operator runbook.
-- Define startup/configuration/provider/save-load/persistence/network/resource/unknown error capture, player message capture, recovery action capture, support reference capture, internal diagnostic capture, redaction review, and evidence classification steps.
+- Convert Phase 11.2 evidence backfill ordering into the first live/provider 100-turn operator runbook.
+- Define provider/model/config capture, command capture, autoplay artifact capture, timing metrics, final drain behavior, background job behavior, progress-quality review, continuity review, failure classification, redaction review, and evidence bundle classification steps.
 - Keep the slice documentation/test-only because no concrete operator evidence is attached.
 - Do not select runtime, provider, packaging, UI, or gameplay hardening without concrete evidence.
 
 ## Remaining risks
 
-- Live/provider 1000-turn execution remains pending.
+- Live/provider 100-turn and 1000-turn execution remain pending.
 - Operator/manual evidence is still needed for endurance timing, final drain, background drain, production resource limits, and long-run narrative quality review.
 - Package artifacts, install/run transcripts, persistence smoke, diagnostic bundles, player-safe error evidence, release notes, redaction review, and operator signoff remain pending.
 - Live/provider save/load checkpoint evidence remains pending.
