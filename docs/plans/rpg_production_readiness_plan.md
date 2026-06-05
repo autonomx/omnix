@@ -14,7 +14,7 @@ Current slice: **Phase 10.3 — persistence and diagnostics evidence envelope**.
 
 Next recommended slice after Phase 10.3: **Phase 10.4 — player-safe error handling evidence envelope**.
 
-Latest source-of-truth SHA before Phase 10.3: `1957d9da2cc505ba04247b92dabef0c614238759`.
+Latest source-of-truth SHA before Phase 10.3: `c1b0dd46b318bd28560e3bea2acdb436fabe0851`.
 
 ## Latest completed work
 
@@ -25,6 +25,7 @@ Latest source-of-truth SHA before Phase 10.3: `1957d9da2cc505ba04247b92dabef0c61
 | #315 Phase 10.1 production readiness baseline | `12efbe0baa16bed4c5336fdf76ff6422081a910f` | Phase 10.1 | Complete | Added production readiness baseline and packaging evidence plan. |
 | #316 Phase 10.1 completion note | `c158b80e77768f819c8405dc14976eeaf42c2169` | Phase 10.1 | Complete | Added Phase 10.1 completion note and cleanup guard. |
 | #317 Phase 10.2 install/run evidence envelope | `1957d9da2cc505ba04247b92dabef0c614238759` | Phase 10.2 | Complete | Added install/run configuration evidence envelope and deterministic guard. |
+| #318 Phase 10.2 completion note | `c1b0dd46b318bd28560e3bea2acdb436fabe0851` | Phase 10.2 | Complete | Added Phase 10.2 completion note and cleanup guard. |
 
 ## Roadmap Principles
 
@@ -65,6 +66,8 @@ Next:
 
 Phase 10.3 scope:
 
+- Add `docs/plans/rpg_phase10_3_persistence_diagnostics_evidence_envelope.md`.
+- Add deterministic source guards proving persistence and diagnostics readiness requires concrete artifacts.
 - Define persistence evidence fields for save/session/data paths, roundtrip checks, replay/package artifacts, and migration/rollback expectations.
 - Define diagnostics evidence fields for logs, error reports, artifact bundles, operator collection steps, and sensitive-data redaction.
 - Keep the slice documentation/test-only and provider-free unless concrete persistence/diagnostics evidence identifies a narrow failure.
