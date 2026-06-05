@@ -8,23 +8,23 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 ## Current Handoff Status
 
-Current phase focus: **Phase 11 — evidence-driven production hardening**.
+Current phase focus: **Phase 12 — concrete evidence-backed production hardening**.
 
-Current slice: **Phase 11.9 — first hardening target selection from attached evidence**.
+Current slice: **Phase 12.1 — concrete hardening implementation from accepted evidence**.
 
-Next recommended slice after Phase 11.9: **Phase 12.1 — concrete hardening implementation from accepted evidence**.
+Next recommended slice after Phase 12.1: **Phase 12.2 — package/install/run evidence capture or hardening**.
 
-Latest source-of-truth SHA before Phase 11.9: `1400cf8b3a31daf2d4469afaeaf893d5a20c9cdf`.
+Latest source-of-truth SHA before Phase 12.1: `764eccb922229c6b0045f77e63bc219f62948fee`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #339 Phase 11.6 live provider 100 turn runbook | `4ff39ee4e6e9166c6e105afc726dca3fa08b7d5a` | Phase 11.6 | Complete | Added live/provider 100-turn evidence runbook and deterministic guard. |
 | #340 Phase 11.6 completion note | `6424b60897ac0a90520e090f23a6868ff1932a73` | Phase 11.6 | Complete | Added Phase 11.6 completion note and cleanup guard. |
 | #341 Phase 11.7 live provider 1000 turn runbook | `70d10433f38d9549a4422fd2091404d041f85b2c` | Phase 11.7 | Complete | Added live/provider 1000-turn evidence runbook and deterministic guard. |
 | #342 Phase 11.7 completion note | `641e3aac839413ba3fc54f44055acb3871483d25` | Phase 11.7 | Complete | Added Phase 11.7 completion note and cleanup guard. |
 | #343 Phase 11.8 checkpoint replay runbook | `bb8d3e3a257be6b34bd174181b797d3006c3ca9b` | Phase 11.8 | Complete | Added checkpoint/replay evidence runbook and deterministic guard. |
+| #345 Phase 11.9 hardening target selection gate | `764eccb922229c6b0045f77e63bc219f62948fee` | Phase 11.9 | Complete | Added evidence-backed hardening target selection gate and deterministic guard. |
 
 ## Roadmap Principles
 
@@ -39,7 +39,8 @@ Latest source-of-truth SHA before Phase 11.9: `1400cf8b3a31daf2d4469afaeaf893d5a
 - Phase 8 — UI/UX Production Pass: **Closed as provider-free UI/UX foundation**.
 - Phase 9 — 1000-Turn Endurance Systems: **Complete as deterministic evidence framework; live/operator validation remains pending**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
-- Phase 11 — Evidence-Driven Production Hardening: **Current**.
+- Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
+- Phase 12 — Concrete Evidence-Backed Production Hardening: **Current; blocked until accepted evidence identifies a bounded target**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -57,7 +58,7 @@ Completed:
 
 ## Phase 11 — Evidence-Driven Production Hardening
 
-Status: **Current.**
+Status: **Complete as deterministic evidence and target-selection framework; operator evidence remains pending.**
 
 Completed:
 
@@ -69,22 +70,26 @@ Completed:
 - [x] Phase 11.6 — first live/provider 100-turn evidence capture runbook.
 - [x] Phase 11.7 — first live/provider 1000-turn evidence capture runbook.
 - [x] Phase 11.8 — first checkpoint/replay evidence capture runbook.
+- [x] Phase 11.9 — first hardening target selection from attached evidence.
+
+## Phase 12 — Concrete Evidence-Backed Production Hardening
+
+Status: **Current; blocked until accepted evidence identifies a bounded target.**
 
 Current:
 
-- [ ] Phase 11.9 — first hardening target selection from attached evidence.
+- [ ] Phase 12.1 — concrete hardening implementation from accepted evidence.
 
 Next:
 
-- [ ] Phase 12.1 — concrete hardening implementation from accepted evidence.
+- [ ] Phase 12.2 — package/install/run evidence capture or hardening.
 
-Phase 11.9 scope:
+Phase 12.1 scope:
 
-- Review attached operator evidence and select the first concrete hardening target only if evidence exists.
-- If no evidence is attached, classify the state as blocked by `operator_evidence_backfill_required` and do not select runtime, provider, packaging, UI, or gameplay hardening.
-- Keep the slice documentation/test-only if no concrete operator evidence is attached.
-- Require source-backed reproduction details before Phase 12 implementation work begins.
-- Add a deterministic target-selection gate covering required evidence inputs, target fields, classifications, the no-evidence baseline, and the Phase 12 entry condition.
+- Inspect attached evidence bundles, CI failure logs, or source-backed diagnostics.
+- Implement a concrete bounded hardening fix only if accepted evidence identifies a target with reproduction steps, affected component, player impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
+- If no accepted evidence is attached, keep Phase 12.1 blocked by `operator_evidence_backfill_required` and select no runtime, provider, packaging, diagnostics, player-safe error, endurance, checkpoint/replay, UI, or gameplay hardening.
+- Do not implement speculative hardening without accepted evidence.
 
 ## Remaining risks
 
