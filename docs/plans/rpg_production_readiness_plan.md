@@ -14,17 +14,17 @@ Current slice: **Phase 11.8 — first checkpoint/replay evidence capture runbook
 
 Next recommended slice after Phase 11.8: **Phase 11.9 — first hardening target selection from attached evidence**.
 
-Latest source-of-truth SHA before Phase 11.8: `70d10433f38d9549a4422fd2091404d041f85b2c`.
+Latest source-of-truth SHA before Phase 11.8: `641e3aac839413ba3fc54f44055acb3871483d25`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #337 Phase 11.5 player safe error runbook | `eed911801166bdb7c1f2876d1e02bc6afe6f69d7` | Phase 11.5 | Complete | Added player-safe error and redaction evidence runbook and deterministic guard. |
 | #338 Phase 11.5 completion note | `7b38a3bb77ab7eea3db477095d5e94024f490fcb` | Phase 11.5 | Complete | Added Phase 11.5 completion note and cleanup guard. |
 | #339 Phase 11.6 live provider 100 turn runbook | `4ff39ee4e6e9166c6e105afc726dca3fa08b7d5a` | Phase 11.6 | Complete | Added live/provider 100-turn evidence runbook and deterministic guard. |
 | #340 Phase 11.6 completion note | `6424b60897ac0a90520e090f23a6868ff1932a73` | Phase 11.6 | Complete | Added Phase 11.6 completion note and cleanup guard. |
 | #341 Phase 11.7 live provider 1000 turn runbook | `70d10433f38d9549a4422fd2091404d041f85b2c` | Phase 11.7 | Complete | Added live/provider 1000-turn evidence runbook and deterministic guard. |
+| #342 Phase 11.7 completion note | `641e3aac839413ba3fc54f44055acb3871483d25` | Phase 11.7 | Complete | Added Phase 11.7 completion note and cleanup guard. |
 
 ## Roadmap Principles
 
