@@ -10,21 +10,21 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 11 — evidence-driven production hardening**.
 
-Current slice: **Phase 11.8 — first checkpoint/replay evidence capture runbook**.
+Current slice: **Phase 11.9 — first hardening target selection from attached evidence**.
 
-Next recommended slice after Phase 11.8: **Phase 11.9 — first hardening target selection from attached evidence**.
+Next recommended slice after Phase 11.9: **Phase 12.1 — concrete hardening implementation from accepted evidence**.
 
-Latest source-of-truth SHA before Phase 11.8: `641e3aac839413ba3fc54f44055acb3871483d25`.
+Latest source-of-truth SHA before Phase 11.9: `bb8d3e3a257be6b34bd174181b797d3006c3ca9b`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #338 Phase 11.5 completion note | `7b38a3bb77ab7eea3db477095d5e94024f490fcb` | Phase 11.5 | Complete | Added Phase 11.5 completion note and cleanup guard. |
 | #339 Phase 11.6 live provider 100 turn runbook | `4ff39ee4e6e9166c6e105afc726dca3fa08b7d5a` | Phase 11.6 | Complete | Added live/provider 100-turn evidence runbook and deterministic guard. |
 | #340 Phase 11.6 completion note | `6424b60897ac0a90520e090f23a6868ff1932a73` | Phase 11.6 | Complete | Added Phase 11.6 completion note and cleanup guard. |
 | #341 Phase 11.7 live provider 1000 turn runbook | `70d10433f38d9549a4422fd2091404d041f85b2c` | Phase 11.7 | Complete | Added live/provider 1000-turn evidence runbook and deterministic guard. |
 | #342 Phase 11.7 completion note | `641e3aac839413ba3fc54f44055acb3871483d25` | Phase 11.7 | Complete | Added Phase 11.7 completion note and cleanup guard. |
+| #343 Phase 11.8 checkpoint replay runbook | `bb8d3e3a257be6b34bd174181b797d3006c3ca9b` | Phase 11.8 | Complete | Added checkpoint/replay evidence runbook and deterministic guard. |
 
 ## Roadmap Principles
 
@@ -68,21 +68,22 @@ Completed:
 - [x] Phase 11.5 — first player-safe error and redaction evidence capture runbook.
 - [x] Phase 11.6 — first live/provider 100-turn evidence capture runbook.
 - [x] Phase 11.7 — first live/provider 1000-turn evidence capture runbook.
+- [x] Phase 11.8 — first checkpoint/replay evidence capture runbook.
 
 Current:
 
-- [ ] Phase 11.8 — first checkpoint/replay evidence capture runbook.
+- [ ] Phase 11.9 — first hardening target selection from attached evidence.
 
 Next:
 
-- [ ] Phase 11.9 — first hardening target selection from attached evidence.
+- [ ] Phase 12.1 — concrete hardening implementation from accepted evidence.
 
-Phase 11.8 scope:
+Phase 11.9 scope:
 
-- Convert Phase 11.2 evidence backfill ordering into the checkpoint/replay operator runbook.
-- Define save/load checkpoint artifact capture, replay verification, package/disk replay references, determinism notes, failure classification, hardening handoff, redaction review, and evidence bundle classification steps.
-- Keep the slice documentation/test-only because no concrete operator evidence is attached.
-- Do not select runtime, provider, packaging, UI, or gameplay hardening without concrete evidence.
+- Review attached operator evidence and select the first concrete hardening target only if evidence exists.
+- If no evidence is attached, classify the state as blocked by `operator_evidence_backfill_required` and do not select runtime, provider, packaging, UI, or gameplay hardening.
+- Keep the slice documentation/test-only if no concrete operator evidence is attached.
+- Require source-backed reproduction details before Phase 12 implementation work begins.
 
 ## Remaining risks
 
@@ -91,7 +92,7 @@ Phase 11.8 scope:
 - Package artifacts, install/run transcripts, persistence smoke, diagnostic bundles, player-safe error evidence, release notes, redaction review, and operator signoff remain pending.
 - Live/provider save/load checkpoint evidence remains pending.
 - Progress-quality and continuity judgments still require live/operator transcript review.
-- Phase 11 hardening must remain evidence-driven and narrow.
+- Phase 12 implementation must remain evidence-driven and narrow.
 
 ## Definition of 8/10 Production Readiness
 
