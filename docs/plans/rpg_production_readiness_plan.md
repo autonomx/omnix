@@ -14,19 +14,18 @@ Current slice: **Phase 11.1 — evidence-driven production hardening triage**.
 
 Next recommended slice after Phase 11.1: **Phase 11.2 — operator evidence backfill or narrow hardening from concrete failures**.
 
-Latest source-of-truth SHA before Phase 11.1: `045a8755736535211848caa0950a888d3bca43c7`.
+Latest source-of-truth SHA before Phase 11.1: `83db1f8e5c6e9d11f926ae93e3c2a8be30f7a81c`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #321 Phase 10.4 player-safe error evidence envelope | `39c3e78a78417f2cc3cd48ca4cf8db32c9c7a06d` | Phase 10.4 | Complete | Added player-safe error handling evidence envelope and deterministic guard. |
-| #322 Phase 10.4 completion note | `ba12cfc91d7fed7743634ed86c5baadc01833749` | Phase 10.4 | Complete | Added Phase 10.4 completion note and cleanup guard. |
 | #323 Phase 10.5 evidence contract | `801b075ad69b3d97a7e6cce7fac746c3bdfeec63` | Phase 10.5 | Complete | Added release-candidate packaging contract and deterministic guard. |
 | #324 Phase 10.5 completion note | `fd246f2da905beb5b471f8888383655a06497ac8` | Phase 10.5 | Complete | Added Phase 10.5 completion note and cleanup guard. |
 | #325 Phase 10.6 checklist | `9f0a9dbe65c3da5f7335e742a9740386cb338d46` | Phase 10.6 | Complete | Added operator release evidence intake checklist and deterministic guard. |
 | #326 Phase 10.6 completion note | `d4eb75096f99abd36aee2989d1128764fdb8924d` | Phase 10.6 | Complete | Added Phase 10.6 completion note and cleanup guard. |
 | #327 Phase 10.7 closeout gate | `045a8755736535211848caa0950a888d3bca43c7` | Phase 10.7 | Complete | Added production readiness closeout decision gate and deterministic guard. |
+| #328 Phase 10.7 completion note | `83db1f8e5c6e9d11f926ae93e3c2a8be30f7a81c` | Phase 10.7 | Complete | Added Phase 10.7 completion note, cleanup guard, and roadmap advancement to Phase 11. |
 
 ## Roadmap Principles
 
