@@ -24,6 +24,7 @@ on:
       - "src/tests/rpg/test_ci_phase10_1_completion_note.py"
       - "src/tests/rpg/test_ci_phase10_2_install_run_configuration_evidence_envelope.py"
       - "src/tests/rpg/test_ci_phase10_2_completion_note.py"
+      - "src/tests/rpg/test_ci_phase10_3_persistence_diagnostics_evidence_envelope.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_*_completion_note.md"
       - "docs/plans/rpg_phase9_1_endurance_baseline.md"
@@ -41,6 +42,7 @@ on:
       - "docs/plans/rpg_phase10_1_completion_note.md"
       - "docs/plans/rpg_phase10_2_install_run_configuration_evidence_envelope.md"
       - "docs/plans/rpg_phase10_2_completion_note.md"
+      - "docs/plans/rpg_phase10_3_persistence_diagnostics_evidence_envelope.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
@@ -66,6 +68,7 @@ on:
       - "src/tests/rpg/test_ci_phase10_1_completion_note.py"
       - "src/tests/rpg/test_ci_phase10_2_install_run_configuration_evidence_envelope.py"
       - "src/tests/rpg/test_ci_phase10_2_completion_note.py"
+      - "src/tests/rpg/test_ci_phase10_3_persistence_diagnostics_evidence_envelope.py"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_*_completion_note.md"
       - "docs/plans/rpg_phase9_1_endurance_baseline.md"
@@ -83,6 +86,7 @@ on:
       - "docs/plans/rpg_phase10_1_completion_note.md"
       - "docs/plans/rpg_phase10_2_install_run_configuration_evidence_envelope.md"
       - "docs/plans/rpg_phase10_2_completion_note.md"
+      - "docs/plans/rpg_phase10_3_persistence_diagnostics_evidence_envelope.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
