@@ -14,7 +14,7 @@ Current slice: **Phase 11.9 — first hardening target selection from attached e
 
 Next recommended slice after Phase 11.9: **Phase 12.1 — concrete hardening implementation from accepted evidence**.
 
-Latest source-of-truth SHA before Phase 11.9: `bb8d3e3a257be6b34bd174181b797d3006c3ca9b`.
+Latest source-of-truth SHA before Phase 11.9: `1400cf8b3a31daf2d4469afaeaf893d5a20c9cdf`.
 
 ## Latest completed work
 
@@ -84,6 +84,7 @@ Phase 11.9 scope:
 - If no evidence is attached, classify the state as blocked by `operator_evidence_backfill_required` and do not select runtime, provider, packaging, UI, or gameplay hardening.
 - Keep the slice documentation/test-only if no concrete operator evidence is attached.
 - Require source-backed reproduction details before Phase 12 implementation work begins.
+- Add a deterministic target-selection gate covering required evidence inputs, target fields, classifications, the no-evidence baseline, and the Phase 12 entry condition.
 
 ## Remaining risks
 
