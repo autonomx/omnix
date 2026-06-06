@@ -17,6 +17,13 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 PERFORMANCE_ARTIFACT_SOURCE = "autoplay_performance_artifacts"
 PERFORMANCE_SUMMARY_JSON_NAME = "autoplay-performance-summary.json"
 PERFORMANCE_SUMMARY_HTML_NAME = "autoplay-performance-summary.html"
+_MANUAL_TIMING_MAP_KEYS = (
+    "manual_turn_stage_timing",
+    "manual_stage_timing",
+    "manual_stage_trace",
+    "stage_timing",
+    "manual_turn_breakdown",
+)
 _MANUAL_BREAKDOWN_KEYS = {
     "manual_turn_ms": ("manual_turn_ms", "manual_turn_duration_ms"),
     "pre_runtime_intent_llm_ms": ("pre_runtime_intent_llm_ms", "intent_llm_ms", "first_call_llm_ms"),
@@ -63,11 +70,20 @@ def _write_text(path: Path, content: str) -> Path:
 
 def _nested_maps(row: Mapping[str, Any]) -> List[Mapping[str, Any]]:
     maps: List[Mapping[str, Any]] = [row]
-    for key in ("performance", "timing", "metrics", "turn_result", "runtime", "turn_runtime", "stage_timing", "manual_turn_breakdown"):
+    primary_keys = (
+        "performance",
+        "timing",
+        "metrics",
+        "turn_result",
+        "runtime",
+        "turn_runtime",
+        *_MANUAL_TIMING_MAP_KEYS,
+    )
+    for key in primary_keys:
         value = row.get(key)
         if isinstance(value, dict):
             maps.append(value)
-            for nested_key in ("performance", "timing", "metrics", "runtime", "turn_runtime", "stage_timing", "manual_turn_breakdown"):
+            for nested_key in primary_keys:
                 nested = value.get(nested_key)
                 if isinstance(nested, dict):
                     maps.append(nested)
