@@ -14,7 +14,7 @@ Current slice: **Phase 12.2 — package/install/run evidence capture or hardenin
 
 Next recommended slice after Phase 12.2: **Phase 12.3 — persistence/diagnostics evidence capture or hardening**.
 
-Latest source-of-truth SHA before Phase 12.2: `71c82ae6500f674f90ebe57b345f3ed78cb4f04d`.
+Latest source-of-truth SHA before Phase 12.2: `c3a18b28d612eeaf5d0b8229f7cd693ebe22cc1e`.
 
 ## Latest completed work
 
@@ -93,6 +93,7 @@ Phase 12.2 scope:
 - Inspect accepted package/install/run evidence if attached.
 - Implement bounded package/install/run hardening only if accepted evidence identifies a concrete failure with reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
 - If no accepted package/install/run evidence is attached, keep Phase 12.2 blocked by `operator_evidence_backfill_required` and select no packaging, runtime, provider, UI, or gameplay hardening.
+- Add a deterministic package evidence decision record and guard proving implementation is blocked without accepted evidence.
 - Do not implement speculative packaging hardening without accepted package/install/run evidence.
 
 ## Remaining risks
