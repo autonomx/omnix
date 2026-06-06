@@ -10,21 +10,21 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.2 — first accepted hardening target implementation after evidence attachment**.
+Current slice: **Phase 13.3 — production readiness evidence review after first hardening target**.
 
-Next recommended slice after Phase 13.2: **Phase 13.3 — production readiness evidence review after first hardening target**.
+Next recommended slice after Phase 13.3: **Phase 13.4 — bounded latency reduction from structured performance evidence**.
 
-Latest source-of-truth SHA before Phase 13.2: `fa0cee3ae42ab26be49eb00d3d17d3c7d13ed604`.
+Latest source-of-truth SHA before Phase 13.3: `2f15aba2e4ceefcb29aca0a1e13e8d49842d6c27`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #353 Phase 12.4 evidence gate bundle | `891822cedd5ceee44e8f2bc012b2f803bd8c57bd` | Phase 12.4 | Complete | Bundled evidence-decision gate, completion note, tests, and roadmap advancement by request. |
 | #354 Phase 12.5 endurance evidence gate bundle | `f063a53996d3e2c5801c84220172f4b8d580e533` | Phase 12.5 | Complete | Bundled endurance evidence-decision gate, completion note, tests, and roadmap advancement by request. |
 | #355 Phase 12.6 checkpoint replay evidence gate bundle | `aedd4be8e82d7f428d5df2e964ef31007384cd87` | Phase 12.6 | Complete | Bundled checkpoint/replay evidence-decision gate, completion note, tests, and roadmap advancement by request. |
 | #356 Phase 12.7 evidence intake closeout bundle | `fa0cee3ae42ab26be49eb00d3d17d3c7d13ed604` | Phase 12.7 | Complete | Bundled evidence intake closeout, completion note, tests, and roadmap advancement by request. |
-| Phase 13.1 bundled operator evidence backfill reopen | `pending-pr-merge` | Phase 13.1 | In review | Bundles evidence backfill reopen gate, completion note, tests, and roadmap advancement by request. |
+| #357 Phase 13.1 operator evidence backfill bundle | `2f15aba2e4ceefcb29aca0a1e13e8d49842d6c27` | Phase 13.1 | Complete | Bundled evidence backfill reopen gate, completion note, tests, and roadmap advancement by request. |
+| Phase 13.2 performance hardening | `pending-pr-merge` | Phase 13.2 | In review | Adds structured autoplay performance artifacts from accepted 5-turn smoke evidence. |
 
 ## Roadmap Principles
 
@@ -41,7 +41,7 @@ Latest source-of-truth SHA before Phase 13.2: `fa0cee3ae42ab26be49eb00d3d17d3c7d
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; blocked until accepted evidence identifies a bounded target**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; first accepted hardening implementation in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -89,35 +89,38 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; blocked until accepted evidence identifies a bounded target.**
+Status: **Current; first accepted hardening implementation in review.**
 
 Completed:
 
 - [x] Phase 13.1 — reopen operator evidence backfill unless accepted evidence is attached.
+- [x] Phase 13.2 — first accepted hardening target implementation after evidence attachment.
 
 Current:
 
-- [ ] Phase 13.2 — first accepted hardening target implementation after evidence attachment.
+- [ ] Phase 13.3 — production readiness evidence review after first hardening target.
 
 Next:
 
-- [ ] Phase 13.3 — production readiness evidence review after first hardening target.
+- [ ] Phase 13.4 — bounded latency reduction from structured performance evidence.
 
-Phase 13.2 scope:
+Phase 13.3 scope:
 
-- Inspect any newly attached accepted evidence.
-- Implement exactly one bounded hardening target only if accepted evidence identifies reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
-- If no accepted evidence is attached, keep implementation blocked by `operator_evidence_backfill_required` and continue operator evidence backfill rather than implementing.
+- Review the next 5-turn smoke with structured performance artifacts.
+- Confirm that `autoplay-performance-summary.json` and `autoplay-performance-summary.html` are written beside autoplay outputs and inside the results ZIP.
+- If structured performance evidence confirms the same bottleneck, select one bounded latency-reduction target.
+- If no structured evidence is attached, keep production readiness blocked by `operator_evidence_backfill_required` and request another operator smoke.
 - Do not implement speculative hardening without accepted evidence.
 
 ## Remaining risks
 
+- This Phase 13.2 slice adds measurement/report hardening, not runtime latency reduction.
+- The 5-turn smoke needs to be rerun to produce structured performance artifacts.
 - Live/provider 1000-turn execution remains pending.
 - Operator/manual evidence is still needed for endurance timing, final drain, background drain, production resource limits, and long-run narrative quality review.
 - Package artifacts, install/run transcripts, persistence smoke, diagnostic bundles, player-safe error evidence, release notes, redaction review, and operator signoff remain pending.
 - Live/provider save/load checkpoint evidence remains pending.
 - Progress-quality and continuity judgments still require live/operator transcript review.
-- Phase 13 implementation must remain evidence-driven and narrow.
 
 ## Definition of 8/10 Production Readiness
 
