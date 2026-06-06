@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.12 — rerun 100-turn evidence review after materialization guard and manual-turn metrics**.
+Current slice: **Phase 13.13 — rerun 100-turn evidence review after recursion guard and manual-stage timing**.
 
-Next recommended slice after Phase 13.12: **Phase 13.13 — production evidence package or report/performance follow-up**.
+Next recommended slice after Phase 13.13: **Phase 13.14 — production evidence package or runtime/performance follow-up**.
 
-Latest source-of-truth SHA before Phase 13.12: `0c42263ffd6d7998458bb93c41b66603b79eca54`.
+Latest source-of-truth SHA before Phase 13.13: `47be44de3f4d1da96164de817cb19d4d530c8dd6`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #362 Phase 13.6 latency evidence backfill | `17d7acb7fa7def1a8e57ecb85133ceb9e6c8f1a1` | Phase 13.6 | Complete | Records that latency-reduced matrix evidence is still missing and blocks speculative follow-up. |
 | #363 Phase 13.7 validated performance path gate | `b0b3f0c9d3557babc0406e084e955dc1d4e25886` | Phase 13.7 | Complete | Records that no latency-reduced matrix evidence is attached and blocks speculative broadening. |
 | #364 Phase 13.8 autoplay report size guard | `71ace2fffe1ba593462516c30fe36859f5ac2c59` | Phase 13.8 | Complete | Caps oversized autoplay report JSON/HTML files and ZIP members after run completion. |
 | #365 Phase 13.9 force-exit report size guard | `1daa97a00393816f1b7053c3dc49ec064cb0330b` | Phase 13.9 | Complete | Installs the size guard before runtime so forced finalization also caps reports. |
 | #366 Phase 13.10 HTML turn-contract marker guard | `0c42263ffd6d7998458bb93c41b66603b79eca54` | Phase 13.10 | Complete | Suppresses the exact turn-contract metadata marker false positive while preserving failures for unapproved markers. |
-| Phase 13.11 report materialization guard and manual metrics | `pending-pr-merge` | Phase 13.11 | In review | Caps report artifacts when materialized and adds manual-turn blocking breakdown metrics. |
+| #367 Phase 13.11 report materialization guard and manual metrics | `47be44de3f4d1da96164de817cb19d4d530c8dd6` | Phase 13.11 | Complete | Caps report artifacts when materialized and adds manual-turn blocking breakdown metrics. |
+| Phase 13.12 recursion guard and manual-stage timing | `pending-pr-merge` | Phase 13.12 | In review | Raises first-call runtime recursion budget and emits manual-stage timing from the turn path. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.12: `0c42263ffd6d7998458bb93c41b66603
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; report materialization and manual metrics in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; recursion/timing hardening in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; report materialization and manual metrics in review.**
+Status: **Current; recursion/timing hardening in review.**
 
 Completed:
 
@@ -105,29 +105,29 @@ Completed:
 - [x] Phase 13.9 — operator evidence package or first validated promotion.
 - [x] Phase 13.10 — rerun 100-turn evidence review after force-exit report-size guard.
 - [x] Phase 13.11 — report materialization guard and manual-turn metrics.
+- [x] Phase 13.12 — recursion guard and manual-stage timing.
 
 Current:
 
-- [ ] Phase 13.12 — rerun 100-turn evidence review after materialization guard and manual-turn metrics.
+- [ ] Phase 13.13 — rerun 100-turn evidence review after recursion guard and manual-stage timing.
 
 Next:
 
-- [ ] Phase 13.13 — production evidence package or report/performance follow-up.
+- [ ] Phase 13.14 — production evidence package or runtime/performance follow-up.
 
-Phase 13.12 scope:
+Phase 13.13 scope:
 
-- Rerun or inspect the 100-turn command after the report materialization guard is merged.
-- Confirm that `autoplay-report-size-guard-summary.json` is present.
-- Confirm that report JSON, report HTML, and results ZIP remain shareable.
-- Confirm that `autoplay-performance-summary.json` includes `manual_turn_breakdown` when timing rows provide stage fields.
-- If report artifacts remain oversized, select one bounded materialization follow-up target.
-- If manual-turn sub-stages are missing, select one bounded instrumentation target.
-- If artifacts are manageable and metrics are present, continue operator evidence packaging or performance optimization review.
+- Rerun or inspect the 100-turn command after the recursion guard and manual-stage timing patch is merged.
+- Confirm that `RecursionError` lines are absent from the console log and provider-error classification summary.
+- Confirm that `autoplay-performance-summary.json` includes populated manual-turn sub-stage fields.
+- If recursion errors persist, select one bounded runtime-state follow-up target.
+- If timing sub-stages remain missing, select one bounded artifact extraction follow-up target.
+- If artifacts are manageable and errors are gone, continue operator evidence packaging or performance optimization review.
 
 ## Remaining risks
 
-- The 100-turn command must be rerun after the materialization guard to confirm report artifacts are capped.
-- Manual-turn sub-stage fields must be present in future rows to fully populate the breakdown.
+- The 100-turn command must be rerun after the recursion/timing patch to confirm deterministic turn errors are gone.
+- Manual-turn sub-stage fields must be verified in the next performance summary.
 - The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
 - Live/provider 1000-turn execution remains pending.
