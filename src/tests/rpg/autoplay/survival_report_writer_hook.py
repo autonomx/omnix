@@ -12,6 +12,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from app.rpg.autoplay_report_size_guard import cap_oversized_autoplay_reports
 from tests.rpg.autoplay.performance_artifacts import (
     PERFORMANCE_SUMMARY_HTML_NAME,
     PERFORMANCE_SUMMARY_JSON_NAME,
@@ -269,8 +270,13 @@ def run_autoplay_survival_report_writer_hook(
                     rows,
                     prefix="performance",
                 )
+        size_guard_result = cap_oversized_autoplay_reports(
+            output_dir,
+            zip_paths=[zip_path] if zip_path else [],
+        )
         manifest = attach_survival_artifact_manifest({}, standalone)
         manifest = attach_autoplay_performance_manifest(manifest, performance_standalone)
+        manifest["autoplay_report_size_guard"] = size_guard_result
         if zip_result.get("ok"):
             manifest = attach_survival_artifact_manifest(manifest, zip_result)
         if performance_zip_result.get("ok"):
@@ -286,6 +292,7 @@ def run_autoplay_survival_report_writer_hook(
             "zip_result": zip_result,
             "performance_standalone_result": performance_standalone,
             "performance_zip_result": performance_zip_result,
+            "size_guard_result": size_guard_result,
             "manifest": manifest,
             "source": SURVIVAL_WRITER_HOOK_SOURCE,
         }
