@@ -14,7 +14,7 @@ Current slice: **Phase 12.3 — persistence/diagnostics evidence capture or hard
 
 Next recommended slice after Phase 12.3: **Phase 12.4 — player-safe error/redaction evidence capture or hardening**.
 
-Latest source-of-truth SHA before Phase 12.3: `2ea2687b726540c5bea52e0ed43baa9d06901fb4`.
+Latest source-of-truth SHA before Phase 12.3: `468ac1b76a0c266c63a3af45dcc9e7e644ebdd32`.
 
 ## Latest completed work
 
@@ -94,6 +94,7 @@ Phase 12.3 scope:
 - Inspect accepted persistence/diagnostics evidence if attached.
 - Implement bounded persistence or diagnostics hardening only if accepted evidence identifies a concrete failure with reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
 - If no accepted persistence/diagnostics evidence is attached, keep Phase 12.3 blocked by `operator_evidence_backfill_required` and select no persistence, diagnostics, runtime, provider, UI, or gameplay hardening.
+- Add a deterministic persistence/diagnostics evidence-decision record and guard proving implementation is blocked without accepted evidence.
 - Do not implement speculative persistence or diagnostics hardening without accepted persistence/diagnostics evidence.
 
 ## Remaining risks
