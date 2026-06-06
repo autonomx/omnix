@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.9 — operator evidence package or first validated promotion**.
+Current slice: **Phase 13.10 — rerun 100-turn evidence review after force-exit report-size guard**.
 
-Next recommended slice after Phase 13.9: **Phase 13.10 — rerun 100-turn evidence review after report-size guard**.
+Next recommended slice after Phase 13.10: **Phase 13.11 — production evidence package or report-size follow-up**.
 
-Latest source-of-truth SHA before Phase 13.9: `b0b3f0c9d3557babc0406e084e955dc1d4e25886`.
+Latest source-of-truth SHA before Phase 13.10: `71ace2fffe1ba593462516c30fe36859f5ac2c59`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #359 Phase 13.3 interactive matrix performance review | `426c9a9ca762df7e64cf5d57f2caab6124fa1711` | Phase 13.3 | Complete | Adds structured matrix performance review artifacts from accepted interactive matrix evidence. |
 | #360 Phase 13.4 provider-backed intent latency reduction | `6cbd349cbf4b6bd515736729eeb4b271df80d392` | Phase 13.4 | Complete | Adds opt-in latency-reduced matrix runner for accepted intent categories. |
 | #361 Phase 13.5 latency reduction evidence review | `e118f182d3fc2ad91b1f42a74035d3eec1564dcd` | Phase 13.5 | Complete | Adds deterministic review helper for latency-reduced matrix evidence; no new live evidence attached. |
 | #362 Phase 13.6 latency evidence backfill | `17d7acb7fa7def1a8e57ecb85133ceb9e6c8f1a1` | Phase 13.6 | Complete | Records that latency-reduced matrix evidence is still missing and blocks speculative follow-up. |
 | #363 Phase 13.7 validated performance path gate | `b0b3f0c9d3557babc0406e084e955dc1d4e25886` | Phase 13.7 | Complete | Records that no latency-reduced matrix evidence is attached and blocks speculative broadening. |
-| Phase 13.8 autoplay report size guard | `pending-pr-merge` | Phase 13.8 | In review | Caps oversized autoplay report JSON/HTML files and ZIP members after run completion. |
+| #364 Phase 13.8 autoplay report size guard | `71ace2fffe1ba593462516c30fe36859f5ac2c59` | Phase 13.8 | Complete | Caps oversized autoplay report JSON/HTML files and ZIP members after run completion. |
+| Phase 13.9 force-exit report size guard | `pending-pr-merge` | Phase 13.9 | In review | Installs the size guard before runtime so forced finalization also caps reports. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.9: `b0b3f0c9d3557babc0406e084e955dc1d
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; report-size hardening in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; force-exit report-size hardening in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; report-size hardening in review.**
+Status: **Current; force-exit report-size hardening in review.**
 
 Completed:
 
@@ -102,26 +102,27 @@ Completed:
 - [x] Phase 13.6 — apply latency-reduction follow-up from live matrix evidence.
 - [x] Phase 13.7 — broaden validated performance path or continue operator evidence backfill.
 - [x] Phase 13.8 — production readiness evidence checkpoint or validated performance promotion.
+- [x] Phase 13.9 — operator evidence package or first validated promotion.
 
 Current:
 
-- [ ] Phase 13.9 — operator evidence package or first validated promotion.
+- [ ] Phase 13.10 — rerun 100-turn evidence review after force-exit report-size guard.
 
 Next:
 
-- [ ] Phase 13.10 — rerun 100-turn evidence review after report-size guard.
+- [ ] Phase 13.11 — production evidence package or report-size follow-up.
 
-Phase 13.9 scope:
+Phase 13.10 scope:
 
-- Rerun or inspect the 100-turn command after the report-size guard is merged.
+- Rerun or inspect the 100-turn command after the force-exit report-size guard is merged.
+- Confirm that `autoplay-report-size-guard-summary.json` is present.
 - Confirm that report JSON, report HTML, and results ZIP remain shareable.
 - If report artifacts remain oversized, select one bounded follow-up target.
 - If report artifacts are manageable, continue operator evidence packaging or validated promotion review.
-- Preserve runtime authority, state mutation boundaries, deferred narration boundaries, deterministic fast paths, and production-readiness evidence requirements.
 
 ## Remaining risks
 
-- The 100-turn command should be rerun to confirm report artifacts stay within manageable size limits.
+- The 100-turn command must be rerun after the force-exit guard to confirm report artifacts are capped.
 - The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
 - Live/provider 1000-turn execution remains pending.
