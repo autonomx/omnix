@@ -8,23 +8,23 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 ## Current Handoff Status
 
-Current phase focus: **Phase 12 — concrete evidence-backed production hardening**.
+Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 12.7 — accepted evidence intake closeout or implementation handoff**.
+Current slice: **Phase 13.1 — reopen operator evidence backfill unless accepted evidence is attached**.
 
-Next recommended slice after Phase 12.7: **Phase 13.1 — implement first accepted hardening target or reopen evidence backfill**.
+Next recommended slice after Phase 13.1: **Phase 13.2 — first accepted hardening target implementation after evidence attachment**.
 
-Latest source-of-truth SHA before Phase 12.7: `f063a53996d3e2c5801c84220172f4b8d580e533`.
+Latest source-of-truth SHA before Phase 13.1: `aedd4be8e82d7f428d5df2e964ef31007384cd87`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #349 Phase 12.2 package evidence decision gate | `2ea2687b726540c5bea52e0ed43baa9d06901fb4` | Phase 12.2 | Complete | Added package/install/run evidence-decision gate proving implementation remains blocked without accepted package evidence. |
 | #351 Phase 12.3 persistence diagnostics evidence decision gate | `3ccde744e6b84a6f0f2d28596b5e167280870778` | Phase 12.3 | Complete | Added persistence/diagnostics evidence-decision gate proving implementation remains blocked without accepted persistence/diagnostics evidence. |
 | #353 Phase 12.4 evidence gate bundle | `891822cedd5ceee44e8f2bc012b2f803bd8c57bd` | Phase 12.4 | Complete | Bundled evidence-decision gate, completion note, tests, and roadmap advancement by request. |
 | #354 Phase 12.5 endurance evidence gate bundle | `f063a53996d3e2c5801c84220172f4b8d580e533` | Phase 12.5 | Complete | Bundled endurance evidence-decision gate, completion note, tests, and roadmap advancement by request. |
-| Phase 12.6 bundled checkpoint replay evidence gate | `pending-pr-merge` | Phase 12.6 | In review | Bundles checkpoint/replay evidence-decision gate, completion note, tests, and roadmap advancement by request. |
+| #355 Phase 12.6 checkpoint replay evidence gate bundle | `aedd4be8e82d7f428d5df2e964ef31007384cd87` | Phase 12.6 | Complete | Bundled checkpoint/replay evidence-decision gate, completion note, tests, and roadmap advancement by request. |
+| Phase 12.7 bundled evidence intake closeout | `pending-pr-merge` | Phase 12.7 | In review | Bundles evidence intake closeout, completion note, tests, and roadmap advancement by request. |
 
 ## Roadmap Principles
 
@@ -40,7 +40,8 @@ Latest source-of-truth SHA before Phase 12.7: `f063a53996d3e2c5801c84220172f4b8d
 - Phase 9 — 1000-Turn Endurance Systems: **Complete as deterministic evidence framework; live/operator validation remains pending**.
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
-- Phase 12 — Concrete Evidence-Backed Production Hardening: **Current; blocked until accepted evidence identifies a bounded target**.
+- Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; blocked until accepted evidence identifies a bounded target**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -74,7 +75,7 @@ Completed:
 
 ## Phase 12 — Concrete Evidence-Backed Production Hardening
 
-Status: **Current; blocked until accepted evidence identifies a bounded target.**
+Status: **Complete as evidence intake framework; implementation remains blocked without accepted evidence.**
 
 Completed:
 
@@ -84,20 +85,25 @@ Completed:
 - [x] Phase 12.4 — player-safe error/redaction evidence capture or hardening.
 - [x] Phase 12.5 — live/provider endurance evidence capture or hardening.
 - [x] Phase 12.6 — checkpoint/replay evidence capture or hardening.
+- [x] Phase 12.7 — accepted evidence intake closeout or implementation handoff.
+
+## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
+
+Status: **Current; blocked until accepted evidence identifies a bounded target.**
 
 Current:
 
-- [ ] Phase 12.7 — accepted evidence intake closeout or implementation handoff.
+- [ ] Phase 13.1 — reopen operator evidence backfill unless accepted evidence is attached.
 
 Next:
 
-- [ ] Phase 13.1 — implement first accepted hardening target or reopen evidence backfill.
+- [ ] Phase 13.2 — first accepted hardening target implementation after evidence attachment.
 
-Phase 12.7 scope:
+Phase 13.1 scope:
 
-- Review the accepted evidence intake gates from Phase 12.1 through Phase 12.6.
-- If accepted evidence is attached, select a single bounded implementation handoff with reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
-- If no accepted evidence is attached, close out Phase 12 as evidence-ready but implementation-blocked by `operator_evidence_backfill_required`.
+- Inspect any newly attached accepted evidence.
+- If accepted evidence is attached, select exactly one bounded hardening target with reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
+- If no accepted evidence is attached, keep implementation blocked by `operator_evidence_backfill_required` and reopen evidence backfill rather than implementing.
 - Do not implement speculative hardening without accepted evidence.
 
 ## Remaining risks
@@ -107,7 +113,7 @@ Phase 12.7 scope:
 - Package artifacts, install/run transcripts, persistence smoke, diagnostic bundles, player-safe error evidence, release notes, redaction review, and operator signoff remain pending.
 - Live/provider save/load checkpoint evidence remains pending.
 - Progress-quality and continuity judgments still require live/operator transcript review.
-- Phase 12 implementation must remain evidence-driven and narrow.
+- Phase 13 implementation must remain evidence-driven and narrow.
 
 ## Definition of 8/10 Production Readiness
 
