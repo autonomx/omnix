@@ -10,11 +10,11 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.3 — production readiness evidence review after first hardening target**.
+Current slice: **Phase 13.4 — bounded latency reduction for provider-backed intent paths**.
 
-Next recommended slice after Phase 13.3: **Phase 13.4 — bounded latency reduction from structured performance evidence**.
+Next recommended slice after Phase 13.4: **Phase 13.5 — production readiness evidence review after latency reduction**.
 
-Latest source-of-truth SHA before Phase 13.3: `2f15aba2e4ceefcb29aca0a1e13e8d49842d6c27`.
+Latest source-of-truth SHA before Phase 13.4: `58d1a7c0b3106a90d639828e292067692a56345d`.
 
 ## Latest completed work
 
@@ -24,7 +24,8 @@ Latest source-of-truth SHA before Phase 13.3: `2f15aba2e4ceefcb29aca0a1e13e8d498
 | #355 Phase 12.6 checkpoint replay evidence gate bundle | `aedd4be8e82d7f428d5df2e964ef31007384cd87` | Phase 12.6 | Complete | Bundled checkpoint/replay evidence-decision gate, completion note, tests, and roadmap advancement by request. |
 | #356 Phase 12.7 evidence intake closeout bundle | `fa0cee3ae42ab26be49eb00d3d17d3c7d13ed604` | Phase 12.7 | Complete | Bundled evidence intake closeout, completion note, tests, and roadmap advancement by request. |
 | #357 Phase 13.1 operator evidence backfill bundle | `2f15aba2e4ceefcb29aca0a1e13e8d49842d6c27` | Phase 13.1 | Complete | Bundled evidence backfill reopen gate, completion note, tests, and roadmap advancement by request. |
-| Phase 13.2 performance hardening | `pending-pr-merge` | Phase 13.2 | In review | Adds structured autoplay performance artifacts from accepted 5-turn smoke evidence. |
+| #358 Phase 13.2 autoplay performance artifacts | `58d1a7c0b3106a90d639828e292067692a56345d` | Phase 13.2 | Complete | Adds structured autoplay performance artifacts from accepted 5-turn smoke evidence. |
+| Phase 13.3 interactive matrix performance review | `pending-pr-merge` | Phase 13.3 | In review | Adds structured matrix performance review artifacts from accepted interactive matrix evidence. |
 
 ## Roadmap Principles
 
@@ -41,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.3: `2f15aba2e4ceefcb29aca0a1e13e8d498
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; first accepted hardening implementation in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; structured performance evidence review in progress**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -89,33 +90,33 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; first accepted hardening implementation in review.**
+Status: **Current; structured performance evidence review in progress.**
 
 Completed:
 
 - [x] Phase 13.1 — reopen operator evidence backfill unless accepted evidence is attached.
 - [x] Phase 13.2 — first accepted hardening target implementation after evidence attachment.
+- [x] Phase 13.3 — production readiness evidence review after first hardening target.
 
 Current:
 
-- [ ] Phase 13.3 — production readiness evidence review after first hardening target.
+- [ ] Phase 13.4 — bounded latency reduction for provider-backed intent paths.
 
 Next:
 
-- [ ] Phase 13.4 — bounded latency reduction from structured performance evidence.
+- [ ] Phase 13.5 — production readiness evidence review after latency reduction.
 
-Phase 13.3 scope:
+Phase 13.4 scope:
 
-- Review the next 5-turn smoke with structured performance artifacts.
-- Confirm that `autoplay-performance-summary.json` and `autoplay-performance-summary.html` are written beside autoplay outputs and inside the results ZIP.
-- If structured performance evidence confirms the same bottleneck, select one bounded latency-reduction target.
-- If no structured evidence is attached, keep production readiness blocked by `operator_evidence_backfill_required` and request another operator smoke.
-- Do not implement speculative hardening without accepted evidence.
+- Use the accepted interactive matrix evidence and matrix performance review artifacts to reduce latency for provider-backed intent paths.
+- Target bounded paths first: rumor/news no-backed-state, commerce food purchase, party companion recruitment, quest no-backed-state, and dialogue persona.
+- Keep deterministic fast paths, runtime authority, state mutation, provider call boundaries, and deferred narration boundaries unchanged.
+- Do not implement speculative latency changes outside the accepted provider-backed performance target.
 
 ## Remaining risks
 
-- This Phase 13.2 slice adds measurement/report hardening, not runtime latency reduction.
-- The 5-turn smoke needs to be rerun to produce structured performance artifacts.
+- This Phase 13.3 slice adds structured review parity, not runtime latency reduction.
+- Provider-backed intent paths remain the next confirmed latency target.
 - Live/provider 1000-turn execution remains pending.
 - Operator/manual evidence is still needed for endurance timing, final drain, background drain, production resource limits, and long-run narrative quality review.
 - Package artifacts, install/run transcripts, persistence smoke, diagnostic bundles, player-safe error evidence, release notes, redaction review, and operator signoff remain pending.
