@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 from copy import deepcopy
+from time import perf_counter
 from typing import Any, Dict, List
 
 from app.rpg.ai.action_intelligence import get_action_advisory
@@ -10,6 +12,29 @@ from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_resu
 from app.rpg.session import runtime as canonical_runtime
 
 _FAST_DIRECT_SOURCE = "ce212_fast_direct_runtime_budget_v1"
+_RECURSION_LIMIT_FLOOR = 10000
+
+
+def _ensure_runtime_recursion_budget() -> int:
+    current = sys.getrecursionlimit()
+    if current < _RECURSION_LIMIT_FLOOR:
+        sys.setrecursionlimit(_RECURSION_LIMIT_FLOOR)
+    return sys.getrecursionlimit()
+
+
+def _ms_since(start: float) -> float:
+    return round((perf_counter() - start) * 1000.0, 3)
+
+
+def _attach_manual_stage_timing(result: Dict[str, Any], timing: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(result, dict):
+        return result
+    result["manual_turn_stage_timing"] = dict(timing)
+    nested = _d(result.get("result"))
+    if nested:
+        nested["manual_turn_stage_timing"] = dict(timing)
+        result["result"] = nested
+    return result
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -660,9 +685,24 @@ def apply_turn(
 ) -> Dict[str, Any]:
     """Interactive CLI two-call entry point."""
 
+    manual_start = perf_counter()
+    recursion_limit = _ensure_runtime_recursion_budget()
+    timing: Dict[str, Any] = {
+        "manual_turn_timing_source": "interactive_first_call_runtime_v1",
+        "runtime_recursion_limit": recursion_limit,
+        "pre_runtime_intent_llm_ms": 0.0,
+        "deterministic_runtime_apply_ms": 0.0,
+        "grounding_validation_ms": 0.0,
+        "repair_ms": 0.0,
+        "state_snapshot_ms": 0.0,
+        "deferred_enqueue_ms": 0.0,
+    }
+    snapshot_start = perf_counter()
     session = _select_session(session_id, session_override=session_override)
+    timing["state_snapshot_ms"] += _ms_since(snapshot_start)
     if not session:
-        return {"ok": False, "error": "session_not_found"}
+        timing["manual_turn_ms"] = _ms_since(manual_start)
+        return {"ok": False, "error": "session_not_found", "manual_turn_stage_timing": timing}
 
     simulation_state = _d(session.get("simulation_state"))
     runtime_state = _d(session.get("runtime_state"))
@@ -672,7 +712,10 @@ def apply_turn(
     if fast_direct_action:
         narration_mode = _narration_mode(performance_override, runtime_state)
         session = _mark_fast_direct_runtime_state(session, fast_direct_action)
+        prepare_start = perf_counter()
         _prepare_stateful_runtime_session(session_id, session, narration_mode=narration_mode)
+        timing["state_snapshot_ms"] += _ms_since(prepare_start)
+        runtime_start = perf_counter()
         result = canonical_runtime.apply_turn(
             session_id=session_id,
             player_input=_s(player_input),
@@ -682,6 +725,7 @@ def apply_turn(
                 narration_mode=narration_mode,
             ),
         )
+        timing["deterministic_runtime_apply_ms"] = _ms_since(runtime_start)
         if isinstance(result, dict):
             result = _attach_fast_direct_result(
                 result,
@@ -689,6 +733,7 @@ def apply_turn(
                 action=fast_direct_action,
             )
             advisory = _fast_direct_advisory(_s(player_input), fast_direct_action)
+            contract_start = perf_counter()
             result = _apply_stateful_narration_contract(
                 result,
                 narration_mode=narration_mode,
@@ -696,7 +741,10 @@ def apply_turn(
                 semantic_advisory={},
                 selection={"reason": "fast_direct_runtime_bypass", "consumable": False},
             )
-        return result
+            timing["grounding_validation_ms"] += _ms_since(contract_start)
+            timing["deferred_enqueue_ms"] = _safe_deferred_enqueue_ms(result)
+        timing["manual_turn_ms"] = _ms_since(manual_start)
+        return _attach_manual_stage_timing(result, timing) if isinstance(result, dict) else result
 
     try:
         service_match = canonical_runtime.resolve_service_turn(
@@ -712,6 +760,7 @@ def apply_turn(
 
     action_advisory: Dict[str, Any] = {}
     semantic_advisory: Dict[str, Any] = {}
+    llm_start = perf_counter()
     try:
         gateway = build_app_llm_gateway()
         action_advisory = get_action_advisory(
@@ -731,7 +780,9 @@ def apply_turn(
             )
     except Exception as exc:
         runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"
+    timing["pre_runtime_intent_llm_ms"] = _ms_since(llm_start)
 
+    validation_start = perf_counter()
     non_stateful_result = build_non_stateful_dialogue_result(
         session=session,
         simulation_state=simulation_state,
@@ -741,6 +792,7 @@ def apply_turn(
         semantic_advisory=semantic_advisory,
         service_matched=service_matched,
     )
+    timing["grounding_validation_ms"] += _ms_since(validation_start)
     if non_stateful_result.get("consumed"):
         non_stateful_result["turn_id"] = canonical_runtime._build_turn_id(runtime_state)
         non_stateful_result["tick"] = int(runtime_state.get("tick", 0) or 0)
@@ -751,15 +803,20 @@ def apply_turn(
             or action_advisory.get("first_call_grounding_diagnostics")
             or non_stateful_result.get("first_call_grounding_diagnostics")
         )
-        return non_stateful_result
+        timing["manual_turn_ms"] = _ms_since(manual_start)
+        return _attach_manual_stage_timing(non_stateful_result, timing)
 
     selection = _d(non_stateful_result.get("selection"))
-    if _should_safe_fallback_nonstateful_dialogue(
+    repair_start = perf_counter()
+    should_fallback = _should_safe_fallback_nonstateful_dialogue(
         action_advisory,
         semantic_advisory,
         selection,
         player_input=_s(player_input),
-    ):
+    )
+    timing["repair_ms"] += _ms_since(repair_start)
+    if should_fallback:
+        repair_start = perf_counter()
         fallback = _safe_dialogue_fallback_result(
             session=session,
             simulation_state=simulation_state,
@@ -769,17 +826,22 @@ def apply_turn(
             semantic_advisory=semantic_advisory,
             selection=selection,
         )
+        timing["repair_ms"] += _ms_since(repair_start)
         fallback["turn_id"] = canonical_runtime._build_turn_id(runtime_state)
         fallback["tick"] = int(runtime_state.get("tick", 0) or 0)
-        return fallback
+        timing["manual_turn_ms"] = _ms_since(manual_start)
+        return _attach_manual_stage_timing(fallback, timing)
 
     first_call_action = _stateful_action_from_first_call(action_advisory, semantic_advisory)
     if not first_call_action:
         first_call_action = candidate_action
 
     narration_mode = _narration_mode(performance_override, runtime_state)
+    prepare_start = perf_counter()
     _prepare_stateful_runtime_session(session_id, session, narration_mode=narration_mode)
+    timing["state_snapshot_ms"] += _ms_since(prepare_start)
 
+    runtime_start = perf_counter()
     result = canonical_runtime.apply_turn(
         session_id=session_id,
         player_input=_s(player_input),
@@ -789,11 +851,13 @@ def apply_turn(
             narration_mode=narration_mode,
         ),
     )
+    timing["deterministic_runtime_apply_ms"] = _ms_since(runtime_start)
     if isinstance(result, dict):
         result["first_call_action_advisory"] = action_advisory
         result["first_call_semantic_advisory"] = semantic_advisory
         result["first_call_visible_response_selection"] = selection
         result["first_call_grounding_diagnostics"] = _first_call_diagnostics(action_advisory, semantic_advisory)
+        contract_start = perf_counter()
         result = _apply_stateful_narration_contract(
             result,
             narration_mode=narration_mode,
@@ -801,4 +865,16 @@ def apply_turn(
             semantic_advisory=semantic_advisory,
             selection=selection,
         )
-    return result
+        timing["grounding_validation_ms"] += _ms_since(contract_start)
+        timing["deferred_enqueue_ms"] = _safe_deferred_enqueue_ms(result)
+    timing["manual_turn_ms"] = _ms_since(manual_start)
+    return _attach_manual_stage_timing(result, timing) if isinstance(result, dict) else result
+
+
+def _safe_deferred_enqueue_ms(result: Dict[str, Any]) -> float:
+    for source in (result, _d(result.get("result")), _d(result.get("turn_runtime")), _d(result.get("performance"))):
+        for key in ("deferred_enqueue_ms", "background_enqueue_ms"):
+            value = source.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return round(float(value), 3)
+    return 0.0
