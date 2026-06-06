@@ -276,7 +276,11 @@ if __name__ != "__main__":
 
 if __name__ == "__main__":
     _register_autoplay_runtime_aliases()
+    from app.rpg.autoplay_report_materialization_guard import (
+        install_report_materialization_size_guard_from_argv,
+    )
     from tests.rpg.autoplay.report_size_guard_hook import install_force_exit_report_size_guard
+    install_report_materialization_size_guard_from_argv(sys.argv[1:])
     install_force_exit_report_size_guard(sys.argv[1:])
     _load_autoplay_campaign_runtime()
     main_fn = globals().get("main")
