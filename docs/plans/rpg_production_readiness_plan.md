@@ -10,21 +10,21 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 12 — concrete evidence-backed production hardening**.
 
-Current slice: **Phase 12.2 — package/install/run evidence capture or hardening**.
+Current slice: **Phase 12.3 — persistence/diagnostics evidence capture or hardening**.
 
-Next recommended slice after Phase 12.2: **Phase 12.3 — persistence/diagnostics evidence capture or hardening**.
+Next recommended slice after Phase 12.3: **Phase 12.4 — player-safe error/redaction evidence capture or hardening**.
 
-Latest source-of-truth SHA before Phase 12.2: `c3a18b28d612eeaf5d0b8229f7cd693ebe22cc1e`.
+Latest source-of-truth SHA before Phase 12.3: `2ea2687b726540c5bea52e0ed43baa9d06901fb4`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #341 Phase 11.7 live provider 1000 turn runbook | `70d10433f38d9549a4422fd2091404d041f85b2c` | Phase 11.7 | Complete | Added live/provider 1000-turn evidence runbook and deterministic guard. |
 | #342 Phase 11.7 completion note | `641e3aac839413ba3fc54f44055acb3871483d25` | Phase 11.7 | Complete | Added Phase 11.7 completion note and cleanup guard. |
 | #343 Phase 11.8 checkpoint replay runbook | `bb8d3e3a257be6b34bd174181b797d3006c3ca9b` | Phase 11.8 | Complete | Added checkpoint/replay evidence runbook and deterministic guard. |
 | #345 Phase 11.9 hardening target selection gate | `764eccb922229c6b0045f77e63bc219f62948fee` | Phase 11.9 | Complete | Added evidence-backed hardening target selection gate and deterministic guard. |
 | #347 Phase 12.1 evidence decision gate | `71c82ae6500f674f90ebe57b345f3ed78cb4f04d` | Phase 12.1 | Complete | Added evidence-decision gate proving implementation remains blocked without accepted evidence. |
+| #349 Phase 12.2 package evidence decision gate | `2ea2687b726540c5bea52e0ed43baa9d06901fb4` | Phase 12.2 | Complete | Added package/install/run evidence-decision gate proving implementation remains blocked without accepted package evidence. |
 
 ## Roadmap Principles
 
@@ -79,22 +79,22 @@ Status: **Current; blocked until accepted evidence identifies a bounded target.*
 Completed:
 
 - [x] Phase 12.1 — concrete hardening implementation from accepted evidence.
+- [x] Phase 12.2 — package/install/run evidence capture or hardening.
 
 Current:
 
-- [ ] Phase 12.2 — package/install/run evidence capture or hardening.
+- [ ] Phase 12.3 — persistence/diagnostics evidence capture or hardening.
 
 Next:
 
-- [ ] Phase 12.3 — persistence/diagnostics evidence capture or hardening.
+- [ ] Phase 12.4 — player-safe error/redaction evidence capture or hardening.
 
-Phase 12.2 scope:
+Phase 12.3 scope:
 
-- Inspect accepted package/install/run evidence if attached.
-- Implement bounded package/install/run hardening only if accepted evidence identifies a concrete failure with reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
-- If no accepted package/install/run evidence is attached, keep Phase 12.2 blocked by `operator_evidence_backfill_required` and select no packaging, runtime, provider, UI, or gameplay hardening.
-- Add a deterministic package evidence decision record and guard proving implementation is blocked without accepted evidence.
-- Do not implement speculative packaging hardening without accepted package/install/run evidence.
+- Inspect accepted persistence/diagnostics evidence if attached.
+- Implement bounded persistence or diagnostics hardening only if accepted evidence identifies a concrete failure with reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
+- If no accepted persistence/diagnostics evidence is attached, keep Phase 12.3 blocked by `operator_evidence_backfill_required` and select no persistence, diagnostics, runtime, provider, UI, or gameplay hardening.
+- Do not implement speculative persistence or diagnostics hardening without accepted persistence/diagnostics evidence.
 
 ## Remaining risks
 
