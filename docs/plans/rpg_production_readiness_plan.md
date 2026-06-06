@@ -10,21 +10,21 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.1 — reopen operator evidence backfill unless accepted evidence is attached**.
+Current slice: **Phase 13.2 — first accepted hardening target implementation after evidence attachment**.
 
-Next recommended slice after Phase 13.1: **Phase 13.2 — first accepted hardening target implementation after evidence attachment**.
+Next recommended slice after Phase 13.2: **Phase 13.3 — production readiness evidence review after first hardening target**.
 
-Latest source-of-truth SHA before Phase 13.1: `aedd4be8e82d7f428d5df2e964ef31007384cd87`.
+Latest source-of-truth SHA before Phase 13.2: `fa0cee3ae42ab26be49eb00d3d17d3c7d13ed604`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #351 Phase 12.3 persistence diagnostics evidence decision gate | `3ccde744e6b84a6f0f2d28596b5e167280870778` | Phase 12.3 | Complete | Added persistence/diagnostics evidence-decision gate proving implementation remains blocked without accepted persistence/diagnostics evidence. |
 | #353 Phase 12.4 evidence gate bundle | `891822cedd5ceee44e8f2bc012b2f803bd8c57bd` | Phase 12.4 | Complete | Bundled evidence-decision gate, completion note, tests, and roadmap advancement by request. |
 | #354 Phase 12.5 endurance evidence gate bundle | `f063a53996d3e2c5801c84220172f4b8d580e533` | Phase 12.5 | Complete | Bundled endurance evidence-decision gate, completion note, tests, and roadmap advancement by request. |
 | #355 Phase 12.6 checkpoint replay evidence gate bundle | `aedd4be8e82d7f428d5df2e964ef31007384cd87` | Phase 12.6 | Complete | Bundled checkpoint/replay evidence-decision gate, completion note, tests, and roadmap advancement by request. |
-| Phase 12.7 bundled evidence intake closeout | `pending-pr-merge` | Phase 12.7 | In review | Bundles evidence intake closeout, completion note, tests, and roadmap advancement by request. |
+| #356 Phase 12.7 evidence intake closeout bundle | `fa0cee3ae42ab26be49eb00d3d17d3c7d13ed604` | Phase 12.7 | Complete | Bundled evidence intake closeout, completion note, tests, and roadmap advancement by request. |
+| Phase 13.1 bundled operator evidence backfill reopen | `pending-pr-merge` | Phase 13.1 | In review | Bundles evidence backfill reopen gate, completion note, tests, and roadmap advancement by request. |
 
 ## Roadmap Principles
 
@@ -91,19 +91,23 @@ Completed:
 
 Status: **Current; blocked until accepted evidence identifies a bounded target.**
 
+Completed:
+
+- [x] Phase 13.1 — reopen operator evidence backfill unless accepted evidence is attached.
+
 Current:
-
-- [ ] Phase 13.1 — reopen operator evidence backfill unless accepted evidence is attached.
-
-Next:
 
 - [ ] Phase 13.2 — first accepted hardening target implementation after evidence attachment.
 
-Phase 13.1 scope:
+Next:
+
+- [ ] Phase 13.3 — production readiness evidence review after first hardening target.
+
+Phase 13.2 scope:
 
 - Inspect any newly attached accepted evidence.
-- If accepted evidence is attached, select exactly one bounded hardening target with reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
-- If no accepted evidence is attached, keep implementation blocked by `operator_evidence_backfill_required` and reopen evidence backfill rather than implementing.
+- Implement exactly one bounded hardening target only if accepted evidence identifies reproduction steps, affected component, player/operator impact, deterministic/runtime boundary impact, non-targets, acceptance criteria, and required verification checks.
+- If no accepted evidence is attached, keep implementation blocked by `operator_evidence_backfill_required` and continue operator evidence backfill rather than implementing.
 - Do not implement speculative hardening without accepted evidence.
 
 ## Remaining risks
