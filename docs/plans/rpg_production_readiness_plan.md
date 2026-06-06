@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.11 — rerun 100-turn evidence review after HTML marker guard**.
+Current slice: **Phase 13.12 — rerun 100-turn evidence review after materialization guard and manual-turn metrics**.
 
-Next recommended slice after Phase 13.11: **Phase 13.12 — production evidence package or report/assertion follow-up**.
+Next recommended slice after Phase 13.12: **Phase 13.13 — production evidence package or report/performance follow-up**.
 
-Latest source-of-truth SHA before Phase 13.11: `1daa97a00393816f1b7053c3dc49ec064cb0330b`.
+Latest source-of-truth SHA before Phase 13.12: `0c42263ffd6d7998458bb93c41b66603b79eca54`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #361 Phase 13.5 latency reduction evidence review | `e118f182d3fc2ad91b1f42a74035d3eec1564dcd` | Phase 13.5 | Complete | Adds deterministic review helper for latency-reduced matrix evidence; no new live evidence attached. |
 | #362 Phase 13.6 latency evidence backfill | `17d7acb7fa7def1a8e57ecb85133ceb9e6c8f1a1` | Phase 13.6 | Complete | Records that latency-reduced matrix evidence is still missing and blocks speculative follow-up. |
 | #363 Phase 13.7 validated performance path gate | `b0b3f0c9d3557babc0406e084e955dc1d4e25886` | Phase 13.7 | Complete | Records that no latency-reduced matrix evidence is attached and blocks speculative broadening. |
 | #364 Phase 13.8 autoplay report size guard | `71ace2fffe1ba593462516c30fe36859f5ac2c59` | Phase 13.8 | Complete | Caps oversized autoplay report JSON/HTML files and ZIP members after run completion. |
 | #365 Phase 13.9 force-exit report size guard | `1daa97a00393816f1b7053c3dc49ec064cb0330b` | Phase 13.9 | Complete | Installs the size guard before runtime so forced finalization also caps reports. |
-| Phase 13.10 HTML turn-contract marker guard | `pending-pr-merge` | Phase 13.10 | In review | Suppresses the exact turn-contract metadata marker false positive while preserving failures for unapproved markers. |
+| #366 Phase 13.10 HTML turn-contract marker guard | `0c42263ffd6d7998458bb93c41b66603b79eca54` | Phase 13.10 | Complete | Suppresses the exact turn-contract metadata marker false positive while preserving failures for unapproved markers. |
+| Phase 13.11 report materialization guard and manual metrics | `pending-pr-merge` | Phase 13.11 | In review | Caps report artifacts when materialized and adds manual-turn blocking breakdown metrics. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.11: `1daa97a00393816f1b7053c3dc49ec06
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; HTML marker guard in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; report materialization and manual metrics in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; HTML marker guard in review.**
+Status: **Current; report materialization and manual metrics in review.**
 
 Completed:
 
@@ -104,28 +104,30 @@ Completed:
 - [x] Phase 13.8 — production readiness evidence checkpoint or validated performance promotion.
 - [x] Phase 13.9 — operator evidence package or first validated promotion.
 - [x] Phase 13.10 — rerun 100-turn evidence review after force-exit report-size guard.
+- [x] Phase 13.11 — report materialization guard and manual-turn metrics.
 
 Current:
 
-- [ ] Phase 13.11 — rerun 100-turn evidence review after HTML marker guard.
+- [ ] Phase 13.12 — rerun 100-turn evidence review after materialization guard and manual-turn metrics.
 
 Next:
 
-- [ ] Phase 13.12 — production evidence package or report/assertion follow-up.
+- [ ] Phase 13.13 — production evidence package or report/performance follow-up.
 
-Phase 13.11 scope:
+Phase 13.12 scope:
 
-- Rerun or inspect the 100-turn command after the HTML marker guard is merged.
-- Confirm that artifact generation completes without the `turn contract` marker failure.
+- Rerun or inspect the 100-turn command after the report materialization guard is merged.
 - Confirm that `autoplay-report-size-guard-summary.json` is present.
 - Confirm that report JSON, report HTML, and results ZIP remain shareable.
-- If another report assertion fails, select one bounded follow-up target.
-- If artifacts are manageable and assertions pass, continue operator evidence packaging or validated promotion review.
+- Confirm that `autoplay-performance-summary.json` includes `manual_turn_breakdown` when timing rows provide stage fields.
+- If report artifacts remain oversized, select one bounded materialization follow-up target.
+- If manual-turn sub-stages are missing, select one bounded instrumentation target.
+- If artifacts are manageable and metrics are present, continue operator evidence packaging or performance optimization review.
 
 ## Remaining risks
 
-- The 100-turn command must be rerun after the HTML marker guard to confirm artifact generation completes.
-- The report-size summary should be checked after the rerun.
+- The 100-turn command must be rerun after the materialization guard to confirm report artifacts are capped.
+- Manual-turn sub-stage fields must be present in future rows to fully populate the breakdown.
 - The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
 - Live/provider 1000-turn execution remains pending.
