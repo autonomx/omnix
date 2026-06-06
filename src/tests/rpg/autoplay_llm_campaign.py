@@ -92,10 +92,6 @@ def _load_autoplay_campaign_runtime() -> None:
         Path(__file__).with_name("autoplay_llm_campaign_parts")
         / "__combined_autoplay_llm_campaign__.py"
     )
-    # Keep inspect.getsource()/getsourcelines() working for functions defined
-    # inside the synthetic combined source. Several autoplay self-checks inspect
-    # their own runtime functions; without a linecache entry, inspect can raise
-    # "lineno is out of bounds" because the compiled filename is virtual.
     linecache.cache[combined_filename] = (
         len(combined_source),
         None,
@@ -105,11 +101,6 @@ def _load_autoplay_campaign_runtime() -> None:
     chunk_globals: Dict[str, object] = globals()
     chunk_globals.setdefault("__file__", str(Path(__file__).resolve()))
     original_name = chunk_globals.get("__name__", __name__)
-    # N118.3: fragment 66 historically contains an ``if __name__ == "__main__"``
-    # block.  After late fragments were added, that block exited before fragments
-    # 67+ loaded, so N117.8/N118/N118.1/N118.2 hooks never ran.  Execute the
-    # combined fragment source under an internal name, then call main() once from
-    # this wrapper after every fragment has loaded.
     chunk_globals["__name__"] = "_autoplay_campaign_runtime"
     _RUNTIME_LOADED = True
     try:
@@ -285,6 +276,8 @@ if __name__ != "__main__":
 
 if __name__ == "__main__":
     _register_autoplay_runtime_aliases()
+    from tests.rpg.autoplay.report_size_guard_hook import install_force_exit_report_size_guard
+    install_force_exit_report_size_guard(sys.argv[1:])
     _load_autoplay_campaign_runtime()
     main_fn = globals().get("main")
     if not callable(main_fn):
