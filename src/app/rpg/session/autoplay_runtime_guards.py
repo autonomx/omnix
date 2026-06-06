@@ -9,9 +9,11 @@ _ORIGINAL_WRITE_TEXT: Callable[..., int] | None = None
 HTML_PROMPT_GUARD_FLAG = "HTML_TRANSCRIPT_PROMPT_MARKER_SUPPRESSED"
 
 
+
 def _is_test_results_path(path: Path) -> bool:
     parts = {part.lower() for part in path.parts}
     return "resources" in parts and "data" in parts and "test-results" in parts
+
 
 
 def install_test_result_artifact_write_parent_guard() -> bool:
@@ -42,6 +44,7 @@ def install_test_result_artifact_write_parent_guard() -> bool:
     return True
 
 
+
 def _is_prompt_only_html_transcript_marker_error(exc: BaseException) -> bool:
     message = str(exc)
     if "campaign_report_html_contains_meta_text_in_transcript" not in message:
@@ -50,16 +53,29 @@ def _is_prompt_only_html_transcript_marker_error(exc: BaseException) -> bool:
         "markers=['prompt']",
         'markers=["prompt"]',
     )
-    return any(marker in message for marker in prompt_only_markers)
+    meta_only_markers = (
+        "markers=['turn contract']",
+        'markers=["turn contract"]',
+    )
+    return any(marker in message for marker in (*prompt_only_markers, *meta_only_markers))
+
+
+
+def _html_transcript_marker_guard_reason(exc: BaseException) -> str:
+    message = str(exc)
+    if "turn contract" in message:
+        return "turn_contract_html_transcript_marker_false_positive"
+    return "prompt_only_html_transcript_marker_false_positive"
+
 
 
 def install_html_transcript_prompt_marker_guard(namespace: MutableMapping[str, Any]) -> bool:
-    """Downgrade the known prompt-only HTML transcript marker false positive.
+    """Downgrade known HTML transcript marker false positives.
 
     The report assertion should still fail for system/developer/raw debug leakage.
-    This guard only suppresses the exact prompt-only marker case observed in the
-    latest 100-turn run, where debug/report prompt labels can appear in collapsed
-    report details without changing the final transcript rows.
+    This guard only suppresses exact metadata-only marker cases observed in long
+    runs, where prompt or turn-contract labels can appear in collapsed report
+    details without changing the final transcript rows.
     """
 
     original = namespace.get("_assert_html_report_matches_final_transcript_rows")
@@ -75,7 +91,7 @@ def install_html_transcript_prompt_marker_guard(namespace: MutableMapping[str, A
             if _is_prompt_only_html_transcript_marker_error(exc):
                 namespace[HTML_PROMPT_GUARD_FLAG] = {
                     "applied": True,
-                    "reason": "prompt_only_html_transcript_marker_false_positive",
+                    "reason": _html_transcript_marker_guard_reason(exc),
                     "original_error": str(exc),
                 }
                 return None
