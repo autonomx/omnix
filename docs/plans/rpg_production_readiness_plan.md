@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.7 — broaden validated performance path or continue operator evidence backfill**.
+Current slice: **Phase 13.8 — production readiness evidence checkpoint or validated performance promotion**.
 
-Next recommended slice after Phase 13.7: **Phase 13.8 — production readiness evidence checkpoint or validated performance promotion**.
+Next recommended slice after Phase 13.8: **Phase 13.9 — operator evidence package or first validated promotion**.
 
-Latest source-of-truth SHA before Phase 13.7: `e118f182d3fc2ad91b1f42a74035d3eec1564dcd`.
+Latest source-of-truth SHA before Phase 13.8: `17d7acb7fa7def1a8e57ecb85133ceb9e6c8f1a1`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #357 Phase 13.1 operator evidence backfill bundle | `2f15aba2e4ceefcb29aca0a1e13e8d49842d6c27` | Phase 13.1 | Complete | Bundled evidence backfill reopen gate, completion note, tests, and roadmap advancement by request. |
 | #358 Phase 13.2 autoplay performance artifacts | `58d1a7c0b3106a90d639828e292067692a56345d` | Phase 13.2 | Complete | Adds structured autoplay performance artifacts from accepted 5-turn smoke evidence. |
 | #359 Phase 13.3 interactive matrix performance review | `426c9a9ca762df7e64cf5d57f2caab6124fa1711` | Phase 13.3 | Complete | Adds structured matrix performance review artifacts from accepted interactive matrix evidence. |
-| #360 Phase 13.4 provider-backed intent latency reduction | `6cbd349cbf4b6bd515736729eeb4b271df80d392` | Phase 13.4 | Complete | Adds opt-in latency-reduced matrix runner for accepted provider-backed intent categories. |
+| #360 Phase 13.4 provider-backed intent latency reduction | `6cbd349cbf4b6bd515736729eeb4b271df80d392` | Phase 13.4 | Complete | Adds opt-in latency-reduced matrix runner for accepted intent categories. |
 | #361 Phase 13.5 latency reduction evidence review | `e118f182d3fc2ad91b1f42a74035d3eec1564dcd` | Phase 13.5 | Complete | Adds deterministic review helper for latency-reduced matrix evidence; no new live evidence attached. |
-| Phase 13.6 latency reduction evidence backfill | `pending-pr-merge` | Phase 13.6 | In review | Records that latency-reduced matrix evidence is still missing and blocks speculative follow-up. |
+| #362 Phase 13.6 latency evidence backfill | `17d7acb7fa7def1a8e57ecb85133ceb9e6c8f1a1` | Phase 13.6 | Complete | Records that latency-reduced matrix evidence is still missing and blocks speculative follow-up. |
+| Phase 13.7 validated performance path gate | `pending-pr-merge` | Phase 13.7 | In review | Records that no latency-reduced matrix evidence is attached and blocks speculative broadening. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.7: `e118f182d3fc2ad91b1f42a74035d3eec
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; latency-reduction evidence backfill in progress**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; validated performance evidence backfill in progress**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; latency-reduction evidence backfill in progress.**
+Status: **Current; validated performance evidence backfill in progress.**
 
 Completed:
 
@@ -100,27 +100,29 @@ Completed:
 - [x] Phase 13.4 — bounded latency reduction for provider-backed intent paths.
 - [x] Phase 13.5 — production readiness evidence review after latency reduction.
 - [x] Phase 13.6 — apply latency-reduction follow-up from live matrix evidence.
+- [x] Phase 13.7 — broaden validated performance path or continue operator evidence backfill.
 
 Current:
 
-- [ ] Phase 13.7 — broaden validated performance path or continue operator evidence backfill.
+- [ ] Phase 13.8 — production readiness evidence checkpoint or validated performance promotion.
 
 Next:
 
-- [ ] Phase 13.8 — production readiness evidence checkpoint or validated performance promotion.
+- [ ] Phase 13.9 — operator evidence package or first validated promotion.
 
-Phase 13.7 scope:
+Phase 13.8 scope:
 
 - Inspect newly attached latency-reduced matrix evidence if available.
-- If latency-reduced matrix evidence confirms improvement, broaden the validated performance path only within the accepted evidence boundary.
+- If validated performance evidence is attached, decide whether to promote a bounded performance path or request repeat validation.
 - If no latency-reduced matrix evidence is attached, continue evidence backfill rather than implementing speculative changes.
-- Preserve runtime authority, state mutation boundaries, provider call boundaries, deferred narration boundaries, and deterministic fast paths.
+- Preserve runtime authority, state mutation boundaries, deferred narration boundaries, deterministic fast paths, and production-readiness evidence requirements.
 
 ## Remaining risks
 
-- The Phase 13.4 latency-reduced matrix runner still needs live/provider operator evidence.
+- The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
-- This Phase 13.6 slice records evidence backfill, not runtime or routing changes.
+- No validated performance path broadening target has been selected.
+- This Phase 13.7 slice records evidence backfill, not runtime or routing changes.
 - Live/provider 1000-turn execution remains pending.
 - Operator/manual evidence is still needed for endurance timing, final drain, background drain, production resource limits, and long-run narrative quality review.
 - Package artifacts, install/run transcripts, persistence smoke, diagnostic bundles, player-safe error evidence, release notes, redaction review, and operator signoff remain pending.
