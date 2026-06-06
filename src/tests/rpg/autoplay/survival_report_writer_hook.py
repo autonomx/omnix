@@ -3,7 +3,7 @@
 The named autoplay fragments are combined dynamically by
 ``autoplay_llm_campaign.py``.  Rather than patching an opaque fragment, this hook
 runs after the stable wrapper's ``main()`` returns and enriches the generated
-artifact directory/ZIP with the BH survival metrics files.
+artifact directory/ZIP with post-run report artifacts.
 """
 from __future__ import annotations
 
@@ -12,6 +12,13 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from tests.rpg.autoplay.performance_artifacts import (
+    PERFORMANCE_SUMMARY_HTML_NAME,
+    PERFORMANCE_SUMMARY_JSON_NAME,
+    append_autoplay_performance_artifacts_to_zip,
+    attach_autoplay_performance_manifest,
+    write_autoplay_performance_artifacts,
+)
 from tests.rpg.autoplay.survival_report_artifacts import (
     SURVIVAL_METRICS_HTML_NAME,
     SURVIVAL_METRICS_JSON_NAME,
@@ -43,7 +50,6 @@ def _repo_root_from_script(script_path: str | Path) -> Path:
     for parent in [path.parent, *path.parents]:
         if (parent / "src").exists() and (parent / "resources").exists():
             return parent
-    # src/tests/rpg/autoplay_llm_campaign.py -> repo root is parents[3]
     try:
         return path.parents[3]
     except IndexError:
@@ -84,7 +90,7 @@ def _extract_rows_from_value(value: Any, rows: List[Dict[str, Any]]) -> None:
                 if len(rows) >= _MAX_ROWS:
                     return
                 item = _safe_dict(item)
-                if _has_survival_evidence(item) or any(k in item for k in ("turn", "turn_index", "tick", "turn_contract", "result")):
+                if _has_survival_evidence(item) or any(k in item for k in ("turn", "turn_index", "tick", "turn_contract", "result", "turn_result", "performance", "timing")):
                     rows.append(item)
                 else:
                     _extract_rows_from_value(item, rows)
@@ -105,6 +111,7 @@ def _extract_rows_from_value(value: Any, rows: List[Dict[str, Any]]) -> None:
             "results",
             "scenario_results",
             "records",
+            "transcript_rows",
         )
         for key in preferred_keys:
             nested = value.get(key)
@@ -144,7 +151,7 @@ def collect_survival_report_rows(results_dir: str | Path, *, zip_path: Optional[
             with zipfile.ZipFile(zip_path, "r") as zf:
                 json_names = [name for name in zf.namelist() if name.lower().endswith(".json")]
                 for name in json_names[:_MAX_ZIP_JSON_MEMBERS]:
-                    if name.endswith(SURVIVAL_METRICS_JSON_NAME):
+                    if name.endswith(SURVIVAL_METRICS_JSON_NAME) or name.endswith(PERFORMANCE_SUMMARY_JSON_NAME):
                         continue
                     try:
                         value = _load_json_text(zf.read(name).decode("utf-8"))
@@ -181,17 +188,36 @@ def find_latest_autoplay_zip(results_dir: str | Path) -> Optional[Path]:
     return candidates[0]
 
 
-def _zip_has_survival_members(zip_path: Path, *, prefix: str = "survival") -> bool:
+def _zip_has_members(zip_path: Path, *, prefix: str, json_name: str, html_name: str) -> bool:
     if not zip_path.exists():
         return False
-    json_member = f"{prefix.strip('/')}/{SURVIVAL_METRICS_JSON_NAME}" if prefix else SURVIVAL_METRICS_JSON_NAME
-    html_member = f"{prefix.strip('/')}/{SURVIVAL_METRICS_HTML_NAME}" if prefix else SURVIVAL_METRICS_HTML_NAME
+    normalized = prefix.strip().strip("/")
+    json_member = f"{normalized}/{json_name}" if normalized else json_name
+    html_member = f"{normalized}/{html_name}" if normalized else html_name
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = set(zf.namelist())
             return json_member in names and html_member in names
     except Exception:
         return False
+
+
+def _zip_has_survival_members(zip_path: Path, *, prefix: str = "survival") -> bool:
+    return _zip_has_members(
+        zip_path,
+        prefix=prefix,
+        json_name=SURVIVAL_METRICS_JSON_NAME,
+        html_name=SURVIVAL_METRICS_HTML_NAME,
+    )
+
+
+def _zip_has_performance_members(zip_path: Path, *, prefix: str = "performance") -> bool:
+    return _zip_has_members(
+        zip_path,
+        prefix=prefix,
+        json_name=PERFORMANCE_SUMMARY_JSON_NAME,
+        html_name=PERFORMANCE_SUMMARY_HTML_NAME,
+    )
 
 
 def run_autoplay_survival_report_writer_hook(
@@ -201,18 +227,19 @@ def run_autoplay_survival_report_writer_hook(
     exit_code: Any = 0,
     results_dir: Optional[str | Path] = None,
 ) -> Dict[str, Any]:
-    """Append survival report artifacts to the latest autoplay output ZIP.
-
-    Returns a diagnostic payload and never raises for normal missing-artifact
-    cases.  The wrapper catches unexpected exceptions too, so this hook cannot
-    fail the autoplay run after gameplay/tests already completed.
-    """
+    """Append post-run report artifacts to the latest autoplay output ZIP."""
     try:
         output_dir = Path(results_dir) if results_dir else default_autoplay_results_dir(script_path)
         zip_path = find_latest_autoplay_zip(output_dir)
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
         standalone = write_survival_report_artifacts(output_dir, rows)
+        performance_standalone = write_autoplay_performance_artifacts(output_dir, rows)
         zip_result: Dict[str, Any] = {
+            "ok": False,
+            "reason": "no_zip_found",
+            "source": SURVIVAL_WRITER_HOOK_SOURCE,
+        }
+        performance_zip_result: Dict[str, Any] = {
             "ok": False,
             "reason": "no_zip_found",
             "source": SURVIVAL_WRITER_HOOK_SOURCE,
@@ -227,14 +254,27 @@ def run_autoplay_survival_report_writer_hook(
                     "source": SURVIVAL_WRITER_HOOK_SOURCE,
                 }
             else:
-                zip_result = append_survival_report_artifacts_to_zip(
+                zip_result = append_survival_report_artifacts_to_zip(zip_path, rows, prefix="survival")
+            if _zip_has_performance_members(zip_path, prefix="performance"):
+                performance_zip_result = {
+                    "ok": True,
+                    "skipped": True,
+                    "reason": "zip_already_contains_performance_members",
+                    "zip_path": str(zip_path),
+                    "source": SURVIVAL_WRITER_HOOK_SOURCE,
+                }
+            else:
+                performance_zip_result = append_autoplay_performance_artifacts_to_zip(
                     zip_path,
                     rows,
-                    prefix="survival",
+                    prefix="performance",
                 )
         manifest = attach_survival_artifact_manifest({}, standalone)
+        manifest = attach_autoplay_performance_manifest(manifest, performance_standalone)
         if zip_result.get("ok"):
             manifest = attach_survival_artifact_manifest(manifest, zip_result)
+        if performance_zip_result.get("ok"):
+            manifest = attach_autoplay_performance_manifest(manifest, performance_zip_result)
         return {
             "ok": True,
             "exit_code": exit_code,
@@ -244,6 +284,8 @@ def run_autoplay_survival_report_writer_hook(
             "rows_observed": len(rows),
             "standalone_result": standalone,
             "zip_result": zip_result,
+            "performance_standalone_result": performance_standalone,
+            "performance_zip_result": performance_zip_result,
             "manifest": manifest,
             "source": SURVIVAL_WRITER_HOOK_SOURCE,
         }
