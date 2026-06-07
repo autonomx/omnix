@@ -61,6 +61,38 @@ def default_autoplay_results_dir(script_path: str | Path) -> Path:
     return _repo_root_from_script(script_path) / "resources" / "data" / "test-results"
 
 
+def _load_json_file(path: Path) -> Dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def load_live_performance_summary(output_dir: str | Path, *, zip_path: Optional[str | Path] = None) -> Dict[str, Any]:
+    """Load the live harness performance summary for advisory bridging."""
+    output_dir = Path(output_dir)
+    candidates = [
+        output_dir / "autoplay-performance.json",
+        output_dir / "autoplay-campaign-results-unzipped" / "autoplay-performance.json",
+    ]
+    for path in candidates:
+        payload = _load_json_file(path)
+        if payload:
+            return payload
+    if zip_path and Path(zip_path).exists():
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                for name in ("autoplay-performance.json", "autoplay-campaign-results-unzipped/autoplay-performance.json"):
+                    if name in zf.namelist():
+                        value = json.loads(zf.read(name).decode("utf-8"))
+                        if isinstance(value, dict):
+                            return value
+        except Exception:
+            return {}
+    return {}
+
+
 def _has_survival_evidence(row: Mapping[str, Any]) -> bool:
     row = _safe_dict(row)
     if not row:
@@ -233,8 +265,13 @@ def run_autoplay_survival_report_writer_hook(
         output_dir = Path(results_dir) if results_dir else default_autoplay_results_dir(script_path)
         zip_path = find_latest_autoplay_zip(output_dir)
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
+        live_performance_summary = load_live_performance_summary(output_dir, zip_path=zip_path)
         standalone = write_survival_report_artifacts(output_dir, rows)
-        performance_standalone = write_autoplay_performance_artifacts(output_dir, rows)
+        performance_standalone = write_autoplay_performance_artifacts(
+            output_dir,
+            rows,
+            run_summary=live_performance_summary,
+        )
         zip_result: Dict[str, Any] = {
             "ok": False,
             "reason": "no_zip_found",
@@ -268,6 +305,7 @@ def run_autoplay_survival_report_writer_hook(
                 performance_zip_result = append_autoplay_performance_artifacts_to_zip(
                     zip_path,
                     rows,
+                    run_summary=live_performance_summary,
                     prefix="performance",
                 )
         size_guard_result = cap_oversized_autoplay_reports(
@@ -288,6 +326,7 @@ def run_autoplay_survival_report_writer_hook(
             "results_dir": str(output_dir),
             "zip_path": str(zip_path) if zip_path else "",
             "rows_observed": len(rows),
+            "live_performance_summary_loaded": bool(live_performance_summary),
             "standalone_result": standalone,
             "zip_result": zip_result,
             "performance_standalone_result": performance_standalone,
