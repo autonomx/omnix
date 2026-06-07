@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.17 — rerun 100-turn evidence review after runtime-result diagnostics priority**.
+Current slice: **Phase 13.18 — rerun 100-turn evidence review after runtime result emitter capture**.
 
-Next recommended slice after Phase 13.17: **Phase 13.18 — runtime follow-up from prioritized diagnostics or production evidence package**.
+Next recommended slice after Phase 13.18: **Phase 13.19 — runtime follow-up from captured emitter evidence or production evidence package**.
 
-Latest source-of-truth SHA before Phase 13.17: `0d03c702dc103da4f7b43ec888b47e3b4aa43203`.
+Latest source-of-truth SHA before Phase 13.18: `c60cc7984852252cf6dce47fd9ad25903078921e`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #367 Phase 13.11 report materialization guard and manual metrics | `47be44de3f4d1da96164de817cb19d4d530c8dd6` | Phase 13.11 | Complete | Caps report artifacts when materialized and adds manual-turn blocking breakdown metrics. |
 | #368 Phase 13.12 recursion guard and manual-stage timing | `88ae8b7db5736260e5f7e88c9c4e224733124f7b` | Phase 13.12 | Complete | Raises first-call runtime recursion budget and emits manual-stage timing from the turn path. |
 | #369 Phase 13.13 output-dir hook and guarded copy | `04b06df7f67b3ababf5720e52a0753c1ca7bded9` | Phase 13.13 | Complete | Passes explicit output dir to post-run artifact hook and bounds copy recursion failures. |
 | #370 Phase 13.14 diagnostics and live timing bridge | `9fac8bd905203493b282334c9bb5f21a1b2db422` | Phase 13.14 | Complete | Adds turn-error diagnostics and bridges live harness timing into performance summaries. |
 | #371 Phase 13.15 result-path diagnostics and trace timing bridge | `0d03c702dc103da4f7b43ec888b47e3b4aa43203` | Phase 13.15 | Complete | Scans saved result payloads for failed turn objects and bridges result trace timing summaries. |
-| Phase 13.16 runtime result diagnostics priority | `pending-pr-merge` | Phase 13.16 | In review | Separates runtime-result diagnostic events from generic failure events so runtime traces are not crowded out. |
+| #372 Phase 13.16 runtime result diagnostics priority | `c60cc7984852252cf6dce47fd9ad25903078921e` | Phase 13.16 | Complete | Separates runtime-result diagnostic events from generic failure events so runtime traces are not crowded out. |
+| Phase 13.17 runtime result emitter capture | `pending-pr-merge` | Phase 13.17 | In review | Captures `runtime_turn_execution.result` probe emissions into a dedicated runtime result artifact. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.17: `0d03c702dc103da4f7b43ec888b47e3b
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; runtime diagnostics priority in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; runtime result emitter capture in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; runtime diagnostics priority in review.**
+Status: **Current; runtime result emitter capture in review.**
 
 Completed:
 
@@ -110,28 +110,29 @@ Completed:
 - [x] Phase 13.14 — non-copy recursion diagnostics and live timing bridge.
 - [x] Phase 13.15 — result-path diagnostics and trace timing bridge.
 - [x] Phase 13.16 — runtime result diagnostics priority.
+- [x] Phase 13.17 — runtime result emitter capture.
 
 Current:
 
-- [ ] Phase 13.17 — rerun 100-turn evidence review after runtime-result diagnostics priority.
+- [ ] Phase 13.18 — rerun 100-turn evidence review after runtime result emitter capture.
 
 Next:
 
-- [ ] Phase 13.18 — runtime follow-up from prioritized diagnostics or production evidence package.
+- [ ] Phase 13.19 — runtime follow-up from captured emitter evidence or production evidence package.
 
-Phase 13.17 scope:
+Phase 13.18 scope:
 
-- Rerun or inspect the 100-turn command after Phase 13.16 is merged.
-- Confirm that `autoplay-turn-error-diagnostics.json` contains `runtime_result_events` when turn errors persist.
-- Inspect runtime result JSON paths, source artifact paths, error fields, and trace keys to identify a bounded runtime component.
-- Confirm generic failure events remain bounded and cannot crowd out runtime events.
-- If diagnostics identify a bounded runtime component, fix that component next.
+- Rerun or inspect the 100-turn command after Phase 13.17 is merged.
+- Confirm that `autoplay-runtime-turn-results.json` exists and captures `runtime_turn_execution.result` emissions.
+- Confirm that `autoplay-turn-error-diagnostics.json` contains prioritized runtime result emission events.
+- Confirm that `autoplay-performance-summary.json` records the runtime emission bridge source when full timing values remain unavailable.
+- If the captured emitter artifact still lacks full payload values, identify the next concrete probe/emitter symbol to wrap.
 - If artifacts are manageable and errors are gone, continue operator evidence packaging or performance optimization review.
 
 ## Remaining risks
 
-- The 100-turn command must be rerun after Phase 13.16 to confirm prioritized runtime diagnostics are captured.
-- If runtime-result diagnostics remain empty while console errors persist, the next slice must wrap the concrete turn result emitter directly.
+- The 100-turn command must be rerun after Phase 13.17 to confirm runtime emitter capture works.
+- If the captured line only contains keys and not payload values, the next slice should wrap the probe function or runtime result emitter symbol once identified.
 - The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
 - Live/provider 1000-turn execution remains pending.
