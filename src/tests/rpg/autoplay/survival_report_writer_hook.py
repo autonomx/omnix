@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from app.rpg.autoplay_report_size_guard import cap_oversized_autoplay_reports
+from tests.rpg.autoplay.live_manual_turn_timing import ARTIFACT_NAME as LIVE_TIMING_ARTIFACT_NAME
 from tests.rpg.autoplay.live_performance_bridge import append_live_performance_bridge_row
 from tests.rpg.autoplay.performance_artifacts import (
     PERFORMANCE_SUMMARY_HTML_NAME,
@@ -21,6 +22,7 @@ from tests.rpg.autoplay.performance_artifacts import (
     attach_autoplay_performance_manifest,
     write_autoplay_performance_artifacts,
 )
+from tests.rpg.autoplay.probe_source_map import write_probe_source_map_from_linecache
 from tests.rpg.autoplay.result_path_diagnostics import (
     RUNTIME_TURN_PAYLOADS_NAME,
     RUNTIME_TURN_RESULTS_NAME,
@@ -140,6 +142,23 @@ def load_runtime_probe_payload_rows(output_dir: str | Path) -> List[Dict[str, An
     return rows
 
 
+def load_live_manual_timing_rows(output_dir: str | Path) -> List[Dict[str, Any]]:
+    payload = _load_json_file(Path(output_dir) / LIVE_TIMING_ARTIFACT_NAME)
+    summary = _safe_dict(payload.get("stage_summary"))
+    if not summary:
+        return []
+    return [
+        {
+            "turn_index": -1,
+            "performance": {
+                "live_manual_substage_summary": summary,
+                "live_manual_substage_event_count": payload.get("event_count", 0),
+            },
+            "source": "live_manual_turn_timing_bridge",
+        }
+    ]
+
+
 def _runtime_payload_artifact(output_dir: Path) -> Dict[str, Any]:
     path = output_dir / RUNTIME_TURN_PAYLOADS_NAME
     payload = _load_json_file(path)
@@ -148,6 +167,18 @@ def _runtime_payload_artifact(output_dir: Path) -> Dict[str, Any]:
         "path": str(path),
         "event_count": len(payload.get("events") or []),
         "source": "runtime_probe_payload_capture",
+    }
+
+
+def _live_timing_artifact(output_dir: Path) -> Dict[str, Any]:
+    path = output_dir / LIVE_TIMING_ARTIFACT_NAME
+    payload = _load_json_file(path)
+    return {
+        "ok": path.exists(),
+        "path": str(path),
+        "event_count": len(payload.get("events") or []),
+        "stage_summary": _safe_dict(payload.get("stage_summary")),
+        "source": "live_manual_turn_timing",
     }
 
 
@@ -322,13 +353,19 @@ def run_autoplay_survival_report_writer_hook(
     try:
         output_dir = Path(results_dir) if results_dir else default_autoplay_results_dir(script_path)
         zip_path = find_latest_autoplay_zip(output_dir)
+        probe_source_map = write_probe_source_map_from_linecache()
         runtime_turn_backfill = backfill_runtime_turn_results_from_console_log(output_dir)
         runtime_payload_artifact = _runtime_payload_artifact(output_dir)
+        live_timing_artifact = _live_timing_artifact(output_dir)
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
         runtime_turn_result_rows = load_runtime_turn_result_rows(output_dir)
         runtime_probe_payload_rows = load_runtime_probe_payload_rows(output_dir)
+        live_manual_timing_rows = load_live_manual_timing_rows(output_dir)
         live_performance_summary = load_live_performance_summary(output_dir, zip_path=zip_path)
-        performance_rows = append_live_performance_bridge_row([*rows, *runtime_turn_result_rows, *runtime_probe_payload_rows], live_performance_summary)
+        performance_rows = append_live_performance_bridge_row(
+            [*rows, *runtime_turn_result_rows, *runtime_probe_payload_rows, *live_manual_timing_rows],
+            live_performance_summary,
+        )
         result_path_diagnostics = write_result_path_diagnostics(output_dir, zip_path=zip_path)
         standalone = write_survival_report_artifacts(output_dir, rows)
         performance_standalone = write_autoplay_performance_artifacts(
@@ -382,8 +419,11 @@ def run_autoplay_survival_report_writer_hook(
         manifest["autoplay_result_path_diagnostics"] = result_path_diagnostics
         manifest["runtime_turn_result_backfill"] = runtime_turn_backfill
         manifest["runtime_probe_payload_artifact"] = runtime_payload_artifact
+        manifest["runtime_probe_source_map"] = probe_source_map
+        manifest["live_manual_turn_substage_timing"] = live_timing_artifact
         manifest["runtime_turn_result_rows_observed"] = len(runtime_turn_result_rows)
         manifest["runtime_probe_payload_rows_observed"] = len(runtime_probe_payload_rows)
+        manifest["live_manual_timing_rows_observed"] = len(live_manual_timing_rows)
         if zip_result.get("ok"):
             manifest = attach_survival_artifact_manifest(manifest, zip_result)
         if performance_zip_result.get("ok"):
@@ -397,8 +437,11 @@ def run_autoplay_survival_report_writer_hook(
             "rows_observed": len(rows),
             "runtime_turn_result_backfill": runtime_turn_backfill,
             "runtime_probe_payload_artifact": runtime_payload_artifact,
+            "runtime_probe_source_map": probe_source_map,
+            "live_manual_turn_substage_timing": live_timing_artifact,
             "runtime_turn_result_rows_observed": len(runtime_turn_result_rows),
             "runtime_probe_payload_rows_observed": len(runtime_probe_payload_rows),
+            "live_manual_timing_rows_observed": len(live_manual_timing_rows),
             "performance_rows_observed": len(performance_rows),
             "live_performance_summary_loaded": bool(live_performance_summary),
             "result_path_diagnostics": result_path_diagnostics,
