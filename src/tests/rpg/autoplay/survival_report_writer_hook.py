@@ -22,6 +22,7 @@ from tests.rpg.autoplay.performance_artifacts import (
     write_autoplay_performance_artifacts,
 )
 from tests.rpg.autoplay.result_path_diagnostics import RUNTIME_TURN_RESULTS_NAME, write_result_path_diagnostics
+from tests.rpg.autoplay.runtime_turn_result_capture_hook import backfill_runtime_turn_results_from_console_log
 from tests.rpg.autoplay.survival_report_artifacts import (
     SURVIVAL_METRICS_HTML_NAME,
     SURVIVAL_METRICS_JSON_NAME,
@@ -284,6 +285,7 @@ def run_autoplay_survival_report_writer_hook(
     try:
         output_dir = Path(results_dir) if results_dir else default_autoplay_results_dir(script_path)
         zip_path = find_latest_autoplay_zip(output_dir)
+        runtime_turn_backfill = backfill_runtime_turn_results_from_console_log(output_dir)
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
         runtime_turn_result_rows = load_runtime_turn_result_rows(output_dir)
         live_performance_summary = load_live_performance_summary(output_dir, zip_path=zip_path)
@@ -339,6 +341,7 @@ def run_autoplay_survival_report_writer_hook(
         manifest = attach_autoplay_performance_manifest(manifest, performance_standalone)
         manifest["autoplay_report_size_guard"] = size_guard_result
         manifest["autoplay_result_path_diagnostics"] = result_path_diagnostics
+        manifest["runtime_turn_result_backfill"] = runtime_turn_backfill
         manifest["runtime_turn_result_rows_observed"] = len(runtime_turn_result_rows)
         if zip_result.get("ok"):
             manifest = attach_survival_artifact_manifest(manifest, zip_result)
@@ -351,6 +354,7 @@ def run_autoplay_survival_report_writer_hook(
             "results_dir": str(output_dir),
             "zip_path": str(zip_path) if zip_path else "",
             "rows_observed": len(rows),
+            "runtime_turn_result_backfill": runtime_turn_backfill,
             "runtime_turn_result_rows_observed": len(runtime_turn_result_rows),
             "performance_rows_observed": len(performance_rows),
             "live_performance_summary_loaded": bool(live_performance_summary),
