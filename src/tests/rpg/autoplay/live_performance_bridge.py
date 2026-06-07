@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping
 
-SOURCE = "autoplay_live_performance_bridge_v2"
+SOURCE = "autoplay_live_performance_bridge_v3"
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -63,7 +63,12 @@ def _find_trace_stage_summary(rows: Iterable[Mapping[str, Any]]) -> Dict[str, An
         if not isinstance(row, dict):
             continue
         for container in (row, _d(row.get("performance")), _d(row.get("turn_result")), _d(row.get("runtime"))):
-            for key in ("turn_perf_trace_summary", "manual_stage_trace_summary", "manual_harness_trace_summary"):
+            for key in (
+                "live_manual_substage_summary",
+                "turn_perf_trace_summary",
+                "manual_stage_trace_summary",
+                "manual_harness_trace_summary",
+            ):
                 value = _d(container.get(key))
                 if value:
                     return value
@@ -115,16 +120,38 @@ def build_live_performance_bridge_row(run_summary: Mapping[str, Any], rows: Iter
     manual = _avg(stage, "manual_turn_ms")
     state_bounds = _avg(stage, "state_bounds_ms") or _avg(stage, "state_snapshot_ms")
     enqueue = _avg(stage, "background_enqueue_ms") or _avg(stage, "deferred_enqueue_ms")
+    pre_runtime_intent = _avg(stage, "pre_runtime_intent_llm_ms")
+    deterministic_apply = _avg(stage, "deterministic_runtime_apply_ms")
+    grounding_validation = _avg(stage, "grounding_validation_ms")
+    repair = _avg(stage, "repair_ms")
     story_hooks = _avg(stage, "story_hooks_ms")
     record_build = _avg(stage, "record_build_ms")
     progress_eval = _avg(stage, "progress_eval_ms")
     base_response = _avg(stage, "base_response_ms")
-    attributed = sum(value or 0.0 for value in (state_bounds, enqueue, story_hooks, record_build, progress_eval, base_response))
+    attributed = sum(
+        value or 0.0
+        for value in (
+            state_bounds,
+            enqueue,
+            pre_runtime_intent,
+            deterministic_apply,
+            grounding_validation,
+            repair,
+            story_hooks,
+            record_build,
+            progress_eval,
+            base_response,
+        )
+    )
     return {
         "turn_index": -1,
         "performance": {
             "manual_turn_stage_timing": {
                 "manual_turn_ms": manual,
+                "pre_runtime_intent_llm_ms": pre_runtime_intent,
+                "deterministic_runtime_apply_ms": deterministic_apply,
+                "grounding_validation_ms": grounding_validation,
+                "repair_ms": repair,
                 "state_snapshot_ms": state_bounds,
                 "deferred_enqueue_ms": enqueue,
             },
