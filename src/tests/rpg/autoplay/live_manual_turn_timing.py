@@ -38,7 +38,15 @@ _EXCLUDE_TOKENS = (
     "write",
     "render",
     "append",
+    "bundle",
+    "static_actions",
 )
+_ALLOWED_STAGE_FUNCTION_NAMES = {
+    "call_pre_runtime_intent_llm": "pre_runtime_intent_llm_ms",
+    "deterministic_runtime_apply_state": "deterministic_runtime_apply_ms",
+    "run_grounding_validator": "grounding_validation_ms",
+    "repair_intent_payload": "repair_ms",
+}
 _EXCLUDE_MODULE_TOKENS = (
     "autoplay_performance_artifacts",
     "live_performance_bridge",
@@ -82,6 +90,10 @@ def _excluded_by_code_location(value: Any) -> bool:
 
 def classify_stage_name(function_name: str) -> str | None:
     lowered = function_name.lower()
+    if lowered.startswith("_"):
+        return None
+    if lowered in _ALLOWED_STAGE_FUNCTION_NAMES:
+        return _ALLOWED_STAGE_FUNCTION_NAMES[lowered]
     if any(token in lowered for token in _EXCLUDE_TOKENS):
         return None
     for stage, tokens in _STAGE_RULES:
