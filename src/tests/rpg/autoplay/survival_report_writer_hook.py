@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from app.rpg.autoplay_report_size_guard import cap_oversized_autoplay_reports
+from tests.rpg.autoplay.live_performance_bridge import append_live_performance_bridge_row
 from tests.rpg.autoplay.performance_artifacts import (
     PERFORMANCE_SUMMARY_HTML_NAME,
     PERFORMANCE_SUMMARY_JSON_NAME,
@@ -266,10 +267,11 @@ def run_autoplay_survival_report_writer_hook(
         zip_path = find_latest_autoplay_zip(output_dir)
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
         live_performance_summary = load_live_performance_summary(output_dir, zip_path=zip_path)
+        performance_rows = append_live_performance_bridge_row(rows, live_performance_summary)
         standalone = write_survival_report_artifacts(output_dir, rows)
         performance_standalone = write_autoplay_performance_artifacts(
             output_dir,
-            rows,
+            performance_rows,
             run_summary=live_performance_summary,
         )
         zip_result: Dict[str, Any] = {
@@ -304,7 +306,7 @@ def run_autoplay_survival_report_writer_hook(
             else:
                 performance_zip_result = append_autoplay_performance_artifacts_to_zip(
                     zip_path,
-                    rows,
+                    performance_rows,
                     run_summary=live_performance_summary,
                     prefix="performance",
                 )
@@ -326,6 +328,7 @@ def run_autoplay_survival_report_writer_hook(
             "results_dir": str(output_dir),
             "zip_path": str(zip_path) if zip_path else "",
             "rows_observed": len(rows),
+            "performance_rows_observed": len(performance_rows),
             "live_performance_summary_loaded": bool(live_performance_summary),
             "standalone_result": standalone,
             "zip_result": zip_result,
