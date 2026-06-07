@@ -2,7 +2,7 @@
 
 Date: 2026-05-30
 Branch: `rpg`
-Last updated: 2026-06-06
+Last updated: 2026-06-07
 
 Goal: reach 8/10 or better across architecture, grounding, performance, mechanics, game design, long-run readiness, production readiness, and commercial/game-quality readiness.
 
@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.16 — rerun 100-turn evidence review after result-path diagnostics**.
+Current slice: **Phase 13.17 — rerun 100-turn evidence review after runtime-result diagnostics priority**.
 
-Next recommended slice after Phase 13.16: **Phase 13.17 — runtime follow-up from result-path diagnostics or production evidence package**.
+Next recommended slice after Phase 13.17: **Phase 13.18 — runtime follow-up from prioritized diagnostics or production evidence package**.
 
-Latest source-of-truth SHA before Phase 13.16: `9fac8bd905203493b282334c9bb5f21a1b2db422`.
+Latest source-of-truth SHA before Phase 13.17: `0d03c702dc103da4f7b43ec888b47e3b4aa43203`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #366 Phase 13.10 HTML turn-contract marker guard | `0c42263ffd6d7998458bb93c41b66603b79eca54` | Phase 13.10 | Complete | Suppresses the exact turn-contract metadata marker false positive while preserving failures for unapproved markers. |
 | #367 Phase 13.11 report materialization guard and manual metrics | `47be44de3f4d1da96164de817cb19d4d530c8dd6` | Phase 13.11 | Complete | Caps report artifacts when materialized and adds manual-turn blocking breakdown metrics. |
 | #368 Phase 13.12 recursion guard and manual-stage timing | `88ae8b7db5736260e5f7e88c9c4e224733124f7b` | Phase 13.12 | Complete | Raises first-call runtime recursion budget and emits manual-stage timing from the turn path. |
 | #369 Phase 13.13 output-dir hook and guarded copy | `04b06df7f67b3ababf5720e52a0753c1ca7bded9` | Phase 13.13 | Complete | Passes explicit output dir to post-run artifact hook and bounds copy recursion failures. |
 | #370 Phase 13.14 diagnostics and live timing bridge | `9fac8bd905203493b282334c9bb5f21a1b2db422` | Phase 13.14 | Complete | Adds turn-error diagnostics and bridges live harness timing into performance summaries. |
-| Phase 13.15 result-path diagnostics and trace timing bridge | `pending-pr-merge` | Phase 13.15 | In review | Scans saved result payloads for failed turn objects and bridges result trace timing summaries. |
+| #371 Phase 13.15 result-path diagnostics and trace timing bridge | `0d03c702dc103da4f7b43ec888b47e3b4aa43203` | Phase 13.15 | Complete | Scans saved result payloads for failed turn objects and bridges result trace timing summaries. |
+| Phase 13.16 runtime result diagnostics priority | `pending-pr-merge` | Phase 13.16 | In review | Separates runtime-result diagnostic events from generic failure events so runtime traces are not crowded out. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.16: `9fac8bd905203493b282334c9bb5f21a
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; result-path diagnostics in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; runtime diagnostics priority in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; result-path diagnostics in review.**
+Status: **Current; runtime diagnostics priority in review.**
 
 Completed:
 
@@ -109,28 +109,29 @@ Completed:
 - [x] Phase 13.13 — output-dir hook and guarded copy.
 - [x] Phase 13.14 — non-copy recursion diagnostics and live timing bridge.
 - [x] Phase 13.15 — result-path diagnostics and trace timing bridge.
+- [x] Phase 13.16 — runtime result diagnostics priority.
 
 Current:
 
-- [ ] Phase 13.16 — rerun 100-turn evidence review after result-path diagnostics.
+- [ ] Phase 13.17 — rerun 100-turn evidence review after runtime-result diagnostics priority.
 
 Next:
 
-- [ ] Phase 13.17 — runtime follow-up from result-path diagnostics or production evidence package.
+- [ ] Phase 13.18 — runtime follow-up from prioritized diagnostics or production evidence package.
 
-Phase 13.16 scope:
+Phase 13.17 scope:
 
-- Rerun or inspect the 100-turn command after Phase 13.15 is merged.
-- Confirm that `autoplay-turn-error-diagnostics.json` exists and contains result-path events if turn errors persist.
-- Inspect result JSON paths, source artifact paths, error fields, and trace keys to identify a bounded runtime component.
-- Confirm that `autoplay-performance-summary.json` includes trace-derived manual timing when result traces provide it.
+- Rerun or inspect the 100-turn command after Phase 13.16 is merged.
+- Confirm that `autoplay-turn-error-diagnostics.json` contains `runtime_result_events` when turn errors persist.
+- Inspect runtime result JSON paths, source artifact paths, error fields, and trace keys to identify a bounded runtime component.
+- Confirm generic failure events remain bounded and cannot crowd out runtime events.
 - If diagnostics identify a bounded runtime component, fix that component next.
 - If artifacts are manageable and errors are gone, continue operator evidence packaging or performance optimization review.
 
 ## Remaining risks
 
-- The 100-turn command must be rerun after Phase 13.15 to capture result-path diagnostics if errors persist.
-- If result-path diagnostics remain empty while console errors persist, the next slice must wrap the concrete turn result emitter directly.
+- The 100-turn command must be rerun after Phase 13.16 to confirm prioritized runtime diagnostics are captured.
+- If runtime-result diagnostics remain empty while console errors persist, the next slice must wrap the concrete turn result emitter directly.
 - The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
 - Live/provider 1000-turn execution remains pending.
