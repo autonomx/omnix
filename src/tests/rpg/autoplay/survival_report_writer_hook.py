@@ -21,6 +21,7 @@ from tests.rpg.autoplay.performance_artifacts import (
     attach_autoplay_performance_manifest,
     write_autoplay_performance_artifacts,
 )
+from tests.rpg.autoplay.result_path_diagnostics import write_result_path_diagnostics
 from tests.rpg.autoplay.survival_report_artifacts import (
     SURVIVAL_METRICS_HTML_NAME,
     SURVIVAL_METRICS_JSON_NAME,
@@ -268,6 +269,7 @@ def run_autoplay_survival_report_writer_hook(
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
         live_performance_summary = load_live_performance_summary(output_dir, zip_path=zip_path)
         performance_rows = append_live_performance_bridge_row(rows, live_performance_summary)
+        result_path_diagnostics = write_result_path_diagnostics(output_dir, zip_path=zip_path)
         standalone = write_survival_report_artifacts(output_dir, rows)
         performance_standalone = write_autoplay_performance_artifacts(
             output_dir,
@@ -317,6 +319,7 @@ def run_autoplay_survival_report_writer_hook(
         manifest = attach_survival_artifact_manifest({}, standalone)
         manifest = attach_autoplay_performance_manifest(manifest, performance_standalone)
         manifest["autoplay_report_size_guard"] = size_guard_result
+        manifest["autoplay_result_path_diagnostics"] = result_path_diagnostics
         if zip_result.get("ok"):
             manifest = attach_survival_artifact_manifest(manifest, zip_result)
         if performance_zip_result.get("ok"):
@@ -330,6 +333,7 @@ def run_autoplay_survival_report_writer_hook(
             "rows_observed": len(rows),
             "performance_rows_observed": len(performance_rows),
             "live_performance_summary_loaded": bool(live_performance_summary),
+            "result_path_diagnostics": result_path_diagnostics,
             "standalone_result": standalone,
             "zip_result": zip_result,
             "performance_standalone_result": performance_standalone,

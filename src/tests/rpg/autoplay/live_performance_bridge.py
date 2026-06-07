@@ -24,18 +24,70 @@ def _stat(stage_summary: Mapping[str, Any], key: str) -> Dict[str, Any]:
 
 
 def _avg(stage_summary: Mapping[str, Any], key: str) -> float | None:
-    return _f(_stat(stage_summary, key).get("avg_ms"))
+    stat = _stat(stage_summary, key)
+    for field in ("avg_ms", "mean_ms", "duration_ms", "elapsed_ms"):
+        value = _f(stat.get(field))
+        if value is not None:
+            return value
+    value = _f(stage_summary.get(key))
+    return value
 
 
-def build_live_performance_bridge_row(run_summary: Mapping[str, Any]) -> Dict[str, Any]:
+def _summary_from_trace(trace: Any) -> Dict[str, Dict[str, float]]:
+    summary: Dict[str, Dict[str, float]] = {}
+    if isinstance(trace, dict):
+        items = trace.items()
+    elif isinstance(trace, list):
+        items = enumerate(trace)
+    else:
+        return summary
+    for key, value in items:
+        if isinstance(value, dict):
+            name = str(value.get("name") or value.get("stage") or value.get("phase") or key)
+            duration = None
+            for field in ("duration_ms", "elapsed_ms", "ms", "avg_ms", "mean_ms"):
+                duration = _f(value.get(field))
+                if duration is not None:
+                    break
+            if duration is not None:
+                summary[name] = {"avg_ms": duration, "count": int(_f(value.get("count")) or 1), "max_ms": duration}
+        else:
+            duration = _f(value)
+            if duration is not None:
+                summary[str(key)] = {"avg_ms": duration, "count": 1, "max_ms": duration}
+    return summary
+
+
+def _find_trace_stage_summary(rows: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for container in (row, _d(row.get("performance")), _d(row.get("turn_result")), _d(row.get("runtime"))):
+            for key in ("turn_perf_trace_summary", "manual_stage_trace_summary", "manual_harness_trace_summary"):
+                value = _d(container.get(key))
+                if value:
+                    return value
+            for key in ("turn_perf_trace", "manual_stage_trace", "manual_harness_trace"):
+                value = container.get(key)
+                summary = _summary_from_trace(value)
+                if summary:
+                    return summary
+    return {}
+
+
+def build_live_performance_bridge_row(run_summary: Mapping[str, Any], rows: Iterable[Mapping[str, Any]] = ()) -> Dict[str, Any]:
     stage = _d(run_summary.get("stage_summary"))
     if not stage:
         stage = _d(_d(run_summary.get("summary")).get("stage_summary"))
+    bridge_source = "live_harness_stage_summary"
+    if not stage:
+        stage = _find_trace_stage_summary(rows)
+        bridge_source = "result_trace_summary"
     if not stage:
         return {}
     manual = _avg(stage, "manual_turn_ms")
-    state_bounds = _avg(stage, "state_bounds_ms")
-    enqueue = _avg(stage, "background_enqueue_ms")
+    state_bounds = _avg(stage, "state_bounds_ms") or _avg(stage, "state_snapshot_ms")
+    enqueue = _avg(stage, "background_enqueue_ms") or _avg(stage, "deferred_enqueue_ms")
     story_hooks = _avg(stage, "story_hooks_ms")
     record_build = _avg(stage, "record_build_ms")
     progress_eval = _avg(stage, "progress_eval_ms")
@@ -51,6 +103,7 @@ def build_live_performance_bridge_row(run_summary: Mapping[str, Any]) -> Dict[st
             },
             "live_manual_timing_bridge": {
                 "source": SOURCE,
+                "bridge_source": bridge_source,
                 "stage_summary": stage,
                 "manual_turn_unattributed_avg_ms": round(max(0.0, (manual or 0.0) - attributed), 3) if manual is not None else None,
                 "note": "Live harness timing is coarser than interactive runtime sub-stage timing; missing sub-stages remain unknown until the live turn path emits them directly.",
@@ -62,7 +115,7 @@ def build_live_performance_bridge_row(run_summary: Mapping[str, Any]) -> Dict[st
 
 def append_live_performance_bridge_row(rows: Iterable[Mapping[str, Any]], run_summary: Mapping[str, Any]) -> List[Dict[str, Any]]:
     bridged = [dict(row) for row in rows if isinstance(row, dict)]
-    row = build_live_performance_bridge_row(run_summary)
+    row = build_live_performance_bridge_row(run_summary, bridged)
     if row:
         bridged.append(row)
     return bridged
