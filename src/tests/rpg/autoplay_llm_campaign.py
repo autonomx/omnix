@@ -22,16 +22,17 @@ _RUNTIME_MODULE_ALIASES = (
 )
 
 
-def _register_autoplay_runtime_aliases() -> None:
-    """Expose this running script under import names used by helper modules.
+def _output_dir_from_argv(argv: List[str]) -> Path | None:
+    for index, value in enumerate(argv):
+        if value == "--output-dir" and index + 1 < len(argv):
+            return Path(argv[index + 1])
+        if value.startswith("--output-dir="):
+            return Path(value.split("=", 1)[1])
+    return None
 
-    Some helper modules import ``tests.rpg.autoplay_llm_campaign`` at runtime to
-    access functions defined by the combined fragment source.  When this file is
-    executed as a script, those functions live on ``__main__`` after
-    ``_load_autoplay_campaign_runtime()``.  Register aliases so those imports
-    resolve to the already-loaded runtime module instead of importing a second,
-    lightweight loader-only copy.
-    """
+
+def _register_autoplay_runtime_aliases() -> None:
+    """Expose this running script under import names used by helper modules."""
     module = sys.modules.get(__name__)
     if module is None:
         return
@@ -52,14 +53,7 @@ def _autoplay_campaign_fragment_paths() -> List[Path]:
 
 
 def _combine_autoplay_campaign_fragments(fragments: List[Path]) -> str:
-    """Combine fragments while keeping all future imports at file start.
-
-    The fragment loader executes every ``*.pyfrag`` as one synthetic module.
-    Late fixes may need lexicographically-early fragments to register guards
-    before the rest of the runtime loads, but many existing fragments still
-    contain ``from __future__`` imports.  Python requires those imports before any
-    other executable statement in the *combined* module, so normalize them here.
-    """
+    """Combine fragments while keeping all future imports at file start."""
     future_imports: List[str] = []
     seen_futures = set()
     body_parts: List[str] = []
@@ -134,6 +128,7 @@ def _run_survival_report_writer_hook(argv: List[str], exit_code: object) -> None
         script_path=Path(__file__).resolve(),
         argv=argv,
         exit_code=exit_code,
+        results_dir=_output_dir_from_argv(argv),
     )
     try:
         print(
@@ -279,7 +274,9 @@ if __name__ == "__main__":
     from app.rpg.autoplay_report_materialization_guard import (
         install_report_materialization_size_guard_from_argv,
     )
+    from tests.rpg.autoplay.deepcopy_recursion_guard import install_deepcopy_recursion_guard_from_argv
     from tests.rpg.autoplay.report_size_guard_hook import install_force_exit_report_size_guard
+    install_deepcopy_recursion_guard_from_argv(sys.argv[1:])
     install_report_materialization_size_guard_from_argv(sys.argv[1:])
     install_force_exit_report_size_guard(sys.argv[1:])
     _load_autoplay_campaign_runtime()
