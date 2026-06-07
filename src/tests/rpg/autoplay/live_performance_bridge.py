@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping
 
-SOURCE = "autoplay_live_performance_bridge_v1"
+SOURCE = "autoplay_live_performance_bridge_v2"
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -75,14 +75,41 @@ def _find_trace_stage_summary(rows: Iterable[Mapping[str, Any]]) -> Dict[str, An
     return {}
 
 
+def _find_runtime_emission_key_summary(rows: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        candidates = [row, _d(row.get("performance")), _d(row.get("turn_result")), _d(row.get("runtime"))]
+        for container in candidates:
+            result_keys = container.get("result_keys") or _d(container.get("traces")).get("result_keys")
+            if not isinstance(result_keys, list):
+                continue
+            keys = {str(key) for key in result_keys}
+            if not keys:
+                continue
+            summary: Dict[str, Any] = {}
+            if "manual_harness_trace_summary" in keys or "manual_stage_trace" in keys:
+                summary["manual_turn_ms"] = {"avg_ms": None, "count": 0, "source": "runtime_result_emission_keys"}
+            if "turn_perf_trace_summary" in keys:
+                summary["turn_perf_trace_summary_present"] = {"avg_ms": None, "count": 0, "source": "runtime_result_emission_keys"}
+            if summary:
+                summary["runtime_result_emission_keys"] = sorted(keys)
+                return summary
+    return {}
+
+
 def build_live_performance_bridge_row(run_summary: Mapping[str, Any], rows: Iterable[Mapping[str, Any]] = ()) -> Dict[str, Any]:
+    row_list = [row for row in rows if isinstance(row, dict)]
     stage = _d(run_summary.get("stage_summary"))
     if not stage:
         stage = _d(_d(run_summary.get("summary")).get("stage_summary"))
     bridge_source = "live_harness_stage_summary"
     if not stage:
-        stage = _find_trace_stage_summary(rows)
+        stage = _find_trace_stage_summary(row_list)
         bridge_source = "result_trace_summary"
+    if not stage:
+        stage = _find_runtime_emission_key_summary(row_list)
+        bridge_source = "runtime_result_emission_keys"
     if not stage:
         return {}
     manual = _avg(stage, "manual_turn_ms")
