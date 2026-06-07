@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.20 — rerun 100-turn evidence review after runtime payload capture wrapper regression fix**.
+Current slice: **Phase 13.21 — rerun 100-turn evidence review after live timing and source map**.
 
-Next recommended slice after Phase 13.20: **Phase 13.21 — runtime fix from captured payload evidence or targeted probe wrapper**.
+Next recommended slice after Phase 13.21: **Phase 13.22 — runtime fix or exact probe helper wrapper from Phase 13.20 evidence**.
 
-Latest source-of-truth SHA before Phase 13.20: `9b40451cd7bfb9ab21eb342da435817a1d1a9ae5`.
+Latest source-of-truth SHA before Phase 13.21: `7e145174c1f5db8b19e6957abd7b8cccac7786e3`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #371 Phase 13.15 result-path diagnostics and trace timing bridge | `0d03c702dc103da4f7b43ec888b47e3b4aa43203` | Phase 13.15 | Complete | Scans saved result payloads for failed turn objects and bridges result trace timing summaries. |
 | #372 Phase 13.16 runtime result diagnostics priority | `c60cc7984852252cf6dce47fd9ad25903078921e` | Phase 13.16 | Complete | Separates runtime-result diagnostic events from generic failure events so runtime traces are not crowded out. |
 | #373 Phase 13.17 runtime result emitter capture | `6be4bf921be3832897dd11584705c6405167937d` | Phase 13.17 | Complete | Captures runtime result probe emissions into a dedicated runtime result artifact when the stream hook sees them. |
 | #374 Phase 13.18 console probe backfill | `1b8aed45748fd2f84f90e626918d9c7e2526adf7` | Phase 13.18 | Complete | Parses persisted console logs after the run to backfill runtime result artifacts before diagnostics. |
 | #375 Phase 13.19 runtime result payload capture | `9b40451cd7bfb9ab21eb342da435817a1d1a9ae5` | Phase 13.19 | Complete | Adds bounded runtime probe payload capture and diagnostics integration. |
-| Phase 13.19 wrapper regression fix | `pending-pr-merge` | Phase 13.19 follow-up | In review | Restricts probe wrappers so the real autoplay runner and runtime facade manifest helpers remain unwrapped. |
+| #376 Phase 13.19 wrapper regression fix | `7e145174c1f5db8b19e6957abd7b8cccac7786e3` | Phase 13.19 follow-up | Complete | Restricts probe wrappers so the real autoplay runner and runtime facade manifest helpers remain unwrapped. |
+| Phase 13.20 live timing and probe source map | `pending-pr-merge` | Phase 13.20 | In review | Adds live manual substage timing artifacts and a non-invasive generated probe source map. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.20: `9b40451cd7bfb9ab21eb342da435817a
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; wrapper regression fix in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; live timing and source map in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; wrapper regression fix in review.**
+Status: **Current; live timing and source map in review.**
 
 Completed:
 
@@ -113,29 +113,31 @@ Completed:
 - [x] Phase 13.17 — runtime result emitter capture.
 - [x] Phase 13.18 — console probe parser and runtime-result artifact backfill.
 - [x] Phase 13.19 — runtime result payload capture.
+- [x] Phase 13.19 follow-up — fix payload wrapper runner regression.
+- [x] Phase 13.20 — live manual-turn substage timing and generated probe source map.
 
 Current:
 
-- [ ] Phase 13.19 follow-up — fix payload wrapper runner regression.
+- [ ] Phase 13.21 — rerun 100-turn evidence review after live timing and source map.
 
 Next:
 
-- [ ] Phase 13.20 — rerun 100-turn evidence review after runtime payload capture wrapper regression fix.
-- [ ] Phase 13.21 — runtime fix from captured payload evidence or targeted probe wrapper.
+- [ ] Phase 13.22 — runtime fix or exact probe helper wrapper from Phase 13.20 evidence.
 
-Phase 13.20 scope:
+Phase 13.21 scope:
 
-- Rerun or inspect the 100-turn command after the Phase 13.19 wrapper regression fix is merged.
-- Confirm the real autoplay runner presence guard no longer fails with `real_autoplay_runner_too_small`.
-- Confirm whether `autoplay-runtime-turn-result-payloads.json` exists and contains payload-capture events.
-- Confirm that `autoplay-turn-error-diagnostics.json` prioritizes payload-capture events over flattened runtime emissions.
-- Confirm whether payload captures include full runtime result values, traces, or stack tails sufficient to identify the concrete runtime component.
-- If payload capture remains empty, target the exact generated probe site without mutating generated runtime source.
+- Rerun or inspect the 100-turn command after Phase 13.20 is merged.
+- Confirm the real autoplay runner presence guard still passes.
+- Confirm whether `autoplay-live-manual-turn-substage-timing.json` exists and includes the four requested substage summaries.
+- Confirm whether `autoplay-performance-summary.json` now includes `pre_runtime_intent_llm_ms`, `deterministic_runtime_apply_ms`, `grounding_validation_ms`, and `repair_ms` with non-null values when live helpers are observed.
+- Confirm whether `autoplay-runtime-probe-source-map.json` identifies the exact generated function/helper that emits the runtime result probe.
+- If live timing or payload capture remains empty, target exact helper names from the source map without broad wrapping.
 
 ## Remaining risks
 
-- The 100-turn command must be rerun after the wrapper regression fix to confirm the real autoplay runner stays intact.
-- If payload capture remains empty, the next slice should identify the exact generated probe site without source mutation.
+- The 100-turn command must be rerun after Phase 13.20 to confirm the live timing helper names match the generated runtime path.
+- If live timing remains empty, the next slice should use the source map and generated helper names to target exact functions.
+- If payload capture remains empty, the next slice should identify the exact generated probe helper without mutating source.
 - The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
 - Live/provider 1000-turn execution remains pending.
