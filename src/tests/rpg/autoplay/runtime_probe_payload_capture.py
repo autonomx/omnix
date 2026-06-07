@@ -1,9 +1,9 @@
 """Capture full runtime probe payload context for autoplay evidence.
 
 Phase 13.18 proved the runtime-result probe line is present in the persisted
-console log, but only as flattened text.  Phase 13.19 instruments generated
-runtime source around the probe line and wraps probe helper functions after load
-so bounded locals/arguments can be persisted before the payload is flattened.
+console log, but only as flattened text.  Phase 13.19 wraps explicit probe
+helper functions after load so bounded arguments can be persisted before the
+payload is flattened.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Optional
 
-SOURCE = "autoplay_runtime_probe_payload_capture_v1"
+SOURCE = "autoplay_runtime_probe_payload_capture_v2"
 ARTIFACT_NAME = "autoplay-runtime-turn-result-payloads.json"
 _EVENT_NAME = "runtime_turn_execution.result"
 _MAX_EVENTS = 1000
@@ -23,6 +23,29 @@ _MAX_ITEMS = 120
 _MAX_STRING = 4000
 _OUTPUT_DIR: Optional[Path] = None
 _WRAPPED_NAMES: set[str] = set()
+_EXCLUDED_NAME_TOKENS = (
+    "main",
+    "runner",
+    "autoplay_runner",
+    "run_autoplay",
+    "assert",
+    "facade",
+    "manifest",
+    "wrapper",
+    "runtime_turn",
+    "call_turn_runtime",
+    "manual_turn",
+)
+_ALLOWED_NAME_TOKENS = (
+    "emit_probe",
+    "probe_emit",
+    "probe_event",
+    "write_probe",
+    "record_probe",
+    "log_probe",
+    "autoplay_probe",
+    "debug_probe",
+)
 
 
 def parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
@@ -192,14 +215,16 @@ def should_wrap_probe_function(name: str, value: Any) -> bool:
     if not callable(value) or getattr(value, "__autoplay_probe_payload_wrapped__", False):
         return False
     lowered = name.lower()
-    if "probe" in lowered or "stage" in lowered or "trace" in lowered:
-        return True
+    if any(token in lowered for token in _EXCLUDED_NAME_TOKENS):
+        return False
+    if not any(token in lowered for token in _ALLOWED_NAME_TOKENS):
+        return False
     code = getattr(value, "__code__", None)
-    if code is not None:
-        constants = getattr(code, "co_consts", ()) or ()
-        names = getattr(code, "co_names", ()) or ()
-        return any(_value_contains_event(constant) for constant in constants) or any("probe" in str(item).lower() for item in names)
-    return False
+    if code is None:
+        return True
+    constants = getattr(code, "co_consts", ()) or ()
+    names = getattr(code, "co_names", ()) or ()
+    return any(_value_contains_event(constant) for constant in constants) or any("probe" in str(item).lower() for item in names)
 
 
 def wrap_runtime_probe_functions(namespace: MutableMapping[str, Any]) -> Dict[str, Any]:
@@ -234,16 +259,5 @@ def wrap_runtime_probe_functions(namespace: MutableMapping[str, Any]) -> Dict[st
 
 
 def instrument_runtime_probe_source(source: str) -> str:
-    """Inject a locals capture before lines containing the runtime result event."""
-    lines = source.splitlines()
-    instrumented: list[str] = []
-    for line in lines:
-        if _EVENT_NAME in line and "capture_runtime_probe_locals" not in line:
-            indent = line[: len(line) - len(line.lstrip())]
-            instrumented.append(indent + "try:")
-            instrumented.append(indent + "    from tests.rpg.autoplay.runtime_probe_payload_capture import capture_runtime_probe_locals")
-            instrumented.append(indent + "    capture_runtime_probe_locals(locals())")
-            instrumented.append(indent + "except Exception:")
-            instrumented.append(indent + "    pass")
-        instrumented.append(line)
-    return "\n".join(instrumented) + ("\n" if source.endswith("\n") else "")
+    """Return source unchanged; generated runtime source is manifest-guarded."""
+    return source
