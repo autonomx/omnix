@@ -75,13 +75,35 @@ def _combine_autoplay_campaign_fragments(fragments: List[Path]) -> str:
     return body
 
 
+def _instrument_autoplay_campaign_source(source: str) -> str:
+    try:
+        from tests.rpg.autoplay.runtime_probe_payload_capture import instrument_runtime_probe_source
+    except Exception:
+        return source
+    try:
+        return instrument_runtime_probe_source(source)
+    except Exception:
+        return source
+
+
+def _wrap_runtime_probe_functions(namespace: Dict[str, object]) -> None:
+    try:
+        from tests.rpg.autoplay.runtime_probe_payload_capture import wrap_runtime_probe_functions
+    except Exception:
+        return
+    try:
+        wrap_runtime_probe_functions(namespace)
+    except Exception:
+        return
+
+
 def _load_autoplay_campaign_runtime() -> None:
     global _RUNTIME_LOADED
     if _RUNTIME_LOADED:
         return
     _register_autoplay_runtime_aliases()
     fragments = _autoplay_campaign_fragment_paths()
-    combined_source = _combine_autoplay_campaign_fragments(fragments)
+    combined_source = _instrument_autoplay_campaign_source(_combine_autoplay_campaign_fragments(fragments))
     combined_filename = str(
         Path(__file__).with_name("autoplay_llm_campaign_parts")
         / "__combined_autoplay_llm_campaign__.py"
@@ -107,6 +129,7 @@ def _load_autoplay_campaign_runtime() -> None:
             chunk_globals,
             chunk_globals,
         )
+        _wrap_runtime_probe_functions(chunk_globals)
     finally:
         chunk_globals["__name__"] = original_name
         _register_autoplay_runtime_aliases()
@@ -276,8 +299,10 @@ if __name__ == "__main__":
     )
     from tests.rpg.autoplay.deepcopy_recursion_guard import install_deepcopy_recursion_guard_from_argv
     from tests.rpg.autoplay.report_size_guard_hook import install_force_exit_report_size_guard
+    from tests.rpg.autoplay.runtime_probe_payload_capture import configure_runtime_probe_payload_capture_from_argv
     from tests.rpg.autoplay.runtime_turn_result_capture_hook import install_runtime_turn_result_capture_hook_from_argv
     from tests.rpg.autoplay.turn_error_diagnostics_hook import install_turn_error_diagnostics_hook_from_argv
+    configure_runtime_probe_payload_capture_from_argv(sys.argv[1:])
     install_runtime_turn_result_capture_hook_from_argv(sys.argv[1:])
     install_turn_error_diagnostics_hook_from_argv(sys.argv[1:])
     install_deepcopy_recursion_guard_from_argv(sys.argv[1:])
