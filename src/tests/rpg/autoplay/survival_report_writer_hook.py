@@ -21,7 +21,7 @@ from tests.rpg.autoplay.performance_artifacts import (
     attach_autoplay_performance_manifest,
     write_autoplay_performance_artifacts,
 )
-from tests.rpg.autoplay.result_path_diagnostics import write_result_path_diagnostics
+from tests.rpg.autoplay.result_path_diagnostics import RUNTIME_TURN_RESULTS_NAME, write_result_path_diagnostics
 from tests.rpg.autoplay.survival_report_artifacts import (
     SURVIVAL_METRICS_HTML_NAME,
     SURVIVAL_METRICS_JSON_NAME,
@@ -38,10 +38,6 @@ _MAX_ROWS = 5000
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
-
-
-def _safe_list(value: Any) -> List[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:
@@ -93,6 +89,28 @@ def load_live_performance_summary(output_dir: str | Path, *, zip_path: Optional[
         except Exception:
             return {}
     return {}
+
+
+def load_runtime_turn_result_rows(output_dir: str | Path) -> List[Dict[str, Any]]:
+    payload = _load_json_file(Path(output_dir) / RUNTIME_TURN_RESULTS_NAME)
+    rows: List[Dict[str, Any]] = []
+    for event in payload.get("events") or []:
+        if not isinstance(event, dict):
+            continue
+        rows.append(
+            {
+                "turn_index": event.get("turn_index", -1),
+                "performance": {
+                    "result_keys": list(event.get("result_keys") or []),
+                    "traces": {
+                        "result_keys": list(event.get("result_keys") or []),
+                        "emitted_line": _safe_str(event.get("line")),
+                    },
+                },
+                "source": "runtime_turn_result_capture_hook_bridge",
+            }
+        )
+    return rows
 
 
 def _has_survival_evidence(row: Mapping[str, Any]) -> bool:
@@ -267,8 +285,9 @@ def run_autoplay_survival_report_writer_hook(
         output_dir = Path(results_dir) if results_dir else default_autoplay_results_dir(script_path)
         zip_path = find_latest_autoplay_zip(output_dir)
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
+        runtime_turn_result_rows = load_runtime_turn_result_rows(output_dir)
         live_performance_summary = load_live_performance_summary(output_dir, zip_path=zip_path)
-        performance_rows = append_live_performance_bridge_row(rows, live_performance_summary)
+        performance_rows = append_live_performance_bridge_row([*rows, *runtime_turn_result_rows], live_performance_summary)
         result_path_diagnostics = write_result_path_diagnostics(output_dir, zip_path=zip_path)
         standalone = write_survival_report_artifacts(output_dir, rows)
         performance_standalone = write_autoplay_performance_artifacts(
@@ -320,6 +339,7 @@ def run_autoplay_survival_report_writer_hook(
         manifest = attach_autoplay_performance_manifest(manifest, performance_standalone)
         manifest["autoplay_report_size_guard"] = size_guard_result
         manifest["autoplay_result_path_diagnostics"] = result_path_diagnostics
+        manifest["runtime_turn_result_rows_observed"] = len(runtime_turn_result_rows)
         if zip_result.get("ok"):
             manifest = attach_survival_artifact_manifest(manifest, zip_result)
         if performance_zip_result.get("ok"):
@@ -331,6 +351,7 @@ def run_autoplay_survival_report_writer_hook(
             "results_dir": str(output_dir),
             "zip_path": str(zip_path) if zip_path else "",
             "rows_observed": len(rows),
+            "runtime_turn_result_rows_observed": len(runtime_turn_result_rows),
             "performance_rows_observed": len(performance_rows),
             "live_performance_summary_loaded": bool(live_performance_summary),
             "result_path_diagnostics": result_path_diagnostics,

@@ -1,9 +1,10 @@
 """Result-path diagnostics for autoplay turn failures.
 
 Phase 13.15 moved diagnostics from console interception to the actual saved
-result payloads.  Phase 13.16 prioritizes trace-bearing runtime result payloads
-so generic report ``ok: false`` objects cannot crowd out the real turn result
-source before the bounded event cap is reached.
+result payloads.  Phase 13.16 prioritized trace-bearing runtime result payloads.
+Phase 13.17 also consumes the direct runtime-turn emission capture artifact so
+runtime result probe lines are preserved even when the full payload is not saved
+elsewhere.
 """
 from __future__ import annotations
 
@@ -12,8 +13,9 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-SOURCE = "autoplay_result_path_diagnostics_v2"
+SOURCE = "autoplay_result_path_diagnostics_v3"
 SUMMARY_NAME = "autoplay-turn-error-diagnostics.json"
+RUNTIME_TURN_RESULTS_NAME = "autoplay-runtime-turn-results.json"
 _TRACE_KEYS = {
     "manual_harness_trace",
     "manual_harness_trace_summary",
@@ -42,10 +44,10 @@ _RUNTIME_KEYS = {
 }
 _ERROR_KEYS = {"error", "error_type", "exception", "exception_type", "traceback", "message"}
 _GENERIC_EVENT_LIMIT = 300
-_RUNTIME_EVENT_LIMIT = 800
+_RUNTIME_EVENT_LIMIT = 1000
 _MAX_STRING = 2000
-_MAX_JSON_FILES = 200
-_MAX_ZIP_JSON_MEMBERS = 220
+_MAX_JSON_FILES = 220
+_MAX_ZIP_JSON_MEMBERS = 240
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -130,8 +132,7 @@ def _is_runtime_result_payload(payload: Mapping[str, Any], traces: Mapping[str, 
     runtime_name = str(payload.get("runtime_name") or "").lower()
     if runtime_name:
         return True
-    source = str(payload.get("source") or "").lower()
-    return "runtime" in source and ("turn" in source or "execution" in source)
+    return bool(payload.get("runtime_result") is True and str(payload.get("event_class") or "").startswith("runtime_result"))
 
 
 def _walk(value: Any, *, path: str = "$", inherited_turn: int | None = None) -> Iterable[Tuple[str, Dict[str, Any], int | None]]:
@@ -150,16 +151,17 @@ def _walk(value: Any, *, path: str = "$", inherited_turn: int | None = None) -> 
 def _event_priority(event: Mapping[str, Any]) -> tuple[int, int, str]:
     traces = set(event.get("trace_keys_present") or [])
     trace_score = len(traces & _RUNTIME_KEYS)
+    emitter_bonus = 20 if event.get("event_class") == "runtime_result_emission" else 0
     runtime_bonus = 10 if event.get("runtime_result") else 0
     turn_bonus = 2 if event.get("turn_index") is not None else 0
-    return (runtime_bonus + trace_score + turn_bonus, trace_score, str(event.get("json_path") or ""))
+    return (emitter_bonus + runtime_bonus + trace_score + turn_bonus, trace_score, str(event.get("json_path") or ""))
 
 
 def extract_result_path_events(value: Any, *, source_path: str = "") -> List[Dict[str, Any]]:
     events: List[Dict[str, Any]] = []
     seen: set[tuple[str, int | None]] = set()
     for path, payload, turn in _walk(value):
-        if not _has_error_marker(payload):
+        if not _has_error_marker(payload) and not _is_runtime_result_payload(payload):
             continue
         key = (path, turn)
         if key in seen:
@@ -178,6 +180,33 @@ def extract_result_path_events(value: Any, *, source_path: str = "") -> List[Dic
                 "error_fields": error_fields,
                 "traces": traces,
                 "trace_keys_present": sorted(traces),
+                "source": SOURCE,
+            }
+        )
+    events.sort(key=_event_priority, reverse=True)
+    return events
+
+
+def runtime_emission_events_from_payload(value: Any, *, source_path: str) -> List[Dict[str, Any]]:
+    payload = _d(value)
+    events: List[Dict[str, Any]] = []
+    for index, raw_event in enumerate(payload.get("events") or []):
+        event = _d(raw_event)
+        if not event:
+            continue
+        result_keys = [str(key) for key in event.get("result_keys") or []]
+        trace_keys = [str(key) for key in event.get("trace_keys_present") or []]
+        turn = _turn_index(event)
+        events.append(
+            {
+                "turn_index": turn,
+                "json_path": f"$.events[{index}]",
+                "source_path": source_path,
+                "runtime_result": True,
+                "event_class": "runtime_result_emission",
+                "error_fields": {"ok": event.get("ok"), "tokens": _safe_json(event.get("tokens"))},
+                "traces": {"emitted_line": _safe_json(event.get("line")), "result_keys": result_keys},
+                "trace_keys_present": sorted(set(trace_keys) | (set(result_keys) & _RUNTIME_KEYS)),
                 "source": SOURCE,
             }
         )
@@ -219,7 +248,7 @@ def _candidate_json_files(output_dir: Path) -> List[Path]:
     if not output_dir.exists():
         return []
     files = [path for path in output_dir.rglob("*.json") if path.is_file()]
-    preferred = ("transcript", "summary", "performance", "runtime", "turn")
+    preferred = ("runtime-turn-results", "transcript", "summary", "performance", "runtime", "turn")
     files.sort(
         key=lambda path: (
             0 if any(part in path.name.lower() for part in preferred) else 1,
@@ -230,6 +259,8 @@ def _candidate_json_files(output_dir: Path) -> List[Path]:
 
 
 def _collect_all_events_from_value(value: Any, *, source_path: str, events: List[Dict[str, Any]]) -> None:
+    if Path(source_path.split(":", 1)[0]).name == RUNTIME_TURN_RESULTS_NAME or source_path.endswith(RUNTIME_TURN_RESULTS_NAME):
+        events.extend(runtime_emission_events_from_payload(value, source_path=source_path))
     events.extend(extract_result_path_events(value, source_path=source_path))
 
 
@@ -250,7 +281,7 @@ def collect_result_path_diagnostics(output_dir: str | Path, *, zip_path: str | P
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 names = [name for name in zf.namelist() if name.lower().endswith(".json")]
-                names.sort(key=lambda name: 0 if any(part in name.lower() for part in ("transcript", "summary", "performance", "runtime", "turn")) else 1)
+                names.sort(key=lambda name: 0 if any(part in name.lower() for part in ("runtime-turn-results", "transcript", "summary", "performance", "runtime", "turn")) else 1)
                 for name in names[:_MAX_ZIP_JSON_MEMBERS]:
                     if name.endswith(SUMMARY_NAME):
                         continue
