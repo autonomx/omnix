@@ -140,6 +140,17 @@ def load_runtime_probe_payload_rows(output_dir: str | Path) -> List[Dict[str, An
     return rows
 
 
+def _runtime_payload_artifact(output_dir: Path) -> Dict[str, Any]:
+    path = output_dir / RUNTIME_TURN_PAYLOADS_NAME
+    payload = _load_json_file(path)
+    return {
+        "ok": path.exists(),
+        "path": str(path),
+        "event_count": len(payload.get("events") or []),
+        "source": "runtime_probe_payload_capture",
+    }
+
+
 def _has_survival_evidence(row: Mapping[str, Any]) -> bool:
     row = _safe_dict(row)
     if not row:
@@ -312,6 +323,7 @@ def run_autoplay_survival_report_writer_hook(
         output_dir = Path(results_dir) if results_dir else default_autoplay_results_dir(script_path)
         zip_path = find_latest_autoplay_zip(output_dir)
         runtime_turn_backfill = backfill_runtime_turn_results_from_console_log(output_dir)
+        runtime_payload_artifact = _runtime_payload_artifact(output_dir)
         rows = collect_survival_report_rows(output_dir, zip_path=zip_path)
         runtime_turn_result_rows = load_runtime_turn_result_rows(output_dir)
         runtime_probe_payload_rows = load_runtime_probe_payload_rows(output_dir)
@@ -369,6 +381,7 @@ def run_autoplay_survival_report_writer_hook(
         manifest["autoplay_report_size_guard"] = size_guard_result
         manifest["autoplay_result_path_diagnostics"] = result_path_diagnostics
         manifest["runtime_turn_result_backfill"] = runtime_turn_backfill
+        manifest["runtime_probe_payload_artifact"] = runtime_payload_artifact
         manifest["runtime_turn_result_rows_observed"] = len(runtime_turn_result_rows)
         manifest["runtime_probe_payload_rows_observed"] = len(runtime_probe_payload_rows)
         if zip_result.get("ok"):
@@ -383,6 +396,7 @@ def run_autoplay_survival_report_writer_hook(
             "zip_path": str(zip_path) if zip_path else "",
             "rows_observed": len(rows),
             "runtime_turn_result_backfill": runtime_turn_backfill,
+            "runtime_probe_payload_artifact": runtime_payload_artifact,
             "runtime_turn_result_rows_observed": len(runtime_turn_result_rows),
             "runtime_probe_payload_rows_observed": len(runtime_probe_payload_rows),
             "performance_rows_observed": len(performance_rows),
