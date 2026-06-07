@@ -75,17 +75,6 @@ def _combine_autoplay_campaign_fragments(fragments: List[Path]) -> str:
     return body
 
 
-def _instrument_autoplay_campaign_source(source: str) -> str:
-    try:
-        from tests.rpg.autoplay.runtime_probe_payload_capture import instrument_runtime_probe_source
-    except Exception:
-        return source
-    try:
-        return instrument_runtime_probe_source(source)
-    except Exception:
-        return source
-
-
 def _wrap_runtime_probe_functions(namespace: Dict[str, object]) -> None:
     try:
         from tests.rpg.autoplay.runtime_probe_payload_capture import wrap_runtime_probe_functions
@@ -103,7 +92,7 @@ def _load_autoplay_campaign_runtime() -> None:
         return
     _register_autoplay_runtime_aliases()
     fragments = _autoplay_campaign_fragment_paths()
-    combined_source = _instrument_autoplay_campaign_source(_combine_autoplay_campaign_fragments(fragments))
+    combined_source = _combine_autoplay_campaign_fragments(fragments)
     combined_filename = str(
         Path(__file__).with_name("autoplay_llm_campaign_parts")
         / "__combined_autoplay_llm_campaign__.py"
