@@ -276,6 +276,8 @@ if __name__ == "__main__":
     )
     from tests.rpg.autoplay.deepcopy_recursion_guard import install_deepcopy_recursion_guard_from_argv
     from tests.rpg.autoplay.report_size_guard_hook import install_force_exit_report_size_guard
+    from tests.rpg.autoplay.turn_error_diagnostics_hook import install_turn_error_diagnostics_hook_from_argv
+    install_turn_error_diagnostics_hook_from_argv(sys.argv[1:])
     install_deepcopy_recursion_guard_from_argv(sys.argv[1:])
     install_report_materialization_size_guard_from_argv(sys.argv[1:])
     install_force_exit_report_size_guard(sys.argv[1:])
