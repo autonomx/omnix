@@ -31,7 +31,24 @@ _EXCLUDE_TOKENS = (
     "artifact",
     "zip",
     "html",
+    "scan",
+    "extract",
+    "collect",
+    "load",
+    "write",
+    "render",
+    "append",
 )
+_EXCLUDE_MODULE_TOKENS = (
+    "autoplay_performance_artifacts",
+    "live_performance_bridge",
+    "performance_artifacts",
+    "result_path_diagnostics",
+    "runtime_turn_result_capture_hook",
+    "survival_report_artifacts",
+    "survival_report_writer_hook",
+)
+_EXCLUDE_FILENAME_TOKENS = tuple(token.replace(".", "/") for token in _EXCLUDE_MODULE_TOKENS)
 
 
 def parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
@@ -54,6 +71,15 @@ def configure_live_manual_turn_timing_from_argv(argv: Iterable[str]) -> None:
     configure_live_manual_turn_timing(output_dir=parse_output_dir(argv))
 
 
+def _excluded_by_code_location(value: Any) -> bool:
+    module = str(getattr(value, "__module__", "") or "").lower()
+    if any(token in module for token in _EXCLUDE_MODULE_TOKENS):
+        return True
+    code = getattr(value, "__code__", None)
+    filename = str(getattr(code, "co_filename", "") or "").replace("\\", "/").lower()
+    return any(token in filename for token in _EXCLUDE_FILENAME_TOKENS)
+
+
 def classify_stage_name(function_name: str) -> str | None:
     lowered = function_name.lower()
     if any(token in lowered for token in _EXCLUDE_TOKENS):
@@ -68,6 +94,8 @@ def should_wrap_timing_function(name: str, value: Any) -> bool:
     if not callable(value) or getattr(value, "__autoplay_live_timing_wrapped__", False):
         return False
     if classify_stage_name(name) is None:
+        return False
+    if _excluded_by_code_location(value):
         return False
     code = getattr(value, "__code__", None)
     if code is None:
