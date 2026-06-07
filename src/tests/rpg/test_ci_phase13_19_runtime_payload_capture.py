@@ -10,6 +10,7 @@ from tests.rpg.autoplay.runtime_probe_payload_capture import (
     capture_runtime_probe_locals,
     configure_runtime_probe_payload_capture,
     instrument_runtime_probe_source,
+    should_wrap_probe_function,
     wrap_runtime_probe_functions,
 )
 from tests.rpg.autoplay.survival_report_writer_hook import (
@@ -18,12 +19,12 @@ from tests.rpg.autoplay.survival_report_writer_hook import (
 )
 
 
-def test_phase13_19_instruments_runtime_probe_source():
+def test_phase13_19_preserves_generated_runtime_source():
     source = "def f():\n    print('event=runtime_turn_execution.result', result)\n"
 
     instrumented = instrument_runtime_probe_source(source)
 
-    assert "capture_runtime_probe_locals(locals())" in instrumented
+    assert instrumented == source
     assert "event=runtime_turn_execution.result" in instrumented
 
 
@@ -64,6 +65,39 @@ def test_phase13_19_wrap_runtime_probe_function_records_call(tmp_path: Path):
     payload = json.loads((tmp_path / RUNTIME_TURN_PAYLOADS_NAME).read_text(encoding="utf-8"))
     assert payload["event_count"] == 1
     assert payload["events"][0]["event_class"] == "runtime_probe_call"
+
+
+def test_phase13_19_does_not_wrap_real_autoplay_runner_or_facade_symbols():
+    def _run_real_autoplay():
+        return "real"
+
+    def _assert_real_autoplay_runner_present():
+        return True
+
+    def _runtime_facade_manifest_gate():
+        return True
+
+    def _call_turn_runtime():
+        return {"ok": True}
+
+    namespace = {
+        "_run_real_autoplay": _run_real_autoplay,
+        "_assert_real_autoplay_runner_present": _assert_real_autoplay_runner_present,
+        "_runtime_facade_manifest_gate": _runtime_facade_manifest_gate,
+        "_call_turn_runtime": _call_turn_runtime,
+    }
+
+    result = wrap_runtime_probe_functions(namespace)
+
+    assert result["wrapped_count"] == 0
+    assert namespace["_run_real_autoplay"] is _run_real_autoplay
+    assert namespace["_assert_real_autoplay_runner_present"] is _assert_real_autoplay_runner_present
+    assert namespace["_runtime_facade_manifest_gate"] is _runtime_facade_manifest_gate
+    assert namespace["_call_turn_runtime"] is _call_turn_runtime
+    assert not should_wrap_probe_function("_run_real_autoplay", _run_real_autoplay)
+    assert not should_wrap_probe_function("_assert_real_autoplay_runner_present", _assert_real_autoplay_runner_present)
+    assert not should_wrap_probe_function("_runtime_facade_manifest_gate", _runtime_facade_manifest_gate)
+    assert not should_wrap_probe_function("_call_turn_runtime", _call_turn_runtime)
 
 
 def test_phase13_19_result_diagnostics_prioritizes_payload_capture(tmp_path: Path):
