@@ -10,22 +10,22 @@ Goal: reach 8/10 or better across architecture, grounding, performance, mechanic
 
 Current phase focus: **Phase 13 — evidence backfill or first accepted hardening implementation**.
 
-Current slice: **Phase 13.13 — rerun 100-turn evidence review after recursion guard and manual-stage timing**.
+Current slice: **Phase 13.14 — rerun 100-turn evidence review after output-dir hook and guarded copy**.
 
-Next recommended slice after Phase 13.13: **Phase 13.14 — production evidence package or runtime/performance follow-up**.
+Next recommended slice after Phase 13.14: **Phase 13.15 — production evidence package or runtime follow-up from guard summary**.
 
-Latest source-of-truth SHA before Phase 13.13: `47be44de3f4d1da96164de817cb19d4d530c8dd6`.
+Latest source-of-truth SHA before Phase 13.14: `88ae8b7db5736260e5f7e88c9c4e224733124f7b`.
 
 ## Latest completed work
 
 | PR | Merge SHA | Phase | Status | Notes |
 |---|---|---|---|---|
-| #363 Phase 13.7 validated performance path gate | `b0b3f0c9d3557babc0406e084e955dc1d4e25886` | Phase 13.7 | Complete | Records that no latency-reduced matrix evidence is attached and blocks speculative broadening. |
 | #364 Phase 13.8 autoplay report size guard | `71ace2fffe1ba593462516c30fe36859f5ac2c59` | Phase 13.8 | Complete | Caps oversized autoplay report JSON/HTML files and ZIP members after run completion. |
 | #365 Phase 13.9 force-exit report size guard | `1daa97a00393816f1b7053c3dc49ec064cb0330b` | Phase 13.9 | Complete | Installs the size guard before runtime so forced finalization also caps reports. |
 | #366 Phase 13.10 HTML turn-contract marker guard | `0c42263ffd6d7998458bb93c41b66603b79eca54` | Phase 13.10 | Complete | Suppresses the exact turn-contract metadata marker false positive while preserving failures for unapproved markers. |
 | #367 Phase 13.11 report materialization guard and manual metrics | `47be44de3f4d1da96164de817cb19d4d530c8dd6` | Phase 13.11 | Complete | Caps report artifacts when materialized and adds manual-turn blocking breakdown metrics. |
-| Phase 13.12 recursion guard and manual-stage timing | `pending-pr-merge` | Phase 13.12 | In review | Raises first-call runtime recursion budget and emits manual-stage timing from the turn path. |
+| #368 Phase 13.12 recursion guard and manual-stage timing | `88ae8b7db5736260e5f7e88c9c4e224733124f7b` | Phase 13.12 | Complete | Raises first-call runtime recursion budget and emits manual-stage timing from the turn path. |
+| Phase 13.13 output-dir hook and guarded copy | `pending-pr-merge` | Phase 13.13 | In review | Passes explicit output dir to post-run artifact hook and bounds copy recursion failures. |
 
 ## Roadmap Principles
 
@@ -42,7 +42,7 @@ Latest source-of-truth SHA before Phase 13.13: `47be44de3f4d1da96164de817cb19d4d
 - Phase 10 — Production Packaging, Stability, and Release Readiness: **Complete as deterministic evidence framework; operator evidence remains pending**.
 - Phase 11 — Evidence-Driven Production Hardening: **Complete as target-selection gate; operator evidence remains pending**.
 - Phase 12 — Concrete Evidence-Backed Production Hardening: **Complete as evidence intake framework; implementation remains blocked without accepted evidence**.
-- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; recursion/timing hardening in review**.
+- Phase 13 — Evidence Backfill or First Accepted Hardening Implementation: **Current; output hook and guarded copy in review**.
 
 ## Phase 10 — Production Packaging, Stability, and Release Readiness
 
@@ -90,7 +90,7 @@ Completed:
 
 ## Phase 13 — Evidence Backfill or First Accepted Hardening Implementation
 
-Status: **Current; recursion/timing hardening in review.**
+Status: **Current; output hook and guarded copy in review.**
 
 Completed:
 
@@ -106,28 +106,30 @@ Completed:
 - [x] Phase 13.10 — rerun 100-turn evidence review after force-exit report-size guard.
 - [x] Phase 13.11 — report materialization guard and manual-turn metrics.
 - [x] Phase 13.12 — recursion guard and manual-stage timing.
+- [x] Phase 13.13 — output-dir hook and guarded copy.
 
 Current:
 
-- [ ] Phase 13.13 — rerun 100-turn evidence review after recursion guard and manual-stage timing.
+- [ ] Phase 13.14 — rerun 100-turn evidence review after output-dir hook and guarded copy.
 
 Next:
 
-- [ ] Phase 13.14 — production evidence package or runtime/performance follow-up.
+- [ ] Phase 13.15 — production evidence package or runtime follow-up from guard summary.
 
-Phase 13.13 scope:
+Phase 13.14 scope:
 
-- Rerun or inspect the 100-turn command after the recursion guard and manual-stage timing patch is merged.
-- Confirm that `RecursionError` lines are absent from the console log and provider-error classification summary.
-- Confirm that `autoplay-performance-summary.json` includes populated manual-turn sub-stage fields.
-- If recursion errors persist, select one bounded runtime-state follow-up target.
-- If timing sub-stages remain missing, select one bounded artifact extraction follow-up target.
+- Rerun or inspect the 100-turn command after Phase 13.13 is merged.
+- Confirm that `autoplay-performance-summary.json` exists in the per-run output directory.
+- Confirm whether `RecursionError` lines are absent.
+- If copy-guard summary exists, inspect it for the bounded source of recursive/cyclic structures.
+- If recursion errors persist without copy-guard summary, select one bounded follow-up for non-copy recursion diagnostics.
 - If artifacts are manageable and errors are gone, continue operator evidence packaging or performance optimization review.
 
 ## Remaining risks
 
-- The 100-turn command must be rerun after the recursion/timing patch to confirm deterministic turn errors are gone.
-- Manual-turn sub-stage fields must be verified in the next performance summary.
+- The 100-turn command must be rerun after Phase 13.13 to confirm deterministic turn errors are gone.
+- The per-run performance summary must be verified.
+- If recursion is not caused by copy, the next slice must capture the exact non-copy source.
 - The Phase 13.4 latency-reduced matrix runner still needs live/operator evidence.
 - No latency-reduction improvement has been confirmed yet.
 - Live/provider 1000-turn execution remains pending.
