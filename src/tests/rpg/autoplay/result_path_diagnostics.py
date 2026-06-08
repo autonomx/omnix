@@ -5,6 +5,8 @@ result payloads.  Phase 13.16 prioritized trace-bearing runtime result payloads.
 Phase 13.17 also consumes the direct runtime-turn emission capture artifact so
 runtime result probe lines are preserved even when the full payload is not saved
 elsewhere. Phase 13.19 consumes bounded probe payload captures when available.
+Phase 13.29 preserves the earlier print-hook traceback evidence that shares this
+summary file path.
 """
 from __future__ import annotations
 
@@ -13,10 +15,14 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-SOURCE = "autoplay_result_path_diagnostics_v4"
+SOURCE = "autoplay_result_path_diagnostics_v5"
 SUMMARY_NAME = "autoplay-turn-error-diagnostics.json"
 RUNTIME_TURN_RESULTS_NAME = "autoplay-runtime-turn-results.json"
 RUNTIME_TURN_PAYLOADS_NAME = "autoplay-runtime-turn-result-payloads.json"
+TURN_ERROR_HOOK_SOURCES = {
+    "autoplay_turn_error_diagnostics_hook_v1",
+    "autoplay_turn_error_diagnostics_hook_v2",
+}
 _TRACE_KEYS = {
     "manual_harness_trace",
     "manual_harness_trace_summary",
@@ -346,11 +352,45 @@ def collect_result_path_diagnostics(output_dir: str | Path, *, zip_path: str | P
     }
 
 
+def _load_existing_turn_error_hook_payload(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    if str(payload.get("source") or "") not in TURN_ERROR_HOOK_SOURCES:
+        return {}
+    events = [event for event in list(payload.get("events") or []) if isinstance(event, dict)]
+    active_events = [event for event in events if event.get("active_exception_available") is True]
+    return {
+        "source": payload.get("source"),
+        "event_count": len(events),
+        "active_exception_event_count": len(active_events),
+        "events": events[-200:],
+    }
+
+
+def _merge_turn_error_hook_payload(payload: Dict[str, Any], hook_payload: Mapping[str, Any]) -> Dict[str, Any]:
+    if not hook_payload:
+        return payload
+    merged = dict(payload)
+    merged["turn_error_hook_source"] = hook_payload.get("source")
+    merged["turn_error_hook_event_count"] = hook_payload.get("event_count", 0)
+    merged["turn_error_hook_active_exception_event_count"] = hook_payload.get("active_exception_event_count", 0)
+    merged["turn_error_hook_events"] = list(hook_payload.get("events") or [])
+    return merged
+
+
 def write_result_path_diagnostics(output_dir: str | Path, *, zip_path: str | Path | None = None) -> Dict[str, Any]:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    payload = collect_result_path_diagnostics(output_dir, zip_path=zip_path)
     path = output_dir / SUMMARY_NAME
+    existing_hook_payload = _load_existing_turn_error_hook_payload(path)
+    payload = collect_result_path_diagnostics(output_dir, zip_path=zip_path)
+    payload = _merge_turn_error_hook_payload(payload, existing_hook_payload)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     payload["path"] = str(path)
     return payload
