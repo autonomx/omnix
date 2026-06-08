@@ -12,14 +12,18 @@ from __future__ import annotations
 import json
 import linecache
 import sys
+import traceback
 from pathlib import Path
 from typing import Dict, List
 
 _RUNTIME_LOADED = False
+_RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR: Path | None = None
 _RUNTIME_MODULE_ALIASES = (
     "tests.rpg.autoplay_llm_campaign",
     "rpg.autoplay_llm_campaign",
 )
+_RUNTIME_TRACEBACK_SOURCE_EXPR = '"traceback": traceback.format_exc(),'
+_RUNTIME_TRACEBACK_CAPTURE_EXPR = '"traceback": _capture_runtime_exception_traceback(traceback.format_exc(), turn_index=turn_index),'
 
 
 def _output_dir_from_argv(argv: List[str]) -> Path | None:
@@ -29,6 +33,95 @@ def _output_dir_from_argv(argv: List[str]) -> Path | None:
         if value.startswith("--output-dir="):
             return Path(value.split("=", 1)[1])
     return None
+
+
+def _configure_runtime_exception_traceback_capture(argv: List[str]) -> None:
+    global _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR
+    _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR = _output_dir_from_argv(argv)
+
+
+def _safe_runtime_traceback_frame(frame: traceback.FrameSummary) -> Dict[str, object]:
+    return {
+        "filename": str(frame.filename)[-300:],
+        "line_number": int(frame.lineno),
+        "function_name": str(frame.name)[-200:],
+        "line": (str(frame.line or "")[-500:] if frame.line is not None else ""),
+    }
+
+
+def _summarize_runtime_repeated_frames(frames: List[traceback.FrameSummary]) -> List[Dict[str, object]]:
+    counts: Dict[str, Dict[str, object]] = {}
+    for frame in frames:
+        key = f"{frame.filename}:{frame.lineno}:{frame.name}"
+        entry = counts.setdefault(
+            key,
+            {
+                "count": 0,
+                "filename": str(frame.filename)[-300:],
+                "line_number": int(frame.lineno),
+                "function_name": str(frame.name)[-200:],
+                "line": (str(frame.line or "")[-500:] if frame.line is not None else ""),
+            },
+        )
+        entry["count"] = int(entry.get("count") or 0) + 1
+    repeated = [entry for entry in counts.values() if int(entry.get("count") or 0) > 1]
+    repeated.sort(key=lambda value: int(value.get("count") or 0), reverse=True)
+    return repeated[:20]
+
+
+def _load_runtime_exception_traceback_payload(path: Path) -> Dict[str, object]:
+    if not path.exists():
+        return {"ok": True, "source": "autoplay_runtime_exception_source_capture_v1", "events": []}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {"ok": True, "source": "autoplay_runtime_exception_source_capture_v1", "events": []}
+    except Exception:
+        return {"ok": True, "source": "autoplay_runtime_exception_source_capture_v1", "events": []}
+
+
+def _capture_runtime_exception_traceback(formatted_text: str, *, turn_index: object = None) -> str:
+    """Persist generated runtime exception context and return ``formatted_text`` unchanged."""
+
+    output_dir = _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR
+    if output_dir is None:
+        return formatted_text
+    try:
+        exc_type, exc, tb = sys.exc_info()
+        frames = traceback.extract_tb(tb, limit=120) if tb is not None else []
+        path = output_dir / "autoplay-exception-tracebacks.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _load_runtime_exception_traceback_payload(path)
+        events = list(payload.get("events") or [])
+        events.append(
+            {
+                "event_class": "runtime_exception_source_capture",
+                "turn_index": turn_index,
+                "active_exception_available": exc_type is not None and exc is not None and tb is not None,
+                "error_type": getattr(exc_type, "__name__", str(exc_type)) if exc_type is not None else None,
+                "message": str(exc)[-1000:] if exc is not None else None,
+                "traceback_frames": [_safe_runtime_traceback_frame(frame) for frame in frames],
+                "traceback_frame_count": len(frames),
+                "repeated_frames": _summarize_runtime_repeated_frames(list(frames)),
+                "formatted_text_tail": formatted_text[-8000:],
+                "source": "autoplay_runtime_exception_source_capture_v1",
+            }
+        )
+        payload.update(
+            {
+                "ok": True,
+                "source": "autoplay_runtime_exception_source_capture_v1",
+                "event_count": len(events),
+                "events": events[-200:],
+            }
+        )
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    except Exception:
+        return formatted_text
+    return formatted_text
+
+
+def _instrument_runtime_exception_traceback_capture(source: str) -> str:
+    return source.replace(_RUNTIME_TRACEBACK_SOURCE_EXPR, _RUNTIME_TRACEBACK_CAPTURE_EXPR)
 
 
 def _register_autoplay_runtime_aliases() -> None:
@@ -114,7 +207,9 @@ def _load_autoplay_campaign_runtime() -> None:
         return
     _register_autoplay_runtime_aliases()
     fragments = _autoplay_campaign_fragment_paths()
-    combined_source = _combine_autoplay_campaign_fragments(fragments)
+    combined_source = _instrument_runtime_exception_traceback_capture(
+        _combine_autoplay_campaign_fragments(fragments)
+    )
     combined_filename = str(
         Path(__file__).with_name("autoplay_llm_campaign_parts")
         / "__combined_autoplay_llm_campaign__.py"
@@ -315,6 +410,7 @@ if __name__ == "__main__":
     from tests.rpg.autoplay.runtime_probe_payload_capture import configure_runtime_probe_payload_capture_from_argv
     from tests.rpg.autoplay.runtime_turn_result_capture_hook import install_runtime_turn_result_capture_hook_from_argv
     from tests.rpg.autoplay.turn_error_diagnostics_hook import install_turn_error_diagnostics_hook_from_argv
+    _configure_runtime_exception_traceback_capture(sys.argv[1:])
     configure_runtime_probe_payload_capture_from_argv(sys.argv[1:])
     configure_live_manual_turn_timing_from_argv(sys.argv[1:])
     configure_probe_source_map_from_argv(sys.argv[1:])
