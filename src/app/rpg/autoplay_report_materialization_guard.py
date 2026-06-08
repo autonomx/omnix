@@ -7,6 +7,7 @@ state or gameplay truth.
 """
 from __future__ import annotations
 
+import builtins
 import json
 import shutil
 import zipfile
@@ -21,7 +22,7 @@ from app.rpg.autoplay_report_size_guard import (
     _limit_for_name,
 )
 
-MATERIALIZATION_GUARD_SOURCE = "autoplay_report_materialization_guard_v1"
+MATERIALIZATION_GUARD_SOURCE = "autoplay_report_materialization_guard_v2"
 SUMMARY_NAME = "autoplay-report-size-guard-summary.json"
 _INSTALLED = False
 _OUTPUT_DIR: Optional[Path] = None
@@ -31,6 +32,7 @@ _ORIGINAL_COPYFILE = shutil.copyfile
 _ORIGINAL_COPY2 = shutil.copy2
 _ORIGINAL_ZIP_WRITE = zipfile.ZipFile.write
 _ORIGINAL_ZIP_WRITESTR = zipfile.ZipFile.writestr
+_ORIGINAL_OPEN = builtins.open
 
 
 def _is_report_name(value: str | Path) -> bool:
@@ -115,6 +117,96 @@ def cap_report_materialization_bytes(path: str | Path, raw: bytes) -> bytes:
         path_hint=path,
     )
     return capped
+
+
+class _GuardedReportFile:
+    def __init__(self, file_obj: Any, path: str | Path, *, binary: bool, encoding: str | None = None) -> None:
+        self._file = file_obj
+        self._path = Path(path)
+        self._binary = binary
+        self._encoding = encoding or "utf-8"
+        self._limit = _limit_for_name(path)
+        self._seen_bytes = 0
+        self._capped = False
+        self._summary_written = False
+        self._written_bytes = 0
+
+    def __enter__(self) -> "_GuardedReportFile":
+        self._file.__enter__()
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Any:
+        try:
+            self.close()
+        finally:
+            return self._file.__exit__(exc_type, exc, tb)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._file, name)
+
+    def _payload_bytes(self, data: Any) -> bytes:
+        if isinstance(data, bytes):
+            return data
+        if isinstance(data, bytearray):
+            return bytes(data)
+        return str(data).encode(self._encoding)
+
+    def _write_payload(self, payload: bytes) -> int:
+        if self._binary:
+            return self._file.write(payload)
+        return self._file.write(payload.decode(self._encoding, errors="replace"))
+
+    def write(self, data: Any) -> int:
+        raw = self._payload_bytes(data)
+        self._seen_bytes += len(raw)
+        if self._limit <= 0:
+            return self._file.write(data)
+        if self._capped:
+            return len(data) if isinstance(data, (str, bytes, bytearray)) else len(raw)
+        if self._seen_bytes <= self._limit:
+            self._written_bytes += len(raw)
+            return self._file.write(data)
+        payload = _compact_payload(str(self._path), self._seen_bytes, self._limit)
+        try:
+            self._file.seek(0)
+            self._file.truncate(0)
+        except Exception:
+            pass
+        self._written_bytes = self._write_payload(payload)
+        self._capped = True
+        return len(data) if isinstance(data, (str, bytes, bytearray)) else len(raw)
+
+    def close(self) -> None:
+        if self._capped and not self._summary_written:
+            _write_summary_event(
+                "file",
+                {
+                    "path": str(self._path),
+                    "original_size_bytes": self._seen_bytes,
+                    "new_size_bytes": self._written_bytes,
+                    "limit_bytes": self._limit,
+                    "source": MATERIALIZATION_GUARD_SOURCE,
+                    "guarded_api": "open.write",
+                },
+                path_hint=self._path,
+            )
+            self._summary_written = True
+        return self._file.close()
+
+
+def _guarded_open(file: Any, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
+    file_obj = _ORIGINAL_OPEN(file, mode, *args, **kwargs)
+    try:
+        writing = any(token in mode for token in ("w", "a", "x", "+"))
+        if not writing or not _is_report_name(file):
+            return file_obj
+        binary = "b" in mode
+        encoding = kwargs.get("encoding") if isinstance(kwargs.get("encoding"), str) else None
+        if len(args) >= 3 and isinstance(args[2], str):
+            encoding = args[2]
+        return _GuardedReportFile(file_obj, file, binary=binary, encoding=encoding)
+    except Exception:
+        return file_obj
 
 
 def _guarded_write_text(self: Path, data: str, *args: Any, **kwargs: Any) -> int:
@@ -256,6 +348,7 @@ def install_report_materialization_size_guard(*, output_dir: str | Path | None =
     shutil.copy2 = _guarded_copy2  # type: ignore[assignment]
     zipfile.ZipFile.write = _guarded_zip_write  # type: ignore[assignment]
     zipfile.ZipFile.writestr = _guarded_zip_writestr  # type: ignore[assignment]
+    builtins.open = _guarded_open  # type: ignore[assignment]
     _INSTALLED = True
     return True
 
