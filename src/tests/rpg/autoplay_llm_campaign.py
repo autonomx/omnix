@@ -18,6 +18,12 @@ from typing import Dict, List
 
 _RUNTIME_LOADED = False
 _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR: Path | None = None
+_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS = (
+    "resources",
+    "data",
+    "test-results",
+    "autoplay-100-n82-travel-location-progression",
+)
 _RUNTIME_MODULE_ALIASES = (
     "tests.rpg.autoplay_llm_campaign",
     "rpg.autoplay_llm_campaign",
@@ -33,6 +39,14 @@ def _output_dir_from_argv(argv: List[str]) -> Path | None:
         if value.startswith("--output-dir="):
             return Path(value.split("=", 1)[1])
     return None
+
+
+def _default_runtime_exception_traceback_output_dir() -> Path:
+    return Path.cwd().joinpath(*_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS)
+
+
+def _runtime_exception_traceback_output_dir() -> Path:
+    return _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR or _default_runtime_exception_traceback_output_dir()
 
 
 def _configure_runtime_exception_traceback_capture(argv: List[str]) -> None:
@@ -82,10 +96,8 @@ def _load_runtime_exception_traceback_payload(path: Path) -> Dict[str, object]:
 def _capture_runtime_exception_traceback(formatted_text: str, *, turn_index: object = None) -> str:
     """Persist generated runtime exception context and return ``formatted_text`` unchanged."""
 
-    output_dir = _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR
-    if output_dir is None:
-        return formatted_text
     try:
+        output_dir = _runtime_exception_traceback_output_dir()
         exc_type, exc, tb = sys.exc_info()
         frames = traceback.extract_tb(tb, limit=120) if tb is not None else []
         path = output_dir / "autoplay-exception-tracebacks.json"

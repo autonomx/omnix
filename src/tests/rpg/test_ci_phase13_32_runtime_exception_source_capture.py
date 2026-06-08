@@ -59,3 +59,25 @@ def test_phase13_32_instrumented_expression_preserves_traceback_value(tmp_path: 
     assert "RuntimeError" in result["traceback"]
     payload = json.loads((tmp_path / "autoplay-exception-tracebacks.json").read_text(encoding="utf-8"))
     assert payload["events"][0]["turn_index"] == 77
+
+
+def test_phase13_33_capture_uses_default_output_dir_when_unconfigured(tmp_path: Path, monkeypatch):
+    original_output_dir = loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR
+    monkeypatch.chdir(tmp_path)
+    try:
+        loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR = None
+        try:
+            raise LookupError("default boom")
+        except LookupError:
+            text = loader._capture_runtime_exception_traceback("default formatted", turn_index=88)
+    finally:
+        loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR = original_output_dir
+
+    assert text == "default formatted"
+    path = tmp_path.joinpath(*loader._DEFAULT_AUTOPLAY_RESULT_DIR_PARTS) / "autoplay-exception-tracebacks.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["event_count"] == 1
+    event = payload["events"][0]
+    assert event["turn_index"] == 88
+    assert event["error_type"] == "LookupError"
+    assert event["active_exception_available"] is True
