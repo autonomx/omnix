@@ -8,6 +8,7 @@ state or gameplay truth.
 from __future__ import annotations
 
 import builtins
+import io
 import json
 import shutil
 import zipfile
@@ -22,7 +23,7 @@ from app.rpg.autoplay_report_size_guard import (
     _limit_for_name,
 )
 
-MATERIALIZATION_GUARD_SOURCE = "autoplay_report_materialization_guard_v2"
+MATERIALIZATION_GUARD_SOURCE = "autoplay_report_materialization_guard_v3"
 SUMMARY_NAME = "autoplay-report-size-guard-summary.json"
 _INSTALLED = False
 _OUTPUT_DIR: Optional[Path] = None
@@ -33,6 +34,7 @@ _ORIGINAL_COPY2 = shutil.copy2
 _ORIGINAL_ZIP_WRITE = zipfile.ZipFile.write
 _ORIGINAL_ZIP_WRITESTR = zipfile.ZipFile.writestr
 _ORIGINAL_OPEN = builtins.open
+_ORIGINAL_IO_OPEN = io.open
 
 
 def _is_report_name(value: str | Path) -> bool:
@@ -194,17 +196,42 @@ class _GuardedReportFile:
         return self._file.close()
 
 
+def _encoding_from_open_args(args: tuple[Any, ...], kwargs: Dict[str, Any]) -> str | None:
+    if isinstance(kwargs.get("encoding"), str):
+        return kwargs["encoding"]
+    if len(args) >= 2 and isinstance(args[1], str):
+        return args[1]
+    return None
+
+
 def _guarded_open(file: Any, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
     file_obj = _ORIGINAL_OPEN(file, mode, *args, **kwargs)
     try:
         writing = any(token in mode for token in ("w", "a", "x", "+"))
         if not writing or not _is_report_name(file):
             return file_obj
-        binary = "b" in mode
-        encoding = kwargs.get("encoding") if isinstance(kwargs.get("encoding"), str) else None
-        if len(args) >= 3 and isinstance(args[2], str):
-            encoding = args[2]
-        return _GuardedReportFile(file_obj, file, binary=binary, encoding=encoding)
+        return _GuardedReportFile(
+            file_obj,
+            file,
+            binary="b" in mode,
+            encoding=_encoding_from_open_args(args, kwargs),
+        )
+    except Exception:
+        return file_obj
+
+
+def _guarded_io_open(file: Any, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
+    file_obj = _ORIGINAL_IO_OPEN(file, mode, *args, **kwargs)
+    try:
+        writing = any(token in mode for token in ("w", "a", "x", "+"))
+        if not writing or not _is_report_name(file):
+            return file_obj
+        return _GuardedReportFile(
+            file_obj,
+            file,
+            binary="b" in mode,
+            encoding=_encoding_from_open_args(args, kwargs),
+        )
     except Exception:
         return file_obj
 
@@ -349,6 +376,7 @@ def install_report_materialization_size_guard(*, output_dir: str | Path | None =
     zipfile.ZipFile.write = _guarded_zip_write  # type: ignore[assignment]
     zipfile.ZipFile.writestr = _guarded_zip_writestr  # type: ignore[assignment]
     builtins.open = _guarded_open  # type: ignore[assignment]
+    io.open = _guarded_io_open  # type: ignore[assignment]
     _INSTALLED = True
     return True
 
