@@ -97,6 +97,17 @@ def _wrap_live_manual_turn_timing_functions(namespace: Dict[str, object]) -> Non
         return
 
 
+def _install_essential_mirror_member_filter() -> None:
+    try:
+        from tests.rpg.autoplay.essential_mirror_member_filter import install_essential_mirror_member_filter
+    except Exception:
+        return
+    try:
+        install_essential_mirror_member_filter()
+    except Exception:
+        return
+
+
 def _load_autoplay_campaign_runtime() -> None:
     global _RUNTIME_LOADED
     if _RUNTIME_LOADED:
@@ -147,7 +158,6 @@ def _run_survival_report_writer_hook(argv: List[str], exit_code: object) -> None
             file=sys.stderr,
         )
         return
-
     result = run_autoplay_survival_report_writer_hook(
         script_path=Path(__file__).resolve(),
         argv=argv,
@@ -312,6 +322,7 @@ if __name__ == "__main__":
     install_turn_error_diagnostics_hook_from_argv(sys.argv[1:])
     install_deepcopy_recursion_guard_from_argv(sys.argv[1:])
     install_report_materialization_size_guard_from_argv(sys.argv[1:])
+    _install_essential_mirror_member_filter()
     install_force_exit_report_size_guard(sys.argv[1:])
     _load_autoplay_campaign_runtime()
     main_fn = globals().get("main")
