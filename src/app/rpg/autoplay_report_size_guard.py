@@ -20,6 +20,7 @@ REPORT_JSON_NAME = "autoplay-campaign-report.json"
 REPORT_HTML_NAMES = {"autoplay-campaign-report.html", "autoplay-campaign-report-rich.html"}
 DEFAULT_MAX_REPORT_JSON_BYTES = 25 * 1024 * 1024
 DEFAULT_MAX_REPORT_HTML_BYTES = 15 * 1024 * 1024
+SUMMARY_NAME = "autoplay-report-size-guard-summary.json"
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -180,17 +181,48 @@ def cap_oversized_report_zip(zip_path: str | Path) -> Dict[str, Any]:
     return {"ok": True, "zip_path": str(zip_path), "capped_members": capped, "source": SIZE_GUARD_SOURCE}
 
 
+def _read_existing_summary(summary_path: Path) -> Dict[str, Any]:
+    if not summary_path.exists():
+        return {}
+    try:
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _merge_file_results(existing: Dict[str, Any], current: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(current)
+    existing_file_result = existing.get("file_result") if isinstance(existing.get("file_result"), dict) else {}
+    existing_capped = list(existing_file_result.get("capped_files") or []) if isinstance(existing_file_result, dict) else []
+    current_capped = list(current.get("capped_files") or [])
+    merged["capped_files"] = existing_capped + current_capped
+    return merged
+
+
+def _merge_zip_results(existing: Dict[str, Any], current: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    existing_zip_results = existing.get("zip_results") if isinstance(existing.get("zip_results"), list) else []
+    return list(existing_zip_results or []) + list(current or [])
+
+
 def cap_oversized_autoplay_reports(output_dir: str | Path, *, zip_paths: Iterable[str | Path] = ()) -> Dict[str, Any]:
     output_dir = Path(output_dir)
+    summary_path = output_dir / SUMMARY_NAME
+    existing_summary = _read_existing_summary(summary_path)
     file_result = cap_oversized_report_files(output_dir)
     zip_results = [cap_oversized_report_zip(path) for path in zip_paths if path]
-    summary_path = output_dir / "autoplay-report-size-guard-summary.json"
-    payload = {
-        "ok": True,
-        "source": SIZE_GUARD_SOURCE,
-        "file_result": file_result,
-        "zip_results": zip_results,
-    }
+    payload = dict(existing_summary)
+    payload.update(
+        {
+            "ok": True,
+            "source": SIZE_GUARD_SOURCE,
+            "materialization_guard_source": existing_summary.get("materialization_guard_source"),
+            "file_result": _merge_file_results(existing_summary, file_result),
+            "zip_results": _merge_zip_results(existing_summary, zip_results),
+        }
+    )
+    if not payload.get("materialization_guard_source"):
+        payload.pop("materialization_guard_source", None)
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     payload["summary_path"] = str(summary_path)
