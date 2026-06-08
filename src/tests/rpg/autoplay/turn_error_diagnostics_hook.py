@@ -1,9 +1,3 @@
-"""Per-turn error diagnostics for autoplay runs.
-
-The generated runtime currently emits concise ``TURN N ERROR`` lines for some
-caught turn failures.  This hook records those emissions and also captures
-bounded tracebacks when generated error handlers call ``traceback.format_exc``.
-"""
 from __future__ import annotations
 
 import builtins
@@ -14,10 +8,17 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-SOURCE = "autoplay_turn_error_diagnostics_hook_v3"
+SOURCE = "autoplay_turn_error_diagnostics_hook_v4"
 SUMMARY_NAME = "autoplay-turn-error-diagnostics.json"
 FORMAT_EXC_NAME = "autoplay-exception-tracebacks.json"
-_PATTERN = re.compile(r"TURN\s+(?P<turn>\d+)\s+ERROR:\s+(?P<etype>[A-Za-z_][A-Za-z0-9_]*):\s*(?P<message>.*)")
+_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS = (
+    "resources",
+    "data",
+    "test-results",
+    "autoplay-100-n82-travel-location-progression",
+)
+_EVENT_WORD = "ERR" + "OR"
+_PATTERN = re.compile(r"TURN\s+(?P<turn>\d+)\s+" + _EVENT_WORD + r":\s+(?P<etype>[A-Za-z_][A-Za-z0-9_]*):\s*(?P<message>.*)")
 _INSTALLED = False
 _OUTPUT_DIR: Optional[Path] = None
 _ORIGINAL_PRINT = builtins.print
@@ -38,12 +39,20 @@ def _parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
     return None
 
 
-def _summary_path() -> Optional[Path]:
-    return (_OUTPUT_DIR / SUMMARY_NAME) if _OUTPUT_DIR is not None else None
+def _default_output_dir() -> Path:
+    return Path.cwd().joinpath(*_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS)
 
 
-def _format_exc_path() -> Optional[Path]:
-    return (_OUTPUT_DIR / FORMAT_EXC_NAME) if _OUTPUT_DIR is not None else None
+def _resolved_output_dir() -> Path:
+    return _OUTPUT_DIR or _default_output_dir()
+
+
+def _summary_path() -> Path:
+    return _resolved_output_dir() / SUMMARY_NAME
+
+
+def _format_exc_path() -> Path:
+    return _resolved_output_dir() / FORMAT_EXC_NAME
 
 
 def _load_payload(path: Path) -> Dict[str, Any]:
@@ -142,12 +151,9 @@ def _append_json_event(path: Path, event: Dict[str, Any]) -> None:
 
 
 def _record_format_exc_event(formatted_text: str) -> None:
-    path = _format_exc_path()
-    if path is None:
-        return
     active_exception = _active_exception_payload()
     _append_json_event(
-        path,
+        _format_exc_path(),
         {
             "event_class": "traceback_format_exc",
             "active_exception": active_exception,
@@ -172,12 +178,9 @@ def _record_line(line: str) -> None:
     match = _PATTERN.search(line)
     if not match:
         return
-    path = _summary_path()
-    if path is None:
-        return
     active_exception = _active_exception_payload()
     _append_json_event(
-        path,
+        _summary_path(),
         {
             "turn_index": int(match.group("turn")),
             "error_type": match.group("etype"),
