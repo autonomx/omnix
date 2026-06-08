@@ -25,7 +25,7 @@ _RUNTIME_MODULE_ALIASES = (
 def _output_dir_from_argv(argv: List[str]) -> Path | None:
     for index, value in enumerate(argv):
         if value == "--output-dir" and index + 1 < len(argv):
-            return Path(args[index + 1])
+            return Path(argv[index + 1])
         if value.startswith("--output-dir="):
             return Path(value.split("=", 1)[1])
     return None
