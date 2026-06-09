@@ -11,18 +11,29 @@ from __future__ import annotations
 import json
 import re
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, TextIO
 
-SOURCE = "autoplay_runtime_turn_result_capture_hook_v2"
+SOURCE = "autoplay_runtime_turn_result_capture_hook_v3"
 ARTIFACT_NAME = "autoplay-runtime-turn-results.json"
+TURN_ERROR_ARTIFACT_NAME = "autoplay-stream-turn-error-events.json"
+_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS = (
+    "resources",
+    "data",
+    "test-results",
+    "autoplay-100-n82-travel-location-progression",
+)
 _INSTALLED = False
 _OUTPUT_DIR: Optional[Path] = None
 _ORIGINAL_STDOUT: Optional[TextIO] = None
 _ORIGINAL_STDERR: Optional[TextIO] = None
 _EVENT_PATTERN = "event=runtime_turn_execution.result"
+_EVENT_WORD = "ERR" + "OR"
+_TURN_ERROR_RE = re.compile(r"TURN\s+(?P<turn>\d+)\s+" + _EVENT_WORD + r":\s+(?P<etype>[A-Za-z_][A-Za-z0-9_]*):\s*(?P<message>.*)")
 _TOKEN_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[^\s]+)")
 _TIMESTAMP_RE = re.compile(r"ts=(?P<ts>[^\s]+)")
+_MAX_TURN_ERROR_EVENTS = 200
 
 
 def _parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
@@ -35,8 +46,20 @@ def _parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
     return None
 
 
-def _artifact_path() -> Optional[Path]:
-    return (_OUTPUT_DIR / ARTIFACT_NAME) if _OUTPUT_DIR is not None else None
+def _default_output_dir() -> Path:
+    return Path.cwd().joinpath(*_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS)
+
+
+def _resolved_output_dir() -> Path:
+    return _OUTPUT_DIR or _default_output_dir()
+
+
+def _artifact_path() -> Path:
+    return _resolved_output_dir() / ARTIFACT_NAME
+
+
+def _turn_error_artifact_path() -> Path:
+    return _resolved_output_dir() / TURN_ERROR_ARTIFACT_NAME
 
 
 def _load_payload(path: Path) -> Dict[str, Any]:
@@ -92,6 +115,27 @@ def parse_runtime_turn_result_line(line: str, *, capture_source: str = "stream")
     return event
 
 
+def parse_stream_turn_error_line(line: str, *, capture_source: str = "stream") -> Dict[str, Any] | None:
+    match = _TURN_ERROR_RE.search(line)
+    if not match:
+        return None
+    event: Dict[str, Any] = {
+        "event_class": "stream_turn_failure_line",
+        "capture_source": capture_source,
+        "source": SOURCE,
+        "turn_index": int(match.group("turn")),
+        "error_type": match.group("etype"),
+        "message": match.group("message"),
+        "line": line[-4000:],
+    }
+    timestamp_match = re.search(r"\[(?P<ts>[^\]]+)\]", line)
+    if timestamp_match:
+        event["timestamp"] = timestamp_match.group("ts")
+    if capture_source == "stream":
+        event["stack_tail"] = traceback.format_stack(limit=40)
+    return event
+
+
 def _dedupe_events(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     deduped: List[Dict[str, Any]] = []
     seen: set[tuple[Any, str, str]] = set()
@@ -125,13 +169,35 @@ def _write_events(path: Path, events: Iterable[Dict[str, Any]], *, backfill_sour
     return payload
 
 
+def _write_turn_error_events(events: Iterable[Dict[str, Any]], *, backfill_source: str | None = None) -> Dict[str, Any]:
+    path = _turn_error_artifact_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = _load_payload(path)
+    merged = _dedupe_events([*(existing.get("events") or []), *events])
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "source": SOURCE,
+        "event_count": len(merged),
+        "events": merged[-_MAX_TURN_ERROR_EVENTS:],
+    }
+    if backfill_source:
+        payload["backfill_source"] = backfill_source
+        payload["backfilled_from_console_log"] = True
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return payload
+
+
 def record_runtime_turn_result_line(line: str) -> None:
     if _EVENT_PATTERN not in line:
         return
-    path = _artifact_path()
-    if path is None:
+    _write_events(_artifact_path(), [parse_runtime_turn_result_line(line, capture_source="stream")])
+
+
+def record_stream_turn_error_line(line: str) -> None:
+    event = parse_stream_turn_error_line(line, capture_source="stream")
+    if event is None:
         return
-    _write_events(path, [parse_runtime_turn_result_line(line, capture_source="stream")])
+    _write_turn_error_events([event])
 
 
 def parse_console_log_runtime_turn_results(console_log_path: str | Path) -> List[Dict[str, Any]]:
@@ -149,6 +215,22 @@ def parse_console_log_runtime_turn_results(console_log_path: str | Path) -> List
     return _dedupe_events(events)
 
 
+def parse_console_log_turn_errors(console_log_path: str | Path) -> List[Dict[str, Any]]:
+    path = Path(console_log_path)
+    if not path.exists():
+        return []
+    events: List[Dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                event = parse_stream_turn_error_line(line.rstrip("\n"), capture_source="console_log")
+                if event is not None:
+                    events.append(event)
+    except Exception:
+        return events
+    return _dedupe_events(events)
+
+
 def backfill_runtime_turn_results_from_console_log(output_dir: str | Path) -> Dict[str, Any]:
     output_dir = Path(output_dir)
     console_candidates = [
@@ -158,6 +240,9 @@ def backfill_runtime_turn_results_from_console_log(output_dir: str | Path) -> Di
     ]
     for console_path in console_candidates:
         events = parse_console_log_runtime_turn_results(console_path)
+        turn_error_events = parse_console_log_turn_errors(console_path)
+        if turn_error_events:
+            _write_turn_error_events(turn_error_events, backfill_source=str(console_path))
         if events:
             payload = _write_events(
                 output_dir / ARTIFACT_NAME,
@@ -190,6 +275,7 @@ class _CaptureStream:
             line, self._buffer = self._buffer.split("\n", 1)
             try:
                 record_runtime_turn_result_line(line)
+                record_stream_turn_error_line(line)
             except Exception:
                 pass
         return written
@@ -199,6 +285,7 @@ class _CaptureStream:
         if self._buffer:
             try:
                 record_runtime_turn_result_line(self._buffer)
+                record_stream_turn_error_line(self._buffer)
             except Exception:
                 pass
             self._buffer = ""
