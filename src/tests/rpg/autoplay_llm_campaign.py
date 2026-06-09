@@ -33,9 +33,11 @@ _RUNTIME_TRACEBACK_CAPTURE_EXPR = '"traceback": _capture_runtime_exception_trace
 _RUNTIME_RESULT_PROBE_SOURCE_EXPR = '''        _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
             "runtime_turn_execution.result",'''
-_RUNTIME_RESULT_PROBE_CAPTURE_EXPR = '''        _capture_runtime_probe_locals(
-            locals(),
-            source_label="runtime_result_probe_source_instrumentation",
+_RUNTIME_RESULT_PROBE_CAPTURE_EXPR = '''        _capture_runtime_probe_snapshot(
+            turn_index=turn_index,
+            turn_result=turn_result,
+            runtime_error=locals().get("runtime_error"),
+            source_label="runtime_result_probe_source_snapshot",
         )
         _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
@@ -57,6 +59,10 @@ def _default_runtime_exception_traceback_output_dir() -> Path:
 
 def _runtime_exception_traceback_output_dir() -> Path:
     return _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR or _default_runtime_exception_traceback_output_dir()
+
+
+def _runtime_probe_snapshot_output_dir() -> Path:
+    return _runtime_exception_traceback_output_dir()
 
 
 def _configure_runtime_exception_traceback_capture(argv: List[str]) -> None:
@@ -103,6 +109,16 @@ def _load_runtime_exception_traceback_payload(path: Path) -> Dict[str, object]:
         return {"ok": True, "source": "autoplay_runtime_exception_source_capture_v1", "events": []}
 
 
+def _load_runtime_probe_snapshot_payload(path: Path) -> Dict[str, object]:
+    if not path.exists():
+        return {"ok": True, "source": "autoplay_runtime_probe_payload_capture_v4", "events": []}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {"ok": True, "source": "autoplay_runtime_probe_payload_capture_v4", "events": []}
+    except Exception:
+        return {"ok": True, "source": "autoplay_runtime_probe_payload_capture_v4", "events": []}
+
+
 def _capture_runtime_exception_traceback(formatted_text: str, *, turn_index: object = None) -> str:
     """Persist generated runtime exception context and return ``formatted_text`` unchanged."""
 
@@ -142,14 +158,69 @@ def _capture_runtime_exception_traceback(formatted_text: str, *, turn_index: obj
     return formatted_text
 
 
-def _capture_runtime_probe_locals(local_vars: object, *, source_label: str = "runtime_result_probe_source_instrumentation") -> None:
+def _runtime_probe_value_summary(value: object) -> Dict[str, object]:
+    summary: Dict[str, object] = {"type": type(value).__name__}
     try:
-        from tests.rpg.autoplay.runtime_probe_payload_capture import capture_runtime_probe_locals
-    except Exception:
-        return
+        if value is None or isinstance(value, (bool, int, float)):
+            summary["value"] = value
+            return summary
+        if isinstance(value, str):
+            summary["value"] = value[-1000:]
+            summary["length"] = len(value)
+            return summary
+        if isinstance(value, dict):
+            summary["key_count"] = len(value)
+            summary["keys"] = sorted(str(key) for key in value.keys())[:80]
+            simple_items: Dict[str, object] = {}
+            for key in ("ok", "error", "runtime_name", "turn_index"):
+                if key in value:
+                    simple_items[key] = _runtime_probe_value_summary(value.get(key))
+            summary["simple_items"] = simple_items
+            return summary
+        if isinstance(value, (list, tuple, set)):
+            summary["length"] = len(value)
+            return summary
+        text = repr(value)
+        summary["repr_tail"] = text[-1000:]
+        summary["repr_length"] = len(text)
+        return summary
+    except Exception as exc:
+        return {"type": type(value).__name__, "summary_error": repr(exc)}
+
+
+def _capture_runtime_probe_snapshot(
+    *,
+    turn_index: object = None,
+    turn_result: object = None,
+    runtime_error: object = None,
+    source_label: str = "runtime_result_probe_source_snapshot",
+) -> None:
     try:
-        if isinstance(local_vars, dict):
-            capture_runtime_probe_locals(local_vars, source_label=source_label)
+        output_dir = _runtime_probe_snapshot_output_dir()
+        path = output_dir / "autoplay-runtime-turn-result-payloads.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _load_runtime_probe_snapshot_payload(path)
+        events = list(payload.get("events") or [])
+        events.append(
+            {
+                "event_class": "runtime_probe_snapshot",
+                "runtime_result": True,
+                "capture_source": source_label,
+                "turn_index": turn_index,
+                "runtime_error": _runtime_probe_value_summary(runtime_error),
+                "turn_result_summary": _runtime_probe_value_summary(turn_result),
+                "source": "autoplay_runtime_probe_payload_capture_v4",
+            }
+        )
+        payload.update(
+            {
+                "ok": True,
+                "source": "autoplay_runtime_probe_payload_capture_v4",
+                "event_count": len(events),
+                "events": events[-200:],
+            }
+        )
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     except Exception:
         return
 
