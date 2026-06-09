@@ -7,13 +7,13 @@ def outer():
     value = 1
     def inner(turn_index):
         turn_result = {
-            \"traceback\": _capture_runtime_exception_traceback(traceback.format_exc(), turn_index=turn_index),
+            "traceback": _capture_runtime_exception_traceback(traceback.format_exc(), turn_index=turn_index),
         }
         _probe_log(
             True,
-            \"runtime_turn_execution.result\",
+            "runtime_turn_execution.result",
             turn_index=turn_index,
-            ok=turn_result.get(\"ok\"),
+            ok=turn_result.get("ok"),
         )
         return turn_result
 """
@@ -23,7 +23,7 @@ def outer():
     probe_matches = [match for match in matches if "runtime_turn_execution.result" in match["event_texts"]]
     capture_matches = [match for match in matches if "_capture_runtime_exception_traceback" in match["event_texts"]]
 
-    assert payload["source"] == "autoplay_probe_source_map_v2"
+    assert payload["source"] == "autoplay_probe_source_map_v3"
     assert probe_matches
     assert capture_matches
     probe = probe_matches[0]
@@ -38,7 +38,7 @@ def outer():
 def test_phase13_36_runtime_source_map_matches_turn_failure_emission():
     source = """
 def emit(turn_index, error_type, message):
-    line = f\"TURN {turn_index} \" + (\"ERR\" + \"OR:\") + f\" {error_type}: {message}\"
+    line = f"TURN {turn_index} " + ("ERR" + "OR:") + f" {error_type}: {message}"
     print(line)
 """
     payload = build_probe_source_map_from_source(source, filename="combined.py")
@@ -46,3 +46,26 @@ def emit(turn_index, error_type, message):
     assert any("TURN" in match["event_texts"] for match in matches)
     assert any("ERROR:" in match["event_texts"] for match in matches)
     assert all(match["function_context"] for match in matches)
+
+
+def test_phase13_43_runtime_source_map_matches_runtime_core_markers():
+    source = """
+def run_runtime_core(turn_perf_trace):
+    turn_perf_trace.append({"event": "runtime_checkpoint_before_companion_systems"})
+    state = apply_companion_systems()
+    turn_perf_trace.append({"event": "runtime_core_before_apply_turn_authoritative"})
+    result = apply_turn_authoritative(state)
+    turn_perf_trace.append({"event": "runtime_core_after_apply_turn_authoritative"})
+    return result
+"""
+    payload = build_probe_source_map_from_source(source, filename="combined.py")
+    matches = payload["matches"]
+    event_texts = [text for match in matches for text in match["event_texts"]]
+
+    assert "runtime_checkpoint_before_companion_systems" in event_texts
+    assert "runtime_core_before_apply_turn_authoritative" in event_texts
+    assert "runtime_core_after_apply_turn_authoritative" in event_texts
+    core_match = next(match for match in matches if "runtime_core_before_apply_turn_authoritative" in match["event_texts"])
+    assert core_match["enclosing_function_name"] == "run_runtime_core"
+    context_text = "\n".join(line["text"] for line in core_match["context"])
+    assert "apply_turn_authoritative" in context_text
