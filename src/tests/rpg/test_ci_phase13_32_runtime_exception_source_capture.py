@@ -1,5 +1,4 @@
 import json
-import types
 from pathlib import Path
 
 import tests.rpg.autoplay_llm_campaign as loader
@@ -83,7 +82,7 @@ def test_phase13_33_capture_uses_default_output_dir_when_unconfigured(tmp_path: 
     assert event["active_exception_available"] is True
 
 
-def test_phase13_38_instruments_runtime_result_probe_with_local_capture():
+def test_phase13_39_instruments_runtime_result_probe_with_bounded_snapshot():
     source = '''
         _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
@@ -94,18 +93,35 @@ def test_phase13_38_instruments_runtime_result_probe_with_local_capture():
 '''
     instrumented = loader._instrument_runtime_exception_traceback_capture(source)
     assert loader._RUNTIME_RESULT_PROBE_CAPTURE_EXPR in instrumented
-    assert instrumented.index("_capture_runtime_probe_locals") < instrumented.index("_probe_log")
+    assert "_capture_runtime_probe_snapshot" in instrumented
+    assert "locals()," not in instrumented
+    assert instrumented.index("_capture_runtime_probe_snapshot") < instrumented.index("_probe_log")
 
 
-def test_phase13_38_runtime_probe_local_capture_helper_delegates(monkeypatch):
-    calls = []
+def test_phase13_39_runtime_probe_snapshot_writes_bounded_payload(tmp_path: Path):
+    original_output_dir = loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR
+    recursive = {"ok": False, "error": "boom"}
+    recursive["self"] = recursive
+    try:
+        loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR = tmp_path
+        loader._capture_runtime_probe_snapshot(
+            turn_index=59,
+            turn_result=recursive,
+            runtime_error="RecursionError: boom",
+            source_label="unit-test",
+        )
+    finally:
+        loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR = original_output_dir
 
-    def fake_capture(local_vars, *, source_label):
-        calls.append((dict(local_vars), source_label))
-
-    module = types.SimpleNamespace(capture_runtime_probe_locals=fake_capture)
-    monkeypatch.setitem(__import__("sys").modules, "tests.rpg.autoplay.runtime_probe_payload_capture", module)
-
-    loader._capture_runtime_probe_locals({"turn_index": 59}, source_label="source-test")
-
-    assert calls == [({"turn_index": 59}, "source-test")]
+    path = tmp_path / "autoplay-runtime-turn-result-payloads.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["source"] == "autoplay_runtime_probe_payload_capture_v4"
+    assert payload["event_count"] == 1
+    event = payload["events"][0]
+    assert event["event_class"] == "runtime_probe_snapshot"
+    assert event["capture_source"] == "unit-test"
+    assert event["turn_index"] == 59
+    assert event["runtime_error"]["value"] == "RecursionError: boom"
+    assert event["turn_result_summary"]["key_count"] == 3
+    assert event["turn_result_summary"]["simple_items"]["ok"]["value"] is False
+    assert event["turn_result_summary"]["simple_items"]["error"]["value"] == "boom"
