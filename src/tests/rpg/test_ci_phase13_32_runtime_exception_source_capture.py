@@ -82,7 +82,7 @@ def test_phase13_33_capture_uses_default_output_dir_when_unconfigured(tmp_path: 
     assert event["active_exception_available"] is True
 
 
-def test_phase13_41_instruments_runtime_result_probe_with_trace_primitives():
+def test_phase13_42_instruments_runtime_result_probe_with_summary_error_primitives():
     source = '''
         _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
@@ -93,54 +93,29 @@ def test_phase13_41_instruments_runtime_result_probe_with_trace_primitives():
         )
 '''
     instrumented = loader._instrument_runtime_exception_traceback_capture(source)
-    assert "_capture_runtime_probe_snapshot" not in instrumented
-    assert "turn_result_key_count=len(_safe_dict(turn_result))" in instrumented
-    assert "manual_harness_trace_count=_runtime_probe_len" in instrumented
-    assert "manual_stage_trace_count=_runtime_probe_len" in instrumented
-    assert "turn_perf_trace_count=_runtime_probe_len" in instrumented
-    assert "manual_stage_trace_last=_runtime_probe_last_token" in instrumented
-    assert "turn_perf_trace_last=_runtime_probe_last_token" in instrumented
+    assert "manual_stage_trace_prev=_runtime_probe_previous_token" in instrumented
+    assert "turn_perf_trace_prev=_runtime_probe_previous_token" in instrumented
+    assert "manual_turn_summary_error_type=" in instrumented
+    assert "manual_turn_summary_error_tail=" in instrumented
 
 
-def test_phase13_41_runtime_probe_trace_helpers_return_safe_tokens():
+def test_phase13_42_runtime_probe_trace_helpers_return_safe_tokens():
     traces = [
         {"event": "begin stage", "stage": "manual turn", "ok": False},
-        {"event": "failed stage", "error_type": "RecursionError", "source": "unit test"},
+        {"event": "failed stage", "error_type": "RuntimeFailure", "source": "unit test"},
     ]
-    summary = {"count": 2, "ok": False, "error_type": "RecursionError"}
+    summary = {"count": 2, "ok": False, "error_type": "RuntimeFailure"}
 
     assert loader._runtime_probe_len(traces) == 2
     assert loader._runtime_probe_key_token(summary) == "count;error_type;ok"
     token = loader._runtime_probe_last_token(traces)
     assert "event:failed_stage" in token
-    assert "error_type:RecursionError" in token
+    assert "error_type:RuntimeFailure" in token
     assert " " not in token
+    prev = loader._runtime_probe_previous_token(traces)
+    assert "event:begin_stage" in prev
 
 
-def test_phase13_39_runtime_probe_snapshot_writes_bounded_payload(tmp_path: Path):
-    original_output_dir = loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR
-    recursive = {"ok": False, "error": "boom"}
-    recursive["self"] = recursive
-    try:
-        loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR = tmp_path
-        loader._capture_runtime_probe_snapshot(
-            turn_index=59,
-            turn_result=recursive,
-            runtime_error="RecursionError: boom",
-            source_label="unit-test",
-        )
-    finally:
-        loader._RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR = original_output_dir
-
-    path = tmp_path / "autoplay-runtime-turn-result-payloads.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["source"] == "autoplay_runtime_probe_payload_capture_v4"
-    assert payload["event_count"] == 1
-    event = payload["events"][0]
-    assert event["event_class"] == "runtime_probe_snapshot"
-    assert event["capture_source"] == "unit-test"
-    assert event["turn_index"] == 59
-    assert event["runtime_error"]["value"] == "RecursionError: boom"
-    assert event["turn_result_summary"]["key_count"] == 3
-    assert event["turn_result_summary"]["simple_items"]["ok"]["value"] is False
-    assert event["turn_result_summary"]["simple_items"]["error"]["value"] == "boom"
+def test_phase13_42_runtime_probe_token_truncates_and_sanitizes():
+    token = loader._runtime_probe_token("alpha beta,gamma|delta", limit=80)
+    assert token == "alpha_beta;gamma/delta"
