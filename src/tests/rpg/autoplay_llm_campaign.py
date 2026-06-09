@@ -36,7 +36,16 @@ _RUNTIME_RESULT_PROBE_KEYS_CAPTURE_EXPR = '''            keys=",".join(sorted(_s
             has_error=("error" in _safe_dict(turn_result)),
             has_traceback=("traceback" in _safe_dict(turn_result)),
             runtime_error_type=type(locals().get("runtime_error")).__name__,
-            runtime_error_tail=str(locals().get("runtime_error") or "")[-300:],'''
+            runtime_error_tail=str(locals().get("runtime_error") or "")[-300:],
+            manual_harness_trace_count=_runtime_probe_len(_safe_dict(turn_result).get("manual_harness_trace")),
+            manual_stage_trace_count=_runtime_probe_len(_safe_dict(turn_result).get("manual_stage_trace")),
+            turn_perf_trace_count=_runtime_probe_len(_safe_dict(turn_result).get("turn_perf_trace")),
+            manual_harness_summary_keys=_runtime_probe_key_token(_safe_dict(turn_result).get("manual_harness_trace_summary")),
+            manual_turn_summary_keys=_runtime_probe_key_token(_safe_dict(turn_result).get("manual_turn_summary")),
+            turn_perf_summary_keys=_runtime_probe_key_token(_safe_dict(turn_result).get("turn_perf_trace_summary")),
+            manual_harness_trace_last=_runtime_probe_last_token(_safe_dict(turn_result).get("manual_harness_trace")),
+            manual_stage_trace_last=_runtime_probe_last_token(_safe_dict(turn_result).get("manual_stage_trace")),
+            turn_perf_trace_last=_runtime_probe_last_token(_safe_dict(turn_result).get("turn_perf_trace")),'''
 
 
 def _output_dir_from_argv(argv: List[str]) -> Path | None:
@@ -181,6 +190,51 @@ def _runtime_probe_value_summary(value: object) -> Dict[str, object]:
         return summary
     except Exception as exc:
         return {"type": type(value).__name__, "summary_error": repr(exc)}
+
+
+def _runtime_probe_token(value: object, *, limit: int = 120) -> str:
+    try:
+        text = "" if value is None else str(value)
+        text = "_".join(text.split())
+        text = text.replace("|", "/").replace(",", ";")
+        return text[-limit:]
+    except Exception as exc:
+        return type(exc).__name__
+
+
+def _runtime_probe_len(value: object) -> int:
+    try:
+        return len(value) if hasattr(value, "__len__") else -1
+    except Exception:
+        return -1
+
+
+def _runtime_probe_key_token(value: object) -> str:
+    try:
+        if isinstance(value, dict):
+            return _runtime_probe_token(",".join(sorted(str(key) for key in value.keys())[:20]), limit=240)
+        return type(value).__name__
+    except Exception as exc:
+        return type(exc).__name__
+
+
+def _runtime_probe_last_token(value: object) -> str:
+    try:
+        if isinstance(value, (list, tuple)) and value:
+            item = value[-1]
+        else:
+            item = value
+        if isinstance(item, dict):
+            parts = []
+            for key in ("event", "stage", "name", "type", "error_type", "ok", "source"):
+                if key in item:
+                    parts.append(f"{key}:{_runtime_probe_token(item.get(key), limit=60)}")
+            if parts:
+                return _runtime_probe_token("|".join(parts), limit=240)
+            return _runtime_probe_key_token(item)
+        return _runtime_probe_token(item, limit=240)
+    except Exception as exc:
+        return type(exc).__name__
 
 
 def _capture_runtime_probe_snapshot(
