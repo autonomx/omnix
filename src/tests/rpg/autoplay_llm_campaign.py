@@ -30,6 +30,16 @@ _RUNTIME_MODULE_ALIASES = (
 )
 _RUNTIME_TRACEBACK_SOURCE_EXPR = '"traceback": traceback.format_exc(),'
 _RUNTIME_TRACEBACK_CAPTURE_EXPR = '"traceback": _capture_runtime_exception_traceback(traceback.format_exc(), turn_index=turn_index),'
+_RUNTIME_RESULT_PROBE_SOURCE_EXPR = '''        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "runtime_turn_execution.result",'''
+_RUNTIME_RESULT_PROBE_CAPTURE_EXPR = '''        _capture_runtime_probe_locals(
+            locals(),
+            source_label="runtime_result_probe_source_instrumentation",
+        )
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "runtime_turn_execution.result",'''
 
 
 def _output_dir_from_argv(argv: List[str]) -> Path | None:
@@ -132,8 +142,21 @@ def _capture_runtime_exception_traceback(formatted_text: str, *, turn_index: obj
     return formatted_text
 
 
+def _capture_runtime_probe_locals(local_vars: object, *, source_label: str = "runtime_result_probe_source_instrumentation") -> None:
+    try:
+        from tests.rpg.autoplay.runtime_probe_payload_capture import capture_runtime_probe_locals
+    except Exception:
+        return
+    try:
+        if isinstance(local_vars, dict):
+            capture_runtime_probe_locals(local_vars, source_label=source_label)
+    except Exception:
+        return
+
+
 def _instrument_runtime_exception_traceback_capture(source: str) -> str:
-    return source.replace(_RUNTIME_TRACEBACK_SOURCE_EXPR, _RUNTIME_TRACEBACK_CAPTURE_EXPR)
+    source = source.replace(_RUNTIME_TRACEBACK_SOURCE_EXPR, _RUNTIME_TRACEBACK_CAPTURE_EXPR)
+    return source.replace(_RUNTIME_RESULT_PROBE_SOURCE_EXPR, _RUNTIME_RESULT_PROBE_CAPTURE_EXPR)
 
 
 def _register_autoplay_runtime_aliases() -> None:
