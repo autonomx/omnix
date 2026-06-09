@@ -30,18 +30,13 @@ _RUNTIME_MODULE_ALIASES = (
 )
 _RUNTIME_TRACEBACK_SOURCE_EXPR = '"traceback": traceback.format_exc(),'
 _RUNTIME_TRACEBACK_CAPTURE_EXPR = '"traceback": _capture_runtime_exception_traceback(traceback.format_exc(), turn_index=turn_index),'
-_RUNTIME_RESULT_PROBE_SOURCE_EXPR = '''        _probe_log(
-            bool(getattr(args, "debug_autoplay_stage_timing", False)),
-            "runtime_turn_execution.result",'''
-_RUNTIME_RESULT_PROBE_CAPTURE_EXPR = '''        _capture_runtime_probe_snapshot(
-            turn_index=turn_index,
-            turn_result=turn_result,
-            runtime_error=locals().get("runtime_error"),
-            source_label="runtime_result_probe_source_snapshot",
-        )
-        _probe_log(
-            bool(getattr(args, "debug_autoplay_stage_timing", False)),
-            "runtime_turn_execution.result",'''
+_RUNTIME_RESULT_PROBE_KEYS_SOURCE_EXPR = '            keys=",".join(sorted(_safe_dict(turn_result).keys())[:80]),'
+_RUNTIME_RESULT_PROBE_KEYS_CAPTURE_EXPR = '''            keys=",".join(sorted(_safe_dict(turn_result).keys())[:80]),
+            turn_result_key_count=len(_safe_dict(turn_result)),
+            has_error=("error" in _safe_dict(turn_result)),
+            has_traceback=("traceback" in _safe_dict(turn_result)),
+            runtime_error_type=type(locals().get("runtime_error")).__name__,
+            runtime_error_tail=str(locals().get("runtime_error") or "")[-300:],'''
 
 
 def _output_dir_from_argv(argv: List[str]) -> Path | None:
@@ -227,7 +222,7 @@ def _capture_runtime_probe_snapshot(
 
 def _instrument_runtime_exception_traceback_capture(source: str) -> str:
     source = source.replace(_RUNTIME_TRACEBACK_SOURCE_EXPR, _RUNTIME_TRACEBACK_CAPTURE_EXPR)
-    return source.replace(_RUNTIME_RESULT_PROBE_SOURCE_EXPR, _RUNTIME_RESULT_PROBE_CAPTURE_EXPR)
+    return source.replace(_RUNTIME_RESULT_PROBE_KEYS_SOURCE_EXPR, _RUNTIME_RESULT_PROBE_KEYS_CAPTURE_EXPR)
 
 
 def _register_autoplay_runtime_aliases() -> None:
