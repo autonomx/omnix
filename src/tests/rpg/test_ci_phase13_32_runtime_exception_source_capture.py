@@ -81,3 +81,31 @@ def test_phase13_33_capture_uses_default_output_dir_when_unconfigured(tmp_path: 
     assert event["turn_index"] == 88
     assert event["error_type"] == "LookupError"
     assert event["active_exception_available"] is True
+
+
+def test_phase13_38_instruments_runtime_result_probe_with_local_capture():
+    source = '''
+        _probe_log(
+            bool(getattr(args, "debug_autoplay_stage_timing", False)),
+            "runtime_turn_execution.result",
+            turn_index=turn_index,
+            ok=_safe_dict(turn_result).get("ok"),
+        )
+'''
+    instrumented = loader._instrument_runtime_exception_traceback_capture(source)
+    assert loader._RUNTIME_RESULT_PROBE_CAPTURE_EXPR in instrumented
+    assert instrumented.index("_capture_runtime_probe_locals") < instrumented.index("_probe_log")
+
+
+def test_phase13_38_runtime_probe_local_capture_helper_delegates(monkeypatch):
+    calls = []
+
+    def fake_capture(local_vars, *, source_label):
+        calls.append((dict(local_vars), source_label))
+
+    module = types.SimpleNamespace(capture_runtime_probe_locals=fake_capture)
+    monkeypatch.setitem(__import__("sys").modules, "tests.rpg.autoplay.runtime_probe_payload_capture", module)
+
+    loader._capture_runtime_probe_locals({"turn_index": 59}, source_label="source-test")
+
+    assert calls == [({"turn_index": 59}, "source-test")]
