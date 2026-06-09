@@ -1,11 +1,4 @@
-"""Autoplay campaign harness loader.
-
-N117.5 replaces the anonymous N117.4 ``chunk_###.pyfrag`` files with named,
-ordered source fragments under ``autoplay_llm_campaign_parts``. The fragments
-are still executed as one combined source unit so the historical
-``python src/tests/rpg/autoplay_llm_campaign.py`` entrypoint and runtime
-semantics stay stable while future patches can target small logical files.
-"""
+"""Autoplay campaign harness loader."""
 
 from __future__ import annotations
 
@@ -45,7 +38,11 @@ _RUNTIME_RESULT_PROBE_KEYS_CAPTURE_EXPR = '''            keys=",".join(sorted(_s
             turn_perf_summary_keys=_runtime_probe_key_token(_safe_dict(turn_result).get("turn_perf_trace_summary")),
             manual_harness_trace_last=_runtime_probe_last_token(_safe_dict(turn_result).get("manual_harness_trace")),
             manual_stage_trace_last=_runtime_probe_last_token(_safe_dict(turn_result).get("manual_stage_trace")),
-            turn_perf_trace_last=_runtime_probe_last_token(_safe_dict(turn_result).get("turn_perf_trace")),'''
+            turn_perf_trace_last=_runtime_probe_last_token(_safe_dict(turn_result).get("turn_perf_trace")),
+            manual_stage_trace_prev=_runtime_probe_previous_token(_safe_dict(turn_result).get("manual_stage_trace")),
+            turn_perf_trace_prev=_runtime_probe_previous_token(_safe_dict(turn_result).get("turn_perf_trace")),
+            manual_turn_summary_error_type=type(_safe_dict(_safe_dict(turn_result).get("manual_turn_summary")).get("error")).__name__,
+            manual_turn_summary_error_tail=_runtime_probe_token(_safe_dict(_safe_dict(turn_result).get("manual_turn_summary")).get("error"), limit=500),'''
 
 
 def _output_dir_from_argv(argv: List[str]) -> Path | None:
@@ -63,10 +60,6 @@ def _default_runtime_exception_traceback_output_dir() -> Path:
 
 def _runtime_exception_traceback_output_dir() -> Path:
     return _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR or _default_runtime_exception_traceback_output_dir()
-
-
-def _runtime_probe_snapshot_output_dir() -> Path:
-    return _runtime_exception_traceback_output_dir()
 
 
 def _configure_runtime_exception_traceback_capture(argv: List[str]) -> None:
@@ -113,16 +106,6 @@ def _load_runtime_exception_traceback_payload(path: Path) -> Dict[str, object]:
         return {"ok": True, "source": "autoplay_runtime_exception_source_capture_v1", "events": []}
 
 
-def _load_runtime_probe_snapshot_payload(path: Path) -> Dict[str, object]:
-    if not path.exists():
-        return {"ok": True, "source": "autoplay_runtime_probe_payload_capture_v4", "events": []}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {"ok": True, "source": "autoplay_runtime_probe_payload_capture_v4", "events": []}
-    except Exception:
-        return {"ok": True, "source": "autoplay_runtime_probe_payload_capture_v4", "events": []}
-
-
 def _capture_runtime_exception_traceback(formatted_text: str, *, turn_index: object = None) -> str:
     """Persist generated runtime exception context and return ``formatted_text`` unchanged."""
 
@@ -162,36 +145,6 @@ def _capture_runtime_exception_traceback(formatted_text: str, *, turn_index: obj
     return formatted_text
 
 
-def _runtime_probe_value_summary(value: object) -> Dict[str, object]:
-    summary: Dict[str, object] = {"type": type(value).__name__}
-    try:
-        if value is None or isinstance(value, (bool, int, float)):
-            summary["value"] = value
-            return summary
-        if isinstance(value, str):
-            summary["value"] = value[-1000:]
-            summary["length"] = len(value)
-            return summary
-        if isinstance(value, dict):
-            summary["key_count"] = len(value)
-            summary["keys"] = sorted(str(key) for key in value.keys())[:80]
-            simple_items: Dict[str, object] = {}
-            for key in ("ok", "error", "runtime_name", "turn_index"):
-                if key in value:
-                    simple_items[key] = _runtime_probe_value_summary(value.get(key))
-            summary["simple_items"] = simple_items
-            return summary
-        if isinstance(value, (list, tuple, set)):
-            summary["length"] = len(value)
-            return summary
-        text = repr(value)
-        summary["repr_tail"] = text[-1000:]
-        summary["repr_length"] = len(text)
-        return summary
-    except Exception as exc:
-        return {"type": type(value).__name__, "summary_error": repr(exc)}
-
-
 def _runtime_probe_token(value: object, *, limit: int = 120) -> str:
     try:
         text = "" if value is None else str(value)
@@ -218,12 +171,8 @@ def _runtime_probe_key_token(value: object) -> str:
         return type(exc).__name__
 
 
-def _runtime_probe_last_token(value: object) -> str:
+def _runtime_probe_item_token(item: object) -> str:
     try:
-        if isinstance(value, (list, tuple)) and value:
-            item = value[-1]
-        else:
-            item = value
         if isinstance(item, dict):
             parts = []
             for key in ("event", "stage", "name", "type", "error_type", "ok", "source"):
@@ -237,41 +186,22 @@ def _runtime_probe_last_token(value: object) -> str:
         return type(exc).__name__
 
 
-def _capture_runtime_probe_snapshot(
-    *,
-    turn_index: object = None,
-    turn_result: object = None,
-    runtime_error: object = None,
-    source_label: str = "runtime_result_probe_source_snapshot",
-) -> None:
+def _runtime_probe_last_token(value: object) -> str:
     try:
-        output_dir = _runtime_probe_snapshot_output_dir()
-        path = output_dir / "autoplay-runtime-turn-result-payloads.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = _load_runtime_probe_snapshot_payload(path)
-        events = list(payload.get("events") or [])
-        events.append(
-            {
-                "event_class": "runtime_probe_snapshot",
-                "runtime_result": True,
-                "capture_source": source_label,
-                "turn_index": turn_index,
-                "runtime_error": _runtime_probe_value_summary(runtime_error),
-                "turn_result_summary": _runtime_probe_value_summary(turn_result),
-                "source": "autoplay_runtime_probe_payload_capture_v4",
-            }
-        )
-        payload.update(
-            {
-                "ok": True,
-                "source": "autoplay_runtime_probe_payload_capture_v4",
-                "event_count": len(events),
-                "events": events[-200:],
-            }
-        )
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    except Exception:
-        return
+        if isinstance(value, (list, tuple)) and value:
+            return _runtime_probe_item_token(value[-1])
+        return _runtime_probe_item_token(value)
+    except Exception as exc:
+        return type(exc).__name__
+
+
+def _runtime_probe_previous_token(value: object) -> str:
+    try:
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            return _runtime_probe_item_token(value[-2])
+        return ""
+    except Exception as exc:
+        return type(exc).__name__
 
 
 def _instrument_runtime_exception_traceback_capture(source: str) -> str:
@@ -280,7 +210,6 @@ def _instrument_runtime_exception_traceback_capture(source: str) -> str:
 
 
 def _register_autoplay_runtime_aliases() -> None:
-    """Expose this running script under import names used by helper modules."""
     module = sys.modules.get(__name__)
     if module is None:
         return
@@ -301,7 +230,6 @@ def _autoplay_campaign_fragment_paths() -> List[Path]:
 
 
 def _combine_autoplay_campaign_fragments(fragments: List[Path]) -> str:
-    """Combine fragments while keeping all future imports at file start."""
     future_imports: List[str] = []
     seen_futures = set()
     body_parts: List[str] = []
@@ -381,15 +309,7 @@ def _load_autoplay_campaign_runtime() -> None:
     chunk_globals["__name__"] = "_autoplay_campaign_runtime"
     _RUNTIME_LOADED = True
     try:
-        exec(
-            compile(
-                combined_source,
-                combined_filename,
-                "exec",
-            ),
-            chunk_globals,
-            chunk_globals,
-        )
+        exec(compile(combined_source, combined_filename, "exec"), chunk_globals, chunk_globals)
         _wrap_runtime_probe_functions(chunk_globals)
         _wrap_live_manual_turn_timing_functions(chunk_globals)
     finally:
@@ -399,14 +319,9 @@ def _load_autoplay_campaign_runtime() -> None:
 
 def _run_survival_report_writer_hook(argv: List[str], exit_code: object) -> None:
     try:
-        from tests.rpg.autoplay.survival_report_writer_hook import (
-            run_autoplay_survival_report_writer_hook,
-        )
-    except Exception as exc:  # pragma: no cover - defensive post-run hook
-        print(
-            "[AUTOPLAY-SURVIVAL-REPORT] hook_import_failed " + repr(exc),
-            file=sys.stderr,
-        )
+        from tests.rpg.autoplay.survival_report_writer_hook import run_autoplay_survival_report_writer_hook
+    except Exception as exc:
+        print("[AUTOPLAY-SURVIVAL-REPORT] hook_import_failed " + repr(exc), file=sys.stderr)
         return
     result = run_autoplay_survival_report_writer_hook(
         script_path=Path(__file__).resolve(),
@@ -427,12 +342,11 @@ def _run_survival_report_writer_hook(argv: List[str], exit_code: object) -> None
                 sort_keys=True,
             )
         )
-    except Exception:  # pragma: no cover - diagnostics only
+    except Exception:
         print("[AUTOPLAY-SURVIVAL-REPORT] hook_completed", file=sys.stderr)
 
 
 def run_autoplay_campaign(args):
-    """Compatibility in-process autoplay runner for import-time unit tests."""
     from copy import deepcopy
     import zipfile
 
@@ -490,12 +404,7 @@ def run_autoplay_campaign(args):
         last_committed_state = deepcopy(final_turn_state)
 
         if callable(checkpoint):
-            checkpoint(
-                session_id=session_id,
-                turn_index=turn_index,
-                simulation_state=last_committed_state,
-                output_dir=output_dir,
-            )
+            checkpoint(session_id=session_id, turn_index=turn_index, simulation_state=last_committed_state, output_dir=output_dir)
 
         row = {
             "turn_index": turn_index,
@@ -510,9 +419,7 @@ def run_autoplay_campaign(args):
 
     post_objective = globals().get("post_objective_false_progress_warnings")
     post_objective_warnings = post_objective(transcript_rows) if callable(post_objective) else []
-    progress_quality_ok = not post_objective_warnings or not bool(
-        getattr(args, "fail_on_post_objective_weak_progress", False)
-    )
+    progress_quality_ok = not post_objective_warnings or not bool(getattr(args, "fail_on_post_objective_weak_progress", False))
 
     summary = {
         "ok": True,
@@ -523,10 +430,7 @@ def run_autoplay_campaign(args):
                 "compatibility_turn_runtime_count": compatibility_turn_runtime_count,
                 "real_turn_runtime_count": real_turn_runtime_count,
             },
-            "progress_quality": {
-                "ok": progress_quality_ok,
-                "warnings": post_objective_warnings,
-            },
+            "progress_quality": {"ok": progress_quality_ok, "warnings": post_objective_warnings},
         },
         "transcript_rows": transcript_rows,
         "artifact_paths": {},
@@ -540,11 +444,7 @@ def run_autoplay_campaign(args):
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(summary_path, arcname="summary.json")
         zf.write(transcript_path, arcname="autoplay-transcript.json")
-    summary["artifact_paths"] = {
-        "summary": str(summary_path),
-        "transcript": str(transcript_path),
-        "zip": str(zip_path),
-    }
+    summary["artifact_paths"] = {"summary": str(summary_path), "transcript": str(transcript_path), "zip": str(zip_path)}
     summary_path.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
     return summary
 
@@ -555,9 +455,7 @@ if __name__ != "__main__":
 
 if __name__ == "__main__":
     _register_autoplay_runtime_aliases()
-    from app.rpg.autoplay_report_materialization_guard import (
-        install_report_materialization_size_guard_from_argv,
-    )
+    from app.rpg.autoplay_report_materialization_guard import install_report_materialization_size_guard_from_argv
     from tests.rpg.autoplay.deepcopy_recursion_guard import install_deepcopy_recursion_guard_from_argv
     from tests.rpg.autoplay.live_manual_turn_timing import configure_live_manual_turn_timing_from_argv
     from tests.rpg.autoplay.probe_source_map import configure_probe_source_map_from_argv
@@ -565,6 +463,7 @@ if __name__ == "__main__":
     from tests.rpg.autoplay.runtime_probe_payload_capture import configure_runtime_probe_payload_capture_from_argv
     from tests.rpg.autoplay.runtime_turn_result_capture_hook import install_runtime_turn_result_capture_hook_from_argv
     from tests.rpg.autoplay.turn_error_diagnostics_hook import install_turn_error_diagnostics_hook_from_argv
+
     _configure_runtime_exception_traceback_capture(sys.argv[1:])
     configure_runtime_probe_payload_capture_from_argv(sys.argv[1:])
     configure_live_manual_turn_timing_from_argv(sys.argv[1:])
