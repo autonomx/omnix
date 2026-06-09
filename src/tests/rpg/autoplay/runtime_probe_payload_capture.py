@@ -14,8 +14,14 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Optional
 
-SOURCE = "autoplay_runtime_probe_payload_capture_v2"
+SOURCE = "autoplay_runtime_probe_payload_capture_v3"
 ARTIFACT_NAME = "autoplay-runtime-turn-result-payloads.json"
+_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS = (
+    "resources",
+    "data",
+    "test-results",
+    "autoplay-100-n82-travel-location-progression",
+)
 _EVENT_NAME = "runtime_turn_execution.result"
 _MAX_EVENTS = 1000
 _MAX_DEPTH = 8
@@ -43,6 +49,8 @@ _ALLOWED_NAME_TOKENS = (
     "write_probe",
     "record_probe",
     "log_probe",
+    "probe_log",
+    "_probe_log",
     "autoplay_probe",
     "debug_probe",
 )
@@ -58,6 +66,14 @@ def parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
     return None
 
 
+def _default_output_dir() -> Path:
+    return Path.cwd().joinpath(*_DEFAULT_AUTOPLAY_RESULT_DIR_PARTS)
+
+
+def _resolved_output_dir() -> Path:
+    return _OUTPUT_DIR or _default_output_dir()
+
+
 def configure_runtime_probe_payload_capture(*, output_dir: str | Path | None = None) -> None:
     global _OUTPUT_DIR
     if output_dir is not None:
@@ -68,8 +84,8 @@ def configure_runtime_probe_payload_capture_from_argv(argv: Iterable[str]) -> No
     configure_runtime_probe_payload_capture(output_dir=parse_output_dir(argv))
 
 
-def artifact_path() -> Optional[Path]:
-    return (_OUTPUT_DIR / ARTIFACT_NAME) if _OUTPUT_DIR is not None else None
+def artifact_path() -> Path:
+    return _resolved_output_dir() / ARTIFACT_NAME
 
 
 def _safe_json(value: Any, *, depth: int = 0, seen: Optional[set[int]] = None) -> Any:
@@ -117,8 +133,6 @@ def _load_payload(path: Path) -> Dict[str, Any]:
 
 def _write_event(event: Mapping[str, Any]) -> Dict[str, Any]:
     path = artifact_path()
-    if path is None:
-        return {"ok": False, "reason": "output_dir_missing", "source": SOURCE}
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = _load_payload(path)
     events = list(payload.get("events") or [])
@@ -164,6 +178,9 @@ def _interesting_locals(local_vars: Mapping[str, Any]) -> Dict[str, Any]:
         "turn_contract",
         "turn_perf_trace",
         "turn_perf_trace_summary",
+        "story_hook_result",
+        "runtime_error",
+        "exc",
     )
     for name in preferred_names:
         if name in local_vars:
@@ -171,9 +188,17 @@ def _interesting_locals(local_vars: Mapping[str, Any]) -> Dict[str, Any]:
     for name, value in local_vars.items():
         if name in wanted:
             continue
-        if any(token in name for token in ("trace", "runtime", "turn_contract", "turn_perf", "manual_")):
+        if any(token in name for token in ("trace", "runtime", "turn_contract", "turn_perf", "manual_", "error")):
             wanted[name] = _safe_json(value)
     return wanted
+
+
+def _turn_index_from_locals(local_copy: Mapping[str, Any]) -> int | None:
+    return (
+        _turn_index_from_value(local_copy)
+        or _turn_index_from_value(local_copy.get("turn_result"))
+        or _turn_index_from_value(local_copy.get("result"))
+    )
 
 
 def capture_runtime_probe_locals(local_vars: Mapping[str, Any], *, source_label: str = "source_instrumentation") -> Dict[str, Any]:
@@ -183,12 +208,34 @@ def capture_runtime_probe_locals(local_vars: Mapping[str, Any], *, source_label:
         "runtime_result": True,
         "source": SOURCE,
         "capture_source": source_label,
-        "turn_index": _turn_index_from_value(local_copy) or _turn_index_from_value(local_copy.get("turn_result")) or _turn_index_from_value(local_copy.get("result")),
+        "turn_index": _turn_index_from_locals(local_copy),
         "locals": _interesting_locals(local_copy),
         "available_local_names": sorted(str(key) for key in local_copy.keys())[:200],
         "stack_tail": traceback.format_stack(limit=12),
     }
     return _write_event(event)
+
+
+def _caller_locals_event(function_name: str) -> Dict[str, Any] | None:
+    frame = inspect.currentframe()
+    try:
+        caller = frame.f_back.f_back if frame is not None and frame.f_back is not None else None
+        if caller is None:
+            return None
+        local_copy = dict(caller.f_locals)
+        return {
+            "event_class": "runtime_probe_caller_locals",
+            "runtime_result": True,
+            "source": SOURCE,
+            "capture_source": "probe_function_wrapper_caller_locals",
+            "function_name": function_name,
+            "turn_index": _turn_index_from_locals(local_copy),
+            "locals": _interesting_locals(local_copy),
+            "available_local_names": sorted(str(key) for key in local_copy.keys())[:200],
+            "stack_tail": traceback.format_stack(limit=16),
+        }
+    finally:
+        del frame
 
 
 def _value_contains_event(value: Any) -> bool:
@@ -236,6 +283,9 @@ def wrap_runtime_probe_functions(namespace: MutableMapping[str, Any]) -> Dict[st
             @functools.wraps(value)
             def wrapper(*args: Any, __original: Callable[..., Any] = value, __name: str = name, **kwargs: Any) -> Any:
                 if _value_contains_event(args) or _value_contains_event(kwargs):
+                    event = _caller_locals_event(__name)
+                    if event is not None:
+                        _write_event(event)
                     _write_event(
                         {
                             "event_class": "runtime_probe_call",
