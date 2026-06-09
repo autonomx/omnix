@@ -82,20 +82,22 @@ def test_phase13_33_capture_uses_default_output_dir_when_unconfigured(tmp_path: 
     assert event["active_exception_available"] is True
 
 
-def test_phase13_39_instruments_runtime_result_probe_with_bounded_snapshot():
+def test_phase13_40_instruments_runtime_result_probe_with_primitive_fields():
     source = '''
         _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
             "runtime_turn_execution.result",
             turn_index=turn_index,
             ok=_safe_dict(turn_result).get("ok"),
+            keys=",".join(sorted(_safe_dict(turn_result).keys())[:80]),
         )
 '''
     instrumented = loader._instrument_runtime_exception_traceback_capture(source)
-    assert loader._RUNTIME_RESULT_PROBE_CAPTURE_EXPR in instrumented
-    assert "_capture_runtime_probe_snapshot" in instrumented
-    assert "locals()," not in instrumented
-    assert instrumented.index("_capture_runtime_probe_snapshot") < instrumented.index("_probe_log")
+    assert "_capture_runtime_probe_snapshot" not in instrumented
+    assert "turn_result_key_count=len(_safe_dict(turn_result))" in instrumented
+    assert "has_error=(\"error\" in _safe_dict(turn_result))" in instrumented
+    assert "has_traceback=(\"traceback\" in _safe_dict(turn_result))" in instrumented
+    assert "runtime_error_type=type(locals().get(\"runtime_error\")).__name__" in instrumented
 
 
 def test_phase13_39_runtime_probe_snapshot_writes_bounded_payload(tmp_path: Path):
