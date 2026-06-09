@@ -6,7 +6,7 @@ import linecache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-SOURCE = "autoplay_probe_source_map_v2"
+SOURCE = "autoplay_probe_source_map_v3"
 ARTIFACT_NAME = "autoplay-runtime-probe-source-map.json"
 EVENT_TEXT = "runtime_turn_execution.result"
 _EVENT_WORD = "ERR" + "OR:"
@@ -15,9 +15,13 @@ EVENT_TEXTS = (
     "TURN",
     _EVENT_WORD,
     "_capture_runtime_exception_traceback",
+    "runtime_checkpoint_before_companion_systems",
+    "runtime_core_before_apply_turn_authoritative",
+    "runtime_checkpoint_after_companion_systems",
+    "runtime_core_after_apply_turn_authoritative",
 )
-_CONTEXT_RADIUS = 24
-_FUNCTION_CONTEXT_MAX_LINES = 220
+_CONTEXT_RADIUS = 36
+_FUNCTION_CONTEXT_MAX_LINES = 320
 _OUTPUT_DIR: Optional[Path] = None
 
 
@@ -135,7 +139,7 @@ def build_probe_source_map_from_source(source: str, *, filename: str = "") -> Di
                 "event_texts": matched_event_texts,
                 "enclosing_function_name": _enclosing_function(lines, line_index),
                 "enclosing_function_start_line": (function_start + 1) if function_start is not None else None,
-                "enclosing_function_end_line": function_end if function_end is not None else None,
+                "enclosing_function_end_line": function_end if function_start is not None else None,
                 "line": line,
                 "called_helper_names": _helper_names(line),
                 "referenced_local_names": _names_on_line(line),
