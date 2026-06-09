@@ -82,7 +82,7 @@ def test_phase13_33_capture_uses_default_output_dir_when_unconfigured(tmp_path: 
     assert event["active_exception_available"] is True
 
 
-def test_phase13_40_instruments_runtime_result_probe_with_primitive_fields():
+def test_phase13_41_instruments_runtime_result_probe_with_trace_primitives():
     source = '''
         _probe_log(
             bool(getattr(args, "debug_autoplay_stage_timing", False)),
@@ -95,9 +95,26 @@ def test_phase13_40_instruments_runtime_result_probe_with_primitive_fields():
     instrumented = loader._instrument_runtime_exception_traceback_capture(source)
     assert "_capture_runtime_probe_snapshot" not in instrumented
     assert "turn_result_key_count=len(_safe_dict(turn_result))" in instrumented
-    assert "has_error=(\"error\" in _safe_dict(turn_result))" in instrumented
-    assert "has_traceback=(\"traceback\" in _safe_dict(turn_result))" in instrumented
-    assert "runtime_error_type=type(locals().get(\"runtime_error\")).__name__" in instrumented
+    assert "manual_harness_trace_count=_runtime_probe_len" in instrumented
+    assert "manual_stage_trace_count=_runtime_probe_len" in instrumented
+    assert "turn_perf_trace_count=_runtime_probe_len" in instrumented
+    assert "manual_stage_trace_last=_runtime_probe_last_token" in instrumented
+    assert "turn_perf_trace_last=_runtime_probe_last_token" in instrumented
+
+
+def test_phase13_41_runtime_probe_trace_helpers_return_safe_tokens():
+    traces = [
+        {"event": "begin stage", "stage": "manual turn", "ok": False},
+        {"event": "failed stage", "error_type": "RecursionError", "source": "unit test"},
+    ]
+    summary = {"count": 2, "ok": False, "error_type": "RecursionError"}
+
+    assert loader._runtime_probe_len(traces) == 2
+    assert loader._runtime_probe_key_token(summary) == "count;error_type;ok"
+    token = loader._runtime_probe_last_token(traces)
+    assert "event:failed_stage" in token
+    assert "error_type:RecursionError" in token
+    assert " " not in token
 
 
 def test_phase13_39_runtime_probe_snapshot_writes_bounded_payload(tmp_path: Path):
