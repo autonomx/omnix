@@ -24,12 +24,17 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
         sys.path.insert(0, path)
 
 from app.rpg.interactive_cli_live_state import make_live_interactive_state_hook  # noqa: E402
+from app.rpg.interactive_cli_state_checkpoint import deserialize_interactive_cli_state_checkpoint  # noqa: E402
 from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 
 STATEFUL_INTERACTIVE_CLI_VERSION = "interactive_cli_campaign_state_v1"
 DEFAULT_CHECKPOINT_DIRNAME = "interactive-state-checkpoints"
 MANIFEST_FILENAME = "interactive-state-checkpoints-manifest.json"
 ZIP_CHECKPOINT_DIRNAME = DEFAULT_CHECKPOINT_DIRNAME
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _safe_str(value: Any) -> str:
@@ -95,6 +100,53 @@ def append_state_checkpoints_to_zip(*, zip_path: str | Path, manifest_path: str 
     return written
 
 
+def verify_state_checkpoints_in_zip(zip_path: str | Path) -> dict[str, Any]:
+    """Verify that a stateful interactive CLI ZIP contains restorable checkpoints."""
+
+    zip_file = Path(zip_path)
+    if not zip_file.exists() or not zip_file.is_file():
+        return {"ok": False, "error": "zip_missing", "zip_path": str(zip_file)}
+    try:
+        with zipfile.ZipFile(zip_file, "r") as archive:
+            names = set(archive.namelist())
+            if MANIFEST_FILENAME not in names:
+                return {"ok": False, "error": "checkpoint_manifest_missing", "zip_path": str(zip_file)}
+            try:
+                manifest = json.loads(archive.read(MANIFEST_FILENAME).decode("utf-8"))
+            except Exception as exc:
+                return {"ok": False, "error": f"checkpoint_manifest_invalid:{type(exc).__name__}", "zip_path": str(zip_file)}
+            manifest_dict = _safe_dict(manifest)
+            checkpoint_names = [str(name) for name in manifest_dict.get("checkpoints") or []]
+            expected_count = int(manifest_dict.get("checkpoint_count") or 0)
+            if manifest_dict.get("format_version") != STATEFUL_INTERACTIVE_CLI_VERSION:
+                return {"ok": False, "error": "checkpoint_manifest_version_mismatch", "zip_path": str(zip_file), "manifest": manifest_dict}
+            if expected_count != len(checkpoint_names):
+                return {"ok": False, "error": "checkpoint_manifest_count_mismatch", "zip_path": str(zip_file), "manifest": manifest_dict}
+            restored_turns: list[int] = []
+            checkpoint_entries: list[str] = []
+            for checkpoint_name in checkpoint_names:
+                arcname = f"{ZIP_CHECKPOINT_DIRNAME}/{checkpoint_name}"
+                checkpoint_entries.append(arcname)
+                if arcname not in names:
+                    return {"ok": False, "error": "checkpoint_zip_entry_missing", "missing_entry": arcname, "zip_path": str(zip_file), "manifest": manifest_dict}
+                try:
+                    checkpoint = deserialize_interactive_cli_state_checkpoint(archive.read(arcname).decode("utf-8"))
+                except Exception as exc:
+                    return {"ok": False, "error": f"checkpoint_zip_entry_invalid:{type(exc).__name__}", "invalid_entry": arcname, "zip_path": str(zip_file), "manifest": manifest_dict}
+                restored_turns.append(int(_safe_dict(checkpoint).get("turn_index") or 0))
+    except zipfile.BadZipFile:
+        return {"ok": False, "error": "zip_invalid", "zip_path": str(zip_file)}
+    return {
+        "ok": True,
+        "format_version": STATEFUL_INTERACTIVE_CLI_VERSION,
+        "zip_path": str(zip_file),
+        "manifest": manifest_dict,
+        "checkpoint_count": len(checkpoint_entries),
+        "checkpoint_entries": checkpoint_entries,
+        "restored_turns": restored_turns,
+    }
+
+
 def run_stateful_interactive_campaign(
     *,
     turns: int,
@@ -130,12 +182,14 @@ def run_stateful_interactive_campaign(
     manifest_path = write_checkpoint_manifest(output_dir=output_dir, checkpoint_paths=hook.saved_checkpoint_paths)
     artifacts = dict(result.get("artifacts") or {})
     zip_entries: list[str] = []
+    zip_verification: dict[str, Any] = {}
     if artifacts.get("zip_path"):
         zip_entries = append_state_checkpoints_to_zip(
             zip_path=artifacts["zip_path"],
             manifest_path=manifest_path,
             checkpoint_paths=hook.saved_checkpoint_paths,
         )
+        zip_verification = verify_state_checkpoints_in_zip(artifacts["zip_path"])
     summary = dict(result.get("summary") or {})
     summary["stateful_interactive_cli"] = {
         "format_version": STATEFUL_INTERACTIVE_CLI_VERSION,
@@ -144,6 +198,7 @@ def run_stateful_interactive_campaign(
         "checkpoint_manifest_path": str(manifest_path),
         "checkpoint_zip_entry_count": len(zip_entries),
         "checkpoint_zip_entries": zip_entries,
+        "checkpoint_zip_verification": zip_verification,
     }
     result["summary"] = summary
     result["stateful_interactive_cli"] = summary["stateful_interactive_cli"]
@@ -151,6 +206,7 @@ def run_stateful_interactive_campaign(
     artifacts["state_checkpoint_manifest_path"] = str(manifest_path)
     artifacts["state_checkpoint_dir"] = str(resolved_checkpoint_dir)
     artifacts["state_checkpoint_zip_entries"] = zip_entries
+    artifacts["state_checkpoint_zip_verification"] = zip_verification
     result["artifacts"] = artifacts
     return result
 
