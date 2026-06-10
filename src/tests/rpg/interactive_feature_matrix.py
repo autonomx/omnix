@@ -26,29 +26,19 @@ from tests.rpg import interactive_intent_matrix as matrix  # noqa: E402
 
 FEATURE_MATRIX_VERSION = "interactive_feature_matrix_v2"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-feature-matrix"
-KNOWN_FEATURE_GAP_SCENARIO_IDS = frozenset(
-    {
-        "travel_round_trip_route",
-        "npc_memory_recall_probe",
-        "equipment_inventory_probe",
-    }
-)
+KNOWN_FEATURE_GAP_SCENARIO_IDS = frozenset()
 
 IntentFeatureScenario = matrix.IntentMatrixScenario
 FeatureTurnExpectation = matrix.TurnExpectation
 
 
 def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
-    """Return broader feature scenarios for live-provider RPG review.
+    """Return broader feature scenarios for live-provider RPG review."""
 
-    These are smoke-level feature probes.  Expectations are grounded enough to
-    catch wrong routing, generic unrelated responses, and obvious regressions,
-    but intentionally less brittle than deterministic unit tests because live
-    provider wording can vary.
-    """
-
+    E = FeatureTurnExpectation
+    S = IntentFeatureScenario
     return [
-        IntentFeatureScenario(
+        S(
             scenario_id="inn_room_purchase_flow",
             title="Inn: ask for room, price, purchase, and follow-up location",
             description="Covers lodging/room service intent and Bran room follow-up presentation.",
@@ -59,13 +49,13 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 "Where is my room, Bran?",
             ),
             expectations=(
-                FeatureTurnExpectation(1, contains_any=("room", "night", "available", "sleep", "lodging"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(2, contains_any=("room", "night", "silver", "price", "cost"), forbids=("Hot stew", "confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(3, contains_any=("room", "night", "pay", "paid", "silver", "key", "upstairs", "lodging"), forbids=("Hot stew", "confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(4, contains_any=("room", "upstairs", "stairs", "hall", "door", "key", "night"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(1, contains_any=("room", "night", "available", "sleep", "lodging"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(2, contains_any=("room", "night", "silver", "price", "cost"), forbids=("Hot stew", "confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(3, contains_any=("room", "night", "pay", "paid", "silver", "key", "upstairs", "lodging"), forbids=("Hot stew", "confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(4, contains_any=("room", "upstairs", "stairs", "hall", "door", "key", "night"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
             ),
         ),
-        IntentFeatureScenario(
+        S(
             scenario_id="shop_sell_attempt",
             title="Shop: ask to sell provisions and check inventory/currency feedback",
             description="Covers sell/service routing and safe refusal/valuation when no backed sell inventory exists.",
@@ -75,12 +65,12 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 "I sell one ration to Bran.",
             ),
             expectations=(
-                FeatureTurnExpectation(1, contains_any=("sell", "ration", "trade", "buy", "can't", "cannot", "not set up"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(2, contains_any=("ration", "copper", "price", "value", "sell", "trade", "can't", "cannot"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(3, contains_any=("ration", "sell", "sold", "trade", "inventory", "can't", "cannot"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(1, contains_any=("sell", "ration", "trade", "buy", "can't", "cannot", "not set up"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(2, contains_any=("ration", "copper", "price", "value", "sell", "trade", "can't", "cannot"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(3, contains_any=("ration", "sell", "sold", "trade", "inventory", "can't", "cannot"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
             ),
         ),
-        IntentFeatureScenario(
+        S(
             scenario_id="travel_round_trip_route",
             title="Travel: tavern to road to old mill and back toward tavern",
             description="Covers multi-step travel intent and destination preservation beyond a two-turn route.",
@@ -91,13 +81,13 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 "I head back south toward the tavern.",
             ),
             expectations=(
-                FeatureTurnExpectation(1, contains_any=("road", "north", "tavern", "travel", "leave"), final_action_type="travel", final_requested_terms_contains_any=("road", "north", "tavern"), provider_called=True),
-                FeatureTurnExpectation(2, contains_any=("old mill", "road", "continue", "travel", "north"), final_action_type="travel", final_requested_terms_contains_any=("old mill", "road"), provider_called=True),
-                FeatureTurnExpectation(3, contains_any=("old mill", "look", "around", "road", "area"), forbids=("Hot stew", "confirmed job or quest"), provider_called=True),
-                FeatureTurnExpectation(4, contains_any=("south", "tavern", "road", "back", "travel"), final_action_type="travel", final_requested_terms_contains_any=("south", "tavern", "road"), provider_called=True),
+                E(1, contains_any=("road", "north", "tavern", "travel", "leave"), final_action_type="travel", final_requested_terms_contains_any=("road", "north", "tavern"), provider_called=True),
+                E(2, contains_any=("old mill", "road", "continue", "travel", "north"), final_action_type="travel", final_requested_terms_contains_any=("old mill", "road"), provider_called=True),
+                E(3, contains_any=("old mill", "look", "around", "road", "area"), forbids=("Hot stew", "confirmed job or quest"), provider_called=True),
+                E(4, contains_any=("south", "tavern", "road", "back", "travel"), final_action_type="travel", final_requested_terms_contains_any=("south", "tavern", "road"), provider_called=True),
             ),
         ),
-        IntentFeatureScenario(
+        S(
             scenario_id="npc_memory_recall_probe",
             title="NPC memory: tell Bran a name and ask if he recalls it",
             description="Covers short-session memory/recall presentation without requiring durable cross-session persistence.",
@@ -106,11 +96,11 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 "What trail name did I ask you to remember?",
             ),
             expectations=(
-                FeatureTurnExpectation(1, contains_any=("Ash Lantern", "remember", "trail name", "Bran"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(2, contains_any=("Ash Lantern", "trail name", "remember", "recall"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(1, contains_any=("Ash Lantern", "remember", "trail name", "Bran"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(2, contains_any=("Ash Lantern", "trail name", "remember", "recall"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
             ),
         ),
-        IntentFeatureScenario(
+        S(
             scenario_id="equipment_inventory_probe",
             title="Inventory/equipment: check gear, ready weapon, and ask status",
             description="Covers inventory/equipment-style commands without entering a full combat scenario.",
@@ -120,12 +110,12 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 "What am I carrying right now?",
             ),
             expectations=(
-                FeatureTurnExpectation(1, contains_any=("inventory", "gear", "carrying", "ration", "waterskin", "sword", "shield"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
-                FeatureTurnExpectation(2, contains_any=("sword", "shield", "ready", "gear", "weapon"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
-                FeatureTurnExpectation(3, contains_any=("carrying", "inventory", "gear", "ration", "waterskin", "sword", "shield"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+                E(1, contains_any=("inventory", "gear", "carrying", "ration", "waterskin", "sword", "shield"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+                E(2, contains_any=("sword", "shield", "ready", "gear", "weapon"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+                E(3, contains_any=("carrying", "inventory", "gear", "ration", "waterskin", "sword", "shield"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
             ),
         ),
-        IntentFeatureScenario(
+        S(
             scenario_id="backed_quest_acceptance_probe",
             title="Quest: ask for real work, accept only if backed, then clarify next step",
             description="Covers safe quest acceptance behavior: backed quest if present, otherwise grounded no-backed fallback.",
@@ -135,9 +125,9 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 "What is the next step for that job?",
             ),
             expectations=(
-                FeatureTurnExpectation(1, contains_any=("job", "quest", "work", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(2, contains_any=("accept", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
-                FeatureTurnExpectation(3, contains_any=("next", "step", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
+                E(1, contains_any=("job", "quest", "work", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
+                E(2, contains_any=("accept", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
+                E(3, contains_any=("next", "step", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
             ),
         ),
     ]
@@ -207,7 +197,13 @@ def _classify_feature_matrix_results(results: Sequence[Mapping[str, Any]]) -> Di
     return {"results": adjusted_results, "feature_gaps": feature_gaps, "hard_failures": hard_failures}
 
 
-def run_feature_matrix(*, scenarios: Sequence[IntentFeatureScenario] | None = None, output_root: Path | None = None, live_provider: bool = True, seed_live_survival: bool = True) -> Dict[str, Any]:
+def run_feature_matrix(
+    *,
+    scenarios: Sequence[IntentFeatureScenario] | None = None,
+    output_root: Path | None = None,
+    live_provider: bool = True,
+    seed_live_survival: bool = True,
+) -> Dict[str, Any]:
     output_root = output_root or DEFAULT_OUTPUT_ROOT
     result = matrix.run_intent_matrix(
         scenarios=list(scenarios or default_feature_matrix_scenarios()),
@@ -257,7 +253,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     scenarios = _select_feature_scenarios(args.scenario)
     output_root = Path(args.output_root) if args.output_root else DEFAULT_OUTPUT_ROOT
-    result = run_feature_matrix(scenarios=scenarios, output_root=output_root, live_provider=True, seed_live_survival=not bool(args.no_live_survival_seed))
+    result = run_feature_matrix(
+        scenarios=scenarios,
+        output_root=output_root,
+        live_provider=True,
+        seed_live_survival=not bool(args.no_live_survival_seed),
+    )
     print(json.dumps(result["summary"], indent=2, ensure_ascii=False, sort_keys=True, default=str))
     return 0 if not result["summary"]["failed"] else 1
 
