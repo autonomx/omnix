@@ -50,6 +50,10 @@ def _sell_turn_summary(*, target_npc="survival state", narration=None, line=None
     }
 
 
+def _final_classification(turn):
+    return turn["interactive_cli_intent_diagnostics"]["final_classification"]
+
+
 def test_phase13_53_sell_ration_is_not_repaired_as_eating_ration():
     repaired = apply_survival_visible_response_repair(_survival_turn_summary(), player_input="I sell one ration to Bran.")
 
@@ -76,6 +80,8 @@ def test_phase13_53_sell_ration_gets_bran_trade_fallback():
     assert "can't buy that ration" in repaired["raw_npc"]["line"]
     assert "selling provisions is not set up" in repaired["raw_npc"]["line"]
     assert "eat a ration" not in repaired["raw_narration"].lower()
+    assert _final_classification(repaired)["target_npc"] == "Bran"
+    assert "ration" in _final_classification(repaired)["requested_terms"]
 
 
 def test_phase13_53_sell_ration_value_question_gets_bran_trade_fallback():
@@ -89,6 +95,21 @@ def test_phase13_53_sell_ration_value_question_gets_bran_trade_fallback():
     assert "ration" in repaired["raw_npc"]["line"]
     assert "not set up" in repaired["raw_npc"]["line"]
     assert repaired["narration_preview"] == "Bran treats the request as a trade question, not a survival action."
+    assert _final_classification(repaired)["target_npc"] == "Bran"
+
+
+def test_phase13_53_sell_ration_specific_bran_output_with_missing_target_is_stabilized():
+    summary = _sell_turn_summary(
+        target_npc="",
+        narration="Bran considers the ration as a trade question.",
+        line="I can't buy that ration from you yet; selling provisions is not set up.",
+    )
+
+    repaired = apply_interactive_response_quality_cleanup(summary, player_input="I sell one ration to Bran.")
+
+    assert repaired["interactive_cli_response_quality"]["cleanup_source"] == "sell_request_target_stability"
+    assert repaired["raw_npc"]["line"] == "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."
+    assert _final_classification(repaired)["target_npc"] == "Bran"
 
 
 def test_phase13_53_sell_ration_specific_bran_output_is_preserved():
