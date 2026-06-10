@@ -41,7 +41,8 @@ def test_phase13_75_verifier_cli_returns_zero_for_valid_zip(tmp_path: Path, caps
 
     assert verify_cli.main([str(zip_path)]) == 0
 
-    payload = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
     assert payload["ok"] is True
     assert payload["checkpoint_count"] == 1
     assert payload["restored_turns"] == [1]
@@ -50,7 +51,8 @@ def test_phase13_75_verifier_cli_returns_zero_for_valid_zip(tmp_path: Path, caps
 def test_phase13_75_verifier_cli_returns_one_for_missing_zip(tmp_path: Path, capsys) -> None:
     assert verify_cli.main([str(tmp_path / "missing.zip")]) == 1
 
-    payload = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
     assert payload["ok"] is False
     assert payload["error"] == "zip_missing"
 
@@ -61,7 +63,8 @@ def test_phase13_75_verifier_cli_returns_one_for_invalid_zip(tmp_path: Path, cap
 
     assert verify_cli.main([str(invalid_zip)]) == 1
 
-    payload = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
     assert payload["ok"] is False
     assert payload["error"] == "zip_invalid"
 
@@ -73,7 +76,8 @@ def test_phase13_76_verifier_cli_writes_summary_json_for_valid_zip(tmp_path: Pat
 
     assert verify_cli.main([str(zip_path), "--summary-path", str(summary_path)]) == 0
 
-    stdout_payload = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    stdout_payload = json.loads(output.out)
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert stdout_payload["ok"] is True
     assert summary_payload["summary_format_version"] == verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION
@@ -87,7 +91,8 @@ def test_phase13_76_verifier_cli_writes_summary_json_for_invalid_zip(tmp_path: P
 
     assert verify_cli.main([str(tmp_path / "missing.zip"), "--summary-path", str(summary_path)]) == 1
 
-    stdout_payload = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr()
+    stdout_payload = json.loads(output.out)
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert stdout_payload["error"] == "zip_missing"
     assert summary_payload["summary_format_version"] == verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION
@@ -157,3 +162,30 @@ def test_phase13_77_summary_schema_requires_bool_ok() -> None:
         "error": "summary_ok_not_bool",
         "actual_type": "str",
     }
+
+
+def test_phase13_78_status_marker_reports_success_counts() -> None:
+    marker = verify_cli.render_state_zip_verification_status_marker(
+        {"ok": True, "checkpoint_count": 2, "restored_turns": [1, 2]}
+    )
+
+    assert marker == "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=true checkpoint_count=2 restored_turn_count=2 error=none"
+
+
+def test_phase13_78_status_marker_reports_failure_error() -> None:
+    marker = verify_cli.render_state_zip_verification_status_marker(
+        {"ok": False, "error": "zip_missing"}
+    )
+
+    assert marker == "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=false checkpoint_count=0 restored_turn_count=0 error=zip_missing"
+
+
+def test_phase13_78_verifier_cli_emits_status_marker_to_stderr(tmp_path: Path, capsys) -> None:
+    zip_path = tmp_path / "interactive-campaign-results.zip"
+    _write_valid_zip(zip_path)
+
+    assert verify_cli.main([str(zip_path)]) == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["ok"] is True
+    assert output.err.strip() == "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=true checkpoint_count=1 restored_turn_count=1 error=none"
