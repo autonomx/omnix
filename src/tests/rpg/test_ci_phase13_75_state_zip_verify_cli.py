@@ -189,3 +189,58 @@ def test_phase13_78_verifier_cli_emits_status_marker_to_stderr(tmp_path: Path, c
     output = capsys.readouterr()
     assert json.loads(output.out)["ok"] is True
     assert output.err.strip() == "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=true checkpoint_count=1 restored_turn_count=1 error=none"
+
+
+def test_phase13_79_status_marker_parser_round_trips_success_marker() -> None:
+    marker = verify_cli.render_state_zip_verification_status_marker(
+        {"ok": True, "checkpoint_count": 2, "restored_turns": [1, 2]}
+    )
+
+    assert verify_cli.parse_state_zip_verification_status_marker(marker) == {
+        "ok": True,
+        "verification_ok": True,
+        "checkpoint_count": 2,
+        "restored_turn_count": 2,
+        "verification_error": "none",
+    }
+
+
+def test_phase13_79_status_marker_parser_round_trips_failure_marker() -> None:
+    marker = verify_cli.render_state_zip_verification_status_marker(
+        {"ok": False, "error": "zip_missing"}
+    )
+
+    assert verify_cli.parse_state_zip_verification_status_marker(marker) == {
+        "ok": True,
+        "verification_ok": False,
+        "checkpoint_count": 0,
+        "restored_turn_count": 0,
+        "verification_error": "zip_missing",
+    }
+
+
+def test_phase13_79_status_marker_parser_rejects_wrong_prefix() -> None:
+    assert verify_cli.parse_state_zip_verification_status_marker("[OTHER] ok=true") == {
+        "ok": False,
+        "error": "status_marker_prefix_mismatch",
+    }
+
+
+def test_phase13_79_status_marker_parser_rejects_missing_required_keys() -> None:
+    marker = "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=true checkpoint_count=1 error=none"
+
+    assert verify_cli.parse_state_zip_verification_status_marker(marker) == {
+        "ok": False,
+        "error": "status_marker_required_keys_missing",
+        "missing_keys": ["restored_turn_count"],
+    }
+
+
+def test_phase13_79_status_marker_parser_rejects_invalid_values() -> None:
+    bad_ok = "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=yes checkpoint_count=1 restored_turn_count=1 error=none"
+    bad_count = "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=true checkpoint_count=x restored_turn_count=1 error=none"
+    negative_count = "[INTERACTIVE_CLI_STATE_ZIP_VERIFY] ok=true checkpoint_count=-1 restored_turn_count=1 error=none"
+
+    assert verify_cli.parse_state_zip_verification_status_marker(bad_ok)["error"] == "status_marker_ok_invalid"
+    assert verify_cli.parse_state_zip_verification_status_marker(bad_count)["error"] == "status_marker_count_invalid"
+    assert verify_cli.parse_state_zip_verification_status_marker(negative_count)["error"] == "status_marker_count_negative"
