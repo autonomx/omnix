@@ -341,3 +341,48 @@ def test_phase13_80_summary_aggregate_preserves_schema_errors() -> None:
             },
         }
     ]
+
+
+def test_phase13_81_aggregate_writer_persists_deterministic_json(tmp_path: Path) -> None:
+    aggregate = verify_cli.aggregate_state_zip_verification_summaries(
+        [
+            {
+                "summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+                "ok": True,
+                "checkpoint_count": 1,
+                "restored_turns": [1],
+            }
+        ]
+    )
+
+    path = verify_cli.write_state_zip_verification_aggregate(
+        aggregate=aggregate,
+        aggregate_path=tmp_path / "nested" / "state-zip-aggregate.json",
+    )
+
+    assert path == tmp_path / "nested" / "state-zip-aggregate.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == aggregate
+
+
+def test_phase13_81_aggregate_writer_rejects_bad_version(tmp_path: Path) -> None:
+    try:
+        verify_cli.write_state_zip_verification_aggregate(
+            aggregate={"aggregate_format_version": "old", "ok": True},
+            aggregate_path=tmp_path / "aggregate.json",
+        )
+    except ValueError as exc:
+        assert str(exc) == "aggregate_format_version_mismatch"
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_phase13_81_aggregate_writer_requires_bool_ok(tmp_path: Path) -> None:
+    try:
+        verify_cli.write_state_zip_verification_aggregate(
+            aggregate={"aggregate_format_version": verify_cli.STATE_ZIP_VERIFY_AGGREGATE_VERSION, "ok": "true"},
+            aggregate_path=tmp_path / "aggregate.json",
+        )
+    except ValueError as exc:
+        assert str(exc) == "aggregate_ok_not_bool"
+    else:
+        raise AssertionError("expected ValueError")
