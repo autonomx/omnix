@@ -17,6 +17,7 @@ def _turn(player_input: str, *, action_type: str, target: str = "", terms=None, 
         "player_input": player_input,
         "raw_narration": narration,
         "raw_npc": npc,
+        "narration_preview": narration,
         "narration_source": narration_source,
         "raw_result": {"narration": narration, "npc": npc, "narration_source": narration_source},
         "extracted": {"narration": narration, "npc_speaker": npc.get("speaker", ""), "npc_line": npc.get("line", "")},
@@ -71,6 +72,30 @@ def test_phase13_50_companion_cleanup_removes_meta_player_phrase():
     assert cleaned["raw_npc"]["speaker"] == "Bran"
     assert "Help the player" not in cleaned["raw_npc"]["line"]
     assert "survive the road ahead" in cleaned["raw_npc"]["line"]
+
+
+def test_phase13_50_companion_cleanup_syncs_better_raw_response_into_preview_and_extracted():
+    original = _turn(
+        "Bran, will you join my party as a companion?",
+        action_type="talk",
+        target="Bran",
+        terms=["companion"],
+        narration="Bran weighs the companion offer and says he is willing to join if you confirm it.",
+        npc={"speaker": "Bran", "line": "If you truly mean it, say the word and I will walk with you."},
+    )
+    original["narration_preview"] = "The moment responds without producing a major new consequence."
+    original["extracted"] = {
+        "narration": "The moment responds without producing a major new consequence.",
+        "npc_speaker": "",
+        "npc_line": "",
+    }
+
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="Bran, will you join my party as a companion?")
+
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "companion_response_sync"
+    assert cleaned["narration_preview"].startswith("Bran weighs")
+    assert cleaned["extracted"]["npc_speaker"] == "Bran"
+    assert "say the word" in cleaned["extracted"]["npc_line"]
 
 
 def test_phase13_50_dialogue_cleanup_keeps_bran_as_speaker():
@@ -139,6 +164,23 @@ def test_phase13_50_quest_fallback_cleanup_handles_generic_environment_npcs_labe
     assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "quest_fallback_speaker_stability"
 
 
+def test_phase13_50_quest_fallback_cleanup_handles_tavern_general_label_from_live_matrix():
+    original = _turn(
+        "I'm looking for a quest.",
+        action_type="talk",
+        target="The Tavern (General)",
+        terms=["quest"],
+        narration="The Tavern (General) checks what he can actually offer and has no backed quest available in the current state.",
+        npc={"speaker": "The Tavern (General)", "line": "I do not have a confirmed job or quest for you right now."},
+        narration_source="quest_repaired",
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="I'm looking for a quest.")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["extracted"]["npc_speaker"] == "Bran"
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "quest_fallback_speaker_stability"
+
+
 def test_phase13_50_rumor_fallback_cleanup_uses_bran_instead_of_atmosphere_label():
     original = _turn(
         "Any rumors around here?",
@@ -164,6 +206,23 @@ def test_phase13_50_rumor_fallback_cleanup_handles_general_environment_npcs_labe
         terms=["rumor"],
         narration="General Environment/NPCs checks the confirmed rumors and news and finds nothing backed by the current state.",
         npc={"speaker": "General Environment/NPCs", "line": "I do not have any confirmed rumors or news for you right now."},
+        narration_source="rumor_repaired",
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="Any rumors around here?")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["extracted"]["npc_speaker"] == "Bran"
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "rumor_fallback_speaker_stability"
+
+
+def test_phase13_50_rumor_fallback_cleanup_handles_general_atmosphere_locals_label_from_live_matrix():
+    original = _turn(
+        "Any rumors around here?",
+        action_type="talk",
+        target="General Atmosphere/Locals",
+        terms=["rumor"],
+        narration="General Atmosphere/Locals checks the confirmed rumors and news and finds nothing backed by the current state.",
+        npc={"speaker": "General Atmosphere/Locals", "line": "I do not have any confirmed rumors or news for you right now."},
         narration_source="rumor_repaired",
     )
     cleaned = apply_interactive_response_quality_cleanup(original, player_input="Any rumors around here?")
