@@ -16,6 +16,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from app.rpg.interactive_cli_commerce_response_quality import apply_commerce_sell_state_to_matrix_result  # noqa: E402
 from app.rpg.interactive_cli_equipment_response_quality import apply_equipment_inventory_to_matrix_result  # noqa: E402
 from app.rpg.interactive_cli_memory_response_quality import apply_short_session_memory_recall_to_matrix_result  # noqa: E402
 from app.rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
@@ -99,15 +100,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if not bool(args.no_response_quality_cleanup):
         cleanup = apply_response_quality_to_matrix_result(result)
+        commerce_cleanup = apply_commerce_sell_state_to_matrix_result(result)
         travel_cleanup = apply_travel_state_to_matrix_result(result)
         memory_cleanup = apply_short_session_memory_recall_to_matrix_result(result)
         equipment_cleanup = apply_equipment_inventory_to_matrix_result(result)
         result["summary"]["response_quality_cleanup"] = cleanup
+        result["summary"]["commerce_response_quality_cleanup"] = commerce_cleanup
         result["summary"]["travel_state_cleanup"] = travel_cleanup
         result["summary"]["memory_response_quality_cleanup"] = memory_cleanup
         result["summary"]["equipment_response_quality_cleanup"] = equipment_cleanup
         changed_turns = (
             int(cleanup.get("changed_turns") or 0)
+            + int(commerce_cleanup.get("changed_turns") or 0)
             + int(travel_cleanup.get("changed_turns") or 0)
             + int(memory_cleanup.get("changed_turns") or 0)
             + int(equipment_cleanup.get("changed_turns") or 0)
@@ -115,6 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if changed_turns > 0:
             result = _revalidate_after_cleanup(result)
             result["summary"]["response_quality_cleanup"] = cleanup
+            result["summary"]["commerce_response_quality_cleanup"] = commerce_cleanup
             result["summary"]["travel_state_cleanup"] = travel_cleanup
             result["summary"]["memory_response_quality_cleanup"] = memory_cleanup
             result["summary"]["equipment_response_quality_cleanup"] = equipment_cleanup
