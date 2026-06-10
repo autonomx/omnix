@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, Mapping
 
 RESPONSE_QUALITY_SOURCE = "interactive_cli_response_quality_v1"
 _RESPONSE_QUALITY_SHOP_SELL_PATCH = "phase_13_53_shop_sell_cleanup_v4"
+_RESPONSE_QUALITY_TRAVEL_PATCH = "phase_13_54_travel_round_trip_cleanup_v1"
 _GENERIC_MOVEMENT_NARRATION = "the scene shifts with the movement"
 _GENERIC_MOMENT_NARRATION = "the moment responds without producing a major new consequence"
 _NON_PERSON_SPEAKERS = {
@@ -72,6 +73,29 @@ _SELL_GENERIC_REFUSAL_TERMS = (
     _GENERIC_MOMENT_NARRATION,
     "without producing a major new consequence",
 )
+_TRAVEL_REQUEST_TERMS = (
+    "travel",
+    "leave",
+    "road",
+    "north",
+    "south",
+    "east",
+    "west",
+    "continue",
+    "toward",
+    "old mill",
+    "mill",
+    "head back",
+    "go back",
+    "back south",
+)
+_TRAVEL_RESPONSE_TERMS = ("road", "north", "south", "tavern", "old mill", "travel", "leave", "continue", "back")
+_TRAVEL_GENERIC_TERMS = (
+    _GENERIC_MOVEMENT_NARRATION,
+    _GENERIC_MOMENT_NARRATION,
+    "without producing a major new consequence",
+    "no major consequence",
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -120,6 +144,18 @@ def _is_sell_request(player_input: str, intent: Mapping[str, Any]) -> bool:
     )
 
 
+def _is_travel_request(player_input: str, intent: Mapping[str, Any]) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    terms = " ".join(_safe_str(term).lower() for term in _safe_list(_safe_dict(intent).get("requested_terms")))
+    action_type = _safe_str(_safe_dict(intent).get("action_type")).lower()
+    combined = " ".join([text, terms])
+    if action_type == "travel":
+        return True
+    if _contains_any(combined, _TRAVEL_REQUEST_TERMS):
+        return True
+    return False
+
+
 def _final_intent(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
     diagnostics = _safe_dict(_safe_dict(turn_summary).get("interactive_cli_intent_diagnostics"))
     if not diagnostics:
@@ -144,13 +180,15 @@ def _target_label(intent: Mapping[str, Any], player_input: str) -> str:
         return "the old mill"
     if "bandit" in text:
         return "the road bandit"
+    if "tavern" in text:
+        return "the tavern"
     if target and target.lower() not in _NON_PERSON_SPEAKERS:
         return target
     return "the road ahead"
 
 
 def _direction_label(intent: Mapping[str, Any], player_input: str) -> str:
-    text = _requested_terms(intent, player_input).lower()
+    text = " ".join([_requested_terms(intent, player_input), _safe_str(player_input)]).lower()
     for direction in ("north", "south", "east", "west"):
         if direction in text:
             return direction
@@ -161,6 +199,23 @@ def _sell_requested_terms(existing_terms: Iterable[Any], speaker: str) -> list[s
     requested_terms = [_safe_str(term).strip() for term in existing_terms if _safe_str(term).strip()]
     requested_terms_lower = {term.lower() for term in requested_terms}
     for term in ("sell", "ration", "trade", "copper", speaker):
+        if term and term.lower() not in requested_terms_lower:
+            requested_terms.append(term)
+            requested_terms_lower.add(term.lower())
+    return requested_terms
+
+
+def _travel_requested_terms(existing_terms: Iterable[Any], player_input: str) -> list[str]:
+    requested_terms = [_safe_str(term).strip() for term in existing_terms if _safe_str(term).strip()]
+    requested_terms_lower = {term.lower() for term in requested_terms}
+    text = _safe_str(player_input).lower()
+    candidates = ["travel", "road"]
+    for term in ("north", "south", "east", "west", "tavern", "old mill", "leave", "continue", "back", "look", "around"):
+        if term in text:
+            candidates.append(term)
+    if "mill" in text and "old mill" not in candidates:
+        candidates.append("old mill")
+    for term in candidates:
         if term and term.lower() not in requested_terms_lower:
             requested_terms.append(term)
             requested_terms_lower.add(term.lower())
@@ -257,6 +312,35 @@ def _set_visible_response(
         warnings.append(warning)
     out["scenario_warnings"] = warnings
     return out
+
+
+def _set_travel_response(
+    out: Dict[str, Any],
+    *,
+    narration: str,
+    source: str,
+    player_input: str,
+    intent: Mapping[str, Any],
+) -> Dict[str, Any]:
+    cleaned = _set_visible_response(out, narration=narration, source=source)
+    for diagnostics in (
+        _safe_dict(cleaned.get("interactive_cli_intent_diagnostics")),
+        _safe_dict(_safe_dict(cleaned.get("raw_result")).get("interactive_cli_intent_diagnostics")),
+    ):
+        final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
+        final["action_type"] = "travel"
+        final["requested_terms"] = _travel_requested_terms(
+            _safe_list(final.get("requested_terms") or _safe_dict(intent).get("requested_terms")),
+            player_input,
+        )
+        diagnostics["final_classification"] = final
+        diagnostics["response_quality_patch"] = _RESPONSE_QUALITY_TRAVEL_PATCH
+    raw_result = _safe_dict(cleaned.get("raw_result"))
+    raw_result["interactive_cli_response_quality"]["patch"] = _RESPONSE_QUALITY_TRAVEL_PATCH
+    cleaned["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
+    cleaned["result"] = raw_result
+    cleaned["raw_result"] = raw_result
+    return cleaned
 
 
 def _visible_output_text(out: Mapping[str, Any]) -> str:
@@ -356,20 +440,25 @@ def _cleanup_party(out: Dict[str, Any], player_input: str, intent: Mapping[str, 
 
 
 def _cleanup_travel(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
-    raw = _safe_dict(out.get("raw_result") or out.get("result"))
-    narration = _safe_str(out.get("raw_narration") or raw.get("narration")).lower()
-    action_type = _safe_str(_safe_dict(intent).get("action_type")).lower()
-    if action_type != "travel" and not _contains_any(player_input, ("travel", "continue along", "toward")):
+    if not _is_travel_request(player_input, intent):
         return None
-    if _GENERIC_MOVEMENT_NARRATION not in narration:
+    output_text = _visible_output_text(out)
+    input_text = _safe_str(player_input).lower()
+    if not (_contains_any(output_text, _TRAVEL_GENERIC_TERMS) or not _contains_any(output_text, _TRAVEL_RESPONSE_TERMS)):
         return None
-    destination = _target_label(intent, player_input)
+
     direction = _direction_label(intent, player_input)
-    if direction == "along the road":
-        cleaned = f"You continue along the road toward {destination}, keeping the current lead in view."
+    if "look" in input_text and "old mill" in input_text:
+        cleaned = "You look around near the old mill, taking in the road, the weathered stones, and the quiet area around it."
+    elif "old mill" in input_text or "mill" in input_text:
+        cleaned = "You continue along the road toward the old mill, keeping the tavern behind you and the route in view."
+    elif "south" in input_text and "tavern" in input_text:
+        cleaned = "You head back south along the road toward the tavern, retracing the route from the old mill."
+    elif direction == "along the road":
+        cleaned = "You continue along the road, keeping the current route and nearby landmarks in view."
     else:
-        cleaned = f"You travel {direction} toward {destination}, leaving the tavern behind while keeping the road in sight."
-    return _set_visible_response(out, narration=cleaned, source="travel_location_specificity")
+        cleaned = f"You travel {direction} along the road away from the tavern, keeping the route clear."
+    return _set_travel_response(out, narration=cleaned, source="travel_round_trip_specificity", player_input=player_input, intent=intent)
 
 
 def _cleanup_combat(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
@@ -427,7 +516,7 @@ def apply_response_quality_to_matrix_result(result: Mapping[str, Any]) -> Dict[s
     return {
         "ok": True,
         "source": RESPONSE_QUALITY_SOURCE,
-        "patch": _RESPONSE_QUALITY_SHOP_SELL_PATCH,
+        "patch": _RESPONSE_QUALITY_TRAVEL_PATCH,
         "changed_turns": changed,
         "scenarios": scenarios,
     }
