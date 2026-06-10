@@ -19,6 +19,37 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 from tests.rpg.interactive_cli_campaign_state import verify_state_checkpoints_in_zip  # noqa: E402
 
 STATE_ZIP_VERIFY_SUMMARY_VERSION = "interactive_cli_state_zip_verify_summary_v1"
+STATE_ZIP_VERIFY_SUMMARY_REQUIRED_KEYS = frozenset({"summary_format_version", "ok"})
+
+
+def validate_state_zip_verification_summary_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the small machine-readable summary schema emitted by this CLI."""
+
+    missing = sorted(key for key in STATE_ZIP_VERIFY_SUMMARY_REQUIRED_KEYS if key not in payload)
+    if missing:
+        return {
+            "ok": False,
+            "error": "summary_required_keys_missing",
+            "missing_keys": missing,
+        }
+    version = payload.get("summary_format_version")
+    if version != STATE_ZIP_VERIFY_SUMMARY_VERSION:
+        return {
+            "ok": False,
+            "error": "summary_format_version_mismatch",
+            "expected": STATE_ZIP_VERIFY_SUMMARY_VERSION,
+            "actual": version,
+        }
+    if not isinstance(payload.get("ok"), bool):
+        return {
+            "ok": False,
+            "error": "summary_ok_not_bool",
+            "actual_type": type(payload.get("ok")).__name__,
+        }
+    return {
+        "ok": True,
+        "summary_format_version": STATE_ZIP_VERIFY_SUMMARY_VERSION,
+    }
 
 
 def write_state_zip_verification_summary(*, result: Mapping[str, Any], summary_path: str | Path) -> Path:
@@ -28,6 +59,9 @@ def write_state_zip_verification_summary(*, result: Mapping[str, Any], summary_p
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = dict(result)
     payload["summary_format_version"] = STATE_ZIP_VERIFY_SUMMARY_VERSION
+    validation = validate_state_zip_verification_summary_payload(payload)
+    if not validation.get("ok"):
+        raise ValueError(str(validation.get("error") or "summary_schema_invalid"))
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
     return path
 
