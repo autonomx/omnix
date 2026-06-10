@@ -88,6 +88,22 @@ def test_phase13_50_dialogue_cleanup_keeps_bran_as_speaker():
     assert cleaned["raw_narration"].startswith("Bran answers")
 
 
+def test_phase13_50_dialogue_cleanup_handles_this_place_speaker_from_live_matrix():
+    original = _turn(
+        "What do you know about this place?",
+        action_type="unknown",
+        target="This place",
+        terms=["this place"],
+        narration="This place answers from what is already established about the scene.",
+        npc={"speaker": "This place", "line": "This place sits by the road, with the tavern serving as the nearest shelter."},
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="What do you know about this place?")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["extracted"]["npc_speaker"] == "Bran"
+    assert cleaned["raw_narration"] == "Bran answers from what is already established about the scene."
+
+
 def test_phase13_50_matrix_cleanup_counts_changed_turns():
     scenario = type("Scenario", (), {"scenario_id": "travel_route_choice"})()
     result = {
