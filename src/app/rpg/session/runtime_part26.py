@@ -5,6 +5,8 @@ from __future__ import annotations
 from .runtime_part25 import *
 from .runtime_part25 import _apply_turn_authoritative as _base_apply_turn_authoritative
 
+_COMBAT_QUEST_BASE_APPLY_TURN_AUTHORITATIVE = _base_apply_turn_authoritative
+
 
 def _combat_quest_contract_sources(payload: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
     payload = _safe_dict(payload)
@@ -82,8 +84,9 @@ def _apply_turn_authoritative(
     action: Dict[str, Any] | None = None,
     *,
     performance_override: Dict[str, Any] | None = None,
+    _base_authoritative: Any = _COMBAT_QUEST_BASE_APPLY_TURN_AUTHORITATIVE,
 ) -> Dict[str, Any]:
-    payload = _base_apply_turn_authoritative(session_id, player_input, action, performance_override=performance_override)
+    payload = _base_authoritative(session_id, player_input, action, performance_override=performance_override)
     return _apply_combat_quest_narrative_contract(payload)
 
 
