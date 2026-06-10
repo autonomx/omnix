@@ -12,6 +12,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping
 
 RESPONSE_QUALITY_SOURCE = "interactive_cli_response_quality_v1"
+_RESPONSE_QUALITY_SHOP_SELL_PATCH = "phase_13_53_shop_sell_cleanup_v4"
 _GENERIC_MOVEMENT_NARRATION = "the scene shifts with the movement"
 _GENERIC_MOMENT_NARRATION = "the moment responds without producing a major new consequence"
 _NON_PERSON_SPEAKERS = {
@@ -64,7 +65,13 @@ _SELL_REQUEST_TERMS = (
 _SELL_ITEM_TERMS = ("ration", "rations", "provision", "provisions", "item", "gear", "inventory")
 _SELL_RESPONSE_TERMS = ("sell", "trade", "ration", "copper", "cannot", "can't", "not set up", "buy")
 _SELL_BAD_SURVIVAL_TERMS = ("you eat a ration", "hunger improves", "consume ration")
-_SELL_GENERIC_REFUSAL_TERMS = ("bran refuses", "unreasonable demand", "refuses. reason")
+_SELL_GENERIC_REFUSAL_TERMS = (
+    "bran refuses",
+    "unreasonable demand",
+    "refuses. reason",
+    _GENERIC_MOMENT_NARRATION,
+    "without producing a major new consequence",
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -101,7 +108,8 @@ def _is_fallback_environment_speaker(value: Any) -> bool:
 def _is_sell_request(player_input: str, intent: Mapping[str, Any]) -> bool:
     text = _safe_str(player_input).strip().lower()
     terms = " ".join(_safe_str(term).lower() for term in _safe_list(_safe_dict(intent).get("requested_terms")))
-    combined = " ".join([text, terms])
+    target = _safe_str(_safe_dict(intent).get("target_npc")).lower()
+    combined = " ".join([text, terms, target])
     if not _contains_any(combined, _SELL_ITEM_TERMS):
         return False
     if _contains_any(combined, _SELL_REQUEST_TERMS):
@@ -149,6 +157,16 @@ def _direction_label(intent: Mapping[str, Any], player_input: str) -> str:
     return "along the road"
 
 
+def _sell_requested_terms(existing_terms: Iterable[Any], speaker: str) -> list[str]:
+    requested_terms = [_safe_str(term).strip() for term in existing_terms if _safe_str(term).strip()]
+    requested_terms_lower = {term.lower() for term in requested_terms}
+    for term in ("sell", "ration", "trade", "copper", speaker):
+        if term and term.lower() not in requested_terms_lower:
+            requested_terms.append(term)
+            requested_terms_lower.add(term.lower())
+    return requested_terms
+
+
 def _updated_diagnostics_for_visible_response(
     diagnostics_value: Any,
     *,
@@ -159,17 +177,15 @@ def _updated_diagnostics_for_visible_response(
     diagnostics["first_call_visible_response_suppressed_by_response_quality"] = True
     diagnostics["response_quality_source"] = RESPONSE_QUALITY_SOURCE
     diagnostics["response_quality_cleanup_source"] = cleanup_source
+    diagnostics["response_quality_patch"] = _RESPONSE_QUALITY_SHOP_SELL_PATCH
     final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
     if speaker:
         final["target_npc"] = speaker
+        final["target_name"] = speaker
+        final["target_id"] = "npc:bran"
         final["action_type"] = "economy"
-        requested_terms = [_safe_str(term) for term in _safe_list(final.get("requested_terms"))]
-        requested_terms_lower = {term.lower() for term in requested_terms}
-        for term in ("sell", "ration", speaker):
-            if term.lower() not in requested_terms_lower:
-                requested_terms.append(term)
-                requested_terms_lower.add(term.lower())
-        final["requested_terms"] = requested_terms
+        final["service_kind"] = "trade"
+        final["requested_terms"] = _sell_requested_terms(_safe_list(final.get("requested_terms")), speaker)
     if final:
         diagnostics["final_classification"] = final
     return diagnostics
@@ -190,10 +206,13 @@ def _set_visible_response(
         "applied": True,
         "source": RESPONSE_QUALITY_SOURCE,
         "cleanup_source": source,
+        "patch": _RESPONSE_QUALITY_SHOP_SELL_PATCH,
     }
     if speaker or line:
         raw_result["npc"] = {"speaker": speaker, "line": line}
         raw_result["target_npc"] = speaker
+        raw_result["target_name"] = speaker
+        raw_result["target_id"] = "npc:bran" if speaker == "Bran" else speaker
     elif "npc" not in raw_result:
         raw_result["npc"] = {"speaker": "", "line": ""}
 
@@ -205,14 +224,19 @@ def _set_visible_response(
     raw_result["interactive_cli_intent_diagnostics"] = diagnostics
 
     out["raw_result"] = raw_result
+    out["result"] = raw_result
     out["raw_narration"] = narration
+    out["narration"] = narration
     out["narration_preview"] = narration
     out["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
     out["interactive_cli_intent_diagnostics"] = diagnostics
     if speaker or line:
         npc_payload = {"speaker": speaker, "line": line}
         out["raw_npc"] = npc_payload
+        out["npc"] = npc_payload
         out["target_npc"] = speaker
+        out["target_name"] = speaker
+        out["target_id"] = "npc:bran" if speaker == "Bran" else speaker
         out["npc_speaker"] = speaker
         out["npc_line"] = line
         out["raw_npc_speaker"] = speaker
@@ -396,9 +420,14 @@ def apply_response_quality_to_matrix_result(result: Mapping[str, Any]) -> Dict[s
             if _safe_dict(cleaned).get("interactive_cli_response_quality"):
                 scenario_changed += 1
             turns.append(cleaned)
-        if scenario_changed:
-            scenario_result["turns"] = turns
-            item["result"] = scenario_result
-            changed += scenario_changed
+        scenario_result["turns"] = turns
+        item["result"] = scenario_result
+        changed += scenario_changed
         scenarios.append({"scenario_id": scenario_id, "changed_turns": scenario_changed})
-    return {"ok": True, "source": RESPONSE_QUALITY_SOURCE, "changed_turns": changed, "scenarios": scenarios}
+    return {
+        "ok": True,
+        "source": RESPONSE_QUALITY_SOURCE,
+        "patch": _RESPONSE_QUALITY_SHOP_SELL_PATCH,
+        "changed_turns": changed,
+        "scenarios": scenarios,
+    }
