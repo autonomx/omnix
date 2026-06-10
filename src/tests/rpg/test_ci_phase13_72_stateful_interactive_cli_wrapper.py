@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -33,11 +34,50 @@ def test_phase13_72_manifest_is_deterministic(tmp_path: Path) -> None:
     }
 
 
+def test_phase13_73_appends_state_checkpoint_artifacts_to_existing_zip(tmp_path: Path) -> None:
+    checkpoint_dir = state_cli.default_checkpoint_dir(tmp_path)
+    checkpoint_dir.mkdir(parents=True)
+    checkpoint = checkpoint_dir / "turn-0001-interactive-cli-state-checkpoint.json"
+    checkpoint.write_text('{"ok": true}', encoding="utf-8")
+    manifest_path = state_cli.write_checkpoint_manifest(output_dir=tmp_path, checkpoint_paths=[checkpoint])
+    zip_path = tmp_path / "interactive-campaign-results.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("interactive-summary.json", "{}")
+
+    written = state_cli.append_state_checkpoints_to_zip(
+        zip_path=zip_path,
+        manifest_path=manifest_path,
+        checkpoint_paths=[checkpoint],
+    )
+
+    assert written == [
+        state_cli.MANIFEST_FILENAME,
+        f"{state_cli.ZIP_CHECKPOINT_DIRNAME}/turn-0001-interactive-cli-state-checkpoint.json",
+    ]
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        assert sorted(archive.namelist()) == sorted([
+            "interactive-summary.json",
+            state_cli.MANIFEST_FILENAME,
+            f"{state_cli.ZIP_CHECKPOINT_DIRNAME}/turn-0001-interactive-cli-state-checkpoint.json",
+        ])
+
+    assert state_cli.append_state_checkpoints_to_zip(
+        zip_path=zip_path,
+        manifest_path=manifest_path,
+        checkpoint_paths=[checkpoint],
+    ) == []
+
+
 def test_phase13_72_stateful_wrapper_installs_hook_and_reports_checkpoints(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, Any] = {}
 
     def fake_run_interactive_campaign(**kwargs: Any) -> dict[str, Any]:
         captured.update(kwargs)
+        output_dir = Path(kwargs["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = output_dir / "interactive-campaign-results.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("interactive-summary.json", "{}")
         turn_summary = {
             "turn_index": 1,
             "player_input": "Bran, remember this: my trail name is Ash Lantern.",
@@ -61,7 +101,7 @@ def test_phase13_72_stateful_wrapper_installs_hook_and_reports_checkpoints(monke
         return {
             "summary": {"completed_turns": 1},
             "turns": [turn_summary],
-            "artifacts": {"output_dir": str(kwargs["output_dir"])},
+            "artifacts": {"output_dir": str(output_dir), "zip_path": str(zip_path)},
         }
 
     monkeypatch.setattr(state_cli.cli, "run_interactive_campaign", fake_run_interactive_campaign)
@@ -89,3 +129,13 @@ def test_phase13_72_stateful_wrapper_installs_hook_and_reports_checkpoints(monke
     assert checkpoint_payload["bundle"]["states"]["memory"]["facts"]["trail_name"] == "Ash Lantern"
     manifest = json.loads(Path(state_info["checkpoint_manifest_path"]).read_text(encoding="utf-8"))
     assert manifest["checkpoints"] == [checkpoint_path.name]
+    assert state_info["checkpoint_zip_entries"] == [
+        state_cli.MANIFEST_FILENAME,
+        f"{state_cli.ZIP_CHECKPOINT_DIRNAME}/{checkpoint_path.name}",
+    ]
+    assert result["artifacts"]["state_checkpoint_zip_entries"] == state_info["checkpoint_zip_entries"]
+
+    with zipfile.ZipFile(output_dir / "interactive-campaign-results.zip", "r") as archive:
+        names = set(archive.namelist())
+    assert state_cli.MANIFEST_FILENAME in names
+    assert f"{state_cli.ZIP_CHECKPOINT_DIRNAME}/{checkpoint_path.name}" in names
