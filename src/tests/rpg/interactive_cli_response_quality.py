@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, Mapping
 
 RESPONSE_QUALITY_SOURCE = "interactive_cli_response_quality_v1"
 _GENERIC_MOVEMENT_NARRATION = "the scene shifts with the movement"
+_GENERIC_MOMENT_NARRATION = "the moment responds without producing a major new consequence"
 _NON_PERSON_SPEAKERS = {
     "the tavern",
     "tavern",
@@ -31,6 +32,10 @@ _FALLBACK_ENVIRONMENT_SPEAKERS = {
     "town/tavern atmosphere",
     "tavern atmosphere",
     "the tavern atmosphere",
+    "the tavern (general)",
+    "tavern (general)",
+    "general atmosphere/locals",
+    "atmosphere/locals",
 }
 
 
@@ -214,6 +219,9 @@ def _cleanup_party(out: Dict[str, Any], player_input: str, intent: Mapping[str, 
     npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
     line = _safe_str(npc.get("line"))
     narration = _safe_str(out.get("raw_narration") or raw.get("narration"))
+    preview = _safe_str(out.get("narration_preview"))
+    extracted = _safe_dict(out.get("extracted"))
+    extracted_narration = _safe_str(extracted.get("narration"))
     if "help the player" in line.lower():
         return _set_visible_response(
             out,
@@ -229,6 +237,18 @@ def _cleanup_party(out: Dict[str, Any], player_input: str, intent: Mapping[str, 
             speaker="Bran",
             line="Then I am with you. I'll help you survive the road ahead.",
             source="companion_acceptance_voice",
+        )
+    if line.strip() and narration.strip() and (
+        _GENERIC_MOMENT_NARRATION in preview.lower()
+        or _GENERIC_MOMENT_NARRATION in extracted_narration.lower()
+        or not _safe_str(extracted.get("npc_speaker")).strip()
+    ):
+        return _set_visible_response(
+            out,
+            narration=narration,
+            speaker=_safe_str(npc.get("speaker")).strip() or "Bran",
+            line=line,
+            source="companion_response_sync",
         )
     return None
 
