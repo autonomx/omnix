@@ -107,3 +107,53 @@ def test_phase13_76_summary_writer_creates_parent_dirs(tmp_path: Path) -> None:
         "checkpoint_count": 0,
         "ok": True,
     }
+
+
+def test_phase13_77_summary_schema_accepts_valid_payload() -> None:
+    validation = verify_cli.validate_state_zip_verification_summary_payload(
+        {
+            "summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+            "ok": True,
+            "checkpoint_count": 1,
+        }
+    )
+
+    assert validation == {
+        "ok": True,
+        "summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+    }
+
+
+def test_phase13_77_summary_schema_rejects_missing_required_keys() -> None:
+    validation = verify_cli.validate_state_zip_verification_summary_payload({"checkpoint_count": 1})
+
+    assert validation == {
+        "ok": False,
+        "error": "summary_required_keys_missing",
+        "missing_keys": ["ok", "summary_format_version"],
+    }
+
+
+def test_phase13_77_summary_schema_rejects_wrong_version() -> None:
+    validation = verify_cli.validate_state_zip_verification_summary_payload(
+        {"summary_format_version": "old", "ok": True}
+    )
+
+    assert validation == {
+        "ok": False,
+        "error": "summary_format_version_mismatch",
+        "expected": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+        "actual": "old",
+    }
+
+
+def test_phase13_77_summary_schema_requires_bool_ok() -> None:
+    validation = verify_cli.validate_state_zip_verification_summary_payload(
+        {"summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION, "ok": "true"}
+    )
+
+    assert validation == {
+        "ok": False,
+        "error": "summary_ok_not_bool",
+        "actual_type": "str",
+    }
