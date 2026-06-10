@@ -1,4 +1,5 @@
 import json
+import zipfile
 from pathlib import Path
 
 from tests.rpg.autoplay import runtime_apply_chain_probe as probe
@@ -63,3 +64,20 @@ def test_phase13_49_runtime_apply_chain_probe_records_manual_turn_return(tmp_pat
     return_events = [event for event in artifact["events"] if event["event_class"] == "runtime_apply_chain_return"]
     assert return_events[-1]["return_payload_shape"]["has_error"] is True
     assert return_events[-1]["return_payload_shape"]["safe_excerpt"]["self"]["__cycle__"] is True
+
+
+def test_phase13_49_runtime_apply_chain_probe_appends_to_result_zip(tmp_path: Path):
+    _reset_probe(tmp_path)
+    zip_path = tmp_path / "interactive-campaign-results.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("interactive-summary.json", "{}")
+
+    probe.install_runtime_apply_chain_probe_from_argv(["--output-dir", str(tmp_path)])
+    append_result = probe.append_runtime_apply_chain_probe_to_result_zips()
+    probe.uninstall_runtime_apply_chain_probe()
+
+    assert append_result["zips_appended"] == [str(zip_path)]
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        assert "autoplay-runtime-apply-chain-probe.json" in zf.namelist()
+        payload = json.loads(zf.read("autoplay-runtime-apply-chain-probe.json").decode("utf-8"))
+    assert payload["source"] == "autoplay_runtime_apply_chain_probe_v2"
