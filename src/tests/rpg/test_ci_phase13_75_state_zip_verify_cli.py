@@ -64,3 +64,46 @@ def test_phase13_75_verifier_cli_returns_one_for_invalid_zip(tmp_path: Path, cap
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert payload["error"] == "zip_invalid"
+
+
+def test_phase13_76_verifier_cli_writes_summary_json_for_valid_zip(tmp_path: Path, capsys) -> None:
+    zip_path = tmp_path / "interactive-campaign-results.zip"
+    summary_path = tmp_path / "nested" / "state-zip-verification-summary.json"
+    _write_valid_zip(zip_path)
+
+    assert verify_cli.main([str(zip_path), "--summary-path", str(summary_path)]) == 0
+
+    stdout_payload = json.loads(capsys.readouterr().out)
+    summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert stdout_payload["ok"] is True
+    assert summary_payload["summary_format_version"] == verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION
+    assert summary_payload["ok"] is True
+    assert summary_payload["checkpoint_count"] == 1
+    assert summary_payload["restored_turns"] == [1]
+
+
+def test_phase13_76_verifier_cli_writes_summary_json_for_invalid_zip(tmp_path: Path, capsys) -> None:
+    summary_path = tmp_path / "state-zip-verification-summary.json"
+
+    assert verify_cli.main([str(tmp_path / "missing.zip"), "--summary-path", str(summary_path)]) == 1
+
+    stdout_payload = json.loads(capsys.readouterr().out)
+    summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert stdout_payload["error"] == "zip_missing"
+    assert summary_payload["summary_format_version"] == verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION
+    assert summary_payload["ok"] is False
+    assert summary_payload["error"] == "zip_missing"
+
+
+def test_phase13_76_summary_writer_creates_parent_dirs(tmp_path: Path) -> None:
+    path = verify_cli.write_state_zip_verification_summary(
+        result={"ok": True, "checkpoint_count": 0},
+        summary_path=tmp_path / "a" / "b" / "summary.json",
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload == {
+        "summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+        "checkpoint_count": 0,
+        "ok": True,
+    }
