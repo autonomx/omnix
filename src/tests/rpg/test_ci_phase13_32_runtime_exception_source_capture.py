@@ -119,3 +119,41 @@ def test_phase13_42_runtime_probe_trace_helpers_return_safe_tokens():
 def test_phase13_42_runtime_probe_token_truncates_and_sanitizes():
     token = loader._runtime_probe_token("alpha beta,gamma|delta", limit=80)
     assert token == "alpha_beta;gamma/delta"
+
+
+def test_phase13_47_detects_foreground_llm_called_in_nested_result(monkeypatch):
+    monkeypatch.delenv("RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM", raising=False)
+    assert loader._should_skip_combined_background_llm(
+        ({"turn_result": {"manual_turn_summary": {"llm_called": True}}},),
+        {},
+    ) is True
+
+
+def test_phase13_47_can_disable_redundant_background_skip(monkeypatch):
+    monkeypatch.setenv("RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM", "0")
+    assert loader._should_skip_combined_background_llm(
+        ({"llm_called": True},),
+        {},
+    ) is False
+
+
+def test_phase13_47_can_skip_all_combined_background_calls(monkeypatch):
+    monkeypatch.setenv("RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM", "1")
+    assert loader._should_skip_combined_background_llm((), {}) is True
+
+
+def test_phase13_47_wraps_combined_background_submit(monkeypatch):
+    monkeypatch.delenv("RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM", raising=False)
+    calls = []
+
+    def submit_combined_background_llm(payload):
+        calls.append(payload)
+        return "job-1"
+
+    namespace = {"submit_combined_background_llm": submit_combined_background_llm}
+    loader._wrap_combined_background_llm_submit_functions(namespace)
+
+    assert namespace["submit_combined_background_llm"]({"llm_called": True}) is None
+    assert calls == []
+    assert namespace["submit_combined_background_llm"]({"llm_called": False}) == "job-1"
+    assert calls == [{"llm_called": False}]
