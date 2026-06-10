@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 import functools
+import importlib
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Optional
 
 SOURCE = "autoplay_live_manual_turn_timing_v1"
 ARTIFACT_NAME = "autoplay-live-manual-turn-substage-timing.json"
+RUNTIME_CHAIN_SOURCE = "autoplay_runtime_apply_chain_probe_v1"
+RUNTIME_CHAIN_ARTIFACT_NAME = "autoplay-runtime-apply-chain-probe.json"
 _OUTPUT_DIR: Optional[Path] = None
 _WRAPPED_NAMES: set[str] = set()
+_RUNTIME_CHAIN_WRAPPED: set[str] = set()
 
 _STAGE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("pre_runtime_intent_llm_ms", ("intent", "classif", "player_agent", "pre_runtime")),
@@ -79,6 +84,13 @@ def configure_live_manual_turn_timing_from_argv(argv: Iterable[str]) -> None:
     configure_live_manual_turn_timing(output_dir=parse_output_dir(argv))
 
 
+def _safe_tail(value: object, *, limit: int = 500) -> str:
+    try:
+        return str(value)[-limit:]
+    except Exception as exc:
+        return type(exc).__name__
+
+
 def _excluded_by_code_location(value: Any) -> bool:
     module = str(getattr(value, "__module__", "") or "").lower()
     if any(token in module for token in _EXCLUDE_MODULE_TOKENS):
@@ -135,14 +147,14 @@ def _turn_index_from_args(args: tuple[Any, ...], kwargs: Mapping[str, Any]) -> i
     return None
 
 
-def _load_payload(path: Path) -> Dict[str, Any]:
+def _load_payload(path: Path, *, source: str = SOURCE) -> Dict[str, Any]:
     if not path.exists():
-        return {"ok": True, "source": SOURCE, "events": []}
+        return {"ok": True, "source": source, "events": []}
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {"ok": True, "source": SOURCE, "events": []}
+        return value if isinstance(value, dict) else {"ok": True, "source": source, "events": []}
     except Exception:
-        return {"ok": True, "source": SOURCE, "events": []}
+        return {"ok": True, "source": source, "events": []}
 
 
 def record_substage_timing(stage_name: str, function_name: str, elapsed_ms: float, *, turn_index: int | None = None) -> Dict[str, Any]:
@@ -182,6 +194,102 @@ def record_substage_timing(stage_name: str, function_name: str, elapsed_ms: floa
     return payload
 
 
+def record_runtime_apply_chain_event(
+    *,
+    module_name: str,
+    function_name: str,
+    elapsed_ms: float,
+    ok: bool,
+    error: BaseException | None = None,
+) -> Dict[str, Any]:
+    if _OUTPUT_DIR is None:
+        return {"ok": False, "reason": "output_dir_missing", "source": RUNTIME_CHAIN_SOURCE}
+    path = _OUTPUT_DIR / RUNTIME_CHAIN_ARTIFACT_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _load_payload(path, source=RUNTIME_CHAIN_SOURCE)
+    events = list(payload.get("events") or [])
+    event = {
+        "module_name": module_name,
+        "function_name": function_name,
+        "elapsed_ms": round(float(elapsed_ms), 3),
+        "ok": bool(ok),
+        "source": RUNTIME_CHAIN_SOURCE,
+    }
+    if error is not None:
+        event["error_type"] = type(error).__name__
+        event["error_tail"] = _safe_tail(error)
+    events.append(event)
+    events = events[-10000:]
+    module_summary: Dict[str, Dict[str, Any]] = {}
+    for item in events:
+        module = str(item.get("module_name") or "")
+        if not module:
+            continue
+        entry = module_summary.setdefault(module, {"count": 0, "error_count": 0, "max_ms": 0.0})
+        entry["count"] += 1
+        if item.get("ok") is not True:
+            entry["error_count"] += 1
+        entry["max_ms"] = max(float(entry.get("max_ms") or 0.0), float(item.get("elapsed_ms") or 0.0))
+    payload.update({"ok": True, "source": RUNTIME_CHAIN_SOURCE, "event_count": len(events), "events": events, "module_summary": module_summary})
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    payload["path"] = str(path)
+    return payload
+
+
+def _wrap_runtime_apply_callable(module: Any, attr_name: str) -> bool:
+    original = getattr(module, attr_name, None)
+    if not callable(original) or getattr(original, "__autoplay_runtime_apply_chain_wrapped__", False):
+        return False
+    module_name = str(getattr(module, "__name__", type(module).__name__))
+    key = f"{module_name}:{attr_name}"
+    if key in _RUNTIME_CHAIN_WRAPPED:
+        return False
+
+    @functools.wraps(original)
+    def wrapper(*args: Any, __original: Callable[..., Any] = original, __module: str = module_name, __name: str = attr_name, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        error: BaseException | None = None
+        try:
+            return __original(*args, **kwargs)
+        except BaseException as exc:  # diagnostics only; preserve behavior
+            error = exc
+            raise
+        finally:
+            elapsed_ms = (time.perf_counter() - started) * 1000.0
+            try:
+                record_runtime_apply_chain_event(
+                    module_name=__module,
+                    function_name=__name,
+                    elapsed_ms=elapsed_ms,
+                    ok=error is None,
+                    error=error,
+                )
+            except Exception:
+                pass
+
+    wrapper.__autoplay_runtime_apply_chain_wrapped__ = True  # type: ignore[attr-defined]
+    setattr(module, attr_name, wrapper)
+    _RUNTIME_CHAIN_WRAPPED.add(key)
+    return True
+
+
+def wrap_runtime_apply_chain() -> Dict[str, Any]:
+    wrapped: List[str] = []
+    module_names = ["app.rpg.session.runtime"] + [f"app.rpg.session.runtime_part{index:02d}" for index in range(1, 28)]
+    for module_name in module_names:
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            continue
+        for attr_name in ("_apply_turn_authoritative", "_base_apply_turn_authoritative", "apply_turn"):
+            try:
+                if _wrap_runtime_apply_callable(module, attr_name):
+                    wrapped.append(f"{module_name}.{attr_name}")
+            except Exception:
+                continue
+    return {"ok": True, "source": RUNTIME_CHAIN_SOURCE, "wrapped_count": len(wrapped), "wrapped_names": wrapped}
+
+
 def wrap_live_manual_turn_timing_functions(namespace: MutableMapping[str, Any]) -> Dict[str, Any]:
     wrapped: List[str] = []
     for name, value in list(namespace.items()):
@@ -208,4 +316,11 @@ def wrap_live_manual_turn_timing_functions(namespace: MutableMapping[str, Any]) 
             wrapped.append(name)
         except Exception:
             continue
-    return {"ok": True, "source": SOURCE, "wrapped_count": len(wrapped), "wrapped_names": wrapped}
+    chain = wrap_runtime_apply_chain()
+    return {
+        "ok": True,
+        "source": SOURCE,
+        "wrapped_count": len(wrapped),
+        "wrapped_names": wrapped,
+        "runtime_apply_chain": chain,
+    }
