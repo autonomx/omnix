@@ -16,6 +16,8 @@ _GENERIC_MOMENT_NARRATION = "the moment responds without producing a major new c
 _NON_PERSON_SPEAKERS = {
     "the tavern",
     "tavern",
+    "tavern (location)",
+    "the tavern (location)",
     "this place",
     "the road",
     "road",
@@ -27,7 +29,9 @@ _NON_PERSON_SPEAKERS = {
 _FALLBACK_ENVIRONMENT_SPEAKERS = {
     "environment/location (tavern)",
     "environment/npcs",
+    "the environment/npcs",
     "general environment/npcs",
+    "general area/local npcs",
     "the town/tavern atmosphere",
     "town/tavern atmosphere",
     "tavern atmosphere",
