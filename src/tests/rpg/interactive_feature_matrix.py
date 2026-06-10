@@ -28,7 +28,6 @@ FEATURE_MATRIX_VERSION = "interactive_feature_matrix_v2"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-feature-matrix"
 KNOWN_FEATURE_GAP_SCENARIO_IDS = frozenset(
     {
-        "shop_sell_attempt",
         "travel_round_trip_route",
         "npc_memory_recall_probe",
         "equipment_inventory_probe",
