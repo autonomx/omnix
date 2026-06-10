@@ -10,14 +10,15 @@ from rpg.interactive_cli_response_quality import (
 from tests.rpg import interactive_intent_matrix_zip as zip_runner
 
 
-def _turn(player_input: str, *, action_type: str, target: str = "", terms=None, narration: str = "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead.", npc=None):
+def _turn(player_input: str, *, action_type: str, target: str = "", terms=None, narration: str = "The scene shifts with the movement, carrying the pressure of the current lead into the space ahead.", npc=None, narration_source: str = ""):
     npc = npc if npc is not None else {"speaker": "", "line": ""}
     return {
         "turn_index": 1,
         "player_input": player_input,
         "raw_narration": narration,
         "raw_npc": npc,
-        "raw_result": {"narration": narration, "npc": npc},
+        "narration_source": narration_source,
+        "raw_result": {"narration": narration, "npc": npc, "narration_source": narration_source},
         "extracted": {"narration": narration, "npc_speaker": npc.get("speaker", ""), "npc_line": npc.get("line", "")},
         "interactive_cli_intent_diagnostics": {
             "provider_called": True,
@@ -102,6 +103,40 @@ def test_phase13_50_dialogue_cleanup_handles_this_place_speaker_from_live_matrix
     assert cleaned["raw_npc"]["speaker"] == "Bran"
     assert cleaned["extracted"]["npc_speaker"] == "Bran"
     assert cleaned["raw_narration"] == "Bran answers from what is already established about the scene."
+
+
+def test_phase13_50_quest_fallback_cleanup_uses_bran_instead_of_environment_label():
+    original = _turn(
+        "I'm looking for a quest.",
+        action_type="talk",
+        target="Environment/Location (Tavern)",
+        terms=["quest"],
+        narration="Environment/Location (Tavern) checks what he can actually offer and has no backed quest available in the current state.",
+        npc={"speaker": "Environment/Location (Tavern)", "line": "I do not have a confirmed job or quest for you right now."},
+        narration_source="quest_repaired",
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="I'm looking for a quest.")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["raw_narration"].startswith("Bran checks")
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "quest_fallback_speaker_stability"
+
+
+def test_phase13_50_rumor_fallback_cleanup_uses_bran_instead_of_atmosphere_label():
+    original = _turn(
+        "Any rumors around here?",
+        action_type="talk",
+        target="The Town/Tavern Atmosphere",
+        terms=["rumor"],
+        narration="The Town/Tavern Atmosphere checks the confirmed rumors and news and finds nothing backed by the current state.",
+        npc={"speaker": "The Town/Tavern Atmosphere", "line": "I do not have any confirmed rumors or news for you right now."},
+        narration_source="rumor_repaired",
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="Any rumors around here?")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["raw_narration"].startswith("Bran checks")
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "rumor_fallback_speaker_stability"
 
 
 def test_phase13_50_matrix_cleanup_counts_changed_turns():
