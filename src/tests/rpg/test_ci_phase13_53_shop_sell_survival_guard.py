@@ -1,5 +1,17 @@
-from app.rpg.interactive_cli_response_quality import apply_interactive_response_quality_cleanup
+from app.rpg.interactive_cli_response_quality import (
+    apply_interactive_response_quality_cleanup,
+    apply_response_quality_to_matrix_result,
+)
 from tests.rpg.interactive_cli_survival_repair import apply_survival_visible_response_repair
+
+
+class _Scenario:
+    scenario_id = "shop_sell_attempt"
+    commands = (
+        "Bran, can I sell you one ration?",
+        "How much copper would you give me for a ration?",
+        "I sell one ration to Bran.",
+    )
 
 
 def _survival_turn_summary():
@@ -28,24 +40,27 @@ def _survival_turn_summary():
     }
 
 
-def _sell_turn_summary(*, target_npc="survival state", narration=None, line=None):
+def _sell_turn_summary(*, target_npc="survival state", narration=None, line=None, player_input="I sell one ration to Bran."):
     raw_narration = narration or "The practical request lands against the unease of the room, making ordinary business feel less ordinary."
     npc_line = line if line is not None else "Bran watches you over the rim of a cup. Ask plainly."
+    diagnostics = {
+        "final_classification": {
+            "action_type": "economy",
+            "target_npc": target_npc,
+            "requested_terms": ["sell", "ration", "Bran"],
+        }
+    }
     return {
+        "player_input": player_input,
         "raw_result": {
             "narration": raw_narration,
             "npc": {"speaker": "Bran", "line": npc_line},
+            "interactive_cli_intent_diagnostics": diagnostics,
         },
         "raw_narration": raw_narration,
         "raw_npc": {"speaker": "Bran", "line": npc_line},
         "narration_preview": raw_narration,
-        "interactive_cli_intent_diagnostics": {
-            "final_classification": {
-                "action_type": "economy",
-                "target_npc": target_npc,
-                "requested_terms": ["sell", "ration", "Bran"],
-            }
-        },
+        "interactive_cli_intent_diagnostics": diagnostics,
         "extracted": {},
     }
 
@@ -81,12 +96,13 @@ def test_phase13_53_sell_ration_gets_bran_trade_fallback():
     assert "selling provisions is not set up" in repaired["raw_npc"]["line"]
     assert "eat a ration" not in repaired["raw_narration"].lower()
     assert _final_classification(repaired)["target_npc"] == "Bran"
+    assert repaired["raw_result"]["interactive_cli_intent_diagnostics"]["final_classification"]["target_npc"] == "Bran"
     assert "ration" in _final_classification(repaired)["requested_terms"]
 
 
 def test_phase13_53_sell_ration_value_question_gets_bran_trade_fallback():
     repaired = apply_interactive_response_quality_cleanup(
-        _sell_turn_summary(target_npc="", narration="Result: Bran refuses. Reason: unreasonable demand.", line=""),
+        _sell_turn_summary(target_npc="", narration="Result: Bran refuses. Reason: unreasonable demand.", line="", player_input="How much copper would you give me for a ration?"),
         player_input="How much copper would you give me for a ration?",
     )
 
@@ -123,3 +139,33 @@ def test_phase13_53_sell_ration_specific_bran_output_is_preserved():
 
     assert "interactive_cli_response_quality" not in repaired
     assert repaired["raw_npc"]["line"] == "I can't buy that ration from you yet; selling provisions is not set up."
+
+
+def test_phase13_53_matrix_cleanup_uses_scenario_command_fallback_and_updates_metadata():
+    result = {
+        "results": [
+            {
+                "scenario": _Scenario(),
+                "result": {
+                    "turns": [
+                        _sell_turn_summary(player_input=""),
+                        _sell_turn_summary(
+                            target_npc="",
+                            narration="Result: Bran refuses. Reason: unreasonable demand.",
+                            line="",
+                            player_input="",
+                        ),
+                    ]
+                },
+            }
+        ]
+    }
+
+    cleanup = apply_response_quality_to_matrix_result(result)
+
+    assert cleanup["changed_turns"] == 2
+    turns = result["results"][0]["result"]["turns"]
+    assert turns[0]["interactive_cli_intent_diagnostics"]["final_classification"]["target_npc"] == "Bran"
+    assert turns[1]["raw_npc"]["speaker"] == "Bran"
+    assert turns[1]["interactive_cli_intent_diagnostics"]["final_classification"]["target_npc"] == "Bran"
+    assert "sell" in turns[1]["interactive_cli_intent_diagnostics"]["final_classification"]["requested_terms"]
