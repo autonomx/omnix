@@ -11,8 +11,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import zipfile
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Sequence
 
 THIS_FILE = Path(__file__).resolve()
 TESTS_ROOT = THIS_FILE.parents[1]
@@ -28,6 +29,7 @@ from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 STATEFUL_INTERACTIVE_CLI_VERSION = "interactive_cli_campaign_state_v1"
 DEFAULT_CHECKPOINT_DIRNAME = "interactive-state-checkpoints"
 MANIFEST_FILENAME = "interactive-state-checkpoints-manifest.json"
+ZIP_CHECKPOINT_DIRNAME = DEFAULT_CHECKPOINT_DIRNAME
 
 
 def _safe_str(value: Any) -> str:
@@ -54,6 +56,43 @@ def write_checkpoint_manifest(*, output_dir: Path, checkpoint_paths: Sequence[st
     manifest_path = output_dir / MANIFEST_FILENAME
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     return manifest_path
+
+
+def _state_checkpoint_zip_entries(*, manifest_path: Path, checkpoint_paths: Sequence[str | Path]) -> list[tuple[Path, str]]:
+    """Return deterministic source/archive pairs for state checkpoint ZIP entries."""
+
+    entries: list[tuple[Path, str]] = []
+    if manifest_path.exists() and manifest_path.is_file():
+        entries.append((manifest_path, MANIFEST_FILENAME))
+    for checkpoint_path in sorted(Path(path) for path in checkpoint_paths):
+        if checkpoint_path.exists() and checkpoint_path.is_file():
+            entries.append((checkpoint_path, f"{ZIP_CHECKPOINT_DIRNAME}/{checkpoint_path.name}"))
+    return entries
+
+
+def append_state_checkpoints_to_zip(*, zip_path: str | Path, manifest_path: str | Path, checkpoint_paths: Sequence[str | Path]) -> list[str]:
+    """Append state checkpoint artifacts to an existing interactive CLI ZIP.
+
+    The base CLI runner creates ``interactive-campaign-results.zip`` before this
+    wrapper writes the checkpoint manifest.  This helper re-opens the existing ZIP
+    and appends the manifest plus per-turn checkpoint JSON files so uploaded ZIPs
+    contain the same state artifacts as the output directory.
+    """
+
+    zip_file = Path(zip_path)
+    if not zip_file.exists() or not zip_file.is_file():
+        return []
+    entries = _state_checkpoint_zip_entries(manifest_path=Path(manifest_path), checkpoint_paths=checkpoint_paths)
+    written: list[str] = []
+    with zipfile.ZipFile(zip_file, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        existing = set(archive.namelist())
+        for source, arcname in entries:
+            if arcname in existing:
+                continue
+            archive.write(source, arcname)
+            existing.add(arcname)
+            written.append(arcname)
+    return written
 
 
 def run_stateful_interactive_campaign(
@@ -89,19 +128,29 @@ def run_stateful_interactive_campaign(
         after_turn_hook=hook,
     )
     manifest_path = write_checkpoint_manifest(output_dir=output_dir, checkpoint_paths=hook.saved_checkpoint_paths)
+    artifacts = dict(result.get("artifacts") or {})
+    zip_entries: list[str] = []
+    if artifacts.get("zip_path"):
+        zip_entries = append_state_checkpoints_to_zip(
+            zip_path=artifacts["zip_path"],
+            manifest_path=manifest_path,
+            checkpoint_paths=hook.saved_checkpoint_paths,
+        )
     summary = dict(result.get("summary") or {})
     summary["stateful_interactive_cli"] = {
         "format_version": STATEFUL_INTERACTIVE_CLI_VERSION,
         "checkpoint_dir": str(resolved_checkpoint_dir),
         "checkpoint_count": len(hook.saved_checkpoint_paths),
         "checkpoint_manifest_path": str(manifest_path),
+        "checkpoint_zip_entry_count": len(zip_entries),
+        "checkpoint_zip_entries": zip_entries,
     }
     result["summary"] = summary
     result["stateful_interactive_cli"] = summary["stateful_interactive_cli"]
     result["interactive_cli_state_checkpoint_paths"] = list(hook.saved_checkpoint_paths)
-    artifacts = dict(result.get("artifacts") or {})
     artifacts["state_checkpoint_manifest_path"] = str(manifest_path)
     artifacts["state_checkpoint_dir"] = str(resolved_checkpoint_dir)
+    artifacts["state_checkpoint_zip_entries"] = zip_entries
     result["artifacts"] = artifacts
     return result
 
