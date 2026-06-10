@@ -167,6 +167,14 @@ def _expansion_for_command(command: str) -> tuple[str, str, str, list[str]]:
     return "location:east-road", "east road", "road", ["road", "wilderness_edge", "new_region"]
 
 
+def _requests_known_route_north(text: str) -> bool:
+    return any(term in text for term in ("north", "road", "leave"))
+
+
+def _requests_return_to_tavern(text: str) -> bool:
+    return "south" in text or "back" in text or "toward the tavern" in text or "return to the tavern" in text
+
+
 def route_transition_for_command(
     previous_map_state: Mapping[str, Any] | None,
     *,
@@ -191,10 +199,10 @@ def route_transition_for_command(
     elif "old mill" in text or " mill" in text:
         destination_id = OLD_MILL_LOCATION_ID
         direction = "north"
-    elif "south" in text or "back" in text or "tavern" in text:
+    elif _requests_return_to_tavern(text):
         destination_id = START_LOCATION_ID
         direction = "south"
-    elif "north" in text or "road" in text or "leave" in text:
+    elif _requests_known_route_north(text):
         destination_id = ROAD_LOCATION_ID
         direction = "north"
     elif any(term in text for term in ("east", "beyond", "follow", "river", "watchtower", "tower", "quarry")):
