@@ -27,6 +27,59 @@ def test_phase13_51_feature_matrix_scenario_selection():
     assert [scenario.scenario_id for scenario in selected] == ["travel_round_trip_route"]
 
 
+def test_phase13_51_known_feature_gap_downgrades_expectation_failure_without_runtime_error():
+    scenario = next(
+        item
+        for item in feature_matrix.default_feature_matrix_scenarios()
+        if item.scenario_id == "equipment_inventory_probe"
+    )
+    classification = feature_matrix._classify_feature_matrix_results(
+        [
+            {
+                "scenario": scenario,
+                "result": {"summary": {"completed_turns": len(scenario.commands), "error_count": 0}},
+                "validation": {
+                    "ok": False,
+                    "scenario_id": scenario.scenario_id,
+                    "failures": ["turn 1: inventory wording missing"],
+                },
+            }
+        ]
+    )
+
+    assert classification["hard_failures"] == []
+    assert classification["feature_gaps"][0]["scenario_id"] == "equipment_inventory_probe"
+    assert classification["results"][0]["validation"]["ok"] is True
+    assert classification["results"][0]["validation"]["feature_gap"] is True
+    assert classification["results"][0]["validation"]["feature_gap_failures"] == [
+        "turn 1: inventory wording missing"
+    ]
+
+
+def test_phase13_51_known_feature_gap_still_fails_on_runtime_error():
+    scenario = next(
+        item
+        for item in feature_matrix.default_feature_matrix_scenarios()
+        if item.scenario_id == "travel_round_trip_route"
+    )
+    classification = feature_matrix._classify_feature_matrix_results(
+        [
+            {
+                "scenario": scenario,
+                "result": {"summary": {"completed_turns": len(scenario.commands), "error_count": 1}},
+                "validation": {
+                    "ok": False,
+                    "scenario_id": scenario.scenario_id,
+                    "failures": ["runtime error"],
+                },
+            }
+        ]
+    )
+
+    assert classification["feature_gaps"] == []
+    assert classification["hard_failures"][0]["scenario_id"] == "travel_round_trip_route"
+
+
 def test_phase13_51_feature_zip_wrapper_requires_live_provider(capsys):
     exit_code = feature_zip.main([])
     captured = capsys.readouterr()
@@ -43,6 +96,8 @@ def test_phase13_51_feature_zip_wrapper_writes_archive(monkeypatch, tmp_path: Pa
         "scenario_count": 1,
         "passed": 1,
         "failed": [],
+        "feature_gaps": [],
+        "feature_gap_count": 0,
         "output_root": str(tmp_path),
         "performance": {},
         "details": {},
