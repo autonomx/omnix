@@ -53,6 +53,21 @@ def test_phase13_60_campaign_map_seed_has_canonical_local_region():
     ]
 
 
+def test_phase13_60_campaign_map_route_precedence_leaves_tavern_for_north_road():
+    map_state = initial_campaign_map_state()
+
+    _updated, transition = route_transition_for_command(
+        map_state,
+        current_location_id="location:tavern",
+        command="I leave the tavern and take the road north.",
+    )
+
+    assert transition["from_location_id"] == "location:tavern"
+    assert transition["to_location_id"] == "location:road-north"
+    assert transition["destination_id"] == "location:road-north"
+    assert transition["direction"] == "north"
+
+
 def test_phase13_60_campaign_map_expands_for_outward_travel_request():
     map_state = initial_campaign_map_state()
 
