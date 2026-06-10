@@ -175,6 +175,13 @@ def _requests_return_to_tavern(text: str) -> bool:
     return "south" in text or "back" in text or "toward the tavern" in text or "return to the tavern" in text
 
 
+def _requests_map_expansion(text: str) -> bool:
+    outward_terms = ("east", "beyond", "river", "watchtower", "tower", "quarry")
+    if any(term in text for term in outward_terms):
+        return True
+    return "follow" in text and not any(term in text for term in ("old mill", "tavern", "north"))
+
+
 def route_transition_for_command(
     previous_map_state: Mapping[str, Any] | None,
     *,
@@ -202,10 +209,7 @@ def route_transition_for_command(
     elif _requests_return_to_tavern(text):
         destination_id = START_LOCATION_ID
         direction = "south"
-    elif _requests_known_route_north(text):
-        destination_id = ROAD_LOCATION_ID
-        direction = "north"
-    elif any(term in text for term in ("east", "beyond", "follow", "river", "watchtower", "tower", "quarry")):
+    elif _requests_map_expansion(text):
         destination_id, name, kind, tags = _expansion_for_command(command)
         direction = "east" if "east" in text or "river" in text or "watchtower" in text else "outward"
         _append_location(map_state, location_id=destination_id, name=name, kind=kind, tags=tags)
@@ -223,6 +227,9 @@ def route_transition_for_command(
         )
         map_state["expansions"] = expansions
         expanded = True
+    elif _requests_known_route_north(text):
+        destination_id = ROAD_LOCATION_ID
+        direction = "north"
     else:
         destination_id = current_location_id
         direction = ""

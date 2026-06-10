@@ -24,7 +24,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 
 from tests.rpg import interactive_intent_matrix as matrix  # noqa: E402
 
-FEATURE_MATRIX_VERSION = "interactive_feature_matrix_v2"
+FEATURE_MATRIX_VERSION = "interactive_feature_matrix_v3"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-feature-matrix"
 KNOWN_FEATURE_GAP_SCENARIO_IDS = frozenset()
 
@@ -85,6 +85,21 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 E(2, contains_any=("old mill", "road", "continue", "travel", "north"), final_action_type="travel", final_requested_terms_contains_any=("old mill", "road"), provider_called=True),
                 E(3, contains_any=("old mill", "look", "around", "road", "area"), forbids=("Hot stew", "confirmed job or quest"), provider_called=True),
                 E(4, contains_any=("south", "tavern", "road", "back", "travel"), final_action_type="travel", final_requested_terms_contains_any=("south", "tavern", "road"), provider_called=True),
+            ),
+        ),
+        S(
+            scenario_id="map_expansion_probe",
+            title="Map expansion: travel beyond the seeded local route",
+            description="Covers progressive map growth when the player follows a route beyond the initial local-region seed.",
+            commands=(
+                "I leave the tavern and take the road north.",
+                "I continue toward the old mill.",
+                "I keep following the old road east toward the river town.",
+            ),
+            expectations=(
+                E(1, contains_any=("road", "north", "tavern", "travel", "leave"), final_action_type="travel", final_requested_terms_contains_any=("road", "north", "tavern"), provider_called=True),
+                E(2, contains_any=("old mill", "road", "continue", "travel", "north"), final_action_type="travel", final_requested_terms_contains_any=("old mill", "road"), provider_called=True),
+                E(3, contains_any=("east", "road", "travel", "river", "route"), final_action_type="travel", final_requested_terms_contains_any=("east", "river", "river town"), provider_called=True),
             ),
         ),
         S(
@@ -238,29 +253,26 @@ def run_feature_matrix(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run extended live-provider interactive RPG feature matrix scenarios.")
-    parser.add_argument("--live-provider", action="store_true", help="Use the configured central provider. Without this, exits with instructions.")
+    parser = argparse.ArgumentParser(description="Run the extended live-provider interactive feature matrix.")
+    parser.add_argument("--live-provider", action="store_true", help="Use the configured central provider.")
     parser.add_argument("--scenario", action="append", default=[], help="Scenario id to run. Can be repeated.")
-    parser.add_argument("--output-root", default="", help="Optional output root. Defaults to resources/data/test-results/interactive-feature-matrix.")
+    parser.add_argument("--output-root", default="", help="Optional output root. Defaults to the feature matrix default output root.")
     parser.add_argument("--no-live-survival-seed", action="store_true", help="Do not seed starter survival/inventory state.")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
-    if not args.live_provider:
-        print("This feature matrix is intended for live-provider regression runs. Re-run with --live-provider.")
-        return 2
     scenarios = _select_feature_scenarios(args.scenario)
     output_root = Path(args.output_root) if args.output_root else DEFAULT_OUTPUT_ROOT
     result = run_feature_matrix(
         scenarios=scenarios,
         output_root=output_root,
-        live_provider=True,
+        live_provider=bool(args.live_provider),
         seed_live_survival=not bool(args.no_live_survival_seed),
     )
     print(json.dumps(result["summary"], indent=2, ensure_ascii=False, sort_keys=True, default=str))
-    return 0 if not result["summary"]["failed"] else 1
+    return 0 if not result["summary"].get("failed") else 1
 
 
 if __name__ == "__main__":
