@@ -5,6 +5,8 @@ from __future__ import annotations
 from .runtime_part21 import *
 from .runtime_part16 import _apply_turn_authoritative as _base_apply_turn_authoritative
 
+_COMBAT_XP_BASE_APPLY_TURN_AUTHORITATIVE = _base_apply_turn_authoritative
+
 
 def _first_non_empty_xp_result(*values: Any) -> Dict[str, Any]:
     for value in values:
@@ -87,8 +89,9 @@ def _apply_turn_authoritative(
     action: Dict[str, Any] | None = None,
     *,
     performance_override: Dict[str, Any] | None = None,
+    _base_authoritative=_COMBAT_XP_BASE_APPLY_TURN_AUTHORITATIVE,
 ) -> Dict[str, Any]:
-    payload = _base_apply_turn_authoritative(
+    payload = _base_authoritative(
         session_id,
         player_input,
         action,
