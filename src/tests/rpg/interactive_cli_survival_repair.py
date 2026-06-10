@@ -49,6 +49,13 @@ def _contains_any(text: str, terms: Tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
 
 
+def _is_sell_or_trade_text(player_input: str) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    if not _contains_any(text, ("sell", "sold", "trade", "barter", "value", "worth", "copper would you give", "give me for")):
+        return False
+    return _contains_any(text, ("ration", "rations", "provision", "provisions", "item", "gear", "inventory"))
+
+
 def _is_survival_text(player_input: str) -> bool:
     text = _safe_str(player_input).strip().lower()
     return _contains_any(
@@ -85,6 +92,8 @@ def _extract_survival_state(raw_result: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def _survival_action_matches_input(action: Mapping[str, Any], player_input: str) -> bool:
+    if _is_sell_or_trade_text(player_input):
+        return False
     action_text = _safe_str(_safe_dict(action).get("action") or _safe_dict(action).get("action_kind")).lower()
     input_text = _safe_str(player_input).lower()
     if ("ration" in input_text or "eat" in input_text) and ("ration" in action_text or "eat" in action_text or "food" in action_text):
@@ -209,6 +218,8 @@ def apply_survival_visible_response_repair(turn_summary: Mapping[str, Any], *, p
     if _safe_dict(out.get("interactive_cli_commerce_followup")).get("applied"):
         return out
     if _safe_dict(out.get("interactive_cli_quest_followup")).get("applied"):
+        return out
+    if _is_sell_or_trade_text(player_input):
         return out
     if not _is_survival_text(player_input):
         return out
