@@ -126,3 +126,81 @@ def test_phase13_51_feature_zip_wrapper_writes_archive(monkeypatch, tmp_path: Pa
         assert "marker.txt" in archive.namelist()
     loaded = json.loads((tmp_path / "interactive-feature-matrix-summary.json").read_text(encoding="utf-8"))
     assert loaded["zip_path"] == str(zip_path)
+
+
+def test_phase13_53_feature_zip_revalidates_after_response_quality_cleanup():
+    scenario = next(
+        item
+        for item in feature_matrix.default_feature_matrix_scenarios()
+        if item.scenario_id == "shop_sell_attempt"
+    )
+    result = {
+        "summary": {
+            "format_version": feature_matrix.FEATURE_MATRIX_VERSION,
+            "matrix_kind": "extended_feature_matrix",
+            "scenario_count": 1,
+            "passed": 0,
+            "failed": [
+                {
+                    "ok": False,
+                    "scenario_id": "shop_sell_attempt",
+                    "failures": ["turn 1: stale failure"],
+                }
+            ],
+            "feature_gaps": [
+                {
+                    "scenario_id": "shop_sell_attempt",
+                    "failures": ["turn 1: stale failure"],
+                }
+            ],
+            "feature_gap_count": 1,
+            "performance": {},
+            "details": {},
+        },
+        "results": [
+            {
+                "scenario": scenario,
+                "result": {
+                    "summary": {"completed_turns": 3, "error_count": 0},
+                    "turns": [
+                        {
+                            "turn_index": 1,
+                            "player_input": "Bran, can I sell you one ration?",
+                            "raw_narration": "Bran treats the request as a trade question, not a survival action.",
+                            "narration_preview": "Bran treats the request as a trade question, not a survival action.",
+                            "raw_npc": {"speaker": "Bran", "line": "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."},
+                            "raw_result": {"narration": "Bran treats the request as a trade question, not a survival action.", "npc": {"speaker": "Bran", "line": "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."}},
+                            "interactive_cli_intent_diagnostics": {"provider_called": True, "final_classification": {"target_npc": "Bran", "requested_terms": ["sell", "ration", "Bran"]}},
+                        },
+                        {
+                            "turn_index": 2,
+                            "player_input": "How much copper would you give me for a ration?",
+                            "raw_narration": "Bran treats the request as a trade question, not a survival action.",
+                            "narration_preview": "Bran treats the request as a trade question, not a survival action.",
+                            "raw_npc": {"speaker": "Bran", "line": "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."},
+                            "raw_result": {"narration": "Bran treats the request as a trade question, not a survival action.", "npc": {"speaker": "Bran", "line": "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."}},
+                            "interactive_cli_intent_diagnostics": {"provider_called": True, "final_classification": {"target_npc": "Bran", "requested_terms": ["sell", "ration", "Bran", "copper"]}},
+                        },
+                        {
+                            "turn_index": 3,
+                            "player_input": "I sell one ration to Bran.",
+                            "raw_narration": "Bran treats the request as a trade question, not a survival action.",
+                            "narration_preview": "Bran treats the request as a trade question, not a survival action.",
+                            "raw_npc": {"speaker": "Bran", "line": "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."},
+                            "raw_result": {"narration": "Bran treats the request as a trade question, not a survival action.", "npc": {"speaker": "Bran", "line": "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."}},
+                            "interactive_cli_intent_diagnostics": {"provider_called": True, "final_classification": {"target_npc": "Bran", "requested_terms": ["sell", "ration", "Bran"]}},
+                        },
+                    ],
+                },
+                "validation": {"ok": False, "scenario_id": "shop_sell_attempt", "failures": ["turn 1: stale failure"]},
+            }
+        ],
+    }
+
+    revalidated = feature_zip._revalidate_after_cleanup(result)
+
+    assert revalidated["summary"]["failed"] == []
+    assert revalidated["summary"]["feature_gaps"] == []
+    assert revalidated["summary"]["feature_gap_count"] == 0
+    assert revalidated["summary"]["passed"] == 1
+    assert revalidated["results"][0]["validation"]["ok"] is True
