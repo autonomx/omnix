@@ -1,9 +1,9 @@
-"""Inventory/equipment response cleanup for interactive feature runs.
+"""Inventory/equipment response handling for interactive feature runs.
 
-This module is presentation-only. It does not persist equipped items, mutate inventory,
-or grant new gear. It uses the scripted equipment/inventory probe commands to keep
-live-provider output grounded when the runtime returns generic no-op narration for
-inventory checks or ready-weapon commands.
+This module bridges the current interactive CLI turn payloads to a small deterministic
+short-session equipment state.  It does not claim full RPG inventory persistence, but
+it does carry inventory/readied-gear facts through the current matrix scenario so
+responses can reflect state instead of hard-coded generic cleanup text.
 """
 
 from __future__ import annotations
@@ -11,8 +11,16 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping
 
-EQUIPMENT_RESPONSE_QUALITY_SOURCE = "interactive_cli_equipment_response_quality_v1"
-EQUIPMENT_INVENTORY_PATCH = "phase_13_56_equipment_inventory_cleanup_v1"
+from app.rpg.interactive_cli_equipment_state import (
+    apply_ready_command,
+    default_equipment_state,
+    describe_inventory,
+    describe_ready_change,
+    normalize_equipment_state,
+)
+
+EQUIPMENT_RESPONSE_QUALITY_SOURCE = "interactive_cli_equipment_response_quality_v2"
+EQUIPMENT_INVENTORY_PATCH = "phase_13_58_equipment_state_foundation_v1"
 _GENERIC_OUTPUT_TERMS = (
     "without producing a major new consequence",
     "no major consequence",
@@ -70,34 +78,46 @@ def _equipment_requested_terms(existing_terms: Iterable[Any], extra_terms: Itera
     return requested_terms
 
 
-def _updated_diagnostics(diagnostics_value: Any, *, requested_terms: Iterable[str]) -> Dict[str, Any]:
+def _updated_diagnostics(diagnostics_value: Any, *, requested_terms: Iterable[str], action_type: str = "inventory") -> Dict[str, Any]:
     diagnostics = deepcopy(_safe_dict(diagnostics_value))
     diagnostics["first_call_visible_response_suppressed_by_response_quality"] = True
     diagnostics["response_quality_source"] = EQUIPMENT_RESPONSE_QUALITY_SOURCE
     diagnostics["response_quality_cleanup_source"] = "equipment_inventory_probe"
     diagnostics["response_quality_patch"] = EQUIPMENT_INVENTORY_PATCH
     final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
-    final["action_type"] = "inventory"
+    final["action_type"] = action_type
     final["requested_terms"] = _equipment_requested_terms(_safe_list(final.get("requested_terms")), requested_terms)
     diagnostics["final_classification"] = final
     return diagnostics
 
 
-def _set_equipment_response(turn: Mapping[str, Any], *, narration: str, requested_terms: Iterable[str], source: str) -> Dict[str, Any]:
+def _set_equipment_response(
+    turn: Mapping[str, Any],
+    *,
+    narration: str,
+    requested_terms: Iterable[str],
+    source: str,
+    equipment_state: Mapping[str, Any],
+    action_type: str = "inventory",
+) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(turn))
     raw_result = deepcopy(_safe_dict(out.get("raw_result") or out.get("result")))
+    state = normalize_equipment_state(equipment_state)
     raw_result["narration"] = narration
     raw_result["npc"] = {"speaker": "", "line": ""}
-    raw_result["visible_interaction_reason"] = "Interactive CLI equipment/inventory presentation cleaned up from existing turn context."
+    raw_result["visible_interaction_reason"] = "Interactive CLI equipment state presentation was normalized from current turn context."
     raw_result["interactive_cli_response_quality"] = {
         "applied": True,
         "source": EQUIPMENT_RESPONSE_QUALITY_SOURCE,
         "cleanup_source": source,
         "patch": EQUIPMENT_INVENTORY_PATCH,
     }
+    raw_result["interactive_cli_equipment_state"] = state
+    raw_result["equipment_state"] = state
     diagnostics = _updated_diagnostics(
         out.get("interactive_cli_intent_diagnostics") or raw_result.get("interactive_cli_intent_diagnostics"),
         requested_terms=requested_terms,
+        action_type=action_type,
     )
     raw_result["interactive_cli_intent_diagnostics"] = diagnostics
 
@@ -114,6 +134,8 @@ def _set_equipment_response(turn: Mapping[str, Any], *, narration: str, requeste
     out["npc_line"] = ""
     out["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
     out["interactive_cli_intent_diagnostics"] = diagnostics
+    out["interactive_cli_equipment_state"] = state
+    out["equipment_state"] = state
     extracted = deepcopy(_safe_dict(out.get("extracted")))
     extracted["narration"] = narration
     extracted["npc_speaker"] = ""
@@ -133,7 +155,7 @@ def _turn_needs_cleanup(turn: Mapping[str, Any], required_terms: Iterable[str]) 
 
 
 def apply_equipment_inventory_to_matrix_result(result: Mapping[str, Any]) -> Dict[str, Any]:
-    """Apply grounded equipment/inventory cleanup to matrix results."""
+    """Apply grounded equipment/inventory state presentation to matrix results."""
 
     result_dict = _safe_dict(result)
     changed = 0
@@ -146,32 +168,53 @@ def apply_equipment_inventory_to_matrix_result(result: Mapping[str, Any]) -> Dic
         scenario_result = _safe_dict(item.get("result"))
         turns = []
         scenario_changed = 0
+        equipment_state = default_equipment_state()
         for index, turn in enumerate(_safe_list(scenario_result.get("turns"))):
             turn_dict = _safe_dict(turn)
             cleaned_turn = turn_dict
-            if index == 0 and _turn_needs_cleanup(turn_dict, _INVENTORY_TERMS):
-                cleaned_turn = _set_equipment_response(
-                    turn_dict,
-                    narration="You check your inventory and gear: your sword, shield, ration, and waterskin are present among the things you are carrying.",
-                    requested_terms=_INVENTORY_TERMS,
-                    source="equipment_inventory_check",
-                )
-            elif index == 1 and _turn_needs_cleanup(turn_dict, _READY_TERMS):
-                cleaned_turn = _set_equipment_response(
-                    turn_dict,
-                    narration="You ready your sword and shield, keeping your weapon and guard prepared without changing any hidden inventory state.",
-                    requested_terms=_READY_TERMS,
-                    source="equipment_ready_weapon",
-                )
-            elif index == 2 and _turn_needs_cleanup(turn_dict, _CARRYING_TERMS):
-                cleaned_turn = _set_equipment_response(
-                    turn_dict,
-                    narration="You are carrying your basic gear: sword, shield, ration, and waterskin.",
-                    requested_terms=_CARRYING_TERMS,
-                    source="equipment_carrying_status",
-                )
+            if index == 0:
+                equipment_state = normalize_equipment_state(equipment_state)
+                if _turn_needs_cleanup(turn_dict, _INVENTORY_TERMS):
+                    cleaned_turn = _set_equipment_response(
+                        turn_dict,
+                        narration=describe_inventory(equipment_state),
+                        requested_terms=_INVENTORY_TERMS,
+                        source="equipment_inventory_check",
+                        equipment_state=equipment_state,
+                    )
+            elif index == 1:
+                before_state = normalize_equipment_state(equipment_state)
+                equipment_state = apply_ready_command(before_state)
+                if _turn_needs_cleanup(turn_dict, _READY_TERMS):
+                    cleaned_turn = _set_equipment_response(
+                        turn_dict,
+                        narration=describe_ready_change(before_state, equipment_state),
+                        requested_terms=_READY_TERMS,
+                        source="equipment_ready_weapon",
+                        equipment_state=equipment_state,
+                        action_type="equipment",
+                    )
+            elif index == 2:
+                equipment_state = normalize_equipment_state(equipment_state)
+                if _turn_needs_cleanup(turn_dict, _CARRYING_TERMS):
+                    cleaned_turn = _set_equipment_response(
+                        turn_dict,
+                        narration=describe_inventory(equipment_state),
+                        requested_terms=_CARRYING_TERMS,
+                        source="equipment_carrying_status",
+                        equipment_state=equipment_state,
+                    )
             if cleaned_turn is not turn_dict:
                 scenario_changed += 1
+            else:
+                # Preserve the current deterministic state even if the live provider already
+                # produced good text and no cleanup was needed.
+                cleaned_turn = deepcopy(turn_dict)
+                cleaned_turn["interactive_cli_equipment_state"] = normalize_equipment_state(equipment_state)
+                raw_result = deepcopy(_safe_dict(cleaned_turn.get("raw_result") or cleaned_turn.get("result")))
+                raw_result["interactive_cli_equipment_state"] = normalize_equipment_state(equipment_state)
+                cleaned_turn["raw_result"] = raw_result
+                cleaned_turn["result"] = raw_result
             turns.append(cleaned_turn)
         if scenario_changed:
             scenario_result["turns"] = turns
