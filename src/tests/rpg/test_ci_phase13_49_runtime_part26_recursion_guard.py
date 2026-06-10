@@ -1,4 +1,4 @@
-from app.rpg.session import runtime_part24, runtime_part25, runtime_part26
+from app.rpg.session import runtime_part22, runtime_part24, runtime_part25, runtime_part26
 
 
 def test_phase13_49_runtime_part26_base_binding_does_not_self_recurse(monkeypatch):
@@ -29,7 +29,7 @@ def test_phase13_49_runtime_part26_base_binding_does_not_self_recurse(monkeypatc
 
 
 def test_phase13_49_combat_runtime_default_base_bindings_are_not_self_references():
-    for module in (runtime_part24, runtime_part25, runtime_part26):
+    for module in (runtime_part22, runtime_part24, runtime_part25, runtime_part26):
         defaults = module._apply_turn_authoritative.__kwdefaults__ or {}
         bound_base = defaults.get("_base_authoritative")
 
@@ -56,6 +56,30 @@ def test_phase13_49_runtime_part25_ignores_polluted_base_alias(monkeypatch):
     )
 
     assert calls == [("session-2", "What do you say, Bran?", {"kind": "dialogue"}, {"probe": True})]
+    assert payload["result"] == {}
+    assert payload["resolved_result"] == {}
+    assert payload["narration_context"] == {}
+
+
+def test_phase13_49_runtime_part22_ignores_polluted_base_alias(monkeypatch):
+    calls = []
+
+    def fake_base(session_id, player_input, action=None, *, performance_override=None):
+        calls.append((session_id, player_input, action, performance_override))
+        return {"result": {}, "resolved_result": {}, "narration_context": {}}
+
+    monkeypatch.setattr(runtime_part22, "_base_apply_turn_authoritative", runtime_part26._apply_turn_authoritative)
+    monkeypatch.setattr(runtime_part22, "_COMBAT_XP_BASE_APPLY_TURN_AUTHORITATIVE", runtime_part26._apply_turn_authoritative)
+
+    payload = runtime_part22._apply_turn_authoritative(
+        "session-3",
+        "I attack the bandit.",
+        {"kind": "combat"},
+        performance_override={"probe": True},
+        _base_authoritative=fake_base,
+    )
+
+    assert calls == [("session-3", "I attack the bandit.", {"kind": "combat"}, {"probe": True})]
     assert payload["result"] == {}
     assert payload["resolved_result"] == {}
     assert payload["narration_context"] == {}
