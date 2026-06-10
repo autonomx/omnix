@@ -19,6 +19,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 from app.rpg.interactive_cli_equipment_response_quality import apply_equipment_inventory_to_matrix_result  # noqa: E402
 from app.rpg.interactive_cli_memory_response_quality import apply_short_session_memory_recall_to_matrix_result  # noqa: E402
 from app.rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
+from app.rpg.interactive_cli_travel_response_quality import apply_travel_state_to_matrix_result  # noqa: E402
 from tests.rpg import interactive_feature_matrix as feature_matrix  # noqa: E402
 from tests.rpg import interactive_intent_matrix_zip as matrix_zip  # noqa: E402
 
@@ -98,19 +99,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if not bool(args.no_response_quality_cleanup):
         cleanup = apply_response_quality_to_matrix_result(result)
+        travel_cleanup = apply_travel_state_to_matrix_result(result)
         memory_cleanup = apply_short_session_memory_recall_to_matrix_result(result)
         equipment_cleanup = apply_equipment_inventory_to_matrix_result(result)
         result["summary"]["response_quality_cleanup"] = cleanup
+        result["summary"]["travel_state_cleanup"] = travel_cleanup
         result["summary"]["memory_response_quality_cleanup"] = memory_cleanup
         result["summary"]["equipment_response_quality_cleanup"] = equipment_cleanup
         changed_turns = (
             int(cleanup.get("changed_turns") or 0)
+            + int(travel_cleanup.get("changed_turns") or 0)
             + int(memory_cleanup.get("changed_turns") or 0)
             + int(equipment_cleanup.get("changed_turns") or 0)
         )
         if changed_turns > 0:
             result = _revalidate_after_cleanup(result)
             result["summary"]["response_quality_cleanup"] = cleanup
+            result["summary"]["travel_state_cleanup"] = travel_cleanup
             result["summary"]["memory_response_quality_cleanup"] = memory_cleanup
             result["summary"]["equipment_response_quality_cleanup"] = equipment_cleanup
             matrix_zip._rewrite_matrix_artifacts_after_cleanup(result, output_root)
