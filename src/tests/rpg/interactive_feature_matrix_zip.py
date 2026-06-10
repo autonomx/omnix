@@ -16,6 +16,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
+from app.rpg.interactive_cli_equipment_response_quality import apply_equipment_inventory_to_matrix_result  # noqa: E402
 from app.rpg.interactive_cli_memory_response_quality import apply_short_session_memory_recall_to_matrix_result  # noqa: E402
 from app.rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
 from tests.rpg import interactive_feature_matrix as feature_matrix  # noqa: E402
@@ -98,13 +99,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not bool(args.no_response_quality_cleanup):
         cleanup = apply_response_quality_to_matrix_result(result)
         memory_cleanup = apply_short_session_memory_recall_to_matrix_result(result)
+        equipment_cleanup = apply_equipment_inventory_to_matrix_result(result)
         result["summary"]["response_quality_cleanup"] = cleanup
         result["summary"]["memory_response_quality_cleanup"] = memory_cleanup
-        changed_turns = int(cleanup.get("changed_turns") or 0) + int(memory_cleanup.get("changed_turns") or 0)
+        result["summary"]["equipment_response_quality_cleanup"] = equipment_cleanup
+        changed_turns = (
+            int(cleanup.get("changed_turns") or 0)
+            + int(memory_cleanup.get("changed_turns") or 0)
+            + int(equipment_cleanup.get("changed_turns") or 0)
+        )
         if changed_turns > 0:
             result = _revalidate_after_cleanup(result)
             result["summary"]["response_quality_cleanup"] = cleanup
             result["summary"]["memory_response_quality_cleanup"] = memory_cleanup
+            result["summary"]["equipment_response_quality_cleanup"] = equipment_cleanup
             matrix_zip._rewrite_matrix_artifacts_after_cleanup(result, output_root)
             _write_feature_matrix_summary_artifacts(result, output_root)
     zip_path = matrix_zip.zip_matrix_output(output_root, Path(args.zip_path) if args.zip_path else None)
