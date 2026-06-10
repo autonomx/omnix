@@ -119,6 +119,20 @@ def aggregate_state_zip_verification_summaries(summaries: Sequence[Mapping[str, 
     }
 
 
+def write_state_zip_verification_aggregate(*, aggregate: Mapping[str, Any], aggregate_path: str | Path) -> Path:
+    """Write an aggregate verifier result as deterministic JSON for CI artifacts."""
+
+    payload = dict(aggregate)
+    if payload.get("aggregate_format_version") != STATE_ZIP_VERIFY_AGGREGATE_VERSION:
+        raise ValueError("aggregate_format_version_mismatch")
+    if not isinstance(payload.get("ok"), bool):
+        raise ValueError("aggregate_ok_not_bool")
+    path = Path(aggregate_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+    return path
+
+
 def write_state_zip_verification_summary(*, result: Mapping[str, Any], summary_path: str | Path) -> Path:
     """Write the verifier result to a deterministic machine-readable JSON file."""
 
