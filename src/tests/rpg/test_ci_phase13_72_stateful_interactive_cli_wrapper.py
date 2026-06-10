@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from app.rpg.interactive_cli_state_checkpoint import create_interactive_cli_state_checkpoint, save_interactive_cli_state_checkpoint_file
 from tests.rpg import interactive_cli_campaign_state as state_cli
 
 
@@ -34,11 +35,21 @@ def test_phase13_72_manifest_is_deterministic(tmp_path: Path) -> None:
     }
 
 
+def _write_valid_checkpoint(path: Path, *, turn_index: int = 1) -> Path:
+    bundle = {
+        "format_version": "interactive_cli_state_bundle_v1",
+        "turn_index": turn_index,
+        "states": {"memory": {"facts": {"trail_name": "Ash Lantern"}}},
+        "state_versions": {"memory": "test"},
+    }
+    checkpoint = create_interactive_cli_state_checkpoint(bundle, turn_index=turn_index)
+    return save_interactive_cli_state_checkpoint_file(checkpoint, path)
+
+
 def test_phase13_73_appends_state_checkpoint_artifacts_to_existing_zip(tmp_path: Path) -> None:
     checkpoint_dir = state_cli.default_checkpoint_dir(tmp_path)
     checkpoint_dir.mkdir(parents=True)
-    checkpoint = checkpoint_dir / "turn-0001-interactive-cli-state-checkpoint.json"
-    checkpoint.write_text('{"ok": true}', encoding="utf-8")
+    checkpoint = _write_valid_checkpoint(checkpoint_dir / "turn-0001-interactive-cli-state-checkpoint.json")
     manifest_path = state_cli.write_checkpoint_manifest(output_dir=tmp_path, checkpoint_paths=[checkpoint])
     zip_path = tmp_path / "interactive-campaign-results.zip"
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -66,6 +77,42 @@ def test_phase13_73_appends_state_checkpoint_artifacts_to_existing_zip(tmp_path:
         manifest_path=manifest_path,
         checkpoint_paths=[checkpoint],
     ) == []
+
+
+def test_phase13_74_verifies_restorable_state_checkpoints_in_zip(tmp_path: Path) -> None:
+    checkpoint_dir = state_cli.default_checkpoint_dir(tmp_path)
+    checkpoint_dir.mkdir(parents=True)
+    checkpoint = _write_valid_checkpoint(checkpoint_dir / "turn-0003-interactive-cli-state-checkpoint.json", turn_index=3)
+    manifest_path = state_cli.write_checkpoint_manifest(output_dir=tmp_path, checkpoint_paths=[checkpoint])
+    zip_path = tmp_path / "interactive-campaign-results.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("interactive-summary.json", "{}")
+    state_cli.append_state_checkpoints_to_zip(zip_path=zip_path, manifest_path=manifest_path, checkpoint_paths=[checkpoint])
+
+    verification = state_cli.verify_state_checkpoints_in_zip(zip_path)
+
+    assert verification["ok"] is True
+    assert verification["checkpoint_count"] == 1
+    assert verification["checkpoint_entries"] == [
+        f"{state_cli.ZIP_CHECKPOINT_DIRNAME}/turn-0003-interactive-cli-state-checkpoint.json"
+    ]
+    assert verification["restored_turns"] == [3]
+
+
+def test_phase13_74_rejects_zip_missing_checkpoint_entry(tmp_path: Path) -> None:
+    checkpoint_dir = state_cli.default_checkpoint_dir(tmp_path)
+    checkpoint_dir.mkdir(parents=True)
+    checkpoint = _write_valid_checkpoint(checkpoint_dir / "turn-0004-interactive-cli-state-checkpoint.json", turn_index=4)
+    manifest_path = state_cli.write_checkpoint_manifest(output_dir=tmp_path, checkpoint_paths=[checkpoint])
+    zip_path = tmp_path / "interactive-campaign-results.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.write(manifest_path, state_cli.MANIFEST_FILENAME)
+
+    verification = state_cli.verify_state_checkpoints_in_zip(zip_path)
+
+    assert verification["ok"] is False
+    assert verification["error"] == "checkpoint_zip_entry_missing"
+    assert verification["missing_entry"] == f"{state_cli.ZIP_CHECKPOINT_DIRNAME}/turn-0004-interactive-cli-state-checkpoint.json"
 
 
 def test_phase13_72_stateful_wrapper_installs_hook_and_reports_checkpoints(monkeypatch, tmp_path: Path) -> None:
@@ -134,6 +181,8 @@ def test_phase13_72_stateful_wrapper_installs_hook_and_reports_checkpoints(monke
         f"{state_cli.ZIP_CHECKPOINT_DIRNAME}/{checkpoint_path.name}",
     ]
     assert result["artifacts"]["state_checkpoint_zip_entries"] == state_info["checkpoint_zip_entries"]
+    assert state_info["checkpoint_zip_verification"]["ok"] is True
+    assert state_info["checkpoint_zip_verification"]["checkpoint_count"] == 1
 
     with zipfile.ZipFile(output_dir / "interactive-campaign-results.zip", "r") as archive:
         names = set(archive.namelist())
