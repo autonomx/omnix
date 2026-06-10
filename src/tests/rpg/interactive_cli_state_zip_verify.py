@@ -88,6 +88,72 @@ def render_state_zip_verification_status_marker(result: Mapping[str, Any]) -> st
     )
 
 
+def parse_state_zip_verification_status_marker(line: str) -> dict[str, Any]:
+    """Parse the one-line verifier status marker emitted to stderr.
+
+    The parser is deliberately strict about marker identity and required fields so
+    automation can distinguish malformed logs from valid failure statuses.
+    """
+
+    text = str(line or "").strip()
+    prefix = f"[{STATE_ZIP_VERIFY_STATUS_MARKER}] "
+    if not text.startswith(prefix):
+        return {
+            "ok": False,
+            "error": "status_marker_prefix_mismatch",
+        }
+    fields: dict[str, str] = {}
+    for token in text[len(prefix):].split():
+        if "=" not in token:
+            return {
+                "ok": False,
+                "error": "status_marker_token_malformed",
+                "token": token,
+            }
+        key, value = token.split("=", 1)
+        if not key or key in fields:
+            return {
+                "ok": False,
+                "error": "status_marker_key_invalid",
+                "key": key,
+            }
+        fields[key] = value
+    required = {"ok", "checkpoint_count", "restored_turn_count", "error"}
+    missing = sorted(required.difference(fields))
+    if missing:
+        return {
+            "ok": False,
+            "error": "status_marker_required_keys_missing",
+            "missing_keys": missing,
+        }
+    if fields["ok"] not in {"true", "false"}:
+        return {
+            "ok": False,
+            "error": "status_marker_ok_invalid",
+            "actual": fields["ok"],
+        }
+    try:
+        checkpoint_count = int(fields["checkpoint_count"])
+        restored_turn_count = int(fields["restored_turn_count"])
+    except ValueError:
+        return {
+            "ok": False,
+            "error": "status_marker_count_invalid",
+        }
+    if checkpoint_count < 0 or restored_turn_count < 0:
+        return {
+            "ok": False,
+            "error": "status_marker_count_negative",
+        }
+    return {
+        "ok": True,
+        "verification_ok": fields["ok"] == "true",
+        "checkpoint_count": checkpoint_count,
+        "restored_turn_count": restored_turn_count,
+        "verification_error": fields["error"],
+    }
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify state checkpoint artifacts inside a stateful interactive CLI ZIP.")
     parser.add_argument("zip_path", help="Path to interactive-campaign-results.zip or an uploaded ZIP artifact.")
