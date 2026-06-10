@@ -114,6 +114,9 @@ def _is_sell_request(player_input: str, intent: Mapping[str, Any]) -> bool:
 
 def _final_intent(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
     diagnostics = _safe_dict(_safe_dict(turn_summary).get("interactive_cli_intent_diagnostics"))
+    if not diagnostics:
+        raw = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+        diagnostics = _safe_dict(raw.get("interactive_cli_intent_diagnostics"))
     return _safe_dict(diagnostics.get("final_classification"))
 
 
@@ -146,6 +149,32 @@ def _direction_label(intent: Mapping[str, Any], player_input: str) -> str:
     return "along the road"
 
 
+def _updated_diagnostics_for_visible_response(
+    diagnostics_value: Any,
+    *,
+    speaker: str,
+    cleanup_source: str,
+) -> Dict[str, Any]:
+    diagnostics = deepcopy(_safe_dict(diagnostics_value))
+    diagnostics["first_call_visible_response_suppressed_by_response_quality"] = True
+    diagnostics["response_quality_source"] = RESPONSE_QUALITY_SOURCE
+    diagnostics["response_quality_cleanup_source"] = cleanup_source
+    final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
+    if speaker:
+        final["target_npc"] = speaker
+        final["action_type"] = "economy"
+        requested_terms = [_safe_str(term) for term in _safe_list(final.get("requested_terms"))]
+        requested_terms_lower = {term.lower() for term in requested_terms}
+        for term in ("sell", "ration", speaker):
+            if term.lower() not in requested_terms_lower:
+                requested_terms.append(term)
+                requested_terms_lower.add(term.lower())
+        final["requested_terms"] = requested_terms
+    if final:
+        diagnostics["final_classification"] = final
+    return diagnostics
+
+
 def _set_visible_response(
     out: Dict[str, Any],
     *,
@@ -168,10 +197,18 @@ def _set_visible_response(
     elif "npc" not in raw_result:
         raw_result["npc"] = {"speaker": "", "line": ""}
 
+    diagnostics = _updated_diagnostics_for_visible_response(
+        out.get("interactive_cli_intent_diagnostics") or raw_result.get("interactive_cli_intent_diagnostics"),
+        speaker=speaker,
+        cleanup_source=source,
+    )
+    raw_result["interactive_cli_intent_diagnostics"] = diagnostics
+
     out["raw_result"] = raw_result
     out["raw_narration"] = narration
     out["narration_preview"] = narration
     out["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
+    out["interactive_cli_intent_diagnostics"] = diagnostics
     if speaker or line:
         npc_payload = {"speaker": speaker, "line": line}
         out["raw_npc"] = npc_payload
@@ -195,35 +232,31 @@ def _set_visible_response(
     if warning not in warnings:
         warnings.append(warning)
     out["scenario_warnings"] = warnings
-
-    diagnostics = deepcopy(_safe_dict(out.get("interactive_cli_intent_diagnostics")))
-    if diagnostics:
-        diagnostics["first_call_visible_response_suppressed_by_response_quality"] = True
-        diagnostics["response_quality_source"] = RESPONSE_QUALITY_SOURCE
-        final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
-        if speaker:
-            final["target_npc"] = speaker
-            final["action_type"] = "economy"
-            requested_terms = list(_safe_list(final.get("requested_terms")))
-            for term in ("sell", "ration", speaker):
-                if term not in requested_terms:
-                    requested_terms.append(term)
-            final["requested_terms"] = requested_terms
-        if final:
-            diagnostics["final_classification"] = final
-        out["interactive_cli_intent_diagnostics"] = diagnostics
     return out
+
+
+def _visible_output_text(out: Mapping[str, Any]) -> str:
+    raw = _safe_dict(out.get("raw_result") or out.get("result"))
+    npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
+    extracted = _safe_dict(out.get("extracted"))
+    return " ".join(
+        _safe_str(value)
+        for value in (
+            out.get("raw_narration"),
+            out.get("narration_preview"),
+            out.get("narration"),
+            raw.get("narration"),
+            npc.get("line"),
+            extracted.get("narration"),
+            extracted.get("npc_line"),
+        )
+    ).lower()
 
 
 def _cleanup_sell_request(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
     if not _is_sell_request(player_input, intent):
         return None
-    raw = _safe_dict(out.get("raw_result") or out.get("result"))
-    narration = _safe_str(out.get("raw_narration") or raw.get("narration")).lower()
-    preview = _safe_str(out.get("narration_preview")).lower()
-    npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
-    line = _safe_str(npc.get("line")).lower()
-    output_text = " ".join([narration, preview, line])
+    output_text = _visible_output_text(out)
     target = _safe_str(_safe_dict(intent).get("target_npc")).strip().lower()
     if _contains_any(output_text, _SELL_BAD_SURVIVAL_TERMS):
         cleanup_source = "sell_request_not_survival_consumption"
@@ -330,9 +363,10 @@ def _cleanup_combat(out: Dict[str, Any], player_input: str, intent: Mapping[str,
 
 def apply_interactive_response_quality_cleanup(turn_summary: Mapping[str, Any], *, player_input: str) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(turn_summary))
+    resolved_player_input = _safe_str(player_input or out.get("player_input") or out.get("player_action"))
     intent = _final_intent(out)
     for cleanup in (_cleanup_sell_request, _cleanup_dialogue_speaker, _cleanup_no_backed_fallback_speaker, _cleanup_party, _cleanup_travel, _cleanup_combat):
-        repaired = cleanup(out, player_input, intent)
+        repaired = cleanup(out, resolved_player_input, intent)
         if repaired is not None:
             return repaired
     return out
@@ -347,12 +381,18 @@ def apply_response_quality_to_matrix_result(result: Mapping[str, Any]) -> Dict[s
     for item in _safe_list(result_dict.get("results")):
         scenario = item.get("scenario")
         scenario_id = _safe_str(getattr(scenario, "scenario_id", "") or _safe_dict(scenario).get("scenario_id"))
+        commands = list(getattr(scenario, "commands", ()) or _safe_dict(scenario).get("commands") or ())
         scenario_result = _safe_dict(item.get("result"))
         turns = []
         scenario_changed = 0
-        for turn in _safe_list(scenario_result.get("turns")):
+        for index, turn in enumerate(_safe_list(scenario_result.get("turns"))):
             turn_dict = _safe_dict(turn)
-            cleaned = apply_interactive_response_quality_cleanup(turn_dict, player_input=_safe_str(turn_dict.get("player_input")))
+            player_input = _safe_str(
+                turn_dict.get("player_input")
+                or turn_dict.get("player_action")
+                or (commands[index] if index < len(commands) else "")
+            )
+            cleaned = apply_interactive_response_quality_cleanup(turn_dict, player_input=player_input)
             if _safe_dict(cleaned).get("interactive_cli_response_quality"):
                 scenario_changed += 1
             turns.append(cleaned)
