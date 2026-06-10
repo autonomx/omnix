@@ -15,6 +15,7 @@ _GENERIC_MOVEMENT_NARRATION = "the scene shifts with the movement"
 _NON_PERSON_SPEAKERS = {
     "the tavern",
     "tavern",
+    "this place",
     "the road",
     "road",
     "the place",
