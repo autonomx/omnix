@@ -21,6 +21,7 @@ from tests.rpg.interactive_cli_campaign_state import verify_state_checkpoints_in
 STATE_ZIP_VERIFY_SUMMARY_VERSION = "interactive_cli_state_zip_verify_summary_v1"
 STATE_ZIP_VERIFY_SUMMARY_REQUIRED_KEYS = frozenset({"summary_format_version", "ok"})
 STATE_ZIP_VERIFY_STATUS_MARKER = "INTERACTIVE_CLI_STATE_ZIP_VERIFY"
+STATE_ZIP_VERIFY_AGGREGATE_VERSION = "interactive_cli_state_zip_verify_aggregate_v1"
 
 
 def validate_state_zip_verification_summary_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -50,6 +51,71 @@ def validate_state_zip_verification_summary_payload(payload: Mapping[str, Any]) 
     return {
         "ok": True,
         "summary_format_version": STATE_ZIP_VERIFY_SUMMARY_VERSION,
+    }
+
+
+def aggregate_state_zip_verification_summaries(summaries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate validated state ZIP verifier summaries into one CI-friendly result."""
+
+    entries: list[dict[str, Any]] = []
+    valid_summary_count = 0
+    invalid_summary_count = 0
+    passed = 0
+    failed = 0
+    total_checkpoint_count = 0
+    total_restored_turn_count = 0
+
+    for index, summary in enumerate(summaries):
+        payload = dict(summary)
+        validation = validate_state_zip_verification_summary_payload(payload)
+        entry: dict[str, Any] = {
+            "index": index,
+            "schema_ok": bool(validation.get("ok")),
+        }
+        if not validation.get("ok"):
+            invalid_summary_count += 1
+            failed += 1
+            entry.update(
+                {
+                    "verification_ok": False,
+                    "error": validation.get("error") or "summary_schema_invalid",
+                    "validation": validation,
+                }
+            )
+            entries.append(entry)
+            continue
+
+        valid_summary_count += 1
+        verification_ok = bool(payload.get("ok"))
+        checkpoint_count = _safe_int(payload.get("checkpoint_count"))
+        restored_turn_count = len(payload.get("restored_turns") if isinstance(payload.get("restored_turns"), list) else [])
+        total_checkpoint_count += checkpoint_count
+        total_restored_turn_count += restored_turn_count
+        if verification_ok:
+            passed += 1
+        else:
+            failed += 1
+        entry.update(
+            {
+                "verification_ok": verification_ok,
+                "checkpoint_count": checkpoint_count,
+                "restored_turn_count": restored_turn_count,
+                "error": str(payload.get("error") or "none"),
+            }
+        )
+        entries.append(entry)
+
+    return {
+        "aggregate_format_version": STATE_ZIP_VERIFY_AGGREGATE_VERSION,
+        "ok": failed == 0 and invalid_summary_count == 0,
+        "summary_count": len(summaries),
+        "valid_summary_count": valid_summary_count,
+        "invalid_summary_count": invalid_summary_count,
+        "passed": passed,
+        "failed": failed,
+        "total_checkpoint_count": total_checkpoint_count,
+        "total_restored_turn_count": total_restored_turn_count,
+        "entries": entries,
     }
 
 
