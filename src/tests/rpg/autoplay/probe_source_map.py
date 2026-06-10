@@ -1,12 +1,13 @@
 """Generated probe source mapping for autoplay diagnostics."""
 from __future__ import annotations
 
+import atexit
 import json
 import linecache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-SOURCE = "autoplay_probe_source_map_v3"
+SOURCE = "autoplay_probe_source_map_v4"
 ARTIFACT_NAME = "autoplay-runtime-probe-source-map.json"
 EVENT_TEXT = "runtime_turn_execution.result"
 _EVENT_WORD = "ERR" + "OR:"
@@ -23,6 +24,7 @@ EVENT_TEXTS = (
 _CONTEXT_RADIUS = 36
 _FUNCTION_CONTEXT_MAX_LINES = 320
 _OUTPUT_DIR: Optional[Path] = None
+_ATEXIT_REGISTERED = False
 
 
 def parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
@@ -35,10 +37,26 @@ def parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
     return None
 
 
+def _write_probe_source_map_at_exit() -> None:
+    try:
+        write_probe_source_map_from_linecache()
+    except Exception:
+        return
+
+
+def _ensure_probe_source_map_atexit() -> None:
+    global _ATEXIT_REGISTERED
+    if _ATEXIT_REGISTERED:
+        return
+    atexit.register(_write_probe_source_map_at_exit)
+    _ATEXIT_REGISTERED = True
+
+
 def configure_probe_source_map(*, output_dir: str | Path | None = None) -> None:
     global _OUTPUT_DIR
     if output_dir is not None:
         _OUTPUT_DIR = Path(output_dir)
+    _ensure_probe_source_map_atexit()
 
 
 def configure_probe_source_map_from_argv(argv: Iterable[str]) -> None:
