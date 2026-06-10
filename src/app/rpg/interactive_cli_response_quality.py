@@ -49,10 +49,22 @@ _FALLBACK_ENVIRONMENT_SUFFIXES = (
     " at tavern",
     " at the tavern",
 )
-_SELL_REQUEST_TERMS = ("sell", "sold", "trade", "barter", "value", "worth", "copper would you give", "give me for")
+_SELL_REQUEST_TERMS = (
+    "sell",
+    "sold",
+    "trade",
+    "barter",
+    "value",
+    "worth",
+    "price",
+    "how much",
+    "copper would you give",
+    "give me for",
+)
 _SELL_ITEM_TERMS = ("ration", "rations", "provision", "provisions", "item", "gear", "inventory")
 _SELL_RESPONSE_TERMS = ("sell", "trade", "ration", "copper", "cannot", "can't", "not set up", "buy")
 _SELL_BAD_SURVIVAL_TERMS = ("you eat a ration", "hunger improves", "consume ration")
+_SELL_GENERIC_REFUSAL_TERMS = ("bran refuses", "unreasonable demand", "refuses. reason")
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -147,6 +159,7 @@ def _set_visible_response(
     }
     if speaker or line:
         raw_result["npc"] = {"speaker": speaker, "line": line}
+        raw_result["target_npc"] = speaker
     elif "npc" not in raw_result:
         raw_result["npc"] = {"speaker": "", "line": ""}
 
@@ -156,6 +169,8 @@ def _set_visible_response(
     out["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
     if speaker or line:
         out["raw_npc"] = {"speaker": speaker, "line": line}
+        out["target_npc"] = speaker
+        out["npc_speaker"] = speaker
 
     extracted = deepcopy(_safe_dict(out.get("extracted")))
     extracted["narration"] = narration
@@ -163,6 +178,7 @@ def _set_visible_response(
     if speaker or line:
         extracted["npc_speaker"] = speaker
         extracted["npc_line"] = line
+        extracted["target_npc"] = speaker
     out["extracted"] = extracted
 
     warnings = list(_safe_list(out.get("scenario_warnings")))
@@ -175,6 +191,17 @@ def _set_visible_response(
     if diagnostics:
         diagnostics["first_call_visible_response_suppressed_by_response_quality"] = True
         diagnostics["response_quality_source"] = RESPONSE_QUALITY_SOURCE
+        final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
+        if speaker:
+            final["target_npc"] = speaker
+            final.setdefault("action_type", "economy")
+            requested_terms = list(_safe_list(final.get("requested_terms")))
+            for term in ("sell", "ration", speaker):
+                if term not in requested_terms:
+                    requested_terms.append(term)
+            final["requested_terms"] = requested_terms
+        if final:
+            diagnostics["final_classification"] = final
         out["interactive_cli_intent_diagnostics"] = diagnostics
     return out
 
@@ -187,16 +214,17 @@ def _cleanup_sell_request(out: Dict[str, Any], player_input: str, intent: Mappin
     npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
     line = _safe_str(npc.get("line")).lower()
     output_text = " ".join([narration, line])
+    target = _safe_str(_safe_dict(intent).get("target_npc")).strip().lower()
     if _contains_any(output_text, _SELL_BAD_SURVIVAL_TERMS):
         cleanup_source = "sell_request_not_survival_consumption"
+    elif _contains_any(output_text, _SELL_GENERIC_REFUSAL_TERMS):
+        cleanup_source = "sell_request_specificity"
     elif not _contains_any(output_text, _SELL_RESPONSE_TERMS):
         cleanup_source = "sell_request_specificity"
+    elif target != "bran":
+        cleanup_source = "sell_request_target_stability"
     else:
-        target = _safe_str(_safe_dict(intent).get("target_npc")).strip().lower()
-        if target and target != "bran":
-            cleanup_source = "sell_request_target_stability"
-        else:
-            return None
+        return None
     narration_text = "Bran treats the request as a trade question, not a survival action."
     line_text = "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."
     return _set_visible_response(out, narration=narration_text, speaker="Bran", line=line_text, source=cleanup_source)
