@@ -130,6 +130,22 @@ def test_phase13_50_dialogue_cleanup_handles_this_place_speaker_from_live_matrix
     assert cleaned["raw_narration"] == "Bran answers from what is already established about the scene."
 
 
+def test_phase13_50_dialogue_cleanup_handles_tavern_location_speaker_from_live_matrix():
+    original = _turn(
+        "What do you know about this place?",
+        action_type="unknown",
+        target="Tavern (Location)",
+        terms=["this place"],
+        narration="Tavern (Location) answers from what is already established about the scene.",
+        npc={"speaker": "Tavern (Location)", "line": "This place sits by the road, with the tavern serving as the nearest shelter."},
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="What do you know about this place?")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["extracted"]["npc_speaker"] == "Bran"
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "dialogue_speaker_stability"
+
+
 def test_phase13_50_quest_fallback_cleanup_uses_bran_instead_of_environment_label():
     original = _turn(
         "I'm looking for a quest.",
@@ -155,6 +171,23 @@ def test_phase13_50_quest_fallback_cleanup_handles_generic_environment_npcs_labe
         terms=["quest"],
         narration="Environment/NPCs checks what he can actually offer and has no backed quest available in the current state.",
         npc={"speaker": "Environment/NPCs", "line": "I do not have a confirmed job or quest for you right now."},
+        narration_source="quest_repaired",
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="I'm looking for a quest.")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["extracted"]["npc_speaker"] == "Bran"
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "quest_fallback_speaker_stability"
+
+
+def test_phase13_50_quest_fallback_cleanup_handles_the_environment_npcs_label_from_live_matrix():
+    original = _turn(
+        "I'm looking for a quest.",
+        action_type="talk",
+        target="The Environment/NPCs",
+        terms=["quest"],
+        narration="The Environment/NPCs checks what he can actually offer and has no backed quest available in the current state.",
+        npc={"speaker": "The Environment/NPCs", "line": "I do not have a confirmed job or quest for you right now."},
         narration_source="quest_repaired",
     )
     cleaned = apply_interactive_response_quality_cleanup(original, player_input="I'm looking for a quest.")
@@ -206,6 +239,23 @@ def test_phase13_50_rumor_fallback_cleanup_handles_general_environment_npcs_labe
         terms=["rumor"],
         narration="General Environment/NPCs checks the confirmed rumors and news and finds nothing backed by the current state.",
         npc={"speaker": "General Environment/NPCs", "line": "I do not have any confirmed rumors or news for you right now."},
+        narration_source="rumor_repaired",
+    )
+    cleaned = apply_interactive_response_quality_cleanup(original, player_input="Any rumors around here?")
+
+    assert cleaned["raw_npc"]["speaker"] == "Bran"
+    assert cleaned["extracted"]["npc_speaker"] == "Bran"
+    assert cleaned["interactive_cli_response_quality"]["cleanup_source"] == "rumor_fallback_speaker_stability"
+
+
+def test_phase13_50_rumor_fallback_cleanup_handles_general_area_local_npcs_label_from_live_matrix():
+    original = _turn(
+        "Any rumors around here?",
+        action_type="talk",
+        target="General Area/Local NPCs",
+        terms=["rumor"],
+        narration="General Area/Local NPCs checks the confirmed rumors and news and finds nothing backed by the current state.",
+        npc={"speaker": "General Area/Local NPCs", "line": "I do not have any confirmed rumors or news for you right now."},
         narration_source="rumor_repaired",
     )
     cleaned = apply_interactive_response_quality_cleanup(original, player_input="Any rumors around here?")
