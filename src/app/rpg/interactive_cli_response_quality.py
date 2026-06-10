@@ -49,6 +49,10 @@ _FALLBACK_ENVIRONMENT_SUFFIXES = (
     " at tavern",
     " at the tavern",
 )
+_SELL_REQUEST_TERMS = ("sell", "sold", "trade", "barter", "value", "worth", "copper would you give", "give me for")
+_SELL_ITEM_TERMS = ("ration", "rations", "provision", "provisions", "item", "gear", "inventory")
+_SELL_RESPONSE_TERMS = ("sell", "trade", "ration", "copper", "cannot", "can't", "not set up", "buy")
+_SELL_BAD_SURVIVAL_TERMS = ("you eat a ration", "hunger improves", "consume ration")
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -80,6 +84,15 @@ def _is_fallback_environment_speaker(value: Any) -> bool:
         if key.endswith(suffix) and key[: -len(suffix)] in _FALLBACK_ENVIRONMENT_SPEAKERS:
             return True
     return False
+
+
+def _is_sell_request(player_input: str, intent: Mapping[str, Any]) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    terms = " ".join(_safe_str(term).lower() for term in _safe_list(_safe_dict(intent).get("requested_terms")))
+    combined = " ".join([text, terms])
+    if not _contains_any(combined, _SELL_REQUEST_TERMS):
+        return False
+    return _contains_any(combined, _SELL_ITEM_TERMS)
 
 
 def _final_intent(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
@@ -166,6 +179,29 @@ def _set_visible_response(
     return out
 
 
+def _cleanup_sell_request(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
+    if not _is_sell_request(player_input, intent):
+        return None
+    raw = _safe_dict(out.get("raw_result") or out.get("result"))
+    narration = _safe_str(out.get("raw_narration") or raw.get("narration")).lower()
+    npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
+    line = _safe_str(npc.get("line")).lower()
+    output_text = " ".join([narration, line])
+    if _contains_any(output_text, _SELL_BAD_SURVIVAL_TERMS):
+        cleanup_source = "sell_request_not_survival_consumption"
+    elif not _contains_any(output_text, _SELL_RESPONSE_TERMS):
+        cleanup_source = "sell_request_specificity"
+    else:
+        target = _safe_str(_safe_dict(intent).get("target_npc")).strip().lower()
+        if target and target != "bran":
+            cleanup_source = "sell_request_target_stability"
+        else:
+            return None
+    narration_text = "Bran treats the request as a trade question, not a survival action."
+    line_text = "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."
+    return _set_visible_response(out, narration=narration_text, speaker="Bran", line=line_text, source=cleanup_source)
+
+
 def _cleanup_dialogue_speaker(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
     raw = _safe_dict(out.get("raw_result") or out.get("result"))
     npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
@@ -176,13 +212,7 @@ def _cleanup_dialogue_speaker(out: Dict[str, Any], player_input: str, intent: Ma
     if not _contains_any(text, ("what do you know", "this place", "tavern", "road", "town")):
         return None
     line = _safe_str(npc.get("line")).strip() or "This place sits by the road, with the tavern serving as shelter, meeting point, and source of local talk."
-    return _set_visible_response(
-        out,
-        narration="Bran answers from what is already established about the scene.",
-        speaker="Bran",
-        line=line,
-        source="dialogue_speaker_stability",
-    )
+    return _set_visible_response(out, narration="Bran answers from what is already established about the scene.", speaker="Bran", line=line, source="dialogue_speaker_stability")
 
 
 def _cleanup_no_backed_fallback_speaker(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
@@ -222,33 +252,11 @@ def _cleanup_party(out: Dict[str, Any], player_input: str, intent: Mapping[str, 
     extracted = _safe_dict(out.get("extracted"))
     extracted_narration = _safe_str(extracted.get("narration"))
     if "help the player" in line.lower():
-        return _set_visible_response(
-            out,
-            narration=narration or "Bran joins your party and falls in beside you.",
-            speaker="Bran",
-            line="Then I am with you. I'll help you survive the road ahead.",
-            source="companion_acceptance_voice",
-        )
+        return _set_visible_response(out, narration=narration or "Bran joins your party and falls in beside you.", speaker="Bran", line="Then I am with you. I'll help you survive the road ahead.", source="companion_acceptance_voice")
     if not line.strip() and _contains_any(combined, ("join my party", "join party")):
-        return _set_visible_response(
-            out,
-            narration="Bran joins your party and falls in beside you.",
-            speaker="Bran",
-            line="Then I am with you. I'll help you survive the road ahead.",
-            source="companion_acceptance_voice",
-        )
-    if line.strip() and narration.strip() and (
-        _GENERIC_MOMENT_NARRATION in preview.lower()
-        or _GENERIC_MOMENT_NARRATION in extracted_narration.lower()
-        or not _safe_str(extracted.get("npc_speaker")).strip()
-    ):
-        return _set_visible_response(
-            out,
-            narration=narration,
-            speaker=_safe_str(npc.get("speaker")).strip() or "Bran",
-            line=line,
-            source="companion_response_sync",
-        )
+        return _set_visible_response(out, narration="Bran joins your party and falls in beside you.", speaker="Bran", line="Then I am with you. I'll help you survive the road ahead.", source="companion_acceptance_voice")
+    if line.strip() and narration.strip() and (_GENERIC_MOMENT_NARRATION in preview.lower() or _GENERIC_MOMENT_NARRATION in extracted_narration.lower() or not _safe_str(extracted.get("npc_speaker")).strip()):
+        return _set_visible_response(out, narration=narration, speaker=_safe_str(npc.get("speaker")).strip() or "Bran", line=line, source="companion_response_sync")
     return None
 
 
@@ -285,7 +293,7 @@ def _cleanup_combat(out: Dict[str, Any], player_input: str, intent: Mapping[str,
 def apply_interactive_response_quality_cleanup(turn_summary: Mapping[str, Any], *, player_input: str) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(turn_summary))
     intent = _final_intent(out)
-    for cleanup in (_cleanup_dialogue_speaker, _cleanup_no_backed_fallback_speaker, _cleanup_party, _cleanup_travel, _cleanup_combat):
+    for cleanup in (_cleanup_sell_request, _cleanup_dialogue_speaker, _cleanup_no_backed_fallback_speaker, _cleanup_party, _cleanup_travel, _cleanup_combat):
         repaired = cleanup(out, player_input, intent)
         if repaired is not None:
             return repaired
