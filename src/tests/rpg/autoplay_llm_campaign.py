@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import linecache
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -273,6 +274,62 @@ def _wrap_live_manual_turn_timing_functions(namespace: Dict[str, object]) -> Non
         return
 
 
+def _looks_like_foreground_llm_called(value: object, *, depth: int = 0, seen: set[int] | None = None) -> bool:
+    if depth > 4:
+        return False
+    if seen is None:
+        seen = set()
+    try:
+        value_id = id(value)
+        if value_id in seen:
+            return False
+        seen.add(value_id)
+        if isinstance(value, dict):
+            if value.get("llm_called") is True:
+                return True
+            return any(_looks_like_foreground_llm_called(v, depth=depth + 1, seen=seen) for v in value.values())
+        if isinstance(value, (list, tuple)):
+            return any(_looks_like_foreground_llm_called(v, depth=depth + 1, seen=seen) for v in value[:20])
+    except Exception:
+        return False
+    return False
+
+
+def _combined_background_skip_mode() -> str:
+    raw = str(os.environ.get("RPG_AUTOPLAY_SKIP_COMBINED_BACKGROUND_LLM", "auto") or "auto").strip().lower()
+    if raw in {"0", "false", "no", "off", "disabled"}:
+        return "off"
+    if raw in {"1", "true", "yes", "on", "all", "always"}:
+        return "all"
+    return "auto"
+
+
+def _should_skip_combined_background_llm(args: tuple[object, ...], kwargs: dict[str, object]) -> bool:
+    mode = _combined_background_skip_mode()
+    if mode == "off":
+        return False
+    if mode == "all":
+        return True
+    return _looks_like_foreground_llm_called(args) or _looks_like_foreground_llm_called(kwargs)
+
+
+def _wrap_combined_background_llm_submit_functions(namespace: Dict[str, object]) -> None:
+    for name, value in list(namespace.items()):
+        if "submit_combined_background" not in name or not callable(value):
+            continue
+        if getattr(value, "_autoplay_skip_redundant_background_wrapped", False):
+            continue
+
+        def _wrapped(*args, __fn=value, __name=name, **kwargs):
+            if _should_skip_combined_background_llm(args, kwargs):
+                print(f"[AUTOPLAY-PROBE] event=submit_combined_background_llm.skipped reason=foreground_llm_called function={__name}")
+                return None
+            return __fn(*args, **kwargs)
+
+        _wrapped._autoplay_skip_redundant_background_wrapped = True  # type: ignore[attr-defined]
+        namespace[name] = _wrapped
+
+
 def _install_essential_mirror_member_filter() -> None:
     try:
         from tests.rpg.autoplay.essential_mirror_member_filter import install_essential_mirror_member_filter
@@ -312,6 +369,7 @@ def _load_autoplay_campaign_runtime() -> None:
         exec(compile(combined_source, combined_filename, "exec"), chunk_globals, chunk_globals)
         _wrap_runtime_probe_functions(chunk_globals)
         _wrap_live_manual_turn_timing_functions(chunk_globals)
+        _wrap_combined_background_llm_submit_functions(chunk_globals)
     finally:
         chunk_globals["__name__"] = original_name
         _register_autoplay_runtime_aliases()
@@ -460,6 +518,7 @@ if __name__ == "__main__":
     from tests.rpg.autoplay.live_manual_turn_timing import configure_live_manual_turn_timing_from_argv
     from tests.rpg.autoplay.probe_source_map import configure_probe_source_map_from_argv
     from tests.rpg.autoplay.report_size_guard_hook import install_force_exit_report_size_guard
+    from tests.rpg.autoplay.runtime_apply_chain_probe import install_runtime_apply_chain_probe_from_argv
     from tests.rpg.autoplay.runtime_probe_payload_capture import configure_runtime_probe_payload_capture_from_argv
     from tests.rpg.autoplay.runtime_turn_result_capture_hook import install_runtime_turn_result_capture_hook_from_argv
     from tests.rpg.autoplay.turn_error_diagnostics_hook import install_turn_error_diagnostics_hook_from_argv
@@ -471,6 +530,7 @@ if __name__ == "__main__":
     install_runtime_turn_result_capture_hook_from_argv(sys.argv[1:])
     install_turn_error_diagnostics_hook_from_argv(sys.argv[1:])
     install_deepcopy_recursion_guard_from_argv(sys.argv[1:])
+    install_runtime_apply_chain_probe_from_argv(sys.argv[1:])
     install_report_materialization_size_guard_from_argv(sys.argv[1:])
     _install_essential_mirror_member_filter()
     install_force_exit_report_size_guard(sys.argv[1:])
