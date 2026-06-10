@@ -12,6 +12,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping
 
 RESPONSE_QUALITY_SOURCE = "interactive_cli_response_quality_v1"
+_RESPONSE_QUALITY_SHOP_SELL_PATCH = "phase_13_53_shop_sell_cleanup_v4"
 _GENERIC_MOVEMENT_NARRATION = "the scene shifts with the movement"
 _GENERIC_MOMENT_NARRATION = "the moment responds without producing a major new consequence"
 _NON_PERSON_SPEAKERS = {
@@ -49,6 +50,28 @@ _FALLBACK_ENVIRONMENT_SUFFIXES = (
     " at tavern",
     " at the tavern",
 )
+_SELL_REQUEST_TERMS = (
+    "sell",
+    "sold",
+    "trade",
+    "barter",
+    "value",
+    "worth",
+    "price",
+    "how much",
+    "copper would you give",
+    "give me for",
+)
+_SELL_ITEM_TERMS = ("ration", "rations", "provision", "provisions", "item", "gear", "inventory")
+_SELL_RESPONSE_TERMS = ("sell", "trade", "ration", "copper", "cannot", "can't", "not set up", "buy")
+_SELL_BAD_SURVIVAL_TERMS = ("you eat a ration", "hunger improves", "consume ration")
+_SELL_GENERIC_REFUSAL_TERMS = (
+    "bran refuses",
+    "unreasonable demand",
+    "refuses. reason",
+    _GENERIC_MOMENT_NARRATION,
+    "without producing a major new consequence",
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -82,8 +105,26 @@ def _is_fallback_environment_speaker(value: Any) -> bool:
     return False
 
 
+def _is_sell_request(player_input: str, intent: Mapping[str, Any]) -> bool:
+    text = _safe_str(player_input).strip().lower()
+    terms = " ".join(_safe_str(term).lower() for term in _safe_list(_safe_dict(intent).get("requested_terms")))
+    target = _safe_str(_safe_dict(intent).get("target_npc")).lower()
+    combined = " ".join([text, terms, target])
+    if not _contains_any(combined, _SELL_ITEM_TERMS):
+        return False
+    if _contains_any(combined, _SELL_REQUEST_TERMS):
+        return True
+    return (
+        "ration" in combined
+        and ("copper" in combined or "coin" in combined or "how much" in combined or "give me" in combined)
+    )
+
+
 def _final_intent(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
     diagnostics = _safe_dict(_safe_dict(turn_summary).get("interactive_cli_intent_diagnostics"))
+    if not diagnostics:
+        raw = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+        diagnostics = _safe_dict(raw.get("interactive_cli_intent_diagnostics"))
     return _safe_dict(diagnostics.get("final_classification"))
 
 
@@ -116,6 +157,40 @@ def _direction_label(intent: Mapping[str, Any], player_input: str) -> str:
     return "along the road"
 
 
+def _sell_requested_terms(existing_terms: Iterable[Any], speaker: str) -> list[str]:
+    requested_terms = [_safe_str(term).strip() for term in existing_terms if _safe_str(term).strip()]
+    requested_terms_lower = {term.lower() for term in requested_terms}
+    for term in ("sell", "ration", "trade", "copper", speaker):
+        if term and term.lower() not in requested_terms_lower:
+            requested_terms.append(term)
+            requested_terms_lower.add(term.lower())
+    return requested_terms
+
+
+def _updated_diagnostics_for_visible_response(
+    diagnostics_value: Any,
+    *,
+    speaker: str,
+    cleanup_source: str,
+) -> Dict[str, Any]:
+    diagnostics = deepcopy(_safe_dict(diagnostics_value))
+    diagnostics["first_call_visible_response_suppressed_by_response_quality"] = True
+    diagnostics["response_quality_source"] = RESPONSE_QUALITY_SOURCE
+    diagnostics["response_quality_cleanup_source"] = cleanup_source
+    diagnostics["response_quality_patch"] = _RESPONSE_QUALITY_SHOP_SELL_PATCH
+    final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
+    if speaker:
+        final["target_npc"] = speaker
+        final["target_name"] = speaker
+        final["target_id"] = "npc:bran"
+        final["action_type"] = "economy"
+        final["service_kind"] = "trade"
+        final["requested_terms"] = _sell_requested_terms(_safe_list(final.get("requested_terms")), speaker)
+    if final:
+        diagnostics["final_classification"] = final
+    return diagnostics
+
+
 def _set_visible_response(
     out: Dict[str, Any],
     *,
@@ -131,18 +206,41 @@ def _set_visible_response(
         "applied": True,
         "source": RESPONSE_QUALITY_SOURCE,
         "cleanup_source": source,
+        "patch": _RESPONSE_QUALITY_SHOP_SELL_PATCH,
     }
     if speaker or line:
         raw_result["npc"] = {"speaker": speaker, "line": line}
+        raw_result["target_npc"] = speaker
+        raw_result["target_name"] = speaker
+        raw_result["target_id"] = "npc:bran" if speaker == "Bran" else speaker
     elif "npc" not in raw_result:
         raw_result["npc"] = {"speaker": "", "line": ""}
 
+    diagnostics = _updated_diagnostics_for_visible_response(
+        out.get("interactive_cli_intent_diagnostics") or raw_result.get("interactive_cli_intent_diagnostics"),
+        speaker=speaker,
+        cleanup_source=source,
+    )
+    raw_result["interactive_cli_intent_diagnostics"] = diagnostics
+
     out["raw_result"] = raw_result
+    out["result"] = raw_result
     out["raw_narration"] = narration
+    out["narration"] = narration
     out["narration_preview"] = narration
     out["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
+    out["interactive_cli_intent_diagnostics"] = diagnostics
     if speaker or line:
-        out["raw_npc"] = {"speaker": speaker, "line": line}
+        npc_payload = {"speaker": speaker, "line": line}
+        out["raw_npc"] = npc_payload
+        out["npc"] = npc_payload
+        out["target_npc"] = speaker
+        out["target_name"] = speaker
+        out["target_id"] = "npc:bran" if speaker == "Bran" else speaker
+        out["npc_speaker"] = speaker
+        out["npc_line"] = line
+        out["raw_npc_speaker"] = speaker
+        out["raw_npc_line"] = line
 
     extracted = deepcopy(_safe_dict(out.get("extracted")))
     extracted["narration"] = narration
@@ -150,6 +248,7 @@ def _set_visible_response(
     if speaker or line:
         extracted["npc_speaker"] = speaker
         extracted["npc_line"] = line
+        extracted["target_npc"] = speaker
     out["extracted"] = extracted
 
     warnings = list(_safe_list(out.get("scenario_warnings")))
@@ -157,13 +256,45 @@ def _set_visible_response(
     if warning not in warnings:
         warnings.append(warning)
     out["scenario_warnings"] = warnings
-
-    diagnostics = deepcopy(_safe_dict(out.get("interactive_cli_intent_diagnostics")))
-    if diagnostics:
-        diagnostics["first_call_visible_response_suppressed_by_response_quality"] = True
-        diagnostics["response_quality_source"] = RESPONSE_QUALITY_SOURCE
-        out["interactive_cli_intent_diagnostics"] = diagnostics
     return out
+
+
+def _visible_output_text(out: Mapping[str, Any]) -> str:
+    raw = _safe_dict(out.get("raw_result") or out.get("result"))
+    npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
+    extracted = _safe_dict(out.get("extracted"))
+    return " ".join(
+        _safe_str(value)
+        for value in (
+            out.get("raw_narration"),
+            out.get("narration_preview"),
+            out.get("narration"),
+            raw.get("narration"),
+            npc.get("line"),
+            extracted.get("narration"),
+            extracted.get("npc_line"),
+        )
+    ).lower()
+
+
+def _cleanup_sell_request(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
+    if not _is_sell_request(player_input, intent):
+        return None
+    output_text = _visible_output_text(out)
+    target = _safe_str(_safe_dict(intent).get("target_npc")).strip().lower()
+    if _contains_any(output_text, _SELL_BAD_SURVIVAL_TERMS):
+        cleanup_source = "sell_request_not_survival_consumption"
+    elif _contains_any(output_text, _SELL_GENERIC_REFUSAL_TERMS):
+        cleanup_source = "sell_request_specificity"
+    elif not _contains_any(output_text, _SELL_RESPONSE_TERMS):
+        cleanup_source = "sell_request_specificity"
+    elif target != "bran":
+        cleanup_source = "sell_request_target_stability"
+    else:
+        return None
+    narration_text = "Bran treats the request as a trade question, not a survival action."
+    line_text = "I can't buy that ration from you yet; selling provisions is not set up in the current trade state."
+    return _set_visible_response(out, narration=narration_text, speaker="Bran", line=line_text, source=cleanup_source)
 
 
 def _cleanup_dialogue_speaker(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
@@ -176,13 +307,7 @@ def _cleanup_dialogue_speaker(out: Dict[str, Any], player_input: str, intent: Ma
     if not _contains_any(text, ("what do you know", "this place", "tavern", "road", "town")):
         return None
     line = _safe_str(npc.get("line")).strip() or "This place sits by the road, with the tavern serving as shelter, meeting point, and source of local talk."
-    return _set_visible_response(
-        out,
-        narration="Bran answers from what is already established about the scene.",
-        speaker="Bran",
-        line=line,
-        source="dialogue_speaker_stability",
-    )
+    return _set_visible_response(out, narration="Bran answers from what is already established about the scene.", speaker="Bran", line=line, source="dialogue_speaker_stability")
 
 
 def _cleanup_no_backed_fallback_speaker(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
@@ -222,33 +347,11 @@ def _cleanup_party(out: Dict[str, Any], player_input: str, intent: Mapping[str, 
     extracted = _safe_dict(out.get("extracted"))
     extracted_narration = _safe_str(extracted.get("narration"))
     if "help the player" in line.lower():
-        return _set_visible_response(
-            out,
-            narration=narration or "Bran joins your party and falls in beside you.",
-            speaker="Bran",
-            line="Then I am with you. I'll help you survive the road ahead.",
-            source="companion_acceptance_voice",
-        )
+        return _set_visible_response(out, narration=narration or "Bran joins your party and falls in beside you.", speaker="Bran", line="Then I am with you. I'll help you survive the road ahead.", source="companion_acceptance_voice")
     if not line.strip() and _contains_any(combined, ("join my party", "join party")):
-        return _set_visible_response(
-            out,
-            narration="Bran joins your party and falls in beside you.",
-            speaker="Bran",
-            line="Then I am with you. I'll help you survive the road ahead.",
-            source="companion_acceptance_voice",
-        )
-    if line.strip() and narration.strip() and (
-        _GENERIC_MOMENT_NARRATION in preview.lower()
-        or _GENERIC_MOMENT_NARRATION in extracted_narration.lower()
-        or not _safe_str(extracted.get("npc_speaker")).strip()
-    ):
-        return _set_visible_response(
-            out,
-            narration=narration,
-            speaker=_safe_str(npc.get("speaker")).strip() or "Bran",
-            line=line,
-            source="companion_response_sync",
-        )
+        return _set_visible_response(out, narration="Bran joins your party and falls in beside you.", speaker="Bran", line="Then I am with you. I'll help you survive the road ahead.", source="companion_acceptance_voice")
+    if line.strip() and narration.strip() and (_GENERIC_MOMENT_NARRATION in preview.lower() or _GENERIC_MOMENT_NARRATION in extracted_narration.lower() or not _safe_str(extracted.get("npc_speaker")).strip()):
+        return _set_visible_response(out, narration=narration, speaker=_safe_str(npc.get("speaker")).strip() or "Bran", line=line, source="companion_response_sync")
     return None
 
 
@@ -284,9 +387,10 @@ def _cleanup_combat(out: Dict[str, Any], player_input: str, intent: Mapping[str,
 
 def apply_interactive_response_quality_cleanup(turn_summary: Mapping[str, Any], *, player_input: str) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(turn_summary))
+    resolved_player_input = _safe_str(player_input or out.get("player_input") or out.get("player_action"))
     intent = _final_intent(out)
-    for cleanup in (_cleanup_dialogue_speaker, _cleanup_no_backed_fallback_speaker, _cleanup_party, _cleanup_travel, _cleanup_combat):
-        repaired = cleanup(out, player_input, intent)
+    for cleanup in (_cleanup_sell_request, _cleanup_dialogue_speaker, _cleanup_no_backed_fallback_speaker, _cleanup_party, _cleanup_travel, _cleanup_combat):
+        repaired = cleanup(out, resolved_player_input, intent)
         if repaired is not None:
             return repaired
     return out
@@ -301,18 +405,29 @@ def apply_response_quality_to_matrix_result(result: Mapping[str, Any]) -> Dict[s
     for item in _safe_list(result_dict.get("results")):
         scenario = item.get("scenario")
         scenario_id = _safe_str(getattr(scenario, "scenario_id", "") or _safe_dict(scenario).get("scenario_id"))
+        commands = list(getattr(scenario, "commands", ()) or _safe_dict(scenario).get("commands") or ())
         scenario_result = _safe_dict(item.get("result"))
         turns = []
         scenario_changed = 0
-        for turn in _safe_list(scenario_result.get("turns")):
+        for index, turn in enumerate(_safe_list(scenario_result.get("turns"))):
             turn_dict = _safe_dict(turn)
-            cleaned = apply_interactive_response_quality_cleanup(turn_dict, player_input=_safe_str(turn_dict.get("player_input")))
+            player_input = _safe_str(
+                turn_dict.get("player_input")
+                or turn_dict.get("player_action")
+                or (commands[index] if index < len(commands) else "")
+            )
+            cleaned = apply_interactive_response_quality_cleanup(turn_dict, player_input=player_input)
             if _safe_dict(cleaned).get("interactive_cli_response_quality"):
                 scenario_changed += 1
             turns.append(cleaned)
-        if scenario_changed:
-            scenario_result["turns"] = turns
-            item["result"] = scenario_result
-            changed += scenario_changed
+        scenario_result["turns"] = turns
+        item["result"] = scenario_result
+        changed += scenario_changed
         scenarios.append({"scenario_id": scenario_id, "changed_turns": scenario_changed})
-    return {"ok": True, "source": RESPONSE_QUALITY_SOURCE, "changed_turns": changed, "scenarios": scenarios}
+    return {
+        "ok": True,
+        "source": RESPONSE_QUALITY_SOURCE,
+        "patch": _RESPONSE_QUALITY_SHOP_SELL_PATCH,
+        "changed_turns": changed,
+        "scenarios": scenarios,
+    }

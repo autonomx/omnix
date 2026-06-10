@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Dict, Mapping, Sequence
 
 THIS_FILE = Path(__file__).resolve()
 TESTS_ROOT = THIS_FILE.parents[1]
@@ -16,7 +16,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
+from app.rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
 from tests.rpg import interactive_feature_matrix as feature_matrix  # noqa: E402
 from tests.rpg import interactive_intent_matrix_zip as matrix_zip  # noqa: E402
 
@@ -30,6 +30,54 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-live-survival-seed", action="store_true", help="Do not seed starter survival/inventory state.")
     parser.add_argument("--no-response-quality-cleanup", action="store_true", help="Disable Phase 13.50 presentation cleanup before zipping.")
     return parser
+
+
+def _revalidate_after_cleanup(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Recompute scenario validation/feature-gap status after artifact cleanup."""
+
+    for item in list(result.get("results") or []):
+        scenario = item.get("scenario")
+        scenario_result = feature_matrix.matrix._safe_dict(item.get("result"))
+        if scenario is not None:
+            item["validation"] = feature_matrix.matrix.validate_matrix_run(scenario, scenario_result)
+    classification = feature_matrix._classify_feature_matrix_results(list(result.get("results") or []))
+    result["results"] = classification["results"]
+    summary = feature_matrix.matrix._safe_dict(result.get("summary"))
+    hard_failures = list(classification["hard_failures"])
+    feature_gaps = list(classification["feature_gaps"])
+    summary.update(
+        {
+            "format_version": feature_matrix.FEATURE_MATRIX_VERSION,
+            "matrix_kind": "extended_feature_matrix",
+            "failed": hard_failures,
+            "passed": int(summary.get("scenario_count") or len(result.get("results") or [])) - len(hard_failures),
+            "feature_gaps": feature_gaps,
+            "feature_gap_count": len(feature_gaps),
+            "known_feature_gap_scenarios": sorted(feature_matrix.KNOWN_FEATURE_GAP_SCENARIO_IDS),
+        }
+    )
+    result["summary"] = summary
+    return result
+
+
+def _write_feature_matrix_summary_artifacts(result: Mapping[str, Any], output_root: Path) -> None:
+    summary = feature_matrix.matrix._safe_dict(result.get("summary"))
+    summary_path = output_root / "interactive-feature-matrix-summary.json"
+    performance_path = output_root / "interactive-feature-matrix-performance.json"
+    report_path = output_root / "interactive-feature-matrix-report.html"
+    summary["summary_path"] = str(summary_path)
+    summary["performance_path"] = str(performance_path)
+    summary["html_report_path"] = str(report_path)
+    summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+    performance_path.write_text(json.dumps(feature_matrix.matrix._safe_dict(summary.get("performance")), indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+    report_path.write_text(
+        feature_matrix.matrix.render_matrix_html(
+            summary,
+            list(result.get("results") or []),
+            feature_matrix.matrix._safe_dict(summary.get("details")),
+        ),
+        encoding="utf-8",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -50,20 +98,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         cleanup = apply_response_quality_to_matrix_result(result)
         result["summary"]["response_quality_cleanup"] = cleanup
         if int(cleanup.get("changed_turns") or 0) > 0:
+            result = _revalidate_after_cleanup(result)
+            result["summary"]["response_quality_cleanup"] = cleanup
             matrix_zip._rewrite_matrix_artifacts_after_cleanup(result, output_root)
-            result["summary"].update(
-                {
-                    "format_version": feature_matrix.FEATURE_MATRIX_VERSION,
-                    "matrix_kind": "extended_feature_matrix",
-                    "response_quality_cleanup": cleanup,
-                }
-            )
-            summary_path = output_root / "interactive-feature-matrix-summary.json"
-            summary_path.write_text(json.dumps(result["summary"], indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+            _write_feature_matrix_summary_artifacts(result, output_root)
     zip_path = matrix_zip.zip_matrix_output(output_root, Path(args.zip_path) if args.zip_path else None)
     result["summary"]["zip_path"] = str(zip_path)
-    summary_path = output_root / "interactive-feature-matrix-summary.json"
-    summary_path.write_text(json.dumps(result["summary"], indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+    _write_feature_matrix_summary_artifacts(result, output_root)
     print(json.dumps(result["summary"], indent=2, ensure_ascii=False, sort_keys=True, default=str))
     print(f"[INTERACTIVE-FEATURE-MATRIX-ZIP] {zip_path}")
     return 0 if not result["summary"].get("failed") else 1
