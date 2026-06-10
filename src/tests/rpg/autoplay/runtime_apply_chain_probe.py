@@ -14,11 +14,13 @@ import json
 import sys
 import time
 import traceback
+import zipfile
 from pathlib import Path
 from types import FrameType, TracebackType
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 _SOURCE = "autoplay_runtime_apply_chain_probe_v2"
+ARTIFACT_NAME = "autoplay-runtime-apply-chain-probe.json"
 _OUTPUT_DIR: Path | None = None
 _INSTALLED = False
 _PREVIOUS_TRACE = None
@@ -75,7 +77,7 @@ def _diagnostic_output_dir() -> Path:
 
 
 def _artifact_path() -> Path:
-    return _diagnostic_output_dir() / "autoplay-runtime-apply-chain-probe.json"
+    return _diagnostic_output_dir() / ARTIFACT_NAME
 
 
 def _safe_text(value: object, *, limit: int = _MAX_STRING) -> str:
@@ -182,6 +184,55 @@ def write_runtime_apply_chain_probe_artifact() -> Dict[str, object]:
     payload = _empty_payload()
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return payload
+
+
+def _candidate_result_zips(output_dir: Path) -> List[Path]:
+    patterns = (
+        "*interactive*campaign*results*.zip",
+        "*autoplay*campaign*results*.zip",
+        "*campaign*results*.zip",
+        "*.zip",
+    )
+    candidates: List[Path] = []
+    seen: set[Path] = set()
+    for pattern in patterns:
+        for path in output_dir.glob(pattern):
+            if path.is_file() and path not in seen:
+                candidates.append(path)
+                seen.add(path)
+    candidates.sort(key=lambda item: item.stat().st_mtime, reverse=True)
+    return candidates[:5]
+
+
+def _zip_contains(zip_path: Path, member_name: str) -> bool:
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            return member_name in set(zf.namelist())
+    except Exception:
+        return False
+
+
+def append_runtime_apply_chain_probe_to_result_zips() -> Dict[str, object]:
+    payload = write_runtime_apply_chain_probe_artifact()
+    artifact = _artifact_path()
+    output_dir = _diagnostic_output_dir()
+    appended: List[str] = []
+    for zip_path in _candidate_result_zips(output_dir):
+        if _zip_contains(zip_path, ARTIFACT_NAME):
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.write(artifact, arcname=ARTIFACT_NAME)
+            appended.append(str(zip_path))
+        except Exception:
+            continue
+    return {
+        "ok": True,
+        "source": _SOURCE,
+        "artifact_path": str(artifact),
+        "event_count": payload.get("event_count", 0) if isinstance(payload, dict) else 0,
+        "zips_appended": appended,
+    }
 
 
 def _safe_frame(frame: FrameType) -> Dict[str, object]:
@@ -325,7 +376,7 @@ def install_runtime_apply_chain_probe_from_argv(argv: Iterable[str]) -> None:
     _PREVIOUS_TRACE = sys.gettrace()
     _INSTALLED = True
     sys.settrace(_runtime_apply_chain_trace)
-    atexit.register(write_runtime_apply_chain_probe_artifact)
+    atexit.register(append_runtime_apply_chain_probe_to_result_zips)
     atexit.register(uninstall_runtime_apply_chain_probe)
     try:
         _write_event(
