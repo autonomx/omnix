@@ -1,20 +1,28 @@
-"""Short-session NPC memory response cleanup for interactive feature runs.
+"""Short-session NPC memory response handling for interactive feature runs.
 
-This module is presentation-only.  It does not persist facts across sessions or mutate
-simulation memory.  It uses earlier commands/turns in the same matrix scenario to keep
-live-provider recall presentation grounded when the user immediately asks an NPC to
-remember a fact and then asks for it back.
+This module bridges current interactive CLI turn payloads to a small deterministic
+short-session memory state.  It does not persist facts across sessions or mutate
+simulation memory, but it does carry explicitly supplied same-scenario facts so
+recall presentation can report state rather than only hard-coded cleanup text.
 """
 
 from __future__ import annotations
 
-import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, Mapping
 
-MEMORY_RESPONSE_QUALITY_SOURCE = "interactive_cli_memory_response_quality_v1"
-MEMORY_RECALL_PATCH = "phase_13_55_npc_memory_recall_cleanup_v1"
-_TRAIL_NAME_RE = re.compile(r"\bmy\s+trail\s+name\s+is\s+([A-Za-z][A-Za-z0-9' -]{1,48})", re.IGNORECASE)
+from app.rpg.interactive_cli_memory_state import (
+    default_short_session_memory_state,
+    describe_trail_name_ack,
+    describe_trail_name_recall,
+    extract_trail_name,
+    get_trail_name,
+    normalize_short_session_memory_state,
+    remember_trail_name,
+)
+
+MEMORY_RESPONSE_QUALITY_SOURCE = "interactive_cli_memory_response_quality_v2"
+MEMORY_RECALL_PATCH = "phase_13_59_npc_memory_state_foundation_v1"
 _RECALL_TERMS = ("what trail name", "trail name did", "asked you to remember", "do you remember")
 _GENERIC_OUTPUT_TERMS = (
     "without producing a major new consequence",
@@ -41,18 +49,6 @@ def _safe_str(value: Any) -> str:
 def _contains_any(text: str, terms: Iterable[str]) -> bool:
     lowered = text.lower()
     return any(term in lowered for term in terms)
-
-
-def _extract_trail_name(text: str) -> str:
-    match = _TRAIL_NAME_RE.search(_safe_str(text))
-    if not match:
-        return ""
-    phrase = match.group(1).strip(" .,!?:;\"'")
-    # Keep the first short name phrase.  The feature probe uses two title-cased words.
-    parts = phrase.split()
-    if len(parts) > 3:
-        phrase = " ".join(parts[:3])
-    return phrase.strip()
 
 
 def _visible_output_text(turn: Mapping[str, Any]) -> str:
@@ -99,21 +95,31 @@ def _updated_diagnostics(diagnostics_value: Any, *, trail_name: str) -> Dict[str
     return diagnostics
 
 
-def _set_bran_memory_response(turn: Mapping[str, Any], *, narration: str, line: str, trail_name: str) -> Dict[str, Any]:
+def _set_bran_memory_response(
+    turn: Mapping[str, Any],
+    *,
+    narration: str,
+    line: str,
+    memory_state: Mapping[str, Any],
+) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(turn))
     raw_result = deepcopy(_safe_dict(out.get("raw_result") or out.get("result")))
+    state = normalize_short_session_memory_state(memory_state)
+    trail_name = get_trail_name(state)
     raw_result["narration"] = narration
     raw_result["npc"] = {"speaker": "Bran", "line": line}
     raw_result["target_npc"] = "Bran"
     raw_result["target_name"] = "Bran"
     raw_result["target_id"] = "npc:bran"
-    raw_result["visible_interaction_reason"] = "Interactive CLI short-session memory presentation cleaned up from current scenario context."
+    raw_result["visible_interaction_reason"] = "Interactive CLI short-session memory state presentation was normalized."
     raw_result["interactive_cli_response_quality"] = {
         "applied": True,
         "source": MEMORY_RESPONSE_QUALITY_SOURCE,
         "cleanup_source": "short_session_memory_recall",
         "patch": MEMORY_RECALL_PATCH,
     }
+    raw_result["interactive_cli_memory_state"] = state
+    raw_result["memory_state"] = state
     diagnostics = _updated_diagnostics(
         out.get("interactive_cli_intent_diagnostics") or raw_result.get("interactive_cli_intent_diagnostics"),
         trail_name=trail_name,
@@ -136,6 +142,8 @@ def _set_bran_memory_response(turn: Mapping[str, Any], *, narration: str, line: 
     out["raw_npc_line"] = line
     out["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
     out["interactive_cli_intent_diagnostics"] = diagnostics
+    out["interactive_cli_memory_state"] = state
+    out["memory_state"] = state
     extracted = deepcopy(_safe_dict(out.get("extracted")))
     extracted["narration"] = narration
     extracted["npc_speaker"] = "Bran"
@@ -150,8 +158,21 @@ def _set_bran_memory_response(turn: Mapping[str, Any], *, narration: str, line: 
     return out
 
 
+def _attach_memory_state(turn: Mapping[str, Any], memory_state: Mapping[str, Any]) -> Dict[str, Any]:
+    out = deepcopy(_safe_dict(turn))
+    state = normalize_short_session_memory_state(memory_state)
+    raw_result = deepcopy(_safe_dict(out.get("raw_result") or out.get("result")))
+    raw_result["interactive_cli_memory_state"] = state
+    raw_result["memory_state"] = state
+    out["raw_result"] = raw_result
+    out["result"] = raw_result
+    out["interactive_cli_memory_state"] = state
+    out["memory_state"] = state
+    return out
+
+
 def apply_short_session_memory_recall_to_matrix_result(result: Mapping[str, Any]) -> Dict[str, Any]:
-    """Apply grounded same-scenario NPC memory recall cleanup to matrix results."""
+    """Apply grounded same-scenario NPC memory recall state to matrix results."""
 
     result_dict = _safe_dict(result)
     changed = 0
@@ -164,8 +185,8 @@ def apply_short_session_memory_recall_to_matrix_result(result: Mapping[str, Any]
         commands = list(getattr(scenario, "commands", ()) or _safe_dict(scenario).get("commands") or ())
         scenario_result = _safe_dict(item.get("result"))
         turns = []
-        trail_name = ""
         scenario_changed = 0
+        memory_state = default_short_session_memory_state()
         for index, turn in enumerate(_safe_list(scenario_result.get("turns"))):
             turn_dict = _safe_dict(turn)
             player_input = _safe_str(
@@ -173,34 +194,47 @@ def apply_short_session_memory_recall_to_matrix_result(result: Mapping[str, Any]
                 or turn_dict.get("player_action")
                 or (commands[index] if index < len(commands) else "")
             )
-            found_name = _extract_trail_name(player_input)
+            found_name = extract_trail_name(player_input)
+            cleaned_turn = turn_dict
             if found_name:
-                trail_name = found_name
+                memory_state = remember_trail_name(memory_state, found_name, npc_name="Bran")
+                trail_name = get_trail_name(memory_state)
                 output = _visible_output_text(turn_dict)
                 if trail_name.lower() not in output.lower() or "bran" not in output.lower():
-                    turn_dict = _set_bran_memory_response(
+                    narration, line = describe_trail_name_ack(memory_state)
+                    cleaned_turn = _set_bran_memory_response(
                         turn_dict,
-                        narration=f"Bran acknowledges the trail name {trail_name} as something you asked him to remember.",
-                        line=f"I'll remember it: {trail_name}.",
-                        trail_name=trail_name,
+                        narration=narration,
+                        line=line,
+                        memory_state=memory_state,
                     )
                     scenario_changed += 1
-            elif trail_name and _contains_any(player_input, _RECALL_TERMS):
+            elif get_trail_name(memory_state) and _contains_any(player_input, _RECALL_TERMS):
+                trail_name = get_trail_name(memory_state)
                 output = _visible_output_text(turn_dict)
                 if trail_name.lower() not in output.lower() or _contains_any(output, _GENERIC_OUTPUT_TERMS):
-                    turn_dict = _set_bran_memory_response(
+                    narration, line = describe_trail_name_recall(memory_state)
+                    cleaned_turn = _set_bran_memory_response(
                         turn_dict,
-                        narration=f"Bran recalls the trail name from this conversation: {trail_name}.",
-                        line=f"You asked me to remember {trail_name}.",
-                        trail_name=trail_name,
+                        narration=narration,
+                        line=line,
+                        memory_state=memory_state,
                     )
                     scenario_changed += 1
-            turns.append(turn_dict)
+            if cleaned_turn is turn_dict:
+                cleaned_turn = _attach_memory_state(turn_dict, memory_state)
+            turns.append(cleaned_turn)
         if scenario_changed:
             scenario_result["turns"] = turns
             item["result"] = scenario_result
             changed += scenario_changed
-        scenarios.append({"scenario_id": scenario_id, "changed_turns": scenario_changed, "trail_name": trail_name})
+        scenarios.append(
+            {
+                "scenario_id": scenario_id,
+                "changed_turns": scenario_changed,
+                "trail_name": get_trail_name(memory_state),
+            }
+        )
     return {
         "ok": True,
         "source": MEMORY_RESPONSE_QUALITY_SOURCE,
