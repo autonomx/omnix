@@ -23,6 +23,13 @@ _NON_PERSON_SPEAKERS = {
     "the room",
     "room",
 }
+_FALLBACK_ENVIRONMENT_SPEAKERS = {
+    "environment/location (tavern)",
+    "the town/tavern atmosphere",
+    "town/tavern atmosphere",
+    "tavern atmosphere",
+    "the tavern atmosphere",
+}
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -136,6 +143,35 @@ def _cleanup_dialogue_speaker(out: Dict[str, Any], player_input: str, intent: Ma
     )
 
 
+def _cleanup_no_backed_fallback_speaker(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
+    raw = _safe_dict(out.get("raw_result") or out.get("result"))
+    npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
+    speaker = _safe_str(npc.get("speaker")).strip()
+    line = _safe_str(npc.get("line")).strip()
+    narration = _safe_str(out.get("raw_narration") or raw.get("narration")).strip()
+    source = _safe_str(out.get("narration_source") or raw.get("narration_source")).lower()
+    combined = " ".join([_safe_str(player_input), narration, line, source]).lower()
+    if speaker.lower() not in _FALLBACK_ENVIRONMENT_SPEAKERS:
+        return None
+    if "no backed" not in combined and "do not have" not in line.lower():
+        return None
+    if not _contains_any(combined, ("quest", "job", "rumor", "news")):
+        return None
+    if _contains_any(combined, ("rumor", "news")):
+        cleaned_narration = "Bran checks the confirmed rumors and news and finds nothing backed by the current state."
+        cleanup_source = "rumor_fallback_speaker_stability"
+    else:
+        cleaned_narration = "Bran checks what he can actually offer and has no backed quest available in the current state."
+        cleanup_source = "quest_fallback_speaker_stability"
+    return _set_visible_response(
+        out,
+        narration=cleaned_narration,
+        speaker="Bran",
+        line=line,
+        source=cleanup_source,
+    )
+
+
 def _cleanup_travel(out: Dict[str, Any], player_input: str, intent: Mapping[str, Any]) -> Dict[str, Any] | None:
     raw = _safe_dict(out.get("raw_result") or out.get("result"))
     narration = _safe_str(out.get("raw_narration") or raw.get("narration")).lower()
@@ -198,7 +234,7 @@ def _cleanup_party(out: Dict[str, Any], player_input: str, intent: Mapping[str, 
 def apply_interactive_response_quality_cleanup(turn_summary: Mapping[str, Any], *, player_input: str) -> Dict[str, Any]:
     out = deepcopy(_safe_dict(turn_summary))
     intent = _final_intent(out)
-    for cleanup in (_cleanup_dialogue_speaker, _cleanup_party, _cleanup_travel, _cleanup_combat):
+    for cleanup in (_cleanup_dialogue_speaker, _cleanup_no_backed_fallback_speaker, _cleanup_party, _cleanup_travel, _cleanup_combat):
         repaired = cleanup(out, player_input, intent)
         if repaired is not None:
             return repaired
