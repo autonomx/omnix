@@ -1,3 +1,8 @@
+from app.rpg.interactive_cli_campaign_map_state import (
+    OLD_MILL_LOCATION_ID,
+    initial_campaign_map_state,
+    route_transition_for_command,
+)
 from app.rpg.interactive_cli_travel_response_quality import apply_travel_state_to_matrix_result
 from tests.rpg import interactive_feature_matrix as feature_matrix
 
@@ -37,6 +42,23 @@ def test_phase13_63_feature_matrix_includes_map_expansion_probe_without_known_ga
     assert "map_expansion_probe" in scenario_ids
     assert "map_expansion_probe" not in feature_matrix.KNOWN_FEATURE_GAP_SCENARIO_IDS
     assert feature_matrix.KNOWN_FEATURE_GAP_SCENARIO_IDS == frozenset()
+
+
+def test_phase13_63_outward_route_precedence_expands_before_known_road_match():
+    map_state = initial_campaign_map_state()
+
+    updated_map, transition = route_transition_for_command(
+        map_state,
+        current_location_id=OLD_MILL_LOCATION_ID,
+        command="I keep following the old road east toward the river town.",
+    )
+
+    assert transition["to_location_id"] == "location:river-town"
+    assert transition["destination_name"] == "river town"
+    assert transition["direction"] == "east"
+    assert transition["map_expanded"] is True
+    assert "location:river-town" in updated_map["locations"]
+    assert updated_map["expansions"][-1]["policy"] == "append_on_edge_request"
 
 
 def test_phase13_63_map_expansion_probe_attaches_canonical_expansion_state():
