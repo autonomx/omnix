@@ -4,11 +4,13 @@ from __future__ import annotations
 import atexit
 import json
 import linecache
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-SOURCE = "autoplay_probe_source_map_v4"
+SOURCE = "autoplay_probe_source_map_v5"
 ARTIFACT_NAME = "autoplay-runtime-probe-source-map.json"
+MANIFEST_NAME = "autoplay-diagnostic-artifact-manifest.json"
 EVENT_TEXT = "runtime_turn_execution.result"
 _EVENT_WORD = "ERR" + "OR:"
 EVENT_TEXTS = (
@@ -20,6 +22,13 @@ EVENT_TEXTS = (
     "runtime_core_before_apply_turn_authoritative",
     "runtime_checkpoint_after_companion_systems",
     "runtime_core_after_apply_turn_authoritative",
+)
+EXPECTED_DIAGNOSTIC_ARTIFACTS = (
+    ARTIFACT_NAME,
+    "autoplay-runtime-turn-results.json",
+    "autoplay-stream-turn-error-events.json",
+    "autoplay-exception-tracebacks.json",
+    "autoplay-runtime-turn-result-payloads.json",
 )
 _CONTEXT_RADIUS = 36
 _FUNCTION_CONTEXT_MAX_LINES = 320
@@ -37,9 +46,72 @@ def parse_output_dir(argv: Iterable[str]) -> Optional[Path]:
     return None
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _placeholder_payload(name: str) -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "source": "autoplay_diagnostic_artifact_contract_v1",
+        "artifact": name,
+        "placeholder": True,
+        "reason": "writer_did_not_produce_artifact",
+        "generated_at": _utc_now(),
+    }
+
+
+def ensure_diagnostic_artifact_contract(output_dir: str | Path | None = None) -> Dict[str, Any]:
+    """Create placeholders and a manifest for expected diagnostic artifacts."""
+
+    target_dir = Path(output_dir) if output_dir is not None else _OUTPUT_DIR
+    if target_dir is None:
+        return {
+            "ok": False,
+            "source": "autoplay_diagnostic_artifact_contract_v1",
+            "reason": "output_dir_missing",
+            "artifacts": [],
+        }
+    target_dir.mkdir(parents=True, exist_ok=True)
+    artifacts: List[Dict[str, Any]] = []
+    for name in EXPECTED_DIAGNOSTIC_ARTIFACTS:
+        path = target_dir / name
+        existed_before = path.exists()
+        placeholder = False
+        if not existed_before:
+            path.write_text(json.dumps(_placeholder_payload(name), indent=2, sort_keys=True), encoding="utf-8")
+            placeholder = True
+        artifacts.append(
+            {
+                "name": name,
+                "path": str(path),
+                "exists": path.exists(),
+                "existed_before_contract": existed_before,
+                "placeholder": placeholder,
+                "size_bytes": path.stat().st_size if path.exists() else 0,
+            }
+        )
+    manifest = {
+        "ok": True,
+        "source": "autoplay_diagnostic_artifact_contract_v1",
+        "generated_at": _utc_now(),
+        "artifact_count": len(artifacts),
+        "placeholder_count": sum(1 for item in artifacts if item.get("placeholder")),
+        "artifacts": artifacts,
+    }
+    manifest_path = target_dir / MANIFEST_NAME
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+    manifest["path"] = str(manifest_path)
+    return manifest
+
+
 def _write_probe_source_map_at_exit() -> None:
     try:
         write_probe_source_map_from_linecache()
+    except Exception:
+        pass
+    try:
+        ensure_diagnostic_artifact_contract()
     except Exception:
         return
 
