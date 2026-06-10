@@ -25,6 +25,8 @@ _NON_PERSON_SPEAKERS = {
 }
 _FALLBACK_ENVIRONMENT_SPEAKERS = {
     "environment/location (tavern)",
+    "environment/npcs",
+    "general environment/npcs",
     "the town/tavern atmosphere",
     "town/tavern atmosphere",
     "tavern atmosphere",
