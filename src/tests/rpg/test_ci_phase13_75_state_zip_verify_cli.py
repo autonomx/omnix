@@ -244,3 +244,100 @@ def test_phase13_79_status_marker_parser_rejects_invalid_values() -> None:
     assert verify_cli.parse_state_zip_verification_status_marker(bad_ok)["error"] == "status_marker_ok_invalid"
     assert verify_cli.parse_state_zip_verification_status_marker(bad_count)["error"] == "status_marker_count_invalid"
     assert verify_cli.parse_state_zip_verification_status_marker(negative_count)["error"] == "status_marker_count_negative"
+
+
+def test_phase13_80_summary_aggregate_counts_all_successes() -> None:
+    aggregate = verify_cli.aggregate_state_zip_verification_summaries(
+        [
+            {
+                "summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+                "ok": True,
+                "checkpoint_count": 1,
+                "restored_turns": [1],
+            },
+            {
+                "summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+                "ok": True,
+                "checkpoint_count": 2,
+                "restored_turns": [1, 2],
+            },
+        ]
+    )
+
+    assert aggregate == {
+        "aggregate_format_version": verify_cli.STATE_ZIP_VERIFY_AGGREGATE_VERSION,
+        "ok": True,
+        "summary_count": 2,
+        "valid_summary_count": 2,
+        "invalid_summary_count": 0,
+        "passed": 2,
+        "failed": 0,
+        "total_checkpoint_count": 3,
+        "total_restored_turn_count": 3,
+        "entries": [
+            {
+                "index": 0,
+                "schema_ok": True,
+                "verification_ok": True,
+                "checkpoint_count": 1,
+                "restored_turn_count": 1,
+                "error": "none",
+            },
+            {
+                "index": 1,
+                "schema_ok": True,
+                "verification_ok": True,
+                "checkpoint_count": 2,
+                "restored_turn_count": 2,
+                "error": "none",
+            },
+        ],
+    }
+
+
+def test_phase13_80_summary_aggregate_preserves_verification_failures() -> None:
+    aggregate = verify_cli.aggregate_state_zip_verification_summaries(
+        [
+            {
+                "summary_format_version": verify_cli.STATE_ZIP_VERIFY_SUMMARY_VERSION,
+                "ok": False,
+                "error": "zip_missing",
+            }
+        ]
+    )
+
+    assert aggregate["ok"] is False
+    assert aggregate["passed"] == 0
+    assert aggregate["failed"] == 1
+    assert aggregate["entries"] == [
+        {
+            "index": 0,
+            "schema_ok": True,
+            "verification_ok": False,
+            "checkpoint_count": 0,
+            "restored_turn_count": 0,
+            "error": "zip_missing",
+        }
+    ]
+
+
+def test_phase13_80_summary_aggregate_preserves_schema_errors() -> None:
+    aggregate = verify_cli.aggregate_state_zip_verification_summaries([{"ok": True}])
+
+    assert aggregate["ok"] is False
+    assert aggregate["valid_summary_count"] == 0
+    assert aggregate["invalid_summary_count"] == 1
+    assert aggregate["failed"] == 1
+    assert aggregate["entries"] == [
+        {
+            "index": 0,
+            "schema_ok": False,
+            "verification_ok": False,
+            "error": "summary_required_keys_missing",
+            "validation": {
+                "ok": False,
+                "error": "summary_required_keys_missing",
+                "missing_keys": ["summary_format_version"],
+            },
+        }
+    ]
