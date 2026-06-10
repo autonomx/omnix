@@ -1,4 +1,5 @@
 import atexit
+import json
 from pathlib import Path
 
 import tests.rpg.autoplay.probe_source_map as source_map
@@ -27,7 +28,7 @@ def outer():
     probe_matches = [match for match in matches if "runtime_turn_execution.result" in match["event_texts"]]
     capture_matches = [match for match in matches if "_capture_runtime_exception_traceback" in match["event_texts"]]
 
-    assert payload["source"] == "autoplay_probe_source_map_v4"
+    assert payload["source"] == "autoplay_probe_source_map_v5"
     assert probe_matches
     assert capture_matches
     probe = probe_matches[0]
@@ -89,7 +90,27 @@ def test_phase13_44_configure_registers_source_map_atexit_once(tmp_path: Path, m
         source_map._OUTPUT_DIR = original_output_dir
         source_map._ATEXIT_REGISTERED = original_registered
 
-    assert source_map.SOURCE == "autoplay_probe_source_map_v4"
+    assert source_map.SOURCE == "autoplay_probe_source_map_v5"
     assert source_map._OUTPUT_DIR == original_output_dir
     assert len(registered) == 1
     assert registered[0].__name__ == "_write_probe_source_map_at_exit"
+
+
+def test_phase13_45_diagnostic_artifact_contract_creates_placeholders(tmp_path: Path):
+    existing = tmp_path / "autoplay-runtime-turn-results.json"
+    existing.write_text(json.dumps({"ok": True, "source": "unit"}), encoding="utf-8")
+
+    manifest = source_map.ensure_diagnostic_artifact_contract(tmp_path)
+
+    assert manifest["source"] == "autoplay_diagnostic_artifact_contract_v1"
+    assert manifest["artifact_count"] == len(source_map.EXPECTED_DIAGNOSTIC_ARTIFACTS)
+    assert manifest["placeholder_count"] == len(source_map.EXPECTED_DIAGNOSTIC_ARTIFACTS) - 1
+    manifest_path = tmp_path / source_map.MANIFEST_NAME
+    assert manifest_path.exists()
+
+    preserved = json.loads(existing.read_text(encoding="utf-8"))
+    assert preserved == {"ok": True, "source": "unit"}
+
+    placeholder = json.loads((tmp_path / "autoplay-exception-tracebacks.json").read_text(encoding="utf-8"))
+    assert placeholder["placeholder"] is True
+    assert placeholder["reason"] == "writer_did_not_produce_artifact"
