@@ -102,9 +102,14 @@ def _is_sell_request(player_input: str, intent: Mapping[str, Any]) -> bool:
     text = _safe_str(player_input).strip().lower()
     terms = " ".join(_safe_str(term).lower() for term in _safe_list(_safe_dict(intent).get("requested_terms")))
     combined = " ".join([text, terms])
-    if not _contains_any(combined, _SELL_REQUEST_TERMS):
+    if not _contains_any(combined, _SELL_ITEM_TERMS):
         return False
-    return _contains_any(combined, _SELL_ITEM_TERMS)
+    if _contains_any(combined, _SELL_REQUEST_TERMS):
+        return True
+    return (
+        "ration" in combined
+        and ("copper" in combined or "coin" in combined or "how much" in combined or "give me" in combined)
+    )
 
 
 def _final_intent(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
@@ -168,9 +173,13 @@ def _set_visible_response(
     out["narration_preview"] = narration
     out["interactive_cli_response_quality"] = raw_result["interactive_cli_response_quality"]
     if speaker or line:
-        out["raw_npc"] = {"speaker": speaker, "line": line}
+        npc_payload = {"speaker": speaker, "line": line}
+        out["raw_npc"] = npc_payload
         out["target_npc"] = speaker
         out["npc_speaker"] = speaker
+        out["npc_line"] = line
+        out["raw_npc_speaker"] = speaker
+        out["raw_npc_line"] = line
 
     extracted = deepcopy(_safe_dict(out.get("extracted")))
     extracted["narration"] = narration
@@ -194,7 +203,7 @@ def _set_visible_response(
         final = deepcopy(_safe_dict(diagnostics.get("final_classification")))
         if speaker:
             final["target_npc"] = speaker
-            final.setdefault("action_type", "economy")
+            final["action_type"] = "economy"
             requested_terms = list(_safe_list(final.get("requested_terms")))
             for term in ("sell", "ration", speaker):
                 if term not in requested_terms:
@@ -211,9 +220,10 @@ def _cleanup_sell_request(out: Dict[str, Any], player_input: str, intent: Mappin
         return None
     raw = _safe_dict(out.get("raw_result") or out.get("result"))
     narration = _safe_str(out.get("raw_narration") or raw.get("narration")).lower()
+    preview = _safe_str(out.get("narration_preview")).lower()
     npc = _safe_dict(out.get("raw_npc") or raw.get("npc"))
     line = _safe_str(npc.get("line")).lower()
-    output_text = " ".join([narration, line])
+    output_text = " ".join([narration, preview, line])
     target = _safe_str(_safe_dict(intent).get("target_npc")).strip().lower()
     if _contains_any(output_text, _SELL_BAD_SURVIVAL_TERMS):
         cleanup_source = "sell_request_not_survival_consumption"
