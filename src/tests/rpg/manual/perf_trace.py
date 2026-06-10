@@ -73,6 +73,15 @@ def traced_manual_stage(event: str, **fields: Any) -> Iterator[None]:
     record_manual_harness_trace(f"{event}_enter", **fields)
     try:
         yield
+    except Exception as exc:
+        record_manual_harness_trace(
+            f"{event}_exception",
+            exception_type=type(exc).__name__,
+            exception_message=str(exc),
+            traceback=traceback.format_exc(limit=80),
+            **fields,
+        )
+        raise
     finally:
         elapsed = time.perf_counter() - start
         record_manual_harness_trace(
@@ -88,6 +97,7 @@ def summarize_manual_harness_trace(rows: List[Dict[str, Any]]) -> Dict[str, Any]
         "total_stage_seconds": 0.0,
         "slowest_stages": [],
         "events": [],
+        "exceptions": [],
     }
     if not rows:
         return summary
@@ -97,6 +107,11 @@ def summarize_manual_harness_trace(rows: List[Dict[str, Any]]) -> Dict[str, Any]
         if isinstance(row, dict)
         and str(row.get("event") or "").endswith("_exit")
         and row.get("elapsed_seconds") is not None
+    ]
+    exceptions = [
+        row for row in rows
+        if isinstance(row, dict)
+        and str(row.get("event") or "").endswith("_exception")
     ]
     summary["stage_count"] = len(exits)
     summary["total_stage_seconds"] = round(
@@ -115,4 +130,13 @@ def summarize_manual_harness_trace(rows: List[Dict[str, Any]]) -> Dict[str, Any]
         reverse=True,
     )[:10]
     summary["events"] = [row.get("event") for row in rows if isinstance(row, dict)]
+    summary["exceptions"] = [
+        {
+            "event": row.get("event"),
+            "exception_type": row.get("exception_type"),
+            "exception_message": row.get("exception_message"),
+            "traceback": row.get("traceback"),
+        }
+        for row in exceptions
+    ]
     return summary
