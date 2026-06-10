@@ -40,7 +40,14 @@ _FALLBACK_ENVIRONMENT_SPEAKERS = {
     "tavern (general)",
     "general atmosphere/locals",
     "atmosphere/locals",
+    "general atmosphere/npcs",
 }
+_FALLBACK_ENVIRONMENT_SUFFIXES = (
+    " in tavern",
+    " in the tavern",
+    " at tavern",
+    " at the tavern",
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -58,6 +65,20 @@ def _safe_str(value: Any) -> str:
 def _contains_any(text: str, terms: Iterable[str]) -> bool:
     lowered = text.lower()
     return any(term in lowered for term in terms)
+
+
+def _speaker_key(value: Any) -> str:
+    return " ".join(_safe_str(value).strip().lower().split())
+
+
+def _is_fallback_environment_speaker(value: Any) -> bool:
+    key = _speaker_key(value)
+    if key in _FALLBACK_ENVIRONMENT_SPEAKERS:
+        return True
+    for suffix in _FALLBACK_ENVIRONMENT_SUFFIXES:
+        if key.endswith(suffix) and key[: -len(suffix)] in _FALLBACK_ENVIRONMENT_SPEAKERS:
+            return True
+    return False
 
 
 def _final_intent(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
@@ -162,7 +183,7 @@ def _cleanup_no_backed_fallback_speaker(out: Dict[str, Any], player_input: str, 
     narration = _safe_str(out.get("raw_narration") or raw.get("narration")).strip()
     source = _safe_str(out.get("narration_source") or raw.get("narration_source")).lower()
     combined = " ".join([_safe_str(player_input), narration, line, source]).lower()
-    if speaker.lower() not in _FALLBACK_ENVIRONMENT_SPEAKERS:
+    if not _is_fallback_environment_speaker(speaker):
         return None
     if "no backed" not in combined and "do not have" not in line.lower():
         return None
