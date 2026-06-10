@@ -6,6 +6,7 @@ from app.rpg.interactive_cli_memory_response_quality import (
     MEMORY_RECALL_PATCH,
     apply_short_session_memory_recall_to_matrix_result,
 )
+from app.rpg.interactive_cli_memory_state import SHORT_SESSION_MEMORY_STATE_VERSION
 from tests.rpg import interactive_feature_matrix as feature_matrix
 from tests.rpg import interactive_intent_matrix as matrix
 from tests.rpg import interactive_feature_matrix_zip as feature_zip
@@ -68,6 +69,13 @@ def test_short_session_memory_recall_cleans_ack_and_recall_turns() -> None:
     assert "Ash Lantern" in turns[0]["narration"]
     assert "Ash Lantern" in turns[1]["narration"]
     assert turns[1]["npc"]["speaker"] == "Bran"
+    turn_1_state = turns[0]["interactive_cli_memory_state"]
+    turn_2_state = turns[1]["interactive_cli_memory_state"]
+    assert turn_1_state["version"] == SHORT_SESSION_MEMORY_STATE_VERSION
+    assert turn_1_state["facts"]["trail_name"] == "Ash Lantern"
+    assert turn_1_state["remembered_by"]["trail_name"] == "Bran"
+    assert turn_2_state["facts"]["trail_name"] == "Ash Lantern"
+    assert turns[1]["raw_result"]["interactive_cli_memory_state"] == turn_2_state
     final = turns[1]["interactive_cli_intent_diagnostics"]["final_classification"]
     assert final["target_npc"] == "Bran"
     assert "Ash Lantern" in final["requested_terms"]
