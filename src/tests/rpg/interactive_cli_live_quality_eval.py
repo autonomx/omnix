@@ -24,6 +24,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
         sys.path.insert(0, path)
 
 LIVE_QUALITY_EVAL_VERSION = "rpg_live_quality_eval_v1"
+LIVE_QUALITY_AGGREGATE_VERSION = "rpg_live_quality_eval_aggregate_v1"
 LIVE_QUALITY_STATUS_MARKER = "RPG_LIVE_QUALITY_EVAL"
 MIN_ACCEPTABLE_AVG_SCORE = 3.0
 MIN_ACCEPTABLE_FUN_SCORE = 2.75
@@ -94,6 +95,8 @@ GROUNDING_KEYS = (
     "turn_contract",
 )
 
+SCORE_KEYS = ("coherence", "agency", "specificity", "continuity", "fun")
+
 
 def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
@@ -159,7 +162,10 @@ def _turn_score(*, player_input: str, narration: str, previous_player_inputs: Se
     overlap = len(player_words.intersection(narration_words))
     has_action_reflection = overlap > 0 or _contains_any(text, ACTION_VERBS)
     has_hook = text.endswith("?") or _contains_any(text, HOOK_PHRASES)
-    has_specificity = bool(re.search(r"\b[A-Z][a-z]+\b", text)) or any(token in text.lower() for token in ("tavern", "road", "market", "inn", "bandit", "bran", "elara", "captain", "gold", "silver", "quest"))
+    has_specificity = bool(re.search(r"\b[A-Z][a-z]+\b", text)) or any(
+        token in text.lower()
+        for token in ("tavern", "road", "market", "inn", "bandit", "bran", "elara", "captain", "gold", "silver", "quest")
+    )
     has_continuity = any(word in text.lower() for prior in previous_player_inputs[-3:] for word in _words(prior) if len(word) >= 5)
     generic = _contains_any(text, GENERIC_PHRASES)
     too_short = len(words) < 8
@@ -242,7 +248,7 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
                 "turn_index": turn.get("turn_index", index),
                 "player_input": player_input,
                 "narration_word_count": len(_words(narration)),
-                "scores": {key: score[key] for key in ("coherence", "agency", "specificity", "continuity", "fun")},
+                "scores": {key: score[key] for key in SCORE_KEYS},
                 "flags": flags,
             }
         )
@@ -266,13 +272,7 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
         numbers = [float(value) for value in values if isinstance(value, (int, float))]
         return round(sum(numbers) / len(numbers), 3) if numbers else 0.0
 
-    scores = {
-        "coherence": avg("coherence"),
-        "agency": avg("agency"),
-        "specificity": avg("specificity"),
-        "continuity": avg("continuity"),
-        "fun": avg("fun"),
-    }
+    scores = {metric: avg(metric) for metric in SCORE_KEYS}
     avg_score = round(sum(scores.values()) / len(scores), 3) if scores else 0.0
     if turn_count == 0:
         failures.append("transcript_has_no_turns")
@@ -331,6 +331,112 @@ def write_live_quality_eval_summary(*, result: Mapping[str, Any], summary_path: 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dict(result), indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
     return path
+
+
+def validate_live_quality_eval_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate a persisted live-quality summary before aggregation."""
+
+    missing = sorted(key for key in ("format_version", "ok", "turn_count", "avg_score", "scores") if key not in payload)
+    if missing:
+        return {"ok": False, "error": "live_quality_summary_required_keys_missing", "missing_keys": missing}
+    if payload.get("format_version") != LIVE_QUALITY_EVAL_VERSION:
+        return {
+            "ok": False,
+            "error": "live_quality_summary_version_mismatch",
+            "expected": LIVE_QUALITY_EVAL_VERSION,
+            "actual": payload.get("format_version"),
+        }
+    if not isinstance(payload.get("ok"), bool):
+        return {"ok": False, "error": "live_quality_summary_ok_not_bool", "actual_type": type(payload.get("ok")).__name__}
+    if not isinstance(payload.get("turn_count"), int) or payload.get("turn_count", 0) < 0:
+        return {"ok": False, "error": "live_quality_summary_turn_count_invalid"}
+    if not isinstance(payload.get("avg_score"), (int, float)):
+        return {"ok": False, "error": "live_quality_summary_avg_score_invalid"}
+    scores = _safe_dict(payload.get("scores"))
+    missing_scores = sorted(score for score in SCORE_KEYS if not isinstance(scores.get(score), (int, float)))
+    if missing_scores:
+        return {"ok": False, "error": "live_quality_summary_scores_invalid", "missing_scores": missing_scores}
+    return {"ok": True, "format_version": LIVE_QUALITY_EVAL_VERSION}
+
+
+def aggregate_live_quality_eval_summaries(summaries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate multiple live-quality summary payloads for nightly/playtest review."""
+
+    entries: list[dict[str, Any]] = []
+    valid_summary_count = 0
+    invalid_summary_count = 0
+    passed = 0
+    failed = 0
+    total_turn_count = 0
+    score_totals = {score: 0.0 for score in SCORE_KEYS}
+    score_weights = {score: 0 for score in SCORE_KEYS}
+    all_failures: list[str] = []
+    all_warnings: list[str] = []
+
+    for index, summary in enumerate(summaries):
+        payload = dict(summary)
+        validation = validate_live_quality_eval_summary(payload)
+        entry: dict[str, Any] = {"index": index, "schema_ok": bool(validation.get("ok"))}
+        if not validation.get("ok"):
+            invalid_summary_count += 1
+            failed += 1
+            entry.update({"quality_ok": False, "error": validation.get("error") or "live_quality_summary_schema_invalid", "validation": validation})
+            entries.append(entry)
+            continue
+
+        valid_summary_count += 1
+        quality_ok = bool(payload.get("ok"))
+        if quality_ok:
+            passed += 1
+        else:
+            failed += 1
+        turn_count = int(payload.get("turn_count") or 0)
+        total_turn_count += turn_count
+        scores = _safe_dict(payload.get("scores"))
+        for score in SCORE_KEYS:
+            value = scores.get(score)
+            if isinstance(value, (int, float)):
+                score_totals[score] += float(value) * max(turn_count, 1)
+                score_weights[score] += max(turn_count, 1)
+        failures = sorted(_safe_str(item) for item in _safe_list(payload.get("failures")) if _safe_str(item))
+        warnings = sorted(_safe_str(item) for item in _safe_list(payload.get("warnings")) if _safe_str(item))
+        all_failures.extend(failures)
+        all_warnings.extend(warnings)
+        entry.update(
+            {
+                "quality_ok": quality_ok,
+                "turn_count": turn_count,
+                "avg_score": round(float(payload.get("avg_score") or 0.0), 3),
+                "fun_score": round(float(scores.get("fun") or 0.0), 3),
+                "failure_count": len(failures),
+                "warning_count": len(warnings),
+                "error": _safe_str(payload.get("error") or (failures[0] if failures else "none")),
+            }
+        )
+        entries.append(entry)
+
+    average_scores = {
+        score: round(score_totals[score] / score_weights[score], 3) if score_weights[score] else 0.0
+        for score in SCORE_KEYS
+    }
+    aggregate_avg_score = round(sum(average_scores.values()) / len(average_scores), 3) if average_scores else 0.0
+    return {
+        "aggregate_format_version": LIVE_QUALITY_AGGREGATE_VERSION,
+        "ok": failed == 0 and invalid_summary_count == 0,
+        "summary_count": len(summaries),
+        "valid_summary_count": valid_summary_count,
+        "invalid_summary_count": invalid_summary_count,
+        "passed": passed,
+        "failed": failed,
+        "total_turn_count": total_turn_count,
+        "avg_score": aggregate_avg_score,
+        "scores": average_scores,
+        "failure_count": len(all_failures),
+        "warning_count": len(all_warnings),
+        "failure_types": sorted(set(all_failures))[:100],
+        "warning_types": sorted(set(all_warnings))[:100],
+        "entries": entries,
+    }
 
 
 def render_live_quality_status_marker(result: Mapping[str, Any]) -> str:
