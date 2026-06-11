@@ -1,9 +1,9 @@
-"""Phase 13.97 — opt-in live LLM RPG playtest runner with quality evaluation.
+"""Phase 13.97+ — opt-in live LLM RPG playtest runner with quality evaluation.
 
 This module intentionally does not run in normal deterministic CI unless the caller
-explicitly opts in.  It drives the existing interactive CLI campaign with scripted
-commands, then evaluates the generated transcript with the deterministic live
-quality evaluator from Phase 13.94.
+explicitly opts in. It drives the existing interactive CLI campaign with scripted
+commands, drains deferred live narration when requested, then evaluates the final
+transcript with the deterministic live quality evaluator.
 """
 
 from __future__ import annotations
@@ -36,6 +36,8 @@ LIVE_LLM_PLAYTEST_VERSION = "rpg_live_llm_playtest_v1"
 LIVE_LLM_PLAYTEST_STATUS_MARKER = "RPG_LIVE_LLM_PLAYTEST"
 LIVE_LLM_PLAYTEST_ENV_FLAG = "RPG_RUN_LIVE_LLM_PLAYTEST"
 LIVE_DEFERRED_NARRATION_DRAIN_SOURCE = "live_llm_playtest_deferred_narration_drain_v1"
+LIVE_DEFERRED_NARRATION_CONTEXT_VERSION = "live_deferred_narration_context_v2"
+LIVE_DEFERRED_NARRATION_MAX_CONTEXT_CHARS = 6500
 DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS = (
     "Bran, remember this: my trail name is Ash Lantern.",
     "I ask Bran what trouble he has heard on the road.",
@@ -195,7 +197,78 @@ def _turn_has_pending_deferred_narration(turn_summary: Mapping[str, Any]) -> boo
     return False
 
 
+def _clip_str(value: Any, *, max_chars: int = 900) -> str:
+    text = _safe_str(value).strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "…[truncated]"
+
+
+def _compact_jsonable(value: Any, *, max_depth: int = 3, max_items: int = 8, max_chars: int = 900) -> Any:
+    """Return a compact JSON-safe snapshot for live narration prompts.
+
+    This avoids sending the entire runtime/session transcript back to LM Studio
+    while preserving the authoritative facts needed for post-runtime narration.
+    """
+
+    if max_depth < 0:
+        return "[truncated]"
+    if isinstance(value, Mapping):
+        compact: dict[str, Any] = {}
+        for index, (key, nested) in enumerate(value.items()):
+            if index >= max_items:
+                compact["__truncated_items__"] = max(0, len(value) - max_items)
+                break
+            compact[_safe_str(key)] = _compact_jsonable(
+                nested,
+                max_depth=max_depth - 1,
+                max_items=max_items,
+                max_chars=max_chars,
+            )
+        return compact
+    if isinstance(value, list):
+        return [
+            _compact_jsonable(item, max_depth=max_depth - 1, max_items=max_items, max_chars=max_chars)
+            for item in value[:max_items]
+        ] + ([{"__truncated_items__": len(value) - max_items}] if len(value) > max_items else [])
+    if isinstance(value, str):
+        return _clip_str(value, max_chars=max_chars)
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return _clip_str(value, max_chars=max_chars)
+
+
+def _selected_result_fields(raw_result: Mapping[str, Any], resolved: Mapping[str, Any]) -> dict[str, Any]:
+    keys = (
+        "ok",
+        "action_type",
+        "visible_interaction_reason",
+        "location_id",
+        "target_location_id",
+        "service_kind",
+        "commerce_kind",
+        "price",
+        "currency_delta",
+        "inventory_delta",
+        "xp_delta",
+        "level_delta",
+        "quest_delta",
+        "memory_delta",
+        "state_delta",
+        "forbidden_narration",
+    )
+    selected: dict[str, Any] = {}
+    for key in keys:
+        if key in resolved:
+            selected[key] = resolved.get(key)
+        elif key in raw_result:
+            selected[key] = raw_result.get(key)
+    return _compact_jsonable(selected, max_depth=3, max_items=8, max_chars=700)
+
+
 def _grounded_live_narration_context(turn_summary: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a compact post-runtime context for deferred live narration drain."""
+
     turn_summary = _safe_dict(turn_summary)
     raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
     resolved = _safe_dict(raw_result.get("resolved_result") or _safe_dict(raw_result.get("result")))
@@ -204,25 +277,73 @@ def _grounded_live_narration_context(turn_summary: Mapping[str, Any]) -> dict[st
     runtime_state = _safe_dict(session.get("runtime_state") or raw_result.get("runtime_state"))
     simulation_state = _safe_dict(session.get("simulation_state") or raw_result.get("simulation_state"))
     player_state = _safe_dict(simulation_state.get("player_state"))
-    return {
-        "player_input": _safe_str(turn_summary.get("player_input")),
+    narration_context = _safe_dict(raw_result.get("narration_context"))
+    context = {
+        "format_version": LIVE_DEFERRED_NARRATION_CONTEXT_VERSION,
+        "player_input": _clip_str(turn_summary.get("player_input"), max_chars=500),
         "turn_index": turn_summary.get("turn_index"),
         "action_type": _safe_str(resolved.get("action_type") or raw_result.get("action_type")),
         "visible_interaction_reason": _safe_str(resolved.get("visible_interaction_reason") or raw_result.get("visible_interaction_reason")),
-        "resolved_result": resolved,
-        "turn_contract": turn_contract,
-        "combat_result": _safe_dict(raw_result.get("combat_result") or resolved.get("combat_result")),
-        "travel_result": _safe_dict(raw_result.get("travel_result") or resolved.get("travel_result")),
-        "service_result": _safe_dict(raw_result.get("service_result") or resolved.get("service_result")),
-        "npc": _safe_dict(raw_result.get("npc") or turn_summary.get("raw_npc")),
-        "current_scene": _safe_dict(runtime_state.get("current_scene")),
+        "resolved_result": _selected_result_fields(raw_result, resolved),
+        "turn_contract": _compact_jsonable(turn_contract, max_depth=2, max_items=8, max_chars=500),
+        "combat_result": _compact_jsonable(raw_result.get("combat_result") or resolved.get("combat_result"), max_depth=3, max_items=8, max_chars=500),
+        "travel_result": _compact_jsonable(raw_result.get("travel_result") or resolved.get("travel_result"), max_depth=3, max_items=8, max_chars=500),
+        "service_result": _compact_jsonable(raw_result.get("service_result") or resolved.get("service_result"), max_depth=3, max_items=8, max_chars=500),
+        "npc": _compact_jsonable(raw_result.get("npc") or turn_summary.get("raw_npc"), max_depth=2, max_items=8, max_chars=500),
+        "current_scene": _compact_jsonable(runtime_state.get("current_scene"), max_depth=2, max_items=8, max_chars=500),
         "player_state": {
             "location_id": _safe_str(player_state.get("location_id")),
             "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids"))[:8],
-            "inventory_state": _safe_dict(player_state.get("inventory_state")),
+            "inventory_state": _compact_jsonable(player_state.get("inventory_state"), max_depth=2, max_items=10, max_chars=400),
         },
-        "recent_authoritative_facts": _safe_list(_safe_dict(raw_result.get("narration_context")).get("recent_authoritative_facts"))[:5],
-        "forbidden_narration": _safe_list(resolved.get("forbidden_narration"))[:12],
+        "recent_authoritative_facts": _compact_jsonable(_safe_list(narration_context.get("recent_authoritative_facts"))[:5], max_depth=2, max_items=5, max_chars=500),
+        "forbidden_narration": _compact_jsonable(_safe_list(resolved.get("forbidden_narration"))[:12], max_depth=1, max_items=12, max_chars=240),
+    }
+    encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, default=str)
+    if len(encoded) <= LIVE_DEFERRED_NARRATION_MAX_CONTEXT_CHARS:
+        return context
+    # Last-resort trim keeps the highest-signal fields and drops optional bulky sections.
+    context["context_trimmed"] = True
+    for key in ("turn_contract", "recent_authoritative_facts", "forbidden_narration"):
+        context.pop(key, None)
+    context["resolved_result"] = _compact_jsonable(context.get("resolved_result"), max_depth=2, max_items=6, max_chars=300)
+    context["player_state"] = _compact_jsonable(context.get("player_state"), max_depth=2, max_items=6, max_chars=300)
+    return context
+
+
+def _context_char_count(context: Mapping[str, Any]) -> int:
+    return len(json.dumps(context, ensure_ascii=False, sort_keys=True, default=str))
+
+
+def _classify_live_deferred_narration_error(error: Any) -> str:
+    text = _safe_str(error).lower()
+    if "n_keep" in text or "n_ctx" in text or "context length" in text or "context window" in text:
+        return "deferred_narration_context_overflow"
+    if "timeout" in text or "timed out" in text:
+        return "deferred_narration_timeout"
+    if "empty_live_deferred_narration" in text:
+        return "empty_live_deferred_narration"
+    if "live_llm_gateway_unavailable" in text:
+        return "live_llm_gateway_unavailable"
+    if "gateway_import_failed" in text:
+        return "live_llm_gateway_import_failed"
+    return "deferred_narration_provider_error"
+
+
+def _failed_drain_payload(*, error: str, provider_attempted: bool, provider_present: bool, context_chars: int = 0) -> dict[str, Any]:
+    error_type = _classify_live_deferred_narration_error(error)
+    return {
+        "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
+        "narration_status": "failed",
+        "narration": "",
+        "runtime_narration_diagnostics": {
+            "provider_attempted": bool(provider_attempted),
+            "provider_present": bool(provider_present),
+            "provider_valid": False,
+            "provider_error_type": error_type,
+            "context_char_count": int(context_chars or 0),
+            "provider_errors": [error],
+        },
     }
 
 
@@ -231,72 +352,49 @@ def _generate_live_deferred_narration_payload(
     turn_summary: Mapping[str, Any],
     timeout_s: float = 45.0,
 ) -> dict[str, Any]:
-    """Best-effort live provider drain for deferred runtime narration.
-
-    The normal runtime owns state.  This hook only renders the already-resolved
-    post-runtime turn into final visible narration for live-quality artifacts.
-    """
+    """Best-effort compact live provider drain for deferred runtime narration."""
 
     try:
         from app.rpg.llm_app_gateway import build_app_llm_gateway
     except Exception as exc:  # pragma: no cover - import failure is environment-specific
-        return {
-            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
-            "narration_status": "failed",
-            "narration": "",
-            "runtime_narration_diagnostics": {
-                "provider_attempted": False,
-                "provider_present": False,
-                "provider_errors": [f"gateway_import_failed:{type(exc).__name__}:{exc}"],
-            },
-        }
+        return _failed_drain_payload(
+            error=f"gateway_import_failed:{type(exc).__name__}:{exc}",
+            provider_attempted=False,
+            provider_present=False,
+        )
 
     gateway = build_app_llm_gateway()
     if gateway is None:
-        return {
-            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
-            "narration_status": "failed",
-            "narration": "",
-            "runtime_narration_diagnostics": {
-                "provider_attempted": False,
-                "provider_present": False,
-                "provider_errors": ["live_llm_gateway_unavailable"],
-            },
-        }
+        return _failed_drain_payload(
+            error="live_llm_gateway_unavailable",
+            provider_attempted=False,
+            provider_present=False,
+        )
 
     context = _grounded_live_narration_context(turn_summary)
+    context_chars = _context_char_count(context)
     prompt = (
         "Write the final player-visible RPG narration for this already-resolved turn.\n"
-        "Use only the grounded context. Do not invent locations, rewards, injuries, NPCs, prices, or quest progress.\n"
+        "Use only the compact grounded context. Do not invent locations, rewards, injuries, NPCs, prices, or quest progress.\n"
         "If an NPC speaks, keep it consistent with the provided NPC/context.\n"
-        "Return only the narration text, in 1-3 short paragraphs, with a concrete next choice when appropriate."
+        "Return only narration text in 1-3 short paragraphs, with one concrete next choice when appropriate."
     )
     try:
         text = _safe_str(gateway.generate(prompt, context=context, timeout_s=timeout_s)).strip()
     except Exception as exc:  # pragma: no cover - provider failures are live-environment specific
-        return {
-            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
-            "narration_status": "failed",
-            "narration": "",
-            "runtime_narration_diagnostics": {
-                "provider_attempted": True,
-                "provider_present": True,
-                "provider_valid": False,
-                "provider_errors": [f"{type(exc).__name__}:{exc}"],
-            },
-        }
+        return _failed_drain_payload(
+            error=f"{type(exc).__name__}:{exc}",
+            provider_attempted=True,
+            provider_present=True,
+            context_chars=context_chars,
+        )
     if not text:
-        return {
-            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
-            "narration_status": "failed",
-            "narration": "",
-            "runtime_narration_diagnostics": {
-                "provider_attempted": True,
-                "provider_present": True,
-                "provider_valid": False,
-                "provider_errors": ["empty_live_deferred_narration"],
-            },
-        }
+        return _failed_drain_payload(
+            error="empty_live_deferred_narration",
+            provider_attempted=True,
+            provider_present=True,
+            context_chars=context_chars,
+        )
     return {
         "format_version": "rpg_narration_v2",
         "source": "provider_runtime_narration",
@@ -308,6 +406,8 @@ def _generate_live_deferred_narration_payload(
             "provider_present": True,
             "provider_valid": True,
             "provider_errors": [],
+            "context_format_version": LIVE_DEFERRED_NARRATION_CONTEXT_VERSION,
+            "context_char_count": context_chars,
             "provider_call_diagnostics": {"source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE},
         },
     }
@@ -322,10 +422,10 @@ def _apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Ma
     payload["source"] = _safe_str(payload.get("source") or "provider_runtime_narration")
     payload["narration_status"] = "completed"
     payload["narration"] = text
-    payload.setdefault("runtime_narration_diagnostics", {})
     diagnostics = _safe_dict(payload.get("runtime_narration_diagnostics"))
     diagnostics.setdefault("provider_attempted", True)
     diagnostics.setdefault("provider_valid", True)
+    diagnostics.setdefault("provider_errors", [])
     payload["runtime_narration_diagnostics"] = diagnostics
 
     turn_summary["raw_narration"] = text
@@ -333,6 +433,7 @@ def _apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Ma
     turn_summary["runtime_narration_diagnostics"] = deepcopy(diagnostics)
     turn_summary["llm_called"] = True
     turn_summary["narration_source"] = payload["source"]
+    turn_summary["narration_status"] = "completed"
 
     raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
     if raw_result:
@@ -340,6 +441,7 @@ def _apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Ma
         raw_result["final_narration"] = text
         raw_result["narration_status"] = "completed"
         raw_result["llm_called"] = True
+        raw_result["narration_source"] = payload["source"]
         raw_result["narration_payload"] = deepcopy(payload)
         raw_result["structured_narration"] = deepcopy(payload)
         nested = _safe_dict(raw_result.get("result"))
@@ -348,10 +450,13 @@ def _apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Ma
             nested["final_narration"] = text
             nested["narration_status"] = "completed"
             nested["llm_called"] = True
+            nested["narration_source"] = payload["source"]
             nested["narration_payload"] = deepcopy(payload)
             nested["structured_narration"] = deepcopy(payload)
             raw_result["result"] = nested
         turn_summary["raw_result"] = raw_result
+        if "result" in turn_summary:
+            turn_summary["result"] = raw_result
 
 
 def drain_deferred_live_narration_turn(
@@ -374,6 +479,7 @@ def drain_deferred_live_narration_turn(
         "timed_out": False,
         "source": "not_pending",
         "error": "",
+        "error_type": "",
     }
     if not pending:
         turn_summary["deferred_narration_drain"] = result
@@ -390,6 +496,7 @@ def drain_deferred_live_narration_turn(
             )
         except Exception as exc:  # pragma: no cover - defensive hook isolation
             result["error"] = f"drain_func_error:{type(exc).__name__}:{exc}"
+            result["error_type"] = _classify_live_deferred_narration_error(result["error"])
 
     if not payload:
         payload = _find_completed_narration_payload(turn_summary)
@@ -408,17 +515,19 @@ def drain_deferred_live_narration_turn(
         errors = _safe_list(diagnostics.get("provider_errors"))
         if errors and not result["error"]:
             result["error"] = _safe_str(errors[0])
+        result["error_type"] = _safe_str(diagnostics.get("provider_error_type") or _classify_live_deferred_narration_error(result["error"]))
     turn_summary["deferred_narration_drain"] = result
     return result
 
 
 def _new_deferred_drain_summary() -> dict[str, Any]:
     return {
-        "format_version": "live_deferred_narration_drain_summary_v1",
+        "format_version": "live_deferred_narration_drain_summary_v2",
         "enabled": True,
         "pending_count": 0,
         "completed_count": 0,
         "timeout_count": 0,
+        "error_types": [],
         "turns": [],
     }
 
@@ -445,6 +554,9 @@ def _build_deferred_narration_after_turn_hook(
             summary["completed_count"] += 1
         if drain_result.get("timed_out"):
             summary["timeout_count"] += 1
+        error_type = _safe_str(drain_result.get("error_type"))
+        if error_type and error_type not in summary["error_types"]:
+            summary["error_types"].append(error_type)
         summary["turns"].append(drain_result)
 
     return after_turn_hook
@@ -460,9 +572,12 @@ def render_live_llm_playtest_status_marker(result: Mapping[str, Any]) -> str:
     avg_score = float(quality.get("avg_score") or 0.0)
     fun_score = float(_safe_dict(quality.get("scores")).get("fun") or 0.0)
     quality_failures = quality.get("failures") if isinstance(quality.get("failures"), list) else []
+    drain = _safe_dict(result.get("deferred_narration_drain"))
+    drain_errors = _safe_list(drain.get("error_types"))
     error = _safe_str(
         result.get("error")
         or quality.get("error")
+        or (drain_errors[0] if drain_errors else "")
         or (quality_failures[0] if quality_failures else "none")
     )
     return (
