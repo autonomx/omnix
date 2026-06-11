@@ -213,3 +213,84 @@ def test_phase13_91_all_bundle_write_cli_uses_supplied_marker(tmp_path: Path, ca
     output = capsys.readouterr()
     payload = json.loads(output.out)
     assert payload["manifest"]["status_marker"] == marker
+
+
+def test_phase13_92_all_bundle_status_marker_round_trips_write_success(tmp_path: Path) -> None:
+    aggregate_path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    result = all_bundle.write_state_zip_aggregate_all_bundle(
+        aggregate_path=aggregate_path,
+        bundle_zip_path=tmp_path / "bundle.zip",
+    )
+
+    marker = all_bundle.render_state_zip_aggregate_all_bundle_status_marker(result, command="write")
+
+    assert marker == (
+        "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_ALL_BUNDLE] "
+        "command=write ok=true summary_count=1 failed=0 bundle_summary_ok=true error=none"
+    )
+    assert all_bundle.parse_state_zip_aggregate_all_bundle_status_marker(marker) == {
+        "ok": True,
+        "command": "write",
+        "bundle_ok": True,
+        "summary_count": 1,
+        "failed": 0,
+        "bundle_summary_ok": True,
+        "bundle_error": "none",
+    }
+
+
+def test_phase13_92_all_bundle_status_marker_round_trips_failure() -> None:
+    marker = all_bundle.render_state_zip_aggregate_all_bundle_status_marker(
+        {"ok": False, "error": "aggregate_all_bundle_missing"},
+        command="verify",
+    )
+
+    assert marker == (
+        "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_ALL_BUNDLE] "
+        "command=verify ok=false summary_count=0 failed=0 bundle_summary_ok=false error=aggregate_all_bundle_missing"
+    )
+    assert all_bundle.parse_state_zip_aggregate_all_bundle_status_marker(marker) == {
+        "ok": True,
+        "command": "verify",
+        "bundle_ok": False,
+        "summary_count": 0,
+        "failed": 0,
+        "bundle_summary_ok": False,
+        "bundle_error": "aggregate_all_bundle_missing",
+    }
+
+
+def test_phase13_92_all_bundle_cli_emits_status_marker_to_stderr(tmp_path: Path, capsys) -> None:
+    aggregate_path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    bundle_path = tmp_path / "bundle.zip"
+
+    assert all_bundle.main(["write", str(aggregate_path), str(bundle_path)]) == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["ok"] is True
+    assert output.err.strip() == (
+        "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_ALL_BUNDLE] "
+        "command=write ok=true summary_count=1 failed=0 bundle_summary_ok=true error=none"
+    )
+
+
+def test_phase13_92_all_bundle_status_marker_rejects_malformed_lines() -> None:
+    wrong_prefix = "[OTHER] command=verify ok=true summary_count=1 failed=0 bundle_summary_ok=true error=none"
+    missing = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_ALL_BUNDLE] command=verify ok=true failed=0 bundle_summary_ok=true error=none"
+    bad_bool = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_ALL_BUNDLE] command=verify ok=yes summary_count=1 failed=0 bundle_summary_ok=true error=none"
+    bad_count = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_ALL_BUNDLE] command=verify ok=true summary_count=x failed=0 bundle_summary_ok=true error=none"
+
+    assert all_bundle.parse_state_zip_aggregate_all_bundle_status_marker(wrong_prefix)["error"] == (
+        "aggregate_all_bundle_status_marker_prefix_mismatch"
+    )
+    assert all_bundle.parse_state_zip_aggregate_all_bundle_status_marker(missing) == {
+        "ok": False,
+        "error": "aggregate_all_bundle_status_marker_required_keys_missing",
+        "missing_keys": ["summary_count"],
+    }
+    assert all_bundle.parse_state_zip_aggregate_all_bundle_status_marker(bad_bool)["error"] == (
+        "aggregate_all_bundle_status_marker_bool_invalid"
+    )
+    assert all_bundle.parse_state_zip_aggregate_all_bundle_status_marker(bad_count)["error"] == (
+        "aggregate_all_bundle_status_marker_count_invalid"
+    )
