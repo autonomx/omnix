@@ -118,3 +118,41 @@ def test_phase13_84_reader_reports_schema_error(tmp_path: Path) -> None:
             "missing_keys": ["aggregate_format_version"],
         },
     }
+
+
+def test_phase13_85_aggregate_read_cli_returns_zero_for_valid_payload(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+
+    assert aggregate_verify.main([str(path)]) == 0
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["ok"] is True
+    assert payload["path"] == str(path)
+    assert payload["aggregate"]["ok"] is True
+
+
+def test_phase13_85_aggregate_read_cli_returns_one_for_missing_file(tmp_path: Path, capsys) -> None:
+    path = tmp_path / "missing-aggregate.json"
+
+    assert aggregate_verify.main([str(path)]) == 1
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload == {
+        "ok": False,
+        "error": "aggregate_file_missing",
+        "path": str(path),
+    }
+
+
+def test_phase13_85_aggregate_read_cli_returns_one_for_schema_error(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "bad-schema.json", {"aggregate_format_version": "old", "ok": True})
+
+    assert aggregate_verify.main([str(path)]) == 1
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["ok"] is False
+    assert payload["error"] == "aggregate_format_version_mismatch"
+    assert payload["validation"]["expected"] == verify_cli.STATE_ZIP_VERIFY_AGGREGATE_VERSION
