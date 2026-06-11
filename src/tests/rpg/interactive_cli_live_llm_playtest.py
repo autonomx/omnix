@@ -1,8 +1,8 @@
-"""Phase 13.97+ — opt-in live LLM RPG playtest runner with quality evaluation.
+"""Opt-in live LLM RPG playtest runner with deterministic quality checks.
 
-The live runner orchestrates scripted packs and scoring only. Deferred narration
-completion/provenance is owned by ``interactive_cli_campaign.run_interactive_campaign``
-through the shared Phase 14.05 runtime narration contract.
+The live runner orchestrates scripted scenario packs and scoring only. Deferred
+narration completion/provenance is owned by ``interactive_cli_campaign`` through
+the shared runtime narration contract.
 """
 
 from __future__ import annotations
@@ -34,14 +34,14 @@ from tests.rpg.manual import runtime_narration_contract as narration_contract  #
 LIVE_LLM_PLAYTEST_VERSION = "rpg_live_llm_playtest_v1"
 LIVE_LLM_PLAYTEST_STATUS_MARKER = "RPG_LIVE_LLM_PLAYTEST"
 LIVE_LLM_PLAYTEST_ENV_FLAG = "RPG_RUN_LIVE_LLM_PLAYTEST"
-LIVE_MECHANIC_SEMANTIC_ASSERTION_VERSION = "rpg_live_mechanic_semantic_assertions_v1"
+LIVE_MECHANIC_SEMANTIC_ASSERTION_VERSION = "rpg_live_mechanic_semantic_assertions_v2"
 LIVE_DEFERRED_NARRATION_DRAIN_SOURCE = narration_contract.RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE
 LIVE_DEFERRED_NARRATION_CONTEXT_VERSION = narration_contract.RUNTIME_DEFERRED_NARRATION_CONTEXT_VERSION
 LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION = narration_contract.RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION
 LIVE_DEFERRED_NARRATION_MAX_CONTEXT_CHARS = narration_contract.RUNTIME_DEFERRED_NARRATION_MAX_CONTEXT_CHARS
 
-# Backward-compatible aliases for earlier Phase 14 deterministic tests.  They now
-# point at the shared runtime-owned contract helpers.
+# Backward-compatible aliases for earlier deterministic tests. They point at the
+# runtime-owned contract helpers.
 _grounded_live_narration_context = narration_contract.grounded_runtime_narration_context
 _classify_live_deferred_narration_error = narration_contract.classify_runtime_narration_error
 drain_deferred_live_narration_turn = narration_contract.drain_deferred_runtime_narration_turn
@@ -55,6 +55,7 @@ DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS = (
     "I head north toward the old road and watch for bandits.",
     "I ask what choice I should make next.",
 )
+
 LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
     "tavern-memory": (
         "Bran, remember this: my trail name is Ash Lantern.",
@@ -114,24 +115,56 @@ LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-LIVE_MECHANIC_SEMANTIC_REQUIREMENTS: dict[str, dict[str, tuple[str, ...]]] = {
+LIVE_MECHANIC_SEMANTIC_REQUIREMENTS: dict[str, dict[str, dict[str, Any]]] = {
     "party-companion": {
-        "companion_or_party": ("companion", "party", "joins", "joined", "travel with", "travels with", "travelling with", "traveling with"),
+        "companion_or_party": {
+            "prompt": "The transcript must show Bran agrees to join, accompany, travel with, or otherwise act as the player's companion/party member.",
+            "phrases": (
+                "companion",
+                "party",
+                "joins",
+                "joined",
+                "join you",
+                "travel with",
+                "travels with",
+                "travelling with",
+                "traveling with",
+                "accompany",
+                "accompanies",
+                "accompanying",
+                "company",
+            ),
+        },
     },
     "quest-investigation": {
-        "investigation_lead": ("clue", "witness", "tracks", "trail", "lead", "objective", "bandit"),
+        "investigation_lead": {
+            "prompt": "The transcript must show investigation progress such as a clue, witness, tracks, trail, lead, objective, or bandit-related evidence.",
+            "phrases": ("clue", "witness", "tracks", "trail", "lead", "objective", "bandit"),
+        },
     },
     "inn-service-economy": {
-        "service_payment": ("price", "room", "rent", "silver", "coin", "pay", "paid", "rest", "resting"),
+        "service_payment": {
+            "prompt": "The transcript must show inn service/economy evidence such as room price, rent, coin, silver, payment, or rest consequence.",
+            "phrases": ("price", "room", "rent", "silver", "coin", "pay", "paid", "rest", "resting"),
+        },
     },
     "travel-encounter": {
-        "location_or_path": ("road", "path", "paths", "landmark", "location", "north", "travel", "shelter", "where you are"),
+        "location_or_path": {
+            "prompt": "The transcript must show travel/location continuity such as road, path, landmark, northward movement, shelter, or where the player is.",
+            "phrases": ("road", "path", "paths", "landmark", "location", "north", "travel", "shelter", "where you are"),
+        },
     },
     "combat-resolution": {
-        "combat_consequence": ("fight", "combat", "injury", "injuries", "reward", "threat", "bandit", "over", "cost", "xp", "wound"),
+        "combat_consequence": {
+            "prompt": "The transcript must show combat resolution or consequence such as fight over, injury, reward, threat, bandit, cost, XP, or wound.",
+            "phrases": ("fight", "combat", "injury", "injuries", "reward", "threat", "bandit", "over", "cost", "xp", "wound"),
+        },
     },
     "memory-recall-cross-scene": {
-        "memory_recall": ("blue ember", "passphrase", "remember", "remembered", "recall", "bran"),
+        "memory_recall": {
+            "prompt": "The transcript must show recall of the seeded memory/passphrase, especially blue ember or an explicit remembered passphrase.",
+            "phrases": ("blue ember", "passphrase", "remember", "remembered", "recall", "bran"),
+        },
     },
 }
 
@@ -202,7 +235,7 @@ def _extract_semantic_turns(transcript_or_result: Mapping[str, Any]) -> list[dic
 
 def _turn_visible_semantic_text(turn: Mapping[str, Any]) -> str:
     parts: list[str] = []
-    for key in ("raw_narration", "narration", "visible_response"):
+    for key in ("player_input", "raw_narration", "narration", "visible_response"):
         value = _safe_str(turn.get(key)).strip()
         if value:
             parts.append(value)
@@ -228,19 +261,40 @@ def _semantic_transcript_text(transcript_or_result: Mapping[str, Any]) -> str:
     return "\n".join(_turn_visible_semantic_text(turn) for turn in _extract_semantic_turns(transcript_or_result)).lower()
 
 
-def evaluate_live_mechanic_semantics(transcript_or_result: Mapping[str, Any], *, scenario_pack: str) -> dict[str, Any]:
-    """Evaluate scenario-pack-specific mechanic evidence in the visible transcript."""
+def _semantic_turn_context(transcript_or_result: Mapping[str, Any]) -> list[dict[str, Any]]:
+    context: list[dict[str, Any]] = []
+    for turn in _extract_semantic_turns(transcript_or_result):
+        text = _turn_visible_semantic_text(turn).strip()
+        if text:
+            context.append(
+                {
+                    "turn_index": turn.get("turn_index"),
+                    "player_input": _safe_str(turn.get("player_input")),
+                    "visible_text": text[:1200],
+                    "narration_source": _safe_str(turn.get("narration_source")),
+                }
+            )
+    return context
 
+
+def _requirement_specs(scenario_pack: str) -> dict[str, dict[str, Any]]:
+    return {name: dict(spec) for name, spec in LIVE_MECHANIC_SEMANTIC_REQUIREMENTS.get(_safe_str(scenario_pack).strip(), {}).items()}
+
+
+def _deterministic_mechanic_semantics(transcript_or_result: Mapping[str, Any], *, scenario_pack: str) -> dict[str, Any]:
     pack = _safe_str(scenario_pack).strip()
-    requirements = LIVE_MECHANIC_SEMANTIC_REQUIREMENTS.get(pack, {})
+    requirements = _requirement_specs(pack)
     text = _semantic_transcript_text(transcript_or_result)
     matched: dict[str, dict[str, Any]] = {}
     failures: list[str] = []
-    for requirement, phrases in sorted(requirements.items()):
-        matched_phrase = next((phrase for phrase in phrases if phrase in text), "")
+    for requirement, spec in sorted(requirements.items()):
+        phrases = tuple(_safe_str(phrase).lower() for phrase in _safe_list(list(spec.get("phrases") or ())))
+        matched_phrase = next((phrase for phrase in phrases if phrase and phrase in text), "")
         matched[requirement] = {
             "ok": bool(matched_phrase),
             "matched_phrase": matched_phrase,
+            "evidence": matched_phrase,
+            "reason": "deterministic_phrase_match" if matched_phrase else "no_accepted_phrase_found",
             "accepted_phrases": list(phrases),
         }
         if not matched_phrase:
@@ -254,7 +308,178 @@ def evaluate_live_mechanic_semantics(transcript_or_result: Mapping[str, Any], *,
         "failures": failures,
         "warnings": [],
         "matched": matched,
+        "judge": {"mode": "deterministic_fallback", "used": False, "valid": False, "error": "llm_judge_not_attempted"},
     }
+
+
+def _json_object_from_text(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    text = _safe_str(value).strip()
+    if not text:
+        return {}
+    try:
+        payload = json.loads(text)
+        return dict(payload) if isinstance(payload, Mapping) else {}
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                payload = json.loads(text[start : end + 1])
+                return dict(payload) if isinstance(payload, Mapping) else {}
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+
+def _build_mechanic_judge_context(transcript_or_result: Mapping[str, Any], *, scenario_pack: str) -> dict[str, Any]:
+    requirements = _requirement_specs(scenario_pack)
+    return {
+        "format_version": "rpg_live_mechanic_semantic_judge_context_v1",
+        "scenario_pack": _safe_str(scenario_pack).strip(),
+        "requirements": {name: _safe_str(spec.get("prompt")) for name, spec in sorted(requirements.items())},
+        "commands": list(LIVE_LLM_PLAYTEST_SCENARIO_PACKS.get(_safe_str(scenario_pack).strip(), ())),
+        "turns": _semantic_turn_context(transcript_or_result),
+    }
+
+
+def _generate_live_mechanic_semantic_judge_payload(
+    *,
+    transcript_or_result: Mapping[str, Any],
+    scenario_pack: str,
+    timeout_s: float = 45.0,
+) -> dict[str, Any]:
+    try:
+        from app.rpg.llm_app_gateway import build_app_llm_gateway
+
+        gateway = build_app_llm_gateway()
+    except Exception as exc:
+        raise RuntimeError(f"semantic_judge_gateway_unavailable:{type(exc).__name__}:{exc}") from exc
+
+    context = _build_mechanic_judge_context(transcript_or_result, scenario_pack=scenario_pack)
+    prompt = (
+        "You are judging whether a live RPG transcript visibly satisfies scenario-specific gameplay mechanics. "
+        "Use only the provided transcript and commands. Return strict JSON only with this shape: "
+        '{"ok": boolean, "requirements": {"<requirement>": {"ok": boolean, "evidence": string, "reason": string}}, "reason": string}. '
+        "Do not reward generic genre prose; require visible evidence in the transcript."
+    )
+    text = gateway.generate(prompt, context=context, timeout_s=timeout_s)
+    return _json_object_from_text(text)
+
+
+def _normalize_mechanic_judge_payload(raw_payload: Any, *, scenario_pack: str) -> tuple[dict[str, Any], str]:
+    payload = _json_object_from_text(raw_payload)
+    requirements = _requirement_specs(scenario_pack)
+    judged_requirements = _safe_dict(payload.get("requirements"))
+    if not payload or not requirements:
+        return {}, "empty_judge_payload"
+    if not judged_requirements:
+        return {}, "missing_requirements"
+
+    matched: dict[str, dict[str, Any]] = {}
+    failures: list[str] = []
+    for requirement, spec in sorted(requirements.items()):
+        item = _safe_dict(judged_requirements.get(requirement))
+        if "ok" not in item:
+            return {}, f"missing_requirement:{requirement}"
+        ok = bool(item.get("ok"))
+        evidence = _safe_str(item.get("evidence"))[:500]
+        reason = _safe_str(item.get("reason"))[:500]
+        matched[requirement] = {
+            "ok": ok,
+            "matched_phrase": "",
+            "evidence": evidence,
+            "reason": reason,
+            "accepted_phrases": list(_safe_list(list(spec.get("phrases") or ()))),
+        }
+        if not ok:
+            failures.append(f"semantic_{_safe_str(scenario_pack).strip().replace('-', '_')}_{requirement}_missing")
+    return (
+        {
+            "format_version": LIVE_MECHANIC_SEMANTIC_ASSERTION_VERSION,
+            "ok": not failures,
+            "scenario_pack": _safe_str(scenario_pack).strip(),
+            "requirement_count": len(requirements),
+            "missing_count": len(failures),
+            "failures": failures,
+            "warnings": [],
+            "matched": matched,
+            "judge": {
+                "mode": "llm_judge",
+                "used": True,
+                "valid": True,
+                "ok": not failures,
+                "reason": _safe_str(payload.get("reason"))[:500],
+            },
+        },
+        "",
+    )
+
+
+def evaluate_live_mechanic_semantics(
+    transcript_or_result: Mapping[str, Any],
+    *,
+    scenario_pack: str,
+    semantic_judge_func: Callable[..., Any] | None = None,
+    use_llm_judge: bool = True,
+) -> dict[str, Any]:
+    """Evaluate scenario-pack-specific mechanic evidence in the visible transcript.
+
+    Live runs prefer an LLM judge so semantic equivalents like "I will accompany
+    you" can satisfy the companion contract without brittle keyword-only logic.
+    If the judge is unavailable or returns invalid JSON, deterministic phrase
+    matching remains the fallback and CI can inject a fake judge.
+    """
+
+    pack = _safe_str(scenario_pack).strip()
+    requirements = _requirement_specs(pack)
+    if not requirements:
+        return {
+            "format_version": LIVE_MECHANIC_SEMANTIC_ASSERTION_VERSION,
+            "ok": True,
+            "scenario_pack": pack,
+            "requirement_count": 0,
+            "missing_count": 0,
+            "failures": [],
+            "warnings": [],
+            "matched": {},
+            "judge": {"mode": "none", "used": False, "valid": False, "error": "no_pack_requirements"},
+        }
+
+    judge_error = ""
+    if use_llm_judge:
+        try:
+            if semantic_judge_func is not None:
+                raw_payload = semantic_judge_func(
+                    transcript_or_result=transcript_or_result,
+                    scenario_pack=pack,
+                    context=_build_mechanic_judge_context(transcript_or_result, scenario_pack=pack),
+                    requirements=requirements,
+                )
+            else:
+                raw_payload = _generate_live_mechanic_semantic_judge_payload(
+                    transcript_or_result=transcript_or_result,
+                    scenario_pack=pack,
+                )
+            judged, judge_error = _normalize_mechanic_judge_payload(raw_payload, scenario_pack=pack)
+            if judged:
+                return judged
+        except Exception as exc:
+            judge_error = f"{type(exc).__name__}:{exc}"
+
+    fallback = _deterministic_mechanic_semantics(transcript_or_result, scenario_pack=pack)
+    fallback["judge"] = {
+        "mode": "deterministic_fallback",
+        "used": bool(use_llm_judge),
+        "valid": False,
+        "error": judge_error or "llm_judge_disabled",
+    }
+    warnings = _safe_list(fallback.get("warnings"))
+    if use_llm_judge:
+        warnings.append("semantic_llm_judge_fallback_used")
+    fallback["warnings"] = sorted(set(_safe_str(item) for item in warnings if _safe_str(item)))
+    return fallback
 
 
 def apply_live_mechanic_semantics_to_quality(quality: Mapping[str, Any], semantics: Mapping[str, Any]) -> dict[str, Any]:
@@ -271,6 +496,10 @@ def apply_live_mechanic_semantics_to_quality(quality: Mapping[str, Any], semanti
     signals = _safe_dict(result.get("signals"))
     signals["mechanic_semantic_requirement_count"] = int(semantics.get("requirement_count") or 0)
     signals["mechanic_semantic_missing_count"] = int(semantics.get("missing_count") or 0)
+    judge = _safe_dict(semantics.get("judge"))
+    signals["mechanic_semantic_judge_mode"] = _safe_str(judge.get("mode"))
+    signals["mechanic_semantic_judge_used"] = bool(judge.get("used"))
+    signals["mechanic_semantic_judge_valid"] = bool(judge.get("valid"))
     result["signals"] = signals
     result["ok"] = bool(result.get("ok")) and bool(semantics.get("ok"))
     return result
@@ -336,6 +565,8 @@ def run_live_llm_playtest(
     drain_deferred_narration: bool = True,
     deferred_narration_drain_func: Callable[..., Mapping[str, Any] | None] | None = None,
     campaign_runner: Any | None = None,
+    semantic_judge_func: Callable[..., Any] | None = None,
+    use_llm_semantic_judge: bool = True,
 ) -> dict[str, Any]:
     if not allow_live and not _truthy_env(LIVE_LLM_PLAYTEST_ENV_FLAG):
         return {
@@ -382,12 +613,17 @@ def run_live_llm_playtest(
         quality = read_live_quality_transcript(transcript_path)
     else:
         quality = evaluate_live_quality_transcript(campaign_result)
-    semantics = evaluate_live_mechanic_semantics(transcript_payload or campaign_result, scenario_pack=scenario_pack)
+    semantics = evaluate_live_mechanic_semantics(
+        transcript_payload or campaign_result,
+        scenario_pack=scenario_pack,
+        semantic_judge_func=semantic_judge_func,
+        use_llm_judge=use_llm_semantic_judge,
+    )
     quality = apply_live_mechanic_semantics_to_quality(quality, semantics)
     resolved_summary_path = Path(summary_path) if summary_path else resolved_output_dir / "live-quality-summary.json"
     write_live_quality_eval_summary(result=quality, summary_path=resolved_summary_path)
 
-    result = {
+    return {
         "format_version": LIVE_LLM_PLAYTEST_VERSION,
         "ok": bool(quality.get("ok")),
         "skipped": False,
@@ -408,7 +644,6 @@ def run_live_llm_playtest(
         "mechanic_semantics": semantics,
         "quality": quality,
     }
-    return result
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -427,6 +662,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-live-survival-seed", action="store_true", help="Do not seed starter survival needs/items/currency.")
     parser.add_argument("--no-deferred-runtime-narration", action="store_true", help="Debug only: do not force deferred post-runtime LLM narration.")
     parser.add_argument("--no-drain-deferred-narration", action="store_true", help="Debug only: score artifacts without enforcing the runtime narration contract.")
+    parser.add_argument("--no-llm-semantic-judge", action="store_true", help="Debug only: use deterministic mechanic semantic fallback instead of the LLM judge.")
     parser.add_argument("--artifact-detail", choices=["summary", "debug", "full"], default="debug")
     parser.add_argument("--summary-path", default="", help="Optional path to persist the live-quality summary JSON.")
     return parser
@@ -451,6 +687,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         seed_live_survival=not bool(args.no_live_survival_seed),
         defer_runtime_narration=not bool(args.no_deferred_runtime_narration),
         drain_deferred_narration=not bool(args.no_drain_deferred_narration),
+        use_llm_semantic_judge=not bool(args.no_llm_semantic_judge),
         artifact_detail=args.artifact_detail,
         summary_path=args.summary_path or None,
     )
