@@ -1,21 +1,8 @@
 """CA/CB/CF/CF.1 — interactive command-line RPG campaign runner.
 
-This runner is for live human/agent playtesting, not LLM-as-player autoplay.
-It prompts for player input in the terminal for a fixed number of turns, captures
-turn results, and writes review artifacts similar in spirit to autoplay reports.
-
-Examples from repo root:
-
-    python src/tests/rpg/interactive_cli_campaign.py --turns 30
-    python src/tests/rpg/interactive_cli_campaign.py --turns 30 --session-id cli_live_test
-    python src/tests/rpg/interactive_cli_campaign.py --turns 30 --script-file commands.txt
-
-A coding agent such as Cline/Codex can drive stdin live, while the runtime still
-uses the normal deterministic apply_turn path.  CB adds provider/narrator
-classification diagnostics. CF adds per-turn performance timing. CF.1 enables
-manual-harness stage tracing for interactive turns so slow runtime/apply-turn
-costs can be split into apply_turn, token logging, artifact emission, summary
-compaction, sanitization, and raw-result restore costs.
+This runner is for live human/agent playtesting, not LLM-as-player autoplay. It
+prompts for player input in the terminal for a fixed number of turns, captures turn
+results, and writes review artifacts similar in spirit to autoplay reports.
 """
 from __future__ import annotations
 
@@ -52,16 +39,22 @@ from rpg.interactive_cli_intent_fallback import (  # noqa: E402
 )
 from rpg.interactive_cli_quest_followup import apply_quest_followup_repair  # noqa: E402
 from rpg.interactive_cli_survival_repair import apply_survival_visible_response_repair  # noqa: E402
+from tests.rpg.manual.live_survival_seed import seed_live_survival_session  # noqa: E402
 from tests.rpg.manual.perf_trace import (  # noqa: E402
     clear_manual_harness_trace,
     get_manual_harness_trace,
     summarize_manual_harness_trace,
 )
+from tests.rpg.manual.runtime_narration_contract import (  # noqa: E402
+    drain_deferred_runtime_narration_turn,
+    new_runtime_narration_contract_summary,
+    normalize_runtime_narration_transcript_payload,
+    record_runtime_narration_drain,
+)
 from tests.rpg.manual.session_helpers import (  # noqa: E402
     _ensure_manual_session,
     _reset_manual_session_artifacts,
 )
-from tests.rpg.manual.live_survival_seed import seed_live_survival_session  # noqa: E402
 from tests.rpg.manual.turn_execution import _extract_narration, _run_one_manual_turn  # noqa: E402
 
 INTERACTIVE_CLI_CAMPAIGN_VERSION = "interactive_cli_campaign_v4"
@@ -118,19 +111,11 @@ def _sum_phase(turns: Sequence[Mapping[str, Any]], key: str) -> float:
     return round(sum(_safe_float(_safe_dict(turn.get("interactive_cli_performance")).get(key)) for turn in turns), 4)
 
 
-def _run_manual_turn_with_trace(
-    *,
-    defer_runtime_narration: bool = False,
-    **kwargs: Any,
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+def _run_manual_turn_with_trace(*, defer_runtime_narration: bool = False, **kwargs: Any) -> tuple[Dict[str, Any], Dict[str, Any]]:
     previous = os.environ.get("RPG_TRACE_MANUAL_HARNESS")
     os.environ["RPG_TRACE_MANUAL_HARNESS"] = "1"
     clear_manual_harness_trace()
-    context = (
-        deferred_runtime_narration_context(True)
-        if defer_runtime_narration
-        else nullcontext()
-    )
+    context = deferred_runtime_narration_context(True) if defer_runtime_narration else nullcontext()
     try:
         with context:
             turn_summary = _run_one_manual_turn(**kwargs)
@@ -156,6 +141,7 @@ def _performance_summary(turns: Sequence[Mapping[str, Any]], *, elapsed_seconds:
         "commerce_repair_seconds",
         "quest_dialogue_repair_seconds",
         "survival_repair_seconds",
+        "runtime_narration_contract_seconds",
         "post_repair_context_seconds",
         "print_prepare_seconds",
         "turn_total_seconds",
@@ -194,7 +180,7 @@ def _performance_summary(turns: Sequence[Mapping[str, Any]], *, elapsed_seconds:
         "slow_turns": slow_turns[:20],
         "phase_totals_seconds": phase_totals,
         "phase_avg_seconds": phase_averages,
-        "note": "runtime_apply_turn_seconds includes _run_one_manual_turn; manual_harness_slowest_stages breaks that down when CF.1 tracing is enabled. intent_router_seconds includes the central provider intent-classifier call.",
+        "note": "runtime_apply_turn_seconds includes _run_one_manual_turn; runtime_narration_contract_seconds covers deferred narration drain/provenance normalization when enabled.",
     }
 
 
@@ -326,9 +312,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
         perf = _safe_dict(turn.get("interactive_cli_performance"))
         harness = _safe_dict(perf.get("manual_harness_trace_summary"))
         narration_source = _safe_str(turn.get("narration_source") or narration_source_for_turn(turn))
-        commerce_html = ""
-        if commerce.get("applied"):
-            commerce_html = "<p><strong>Commerce follow-up:</strong> answered from authoritative service offers.</p>"
+        commerce_html = "<p><strong>Commerce follow-up:</strong> answered from authoritative service offers.</p>" if commerce.get("applied") else ""
         quest_html = ""
         if quest.get("applied"):
             kind = _safe_str(quest.get("inquiry_kind") or "quest")
@@ -345,8 +329,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
                 f"<li>total: {escape(_safe_str(perf.get('turn_total_seconds')))}s</li>",
                 f"<li>runtime/manual harness: {escape(_safe_str(perf.get('runtime_apply_turn_seconds')))}s</li>",
                 f"<li>intent router/provider classifier: {escape(_safe_str(perf.get('intent_router_seconds')))}s</li>",
-                f"<li>commerce repair: {escape(_safe_str(perf.get('commerce_repair_seconds')))}s</li>",
-                f"<li>quest/dialogue repair: {escape(_safe_str(perf.get('quest_dialogue_repair_seconds')))}s</li>",
+                f"<li>runtime narration contract: {escape(_safe_str(perf.get('runtime_narration_contract_seconds')))}s</li>",
                 "</ul><h4>Manual harness slowest stages</h4><ul>",
                 slow_stage_html,
                 "</ul>",
@@ -412,8 +395,6 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
         f"<div class='metric'><strong>Warnings</strong><br>{escape(_safe_str(summary.get('warning_count')))}</div>",
         f"<div class='metric'><strong>Errors</strong><br>{escape(_safe_str(summary.get('error_count')))}</div>",
         f"<div class='metric'><strong>Provider called</strong><br>{escape(_safe_str(summary.get('provider_called_count')))}</div>",
-        f"<div class='metric'><strong>Commerce repairs</strong><br>{escape(_safe_str(summary.get('commerce_followup_repair_count')))}</div>",
-        f"<div class='metric'><strong>Quest repairs</strong><br>{escape(_safe_str(summary.get('quest_followup_repair_count')))}</div>",
         "</div>",
         "<details open><summary>Performance summary</summary>",
         f"<p>{escape(_safe_str(performance.get('note')))}</p>",
@@ -436,11 +417,22 @@ def write_interactive_campaign_artifacts(*, output_dir: Path, summary: Mapping[s
     performance_path = output_dir / "interactive-performance.json"
     html_path = output_dir / "interactive-report.html"
     zip_path = output_dir / "interactive-campaign-results.zip"
-    transcript_payload = {"format_version": INTERACTIVE_CLI_CAMPAIGN_VERSION, "summary": dict(summary), "turns": list(turns)}
-    transcript_path.write_text(_json_dumps(transcript_payload), encoding="utf-8")
-    summary_path.write_text(_json_dumps(summary), encoding="utf-8")
-    performance_path.write_text(_json_dumps(_safe_dict(summary).get("performance")), encoding="utf-8")
-    html_path.write_text(render_interactive_campaign_html(summary, turns), encoding="utf-8")
+    summary_dict = dict(summary)
+    transcript_payload = {"format_version": INTERACTIVE_CLI_CAMPAIGN_VERSION, "summary": summary_dict, "turns": list(turns)}
+    normalized_transcript, normalization = normalize_runtime_narration_transcript_payload(transcript_payload)
+    if normalization.get("normalized_count") or normalization.get("already_normalized_count"):
+        summary_dict = dict(_safe_dict(normalized_transcript.get("summary")) or summary_dict)
+        contract = _safe_dict(summary_dict.get("runtime_narration_contract"))
+        if contract:
+            contract["transcript_provenance_normalization"] = normalization
+            summary_dict["runtime_narration_contract"] = contract
+        summary_dict["runtime_transcript_provenance_normalization"] = normalization
+        normalized_transcript["summary"] = summary_dict
+        turns = _safe_list(normalized_transcript.get("turns"))
+    transcript_path.write_text(_json_dumps(normalized_transcript), encoding="utf-8")
+    summary_path.write_text(_json_dumps(summary_dict), encoding="utf-8")
+    performance_path.write_text(_json_dumps(_safe_dict(summary_dict).get("performance")), encoding="utf-8")
+    html_path.write_text(render_interactive_campaign_html(summary_dict, turns), encoding="utf-8")
     survival_rows = [_turn_report_row(turn) for turn in turns]
     survival_dir = output_dir / "survival"
     survival_result = write_survival_report_artifacts(survival_dir, survival_rows)
@@ -460,7 +452,27 @@ def read_scripted_commands(path: str | Path) -> List[str]:
     return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
 
 
-def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, input_func: Callable[[str], str] = input, scripted_commands: Sequence[str] | None = None, reset_session: bool = True, console_llm: bool = True, include_raw_result: bool = True, artifact_detail: str = "debug", enable_llm_intent_fallback: bool = True, provider_factory: Callable[[], Any] | None = None, seed_live_survival: bool = False, defer_runtime_narration: bool = False, runtime_performance_override: Mapping[str, Any] | None = None, force_llm_intent: bool = True, after_turn_hook: Callable[..., Any] | None = None) -> Dict[str, Any]:
+def run_interactive_campaign(
+    *,
+    turns: int,
+    session_id: str,
+    output_dir: Path,
+    input_func: Callable[[str], str] = input,
+    scripted_commands: Sequence[str] | None = None,
+    reset_session: bool = True,
+    console_llm: bool = True,
+    include_raw_result: bool = True,
+    artifact_detail: str = "debug",
+    enable_llm_intent_fallback: bool = True,
+    provider_factory: Callable[[], Any] | None = None,
+    seed_live_survival: bool = False,
+    defer_runtime_narration: bool = False,
+    runtime_performance_override: Mapping[str, Any] | None = None,
+    force_llm_intent: bool = True,
+    after_turn_hook: Callable[..., Any] | None = None,
+    enforce_deferred_narration_contract: bool = False,
+    deferred_narration_drain_func: Callable[..., Mapping[str, Any] | None] | None = None,
+) -> Dict[str, Any]:
     if turns <= 0:
         raise ValueError("turns_must_be_positive")
     session_id = _safe_str(session_id).strip() or f"interactive_cli_{uuid.uuid4().hex[:8]}"
@@ -473,6 +485,8 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
     commands = list(scripted_commands or [])
     turn_summaries: List[Dict[str, Any]] = []
     last_service_offer_context: Dict[str, Any] = {}
+    contract_enabled = bool(defer_runtime_narration and enforce_deferred_narration_contract)
+    runtime_narration_contract = new_runtime_narration_contract_summary(enabled=contract_enabled)
     started_at = time.time()
     stop_reason = "turn_limit"
     print(f"Interactive RPG campaign session: {session_id}", flush=True)
@@ -540,13 +554,26 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
         perf["survival_repair_seconds"] = _elapsed_since(phase)
 
         phase = time.perf_counter()
+        if contract_enabled:
+            drain_result = drain_deferred_runtime_narration_turn(
+                turn_summary=turn_summary,
+                session_id=session_id,
+                turn_index=len(turn_summaries) + 1,
+                player_input=player_input,
+                drain_func=deferred_narration_drain_func,
+            )
+            record_runtime_narration_drain(runtime_narration_contract, drain_result)
+        perf["runtime_narration_contract_seconds"] = _elapsed_since(phase)
+
+        phase = time.perf_counter()
         raw_after_repair = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
         repaired_context = extract_service_offer_context(raw_after_repair)
         if repaired_context:
             last_service_offer_context = repaired_context
         elif current_offer_context:
             last_service_offer_context = current_offer_context
-        turn_summary["narration_source"] = narration_source_for_turn(turn_summary)
+        if _safe_str(turn_summary.get("narration_source")) != "provider_runtime_narration":
+            turn_summary["narration_source"] = narration_source_for_turn(turn_summary)
         perf["post_repair_context_seconds"] = _elapsed_since(phase)
 
         if after_turn_hook is not None:
@@ -556,7 +583,8 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
                 turn_index=len(turn_summaries) + 1,
                 player_input=player_input,
             )
-            turn_summary["narration_source"] = narration_source_for_turn(turn_summary)
+            if _safe_str(turn_summary.get("narration_source")) != "provider_runtime_narration":
+                turn_summary["narration_source"] = narration_source_for_turn(turn_summary)
 
         phase = time.perf_counter()
         raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
@@ -583,6 +611,7 @@ def run_interactive_campaign(*, turns: int, session_id: str, output_dir: Path, i
 
     ended_at = time.time()
     summary = build_interactive_campaign_summary(run_id=output_dir.name.replace("interactive-cli-campaign-", ""), session_id=session_id, requested_turns=turns, turns=turn_summaries, started_at=started_at, ended_at=ended_at, stop_reason=stop_reason)
+    summary["runtime_narration_contract"] = runtime_narration_contract
     artifacts = write_interactive_campaign_artifacts(output_dir=output_dir, summary=summary, turns=turn_summaries)
     print("\nInteractive campaign complete.", flush=True)
     print(f"Report: {artifacts['html_path']}", flush=True)
