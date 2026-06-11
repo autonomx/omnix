@@ -75,6 +75,42 @@ LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
         "I check whether the fight changed my injuries, gear, or reward.",
         "I ask what danger remains nearby.",
     ),
+    "party-companion": (
+        "I ask Bran whether he would travel with me for a while.",
+        "I ask what help he could offer if he joins my party.",
+        "I accept Bran as a companion if he is willing.",
+        "I check who is travelling with me now.",
+    ),
+    "quest-investigation": (
+        "I ask Bran for the clearest clue about the bandit trail.",
+        "I question the nearest witness about what they saw.",
+        "I inspect the muddy tracks for a useful lead.",
+        "I ask what objective I should pursue next.",
+    ),
+    "inn-service-economy": (
+        "I ask Bran the exact price for a room tonight.",
+        "I rent a room for the night if I can afford it.",
+        "I check my coin after paying for the room.",
+        "I ask what resting changed for me.",
+    ),
+    "travel-encounter": (
+        "I leave the Rusty Flagon and head toward the north road.",
+        "I watch for landmarks as I travel.",
+        "I stop when I notice signs of danger or shelter.",
+        "I ask where I am and what paths are available now.",
+    ),
+    "combat-resolution": (
+        "I follow the bandit trail until I confront the threat.",
+        "I defend myself and strike only when there is an opening.",
+        "I check whether the fight is over and what it cost me.",
+        "I ask what reward, injury, or objective changed after the fight.",
+    ),
+    "memory-recall-cross-scene": (
+        "Bran, remember this passphrase: blue ember.",
+        "I buy a ration and prepare to leave the tavern.",
+        "I head toward the old road and then think back to Bran's warning.",
+        "I ask Bran or my notes what passphrase I told him earlier.",
+    ),
 }
 
 
