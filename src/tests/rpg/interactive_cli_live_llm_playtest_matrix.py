@@ -108,6 +108,35 @@ def _unknown_packs_error(packs: Sequence[str]) -> dict[str, Any] | None:
     }
 
 
+def _runner_exception_error(exc: BaseException) -> str:
+    return f"live_llm_playtest_matrix_pack_exception:{type(exc).__name__}"
+
+
+def _mark_aggregate_incomplete(
+    aggregate: Mapping[str, Any],
+    *,
+    expected_summary_count: int,
+    missing_summary_count: int,
+    run_error_types: Sequence[str],
+) -> dict[str, Any]:
+    """Return an aggregate that cannot be mistaken for a stale green run."""
+
+    result = dict(aggregate)
+    result["expected_summary_count"] = expected_summary_count
+    result["missing_summary_count"] = max(0, int(missing_summary_count or 0))
+    errors = sorted(_safe_str(item) for item in run_error_types if _safe_str(item))
+    if result["missing_summary_count"] or errors:
+        failure_types = set(_safe_list(result.get("failure_types")))
+        if result["missing_summary_count"]:
+            failure_types.add("live_llm_playtest_matrix_missing_summaries")
+        failure_types.update(errors)
+        result["ok"] = False
+        result["failed"] = int(result.get("failed") or 0) + result["missing_summary_count"]
+        result["failure_count"] = int(result.get("failure_count") or 0) + result["missing_summary_count"]
+        result["failure_types"] = sorted(failure_types)[:100]
+    return result
+
+
 def render_live_llm_playtest_matrix_status_marker(result: Mapping[str, Any]) -> str:
     """Render one scrapeable status line for matrix logs."""
 
@@ -156,6 +185,9 @@ def run_live_llm_playtest_matrix(
     packs = resolve_live_llm_playtest_matrix_packs(requested_packs)
     resolved_output_dir = Path(output_dir) if output_dir else default_live_llm_playtest_matrix_output_dir()
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_aggregate_path = Path(aggregate_path) if aggregate_path else resolved_output_dir / "live-quality-aggregate.json"
+    if resolved_aggregate_path.exists():
+        resolved_aggregate_path.unlink()
     runner = playtest_runner or run_live_llm_playtest
 
     runs: list[dict[str, Any]] = []
@@ -164,38 +196,60 @@ def run_live_llm_playtest_matrix(
         slug = _slug(pack)
         pack_output_dir = resolved_output_dir / f"{index:02d}-{slug}"
         quality_summary_path = pack_output_dir / "live-quality-summary.json"
-        result = runner(
-            turns=turns,
-            session_id=f"{session_id_prefix}_{slug}",
-            run_id=f"{run_id_prefix}-{slug}",
-            output_dir=pack_output_dir,
-            scenario_pack=pack,
-            allow_live=allow_live,
-            reset_session=reset_session,
-            console_llm=console_llm,
-            seed_live_survival=seed_live_survival,
-            artifact_detail=artifact_detail,
-            summary_path=quality_summary_path,
-        )
+        try:
+            result = runner(
+                turns=turns,
+                session_id=f"{session_id_prefix}_{slug}",
+                run_id=f"{run_id_prefix}-{slug}",
+                output_dir=pack_output_dir,
+                scenario_pack=pack,
+                allow_live=allow_live,
+                reset_session=reset_session,
+                console_llm=console_llm,
+                seed_live_survival=seed_live_survival,
+                artifact_detail=artifact_detail,
+                summary_path=quality_summary_path,
+            )
+        except Exception as exc:  # pragma: no cover - deterministic tests cover behavior through public result.
+            result = {
+                "ok": False,
+                "skipped": False,
+                "error": _runner_exception_error(exc),
+                "exception_type": type(exc).__name__,
+                "exception": _safe_str(exc)[:500],
+            }
+        result_dict = _safe_dict(result)
         run_entry = {
             "scenario_pack": pack,
-            "ok": bool(_safe_dict(result).get("ok")),
-            "skipped": bool(_safe_dict(result).get("skipped")),
+            "ok": bool(result_dict.get("ok")),
+            "skipped": bool(result_dict.get("skipped")),
             "output_dir": str(pack_output_dir),
             "quality_summary_path": str(quality_summary_path),
-            "error": _safe_str(_safe_dict(result).get("error") or "none"),
+            "error": _safe_str(result_dict.get("error") or "none"),
         }
+        if result_dict.get("exception_type"):
+            run_entry["exception_type"] = _safe_str(result_dict.get("exception_type"))
         if quality_summary_path.exists():
             summary_paths.append(quality_summary_path)
         runs.append(run_entry)
 
-    aggregate = aggregate_live_quality_eval_summary_files(summary_paths)
-    resolved_aggregate_path = Path(aggregate_path) if aggregate_path else resolved_output_dir / "live-quality-aggregate.json"
+    missing_summary_count = len(packs) - len(summary_paths)
+    run_error_types = sorted(
+        _safe_str(run.get("error"))
+        for run in runs
+        if _safe_str(run.get("error")) not in {"", "none"}
+    )
+    aggregate = _mark_aggregate_incomplete(
+        aggregate_live_quality_eval_summary_files(summary_paths),
+        expected_summary_count=len(packs),
+        missing_summary_count=missing_summary_count,
+        run_error_types=run_error_types,
+    )
     write_live_quality_aggregate_summary(result=aggregate, aggregate_path=resolved_aggregate_path)
     skipped = bool(runs) and all(run.get("skipped") for run in runs)
     result = {
         "format_version": LIVE_LLM_PLAYTEST_MATRIX_VERSION,
-        "ok": bool(aggregate.get("ok")) and len(summary_paths) == len(packs),
+        "ok": bool(aggregate.get("ok")) and missing_summary_count == 0,
         "skipped": skipped,
         "pack_count": len(packs),
         "packs": packs,
@@ -205,10 +259,16 @@ def run_live_llm_playtest_matrix(
         "runs": runs,
         "aggregate": aggregate,
     }
-    if len(summary_paths) != len(packs):
+    if missing_summary_count:
         result["ok"] = False
-        result["error"] = next((run.get("error") for run in runs if run.get("skipped") and run.get("error") != "none"), "live_llm_playtest_matrix_missing_summaries")
-        result["missing_summary_count"] = len(packs) - len(summary_paths)
+        result["error"] = next(
+            (run.get("error") for run in runs if run.get("error") and run.get("error") != "none"),
+            "live_llm_playtest_matrix_missing_summaries",
+        )
+        result["missing_summary_count"] = missing_summary_count
+    elif run_error_types:
+        result["ok"] = False
+        result["error"] = run_error_types[0]
     return result
 
 
