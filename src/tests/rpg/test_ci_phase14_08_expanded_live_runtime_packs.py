@@ -82,3 +82,45 @@ def test_phase14_08_matrix_runs_all_registered_packs_by_default(tmp_path: Path) 
     assert len(result["summary_paths"]) == len(expected)
     assert result["aggregate"]["passed"] == len(expected)
     assert result["aggregate"]["failed"] == 0
+
+
+def test_phase14_08_matrix_writes_current_failure_aggregate_when_pack_raises(tmp_path: Path) -> None:
+    output_dir = tmp_path / "matrix"
+    aggregate_path = output_dir / "live-quality-aggregate.json"
+    aggregate_path.parent.mkdir(parents=True, exist_ok=True)
+    aggregate_path.write_text('{"ok": true, "stale": true}', encoding="utf-8")
+    captured: list[str] = []
+
+    def fake_runner(**kwargs):
+        pack = kwargs["scenario_pack"]
+        captured.append(pack)
+        if pack == "travel-encounter":
+            raise RuntimeError("travel graph unavailable")
+        summary_path = Path(kwargs["summary_path"])
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _passing_summary(turn_count=len(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS[pack]))
+        summary_path.write_text(json.dumps(payload), encoding="utf-8")
+        return {"ok": True, "skipped": False, "quality_summary_path": str(summary_path), "quality": payload}
+
+    result = matrix.run_live_llm_playtest_matrix(
+        allow_live=True,
+        output_dir=output_dir,
+        playtest_runner=fake_runner,
+    )
+
+    aggregate = json.loads(aggregate_path.read_text(encoding="utf-8"))
+    expected = sorted(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS)
+    assert result["ok"] is False
+    assert result["packs"] == expected
+    assert captured == expected
+    assert result["missing_summary_count"] == 1
+    assert aggregate["ok"] is False
+    assert aggregate["expected_summary_count"] == len(expected)
+    assert aggregate["missing_summary_count"] == 1
+    assert aggregate["failed"] == 1
+    assert aggregate.get("stale") is None
+    assert "live_llm_playtest_matrix_missing_summaries" in aggregate["failure_types"]
+    assert "live_llm_playtest_matrix_pack_exception:RuntimeError" in aggregate["failure_types"]
+    failed_run = next(item for item in result["runs"] if item["scenario_pack"] == "travel-encounter")
+    assert failed_run["ok"] is False
+    assert failed_run["error"] == "live_llm_playtest_matrix_pack_exception:RuntimeError"
