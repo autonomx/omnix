@@ -21,6 +21,7 @@ from tests.rpg.interactive_cli_campaign_state import verify_state_checkpoints_in
 STATE_ZIP_VERIFY_SUMMARY_VERSION = "interactive_cli_state_zip_verify_summary_v1"
 STATE_ZIP_VERIFY_SUMMARY_REQUIRED_KEYS = frozenset({"summary_format_version", "ok"})
 STATE_ZIP_VERIFY_STATUS_MARKER = "INTERACTIVE_CLI_STATE_ZIP_VERIFY"
+STATE_ZIP_VERIFY_AGGREGATE_STATUS_MARKER = "INTERACTIVE_CLI_STATE_ZIP_AGGREGATE"
 STATE_ZIP_VERIFY_AGGREGATE_VERSION = "interactive_cli_state_zip_verify_aggregate_v1"
 
 
@@ -181,6 +182,21 @@ def render_state_zip_verification_status_marker(result: Mapping[str, Any]) -> st
     )
 
 
+def render_state_zip_verification_aggregate_status_marker(aggregate: Mapping[str, Any]) -> str:
+    """Render a one-line aggregate status marker for CI log scraping."""
+
+    ok = "true" if bool(aggregate.get("ok")) else "false"
+    summary_count = _safe_int(aggregate.get("summary_count"))
+    passed = _safe_int(aggregate.get("passed"))
+    failed = _safe_int(aggregate.get("failed"))
+    invalid_summary_count = _safe_int(aggregate.get("invalid_summary_count"))
+    return (
+        f"[{STATE_ZIP_VERIFY_AGGREGATE_STATUS_MARKER}] "
+        f"ok={ok} summary_count={summary_count} passed={passed} "
+        f"failed={failed} invalid_summary_count={invalid_summary_count}"
+    )
+
+
 def parse_state_zip_verification_status_marker(line: str) -> dict[str, Any]:
     """Parse the one-line verifier status marker emitted to stderr.
 
@@ -247,6 +263,71 @@ def parse_state_zip_verification_status_marker(line: str) -> dict[str, Any]:
     }
 
 
+def parse_state_zip_verification_aggregate_status_marker(line: str) -> dict[str, Any]:
+    """Parse the one-line aggregate status marker emitted to stderr."""
+
+    text = str(line or "").strip()
+    prefix = f"[{STATE_ZIP_VERIFY_AGGREGATE_STATUS_MARKER}] "
+    if not text.startswith(prefix):
+        return {
+            "ok": False,
+            "error": "aggregate_status_marker_prefix_mismatch",
+        }
+    fields: dict[str, str] = {}
+    for token in text[len(prefix):].split():
+        if "=" not in token:
+            return {
+                "ok": False,
+                "error": "aggregate_status_marker_token_malformed",
+                "token": token,
+            }
+        key, value = token.split("=", 1)
+        if not key or key in fields:
+            return {
+                "ok": False,
+                "error": "aggregate_status_marker_key_invalid",
+                "key": key,
+            }
+        fields[key] = value
+    required = {"ok", "summary_count", "passed", "failed", "invalid_summary_count"}
+    missing = sorted(required.difference(fields))
+    if missing:
+        return {
+            "ok": False,
+            "error": "aggregate_status_marker_required_keys_missing",
+            "missing_keys": missing,
+        }
+    if fields["ok"] not in {"true", "false"}:
+        return {
+            "ok": False,
+            "error": "aggregate_status_marker_ok_invalid",
+            "actual": fields["ok"],
+        }
+    try:
+        summary_count = int(fields["summary_count"])
+        passed = int(fields["passed"])
+        failed = int(fields["failed"])
+        invalid_summary_count = int(fields["invalid_summary_count"])
+    except ValueError:
+        return {
+            "ok": False,
+            "error": "aggregate_status_marker_count_invalid",
+        }
+    if min(summary_count, passed, failed, invalid_summary_count) < 0:
+        return {
+            "ok": False,
+            "error": "aggregate_status_marker_count_negative",
+        }
+    return {
+        "ok": True,
+        "aggregate_ok": fields["ok"] == "true",
+        "summary_count": summary_count,
+        "passed": passed,
+        "failed": failed,
+        "invalid_summary_count": invalid_summary_count,
+    }
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify state checkpoint artifacts inside a stateful interactive CLI ZIP.")
     parser.add_argument("zip_path", nargs="?", help="Path to interactive-campaign-results.zip or an uploaded ZIP artifact.")
@@ -268,6 +349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.aggregate_path:
             write_state_zip_verification_aggregate(aggregate=aggregate, aggregate_path=Path(args.aggregate_path))
         print(json.dumps(aggregate, indent=2, ensure_ascii=False, sort_keys=True, default=str))
+        print(render_state_zip_verification_aggregate_status_marker(aggregate), file=sys.stderr)
         return 0 if aggregate.get("ok") else 1
     if not args.zip_path:
         raise SystemExit("zip_path is required unless --aggregate-summary is provided")
