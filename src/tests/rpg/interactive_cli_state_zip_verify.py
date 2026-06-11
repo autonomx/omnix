@@ -133,6 +133,19 @@ def write_state_zip_verification_aggregate(*, aggregate: Mapping[str, Any], aggr
     return path
 
 
+def read_state_zip_verification_summary(path: str | Path) -> dict[str, Any]:
+    """Read a single verifier summary JSON payload from disk."""
+
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def aggregate_state_zip_verification_summary_files(paths: Sequence[str | Path]) -> dict[str, Any]:
+    """Read and aggregate multiple persisted verifier summary JSON files."""
+
+    summaries = [read_state_zip_verification_summary(path) for path in paths]
+    return aggregate_state_zip_verification_summaries(summaries)
+
+
 def write_state_zip_verification_summary(*, result: Mapping[str, Any], summary_path: str | Path) -> Path:
     """Write the verifier result to a deterministic machine-readable JSON file."""
 
@@ -236,13 +249,28 @@ def parse_state_zip_verification_status_marker(line: str) -> dict[str, Any]:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify state checkpoint artifacts inside a stateful interactive CLI ZIP.")
-    parser.add_argument("zip_path", help="Path to interactive-campaign-results.zip or an uploaded ZIP artifact.")
+    parser.add_argument("zip_path", nargs="?", help="Path to interactive-campaign-results.zip or an uploaded ZIP artifact.")
     parser.add_argument("--summary-path", default="", help="Optional path for writing the structured verification JSON result.")
+    parser.add_argument(
+        "--aggregate-summary",
+        action="append",
+        default=[],
+        help="Persisted state ZIP verification summary JSON file to include in aggregate mode. Repeat for multiple files.",
+    )
+    parser.add_argument("--aggregate-path", default="", help="Optional path for writing aggregate verification JSON.")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
+    if args.aggregate_summary:
+        aggregate = aggregate_state_zip_verification_summary_files([Path(path) for path in args.aggregate_summary])
+        if args.aggregate_path:
+            write_state_zip_verification_aggregate(aggregate=aggregate, aggregate_path=Path(args.aggregate_path))
+        print(json.dumps(aggregate, indent=2, ensure_ascii=False, sort_keys=True, default=str))
+        return 0 if aggregate.get("ok") else 1
+    if not args.zip_path:
+        raise SystemExit("zip_path is required unless --aggregate-summary is provided")
     result = verify_state_checkpoints_in_zip(Path(args.zip_path))
     if args.summary_path:
         write_state_zip_verification_summary(result=result, summary_path=Path(args.summary_path))
