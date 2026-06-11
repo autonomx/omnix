@@ -26,7 +26,7 @@ def _quality_summary(*, ok: bool = True, turn_count: int = 2, avg_score: float =
 
 
 def test_phase13_99_resolves_all_matrix_packs_by_default() -> None:
-    assert matrix.resolve_live_llm_playtest_matrix_packs([]) == ["combat-tension", "commerce-travel", "tavern-memory"]
+    assert matrix.resolve_live_llm_playtest_matrix_packs([]) == sorted(matrix.LIVE_LLM_PLAYTEST_SCENARIO_PACKS)
 
 
 def test_phase13_99_resolves_selected_matrix_packs_without_duplicates() -> None:
@@ -156,7 +156,7 @@ def test_phase13_99_matrix_runner_reports_unknown_packs() -> None:
         "skipped": False,
         "error": "unknown_live_llm_playtest_matrix_pack",
         "unknown_packs": ["missing-pack"],
-        "available_packs": ["combat-tension", "commerce-travel", "tavern-memory"],
+        "available_packs": sorted(matrix.LIVE_LLM_PLAYTEST_SCENARIO_PACKS),
     }
 
 
@@ -183,7 +183,7 @@ def test_phase13_99_matrix_cli_lists_packs(capsys) -> None:
 
     output = capsys.readouterr()
     payload = json.loads(output.out)
-    assert sorted(payload["scenario_packs"]) == ["combat-tension", "commerce-travel", "tavern-memory"]
+    assert sorted(payload["scenario_packs"]) == sorted(matrix.LIVE_LLM_PLAYTEST_SCENARIO_PACKS)
     assert output.err == ""
 
 
