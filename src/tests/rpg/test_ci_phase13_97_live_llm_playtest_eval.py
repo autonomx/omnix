@@ -167,6 +167,8 @@ def test_phase13_97_live_playtest_cli_wires_options(monkeypatch, tmp_path: Path,
             str(tmp_path / "out"),
             "--command",
             "Ask Bran about trouble.",
+            "--scenario-pack",
+            "tavern-memory",
             "--no-reset-session-state",
             "--console-llm",
             "--no-live-survival-seed",
@@ -184,8 +186,143 @@ def test_phase13_97_live_playtest_cli_wires_options(monkeypatch, tmp_path: Path,
     assert captured["session_id"] == "s1"
     assert captured["run_id"] == "r1"
     assert captured["commands"] == ["Ask Bran about trouble."]
+    assert captured["scenario_pack"] == "tavern-memory"
     assert captured["reset_session"] is False
     assert captured["console_llm"] is True
     assert captured["seed_live_survival"] is False
     assert captured["artifact_detail"] == "summary"
     assert captured["summary_path"] == str(tmp_path / "quality.json")
+
+
+def test_phase13_98_lists_builtin_live_playtest_scenario_packs() -> None:
+    packs = playtest.list_live_llm_playtest_scenario_packs()
+
+    assert sorted(packs) == ["combat-tension", "commerce-travel", "tavern-memory"]
+    assert packs["tavern-memory"][0] == "Bran, remember this: my trail name is Ash Lantern."
+    assert any("two rations" in command for command in packs["commerce-travel"])
+    assert any("bandit" in command for command in packs["combat-tension"])
+
+
+def test_phase13_98_resolves_named_scenario_pack() -> None:
+    assert playtest.resolve_live_llm_playtest_scenario_pack("commerce-travel") == list(
+        playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS["commerce-travel"]
+    )
+
+
+def test_phase13_98_rejects_unknown_scenario_pack() -> None:
+    try:
+        playtest.resolve_live_llm_playtest_scenario_pack("missing-pack")
+    except ValueError as exc:
+        assert str(exc) == "unknown_live_llm_playtest_scenario_pack:missing-pack;available=combat-tension, commerce-travel, tavern-memory"
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected unknown scenario pack to raise")
+
+
+def test_phase13_98_scenario_pack_feeds_runner_when_no_explicit_commands(tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_runner(**kwargs):
+        captured.update(kwargs)
+        return {
+            "summary": {"completed_turns": 1},
+            "turns": [
+                {
+                    "turn_index": 1,
+                    "player_input": "I ask Elara what trail food she recommends for the north road.",
+                    "raw_narration": "Elara recommends rations for the north road and asks whether you want to buy two before leaving town.",
+                }
+            ],
+            "artifacts": {"transcript_path": str(tmp_path / "missing-transcript.json")},
+        }
+
+    result = playtest.run_live_llm_playtest(
+        allow_live=True,
+        output_dir=tmp_path / "out",
+        scenario_pack="commerce-travel",
+        campaign_runner=fake_runner,
+    )
+
+    assert result["scenario_pack"] == "commerce-travel"
+    assert result["commands"] == list(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS["commerce-travel"])
+    assert captured["scripted_commands"] == list(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS["commerce-travel"])
+    assert captured["turns"] == len(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS["commerce-travel"])
+
+
+def test_phase13_98_explicit_commands_override_scenario_pack(tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_runner(**kwargs):
+        captured.update(kwargs)
+        return {
+            "summary": {"completed_turns": 1},
+            "turns": [
+                {
+                    "turn_index": 1,
+                    "player_input": "custom",
+                    "raw_narration": "Bran answers your custom question and gives you a specific road choice.",
+                }
+            ],
+            "artifacts": {"transcript_path": str(tmp_path / "missing-transcript.json")},
+        }
+
+    result = playtest.run_live_llm_playtest(
+        allow_live=True,
+        output_dir=tmp_path / "out",
+        commands=["custom"],
+        scenario_pack="combat-tension",
+        campaign_runner=fake_runner,
+    )
+
+    assert result["commands"] == ["custom"]
+    assert captured["scripted_commands"] == ["custom"]
+
+
+def test_phase13_98_script_file_overrides_scenario_pack(tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+    script_path = tmp_path / "commands.txt"
+    script_path.write_text("from script\n", encoding="utf-8")
+
+    def fake_runner(**kwargs):
+        captured.update(kwargs)
+        return {
+            "summary": {"completed_turns": 1},
+            "turns": [
+                {
+                    "turn_index": 1,
+                    "player_input": "from script",
+                    "raw_narration": "Bran follows the script command and offers a road choice.",
+                }
+            ],
+            "artifacts": {"transcript_path": str(tmp_path / "missing-transcript.json")},
+        }
+
+    result = playtest.run_live_llm_playtest(
+        allow_live=True,
+        output_dir=tmp_path / "out",
+        script_file=script_path,
+        scenario_pack="combat-tension",
+        campaign_runner=fake_runner,
+    )
+
+    assert result["commands"] == ["from script"]
+    assert captured["scripted_commands"] == ["from script"]
+
+
+def test_phase13_98_unknown_scenario_pack_returns_structured_error() -> None:
+    result = playtest.run_live_llm_playtest(allow_live=True, scenario_pack="missing-pack")
+
+    assert result == {
+        "format_version": playtest.LIVE_LLM_PLAYTEST_VERSION,
+        "ok": False,
+        "skipped": False,
+        "error": "unknown_live_llm_playtest_scenario_pack:missing-pack;available=combat-tension, commerce-travel, tavern-memory",
+    }
+
+
+def test_phase13_98_cli_lists_scenario_packs(capsys) -> None:
+    assert playtest.main(["--list-scenario-packs"]) == 0
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert sorted(payload["scenario_packs"]) == ["combat-tension", "commerce-travel", "tavern-memory"]
+    assert output.err == ""
