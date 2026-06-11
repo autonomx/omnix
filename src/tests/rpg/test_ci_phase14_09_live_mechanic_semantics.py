@@ -52,6 +52,7 @@ def test_phase14_09_semantic_assertions_pass_when_pack_mechanic_is_visible() -> 
             "He lists the help he can offer on the road.",
         ),
         scenario_pack="party-companion",
+        use_llm_judge=False,
     )
 
     assert result["ok"] is True
@@ -59,15 +60,17 @@ def test_phase14_09_semantic_assertions_pass_when_pack_mechanic_is_visible() -> 
     assert result["missing_count"] == 0
     assert result["failures"] == []
     assert result["matched"]["companion_or_party"]["matched_phrase"]
+    assert result["judge"]["mode"] == "deterministic_fallback"
 
 
 def test_phase14_09_semantic_assertions_fail_when_mechanic_is_missing() -> None:
     result = playtest.evaluate_live_mechanic_semantics(
         _transcript(
             "The tavern remains warm and the night outside is quiet.",
-            "Bran answers carefully, keeping his voice low.",
+            "The innkeeper answers carefully, keeping his voice low.",
         ),
         scenario_pack="memory-recall-cross-scene",
+        use_llm_judge=False,
     )
 
     assert result["ok"] is False
@@ -85,7 +88,7 @@ def test_phase14_09_semantic_failures_are_written_into_quality_summary(tmp_path:
             json.dumps(
                 _transcript(
                     "The innkeeper smiles politely.",
-                    "The room remains quiet, but no price or payment is discussed.",
+                    "The hearth pops in the corner while conversation drifts elsewhere.",
                 )
             ),
             encoding="utf-8",
@@ -100,6 +103,7 @@ def test_phase14_09_semantic_failures_are_written_into_quality_summary(tmp_path:
         scenario_pack="inn-service-economy",
         output_dir=output_dir,
         campaign_runner=fake_campaign_runner,
+        use_llm_semantic_judge=False,
     )
 
     quality = json.loads((output_dir / "live-quality-summary.json").read_text(encoding="utf-8"))
@@ -122,6 +126,7 @@ def test_phase14_09_matrix_aggregate_fails_on_pack_semantic_failure(tmp_path: Pa
             semantics = playtest.evaluate_live_mechanic_semantics(
                 _transcript("The road is quiet and no consequence is described."),
                 scenario_pack="combat-resolution",
+                use_llm_judge=False,
             )
             payload = playtest.apply_live_mechanic_semantics_to_quality(payload, semantics)
         summary_path.write_text(json.dumps(payload), encoding="utf-8")
