@@ -30,6 +30,9 @@ MIN_ACCEPTABLE_AVG_SCORE = 3.0
 MIN_ACCEPTABLE_FUN_SCORE = 2.75
 MAX_DUPLICATE_RESPONSE_RATIO = 0.25
 MAX_GENERIC_TURN_RATIO = 0.45
+MIN_LIVE_LLM_NARRATION_RATIO = 0.9
+MAX_VISIBLE_REPAIR_TURN_RATIO = 0.25
+MAX_DETERMINISTIC_FALLBACK_TURN_RATIO = 0.1
 
 GENERIC_PHRASES = (
     "the air is thick",
@@ -93,6 +96,22 @@ GROUNDING_KEYS = (
     "interactive_cli_commerce_state",
     "survival",
     "turn_contract",
+)
+
+NARRATION_SOURCE_KEYS = (
+    "narration_source",
+    "presentation_source",
+    "response_source",
+    "visible_response_source",
+    "validated_presentation_source",
+    "final_response_source",
+)
+
+LLM_CALLED_KEYS = (
+    "llm_called",
+    "deferred_llm_called",
+    "narration_llm_called",
+    "presentation_llm_called",
 )
 
 SPECIFICITY_STOPWORDS = frozenset({"a", "an", "as", "do", "he", "she", "the", "they", "this", "will", "you"})
@@ -167,6 +186,33 @@ def _turn_has_grounding(turn: Mapping[str, Any]) -> bool:
     return any(key in raw for key in GROUNDING_KEYS)
 
 
+def _turn_narration_metadata(turn: Mapping[str, Any]) -> dict[str, Any]:
+    """Classify live narration provenance without requiring old synthetic tests to opt in."""
+
+    raw = _safe_dict(turn.get("raw_result") or turn.get("result"))
+    sources = [
+        _safe_str(turn.get(key) or raw.get(key)).strip().lower()
+        for key in NARRATION_SOURCE_KEYS
+        if _safe_str(turn.get(key) or raw.get(key)).strip()
+    ]
+    llm_called_values = [turn.get(key, raw.get(key)) for key in LLM_CALLED_KEYS if key in turn or key in raw]
+    has_metadata = bool(sources or llm_called_values)
+    source_text = " ".join(sources)
+    visible_repair = any(token in source_text for token in ("repaired", "visible_response_repair", "dialogue_repair", "quest_repair", "survival_repair"))
+    deterministic_fallback = any(token in source_text for token in ("fallback", "deterministic", "no_change"))
+    llm_called = any(bool(value) for value in llm_called_values)
+    llm_source = any("llm" in source for source in sources)
+    llm_narration = (llm_called or llm_source) and not visible_repair and not deterministic_fallback
+    return {
+        "has_metadata": has_metadata,
+        "sources": sources,
+        "llm_called": llm_called,
+        "llm_narration": llm_narration,
+        "visible_repair": visible_repair,
+        "deterministic_fallback": deterministic_fallback,
+    }
+
+
 def _turn_score(*, player_input: str, narration: str, previous_player_inputs: Sequence[str]) -> dict[str, Any]:
     text = narration.strip()
     words = _words(text)
@@ -231,12 +277,29 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
     normalized_responses: list[str] = []
     generic_turns = 0
     grounded_turns = 0
+    narration_metadata_turns = 0
+    llm_narration_turns = 0
+    visible_repair_turns = 0
+    deterministic_fallback_turns = 0
 
     for index, turn in enumerate(turns, start=1):
         player_input = _safe_str(turn.get("player_input"))
         narration = _extract_narration(turn)
         score = _turn_score(player_input=player_input, narration=narration, previous_player_inputs=previous_inputs)
         flags = _safe_dict(score.get("flags"))
+        provenance = _turn_narration_metadata(turn)
+        if provenance.get("has_metadata"):
+            narration_metadata_turns += 1
+            if provenance.get("llm_narration"):
+                llm_narration_turns += 1
+            else:
+                warnings.append(f"turn_{index}_missing_llm_narration")
+            if provenance.get("visible_repair"):
+                visible_repair_turns += 1
+                warnings.append(f"turn_{index}_visible_response_repair")
+            if provenance.get("deterministic_fallback"):
+                deterministic_fallback_turns += 1
+                warnings.append(f"turn_{index}_deterministic_fallback")
         if flags.get("generic"):
             generic_turns += 1
             warnings.append(f"turn_{index}_generic_response")
@@ -259,7 +322,14 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
                 "player_input": player_input,
                 "narration_word_count": len(_words(narration)),
                 "scores": {key: score[key] for key in SCORE_KEYS},
-                "flags": flags,
+                "flags": {
+                    **flags,
+                    "has_narration_metadata": bool(provenance.get("has_metadata")),
+                    "llm_narration": bool(provenance.get("llm_narration")),
+                    "visible_repair": bool(provenance.get("visible_repair")),
+                    "deterministic_fallback": bool(provenance.get("deterministic_fallback")),
+                },
+                "narration_sources": provenance.get("sources", []),
             }
         )
         if player_input:
@@ -276,6 +346,9 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
     duplicate_ratio = round(duplicate_count / turn_count, 4) if turn_count else 0.0
     generic_ratio = round(generic_turns / turn_count, 4) if turn_count else 0.0
     grounding_ratio = round(grounded_turns / turn_count, 4) if turn_count else 0.0
+    llm_narration_ratio = round(llm_narration_turns / narration_metadata_turns, 4) if narration_metadata_turns else 0.0
+    visible_repair_ratio = round(visible_repair_turns / narration_metadata_turns, 4) if narration_metadata_turns else 0.0
+    deterministic_fallback_ratio = round(deterministic_fallback_turns / narration_metadata_turns, 4) if narration_metadata_turns else 0.0
 
     def avg(metric: str) -> float:
         values = [_safe_dict(item.get("scores")).get(metric) for item in per_turn]
@@ -290,6 +363,13 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
         warnings.append("duplicate_response_ratio_high")
     if generic_ratio > MAX_GENERIC_TURN_RATIO:
         warnings.append("generic_turn_ratio_high")
+    if narration_metadata_turns:
+        if llm_narration_ratio < MIN_LIVE_LLM_NARRATION_RATIO:
+            failures.append("llm_narration_ratio_below_threshold")
+        if visible_repair_ratio > MAX_VISIBLE_REPAIR_TURN_RATIO:
+            failures.append("visible_response_repair_ratio_high")
+        if deterministic_fallback_ratio > MAX_DETERMINISTIC_FALLBACK_TURN_RATIO:
+            failures.append("deterministic_fallback_ratio_high")
     if avg_score < MIN_ACCEPTABLE_AVG_SCORE:
         failures.append("average_quality_score_below_threshold")
     if scores.get("fun", 0.0) < MIN_ACCEPTABLE_FUN_SCORE:
@@ -306,6 +386,9 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
             "min_acceptable_fun_score": MIN_ACCEPTABLE_FUN_SCORE,
             "max_duplicate_response_ratio": MAX_DUPLICATE_RESPONSE_RATIO,
             "max_generic_turn_ratio": MAX_GENERIC_TURN_RATIO,
+            "min_live_llm_narration_ratio": MIN_LIVE_LLM_NARRATION_RATIO,
+            "max_visible_repair_turn_ratio": MAX_VISIBLE_REPAIR_TURN_RATIO,
+            "max_deterministic_fallback_turn_ratio": MAX_DETERMINISTIC_FALLBACK_TURN_RATIO,
         },
         "signals": {
             "duplicate_response_ratio": duplicate_ratio,
@@ -314,6 +397,13 @@ def evaluate_live_quality_transcript(transcript_or_result: Mapping[str, Any]) ->
             "generic_turn_count": generic_turns,
             "grounding_ratio": grounding_ratio,
             "grounded_turn_count": grounded_turns,
+            "narration_metadata_turn_count": narration_metadata_turns,
+            "llm_narration_turn_count": llm_narration_turns,
+            "llm_narration_ratio": llm_narration_ratio,
+            "visible_repair_turn_count": visible_repair_turns,
+            "visible_repair_turn_ratio": visible_repair_ratio,
+            "deterministic_fallback_turn_count": deterministic_fallback_turns,
+            "deterministic_fallback_turn_ratio": deterministic_fallback_ratio,
         },
         "failures": sorted(set(failures)),
         "warnings": sorted(set(warnings))[:100],

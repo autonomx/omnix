@@ -154,6 +154,7 @@ def run_live_llm_playtest(
     seed_live_survival: bool = True,
     artifact_detail: str = "debug",
     summary_path: str | Path | None = None,
+    defer_runtime_narration: bool = True,
     campaign_runner: Any | None = None,
 ) -> dict[str, Any]:
     """Run an opt-in scripted live LLM playtest and evaluate its transcript."""
@@ -176,7 +177,6 @@ def run_live_llm_playtest(
             "skipped": False,
             "error": str(exc),
         }
-
     resolved_run_id = _safe_str(run_id).strip() or _default_run_id()
     resolved_session_id = _safe_str(session_id).strip() or f"interactive_cli_{resolved_run_id}"
     resolved_output_dir = Path(output_dir) if output_dir else _default_output_dir(resolved_run_id)
@@ -194,6 +194,7 @@ def run_live_llm_playtest(
         artifact_detail=artifact_detail,
         enable_llm_intent_fallback=True,
         seed_live_survival=seed_live_survival,
+        defer_runtime_narration=defer_runtime_narration,
     )
     artifacts = _safe_dict(campaign_result.get("artifacts"))
     transcript_path = Path(_safe_str(artifacts.get("transcript_path")) or (resolved_output_dir / "interactive-transcript.json"))
@@ -216,6 +217,7 @@ def run_live_llm_playtest(
         "output_dir": str(resolved_output_dir),
         "transcript_path": str(transcript_path),
         "quality_summary_path": str(resolved_summary_path),
+        "defer_runtime_narration": bool(defer_runtime_narration),
         "campaign_artifacts": artifacts,
         "quality": quality,
     }
@@ -236,6 +238,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-reset-session-state", action="store_true", help="Do not delete saved session files before starting.")
     parser.add_argument("--console-llm", action="store_true", help="Print manual LLM console diagnostics per turn.")
     parser.add_argument("--no-live-survival-seed", action="store_true", help="Do not seed starter survival needs/items/currency.")
+    parser.add_argument("--no-deferred-runtime-narration", action="store_true", help="Debug only: do not force deferred post-runtime LLM narration.")
     parser.add_argument("--artifact-detail", choices=["summary", "debug", "full"], default="debug")
     parser.add_argument("--summary-path", default="", help="Optional path to persist the live-quality summary JSON.")
     return parser
@@ -258,6 +261,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         reset_session=not bool(args.no_reset_session_state),
         console_llm=bool(args.console_llm),
         seed_live_survival=not bool(args.no_live_survival_seed),
+        defer_runtime_narration=not bool(args.no_deferred_runtime_narration),
         artifact_detail=args.artifact_detail,
         summary_path=args.summary_path or None,
     )
