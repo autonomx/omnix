@@ -36,6 +36,34 @@ def test_phase13_99_resolves_selected_matrix_packs_without_duplicates() -> None:
     ]
 
 
+def test_phase14_00_default_matrix_output_dir_is_under_resources_test_results() -> None:
+    assert matrix.default_live_llm_playtest_matrix_output_dir() == Path(
+        "resources/data/test-results/live-llm-playtest-matrix"
+    )
+
+
+def test_phase14_00_matrix_runner_defaults_to_resources_test_results(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def fake_playtest_runner(**kwargs):
+        summary_path = Path(kwargs["summary_path"])
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _quality_summary(ok=True, turn_count=1, avg_score=4.0, fun=4.0)
+        summary_path.write_text(json.dumps(payload), encoding="utf-8")
+        return {"ok": True, "skipped": False, "quality_summary_path": str(summary_path), "quality": payload}
+
+    result = matrix.run_live_llm_playtest_matrix(
+        scenario_packs=["tavern-memory"],
+        allow_live=True,
+        playtest_runner=fake_playtest_runner,
+    )
+
+    expected = Path("resources/data/test-results/live-llm-playtest-matrix")
+    assert Path(result["output_dir"]) == expected
+    assert Path(result["aggregate_path"]) == expected / "live-quality-aggregate.json"
+    assert Path(result["summary_paths"][0]) == expected / "01-tavern-memory" / "live-quality-summary.json"
+
+
 def test_phase13_99_matrix_runner_runs_selected_packs_and_aggregates(tmp_path: Path) -> None:
     captured: list[dict] = []
 
