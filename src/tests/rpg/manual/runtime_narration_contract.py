@@ -1,10 +1,3 @@
-"""Phase 14.05+ — shared manual-runtime narration contract helpers.
-
-The interactive campaign runner owns this contract so live matrix tests exercise the
-same path that writes runtime-driven campaign artifacts. Live playtest wrappers may
-orchestrate/scoring, but deferred narration drain and provenance normalization live
-here.
-"""
 from __future__ import annotations
 
 import json
@@ -15,19 +8,9 @@ from typing import Any, Callable, Mapping
 RUNTIME_NARRATION_CONTRACT_VERSION = "runtime_narration_contract_v1"
 RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE = "runtime_deferred_narration_drain_v1"
 RUNTIME_DEFERRED_NARRATION_CONTEXT_VERSION = "runtime_deferred_narration_context_v1"
-RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION = "runtime_transcript_provenance_normalization_v1"
+RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION = "runtime_transcript_provenance_normalization_v2"
 RUNTIME_DEFERRED_NARRATION_MAX_CONTEXT_CHARS = 6500
-RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES = frozenset(
-    {
-        "dialogue_repaired",
-        "quest_repaired",
-        "survival_repaired",
-        "commerce_repaired",
-        "commerce_followup_repaired",
-        "service_repaired",
-        "visible_response_repaired",
-    }
-)
+RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES = frozenset({"dialogue_repaired", "quest_repaired", "survival_repaired", "commerce_repaired", "commerce_followup_repaired", "service_repaired", "visible_response_repaired"})
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -42,6 +25,11 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _source_requires_runtime_narration(source: Any) -> bool:
+    text = _safe_str(source).strip()
+    return text == "deferred_runtime_narration_pending" or text in RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES or text.endswith("_repaired")
+
+
 def _narration_payload_text(payload: Mapping[str, Any]) -> str:
     payload = _safe_dict(payload)
     for key in ("narration", "final_narration", "rendered_narration", "text", "message"):
@@ -53,41 +41,29 @@ def _narration_payload_text(payload: Mapping[str, Any]) -> str:
 
 def _payload_is_pending(payload: Mapping[str, Any]) -> bool:
     payload = _safe_dict(payload)
-    source = _safe_str(payload.get("source")).strip()
-    status = _safe_str(payload.get("narration_status") or payload.get("status")).strip().lower()
-    return source == "deferred_runtime_narration_pending" or status in {"pending", "queued"}
+    status = _safe_str(payload.get("narration_status") or payload.get("status")).lower()
+    return _safe_str(payload.get("source")) == "deferred_runtime_narration_pending" or status in {"pending", "queued"}
 
 
 def _payload_is_completed_llm_narration(payload: Mapping[str, Any]) -> bool:
     payload = _safe_dict(payload)
-    if not _narration_payload_text(payload):
+    if not _narration_payload_text(payload) or _payload_is_pending(payload):
         return False
-    if _payload_is_pending(payload):
-        return False
-    source = _safe_str(payload.get("source")).strip()
-    status = _safe_str(payload.get("narration_status") or payload.get("status")).strip().lower()
+    source = _safe_str(payload.get("source"))
+    status = _safe_str(payload.get("narration_status") or payload.get("status")).lower()
     return source in {"provider_runtime_narration", "deferred_llm_narration", "combat_narration"} or status == "completed"
 
 
 def _iter_mapping_values(value: Any, *, max_depth: int = 6):
-    seen: set[int] = set()
-
-    def walk(node: Any, depth: int):
-        if depth > max_depth or not isinstance(node, (Mapping, list)):
-            return
-        node_id = id(node)
-        if node_id in seen:
-            return
-        seen.add(node_id)
-        if isinstance(node, Mapping):
-            yield node
-            for nested in node.values():
-                yield from walk(nested, depth + 1)
-        else:
-            for nested in node:
-                yield from walk(nested, depth + 1)
-
-    yield from walk(value, 0)
+    if max_depth < 0:
+        return
+    if isinstance(value, Mapping):
+        yield value
+        for nested in value.values():
+            yield from _iter_mapping_values(nested, max_depth=max_depth - 1)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _iter_mapping_values(nested, max_depth=max_depth - 1)
 
 
 def _find_completed_narration_payload(value: Any) -> dict[str, Any]:
@@ -98,143 +74,75 @@ def _find_completed_narration_payload(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _source_requires_runtime_narration(source: Any) -> bool:
-    source_text = _safe_str(source).strip()
-    if source_text == "deferred_runtime_narration_pending":
-        return True
-    if source_text in RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES:
-        return True
-    return source_text.endswith("_repaired")
+def completed_provider_payload_for_turn(turn_summary: Mapping[str, Any]) -> dict[str, Any]:
+    turn_summary = _safe_dict(turn_summary)
+    raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    for payload in (
+        _safe_dict(turn_summary.get("raw_narration_payload")),
+        _safe_dict(raw_result.get("narration_payload")),
+        _safe_dict(raw_result.get("structured_narration")),
+        _safe_dict(_safe_dict(raw_result.get("result")).get("narration_payload")),
+    ):
+        if _payload_is_completed_llm_narration(payload):
+            return payload
+    return _find_completed_narration_payload(raw_result)
 
 
 def _turn_requires_runtime_narration(turn_summary: Mapping[str, Any]) -> bool:
     turn_summary = _safe_dict(turn_summary)
-    if _source_requires_runtime_narration(turn_summary.get("narration_source")):
-        return True
-    if _payload_is_pending(_safe_dict(turn_summary.get("raw_narration_payload"))):
-        return True
     raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
-    if _source_requires_runtime_narration(raw_result.get("narration_source")):
+    nested = _safe_dict(raw_result.get("result"))
+    if any(_source_requires_runtime_narration(src) for src in (turn_summary.get("narration_source"), raw_result.get("narration_source"), nested.get("narration_source"))):
         return True
     if _safe_str(raw_result.get("narration_status")).lower() in {"pending", "queued"}:
         return True
-    nested = _safe_dict(raw_result.get("result"))
-    if _source_requires_runtime_narration(nested.get("narration_source")):
-        return True
-    for key in ("narration_payload", "structured_narration", "narration_result"):
-        if _payload_is_pending(_safe_dict(raw_result.get(key))):
-            return True
-        if _payload_is_pending(_safe_dict(nested.get(key))):
+    for payload in (_safe_dict(turn_summary.get("raw_narration_payload")), _safe_dict(raw_result.get("narration_payload")), _safe_dict(raw_result.get("structured_narration")), _safe_dict(nested.get("narration_payload"))):
+        if _payload_is_pending(payload):
             return True
     return False
 
 
-# Backward-compatible private name used by earlier Phase 14 tests.
 _turn_has_pending_deferred_narration = _turn_requires_runtime_narration
 
 
 def _clip_str(value: Any, *, max_chars: int = 900) -> str:
     text = _safe_str(value).strip()
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars].rstrip() + "…[truncated]"
+    return text if len(text) <= max_chars else text[:max_chars].rstrip() + "…[truncated]"
 
 
-def _compact_jsonable(value: Any, *, max_depth: int = 3, max_items: int = 8, max_chars: int = 900) -> Any:
-    if max_depth < 0:
+def _compact(value: Any, *, depth: int = 3, items: int = 8, chars: int = 700) -> Any:
+    if depth < 0:
         return "[truncated]"
     if isinstance(value, Mapping):
-        compact: dict[str, Any] = {}
-        for index, (key, nested) in enumerate(value.items()):
-            if index >= max_items:
-                compact["__truncated_items__"] = max(0, len(value) - max_items)
-                break
-            compact[_safe_str(key)] = _compact_jsonable(nested, max_depth=max_depth - 1, max_items=max_items, max_chars=max_chars)
-        return compact
+        return {str(k): _compact(v, depth=depth - 1, items=items, chars=chars) for k, v in list(value.items())[:items]}
     if isinstance(value, list):
-        items = [_compact_jsonable(item, max_depth=max_depth - 1, max_items=max_items, max_chars=max_chars) for item in value[:max_items]]
-        if len(value) > max_items:
-            items.append({"__truncated_items__": len(value) - max_items})
-        return items
+        return [_compact(v, depth=depth - 1, items=items, chars=chars) for v in value[:items]]
     if isinstance(value, str):
-        return _clip_str(value, max_chars=max_chars)
-    if isinstance(value, (int, float, bool)) or value is None:
-        return value
-    return _clip_str(value, max_chars=max_chars)
-
-
-def _selected_result_fields(raw_result: Mapping[str, Any], resolved: Mapping[str, Any]) -> dict[str, Any]:
-    keys = (
-        "ok",
-        "action_type",
-        "visible_interaction_reason",
-        "location_id",
-        "target_location_id",
-        "service_kind",
-        "commerce_kind",
-        "price",
-        "currency_delta",
-        "inventory_delta",
-        "xp_delta",
-        "level_delta",
-        "quest_delta",
-        "memory_delta",
-        "state_delta",
-        "forbidden_narration",
-    )
-    selected: dict[str, Any] = {}
-    for key in keys:
-        if key in resolved:
-            selected[key] = resolved.get(key)
-        elif key in raw_result:
-            selected[key] = raw_result.get(key)
-    return _compact_jsonable(selected, max_depth=3, max_items=8, max_chars=700)
+        return _clip_str(value, max_chars=chars)
+    return value if isinstance(value, (int, float, bool)) or value is None else _clip_str(value, max_chars=chars)
 
 
 def grounded_runtime_narration_context(turn_summary: Mapping[str, Any]) -> dict[str, Any]:
     turn_summary = _safe_dict(turn_summary)
     raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
-    resolved = _safe_dict(raw_result.get("resolved_result") or _safe_dict(raw_result.get("result")))
-    turn_contract = _safe_dict(turn_summary.get("raw_turn_contract") or raw_result.get("turn_contract"))
+    nested = _safe_dict(raw_result.get("result"))
     session = _safe_dict(raw_result.get("session"))
-    runtime_state = _safe_dict(session.get("runtime_state") or raw_result.get("runtime_state"))
-    simulation_state = _safe_dict(session.get("simulation_state") or raw_result.get("simulation_state"))
-    player_state = _safe_dict(simulation_state.get("player_state"))
-    narration_context = _safe_dict(raw_result.get("narration_context"))
+    state = _safe_dict(_safe_dict(session.get("simulation_state")).get("player_state"))
     context = {
         "format_version": RUNTIME_DEFERRED_NARRATION_CONTEXT_VERSION,
         "player_input": _clip_str(turn_summary.get("player_input"), max_chars=500),
         "turn_index": turn_summary.get("turn_index"),
-        "action_type": _safe_str(resolved.get("action_type") or raw_result.get("action_type")),
-        "visible_interaction_reason": _safe_str(resolved.get("visible_interaction_reason") or raw_result.get("visible_interaction_reason")),
-        "resolved_result": _selected_result_fields(raw_result, resolved),
-        "turn_contract": _compact_jsonable(turn_contract, max_depth=2, max_items=8, max_chars=500),
-        "combat_result": _compact_jsonable(raw_result.get("combat_result") or resolved.get("combat_result"), max_depth=3, max_items=8, max_chars=500),
-        "travel_result": _compact_jsonable(raw_result.get("travel_result") or resolved.get("travel_result"), max_depth=3, max_items=8, max_chars=500),
-        "service_result": _compact_jsonable(raw_result.get("service_result") or resolved.get("service_result"), max_depth=3, max_items=8, max_chars=500),
-        "npc": _compact_jsonable(raw_result.get("npc") or turn_summary.get("raw_npc"), max_depth=2, max_items=8, max_chars=500),
-        "current_scene": _compact_jsonable(runtime_state.get("current_scene"), max_depth=2, max_items=8, max_chars=500),
-        "player_state": {
-            "location_id": _safe_str(player_state.get("location_id")),
-            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids"))[:8],
-            "inventory_state": _compact_jsonable(player_state.get("inventory_state"), max_depth=2, max_items=10, max_chars=400),
-        },
-        "recent_authoritative_facts": _compact_jsonable(_safe_list(narration_context.get("recent_authoritative_facts"))[:5], max_depth=2, max_items=5, max_chars=500),
-        "forbidden_narration": _compact_jsonable(_safe_list(resolved.get("forbidden_narration"))[:12], max_depth=1, max_items=12, max_chars=240),
+        "action_type": _safe_str(nested.get("action_type") or raw_result.get("action_type")),
+        "visible_interaction_reason": _safe_str(nested.get("visible_interaction_reason") or raw_result.get("visible_interaction_reason")),
+        "resolved_result": _compact(nested or raw_result, depth=2),
+        "npc": _compact(raw_result.get("npc") or turn_summary.get("raw_npc"), depth=2),
+        "current_scene": _compact(_safe_dict(_safe_dict(session.get("runtime_state")).get("current_scene")), depth=2),
+        "player_state": {"location_id": _safe_str(state.get("location_id")), "nearby_npc_ids": _safe_list(state.get("nearby_npc_ids"))[:8], "inventory_state": _compact(state.get("inventory_state"), depth=2)},
     }
-    encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, default=str)
-    if len(encoded) <= RUNTIME_DEFERRED_NARRATION_MAX_CONTEXT_CHARS:
-        return context
-    context["context_trimmed"] = True
-    for key in ("turn_contract", "recent_authoritative_facts", "forbidden_narration"):
-        context.pop(key, None)
-    context["resolved_result"] = _compact_jsonable(context.get("resolved_result"), max_depth=2, max_items=6, max_chars=300)
-    context["player_state"] = _compact_jsonable(context.get("player_state"), max_depth=2, max_items=6, max_chars=300)
+    if len(json.dumps(context, ensure_ascii=False, sort_keys=True, default=str)) > RUNTIME_DEFERRED_NARRATION_MAX_CONTEXT_CHARS:
+        context["resolved_result"] = _compact(context.get("resolved_result"), depth=1, chars=300)
+        context["context_trimmed"] = True
     return context
-
-
-def _context_char_count(context: Mapping[str, Any]) -> int:
-    return len(json.dumps(context, ensure_ascii=False, sort_keys=True, default=str))
 
 
 def classify_runtime_narration_error(error: Any) -> str:
@@ -243,72 +151,28 @@ def classify_runtime_narration_error(error: Any) -> str:
         return "deferred_narration_context_overflow"
     if "timeout" in text or "timed out" in text:
         return "deferred_narration_timeout"
-    if "empty_runtime_deferred_narration" in text or "empty_live_deferred_narration" in text:
-        return "empty_live_deferred_narration"
-    if "live_llm_gateway_unavailable" in text or "runtime_llm_gateway_unavailable" in text:
+    if "gateway" in text:
         return "live_llm_gateway_unavailable"
-    if "gateway_import_failed" in text:
-        return "live_llm_gateway_import_failed"
     return "deferred_narration_provider_error"
-
-
-def _failed_drain_payload(*, error: str, provider_attempted: bool, provider_present: bool, context_chars: int = 0) -> dict[str, Any]:
-    error_type = classify_runtime_narration_error(error)
-    return {
-        "source": RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE,
-        "narration_status": "failed",
-        "narration": "",
-        "runtime_narration_diagnostics": {
-            "provider_attempted": bool(provider_attempted),
-            "provider_present": bool(provider_present),
-            "provider_valid": False,
-            "provider_error_type": error_type,
-            "context_char_count": int(context_chars or 0),
-            "provider_errors": [error],
-        },
-    }
 
 
 def generate_runtime_deferred_narration_payload(*, turn_summary: Mapping[str, Any], timeout_s: float = 45.0) -> dict[str, Any]:
     try:
         from app.rpg.llm_app_gateway import build_app_llm_gateway
-    except Exception as exc:  # pragma: no cover - import failure is environment-specific
-        return _failed_drain_payload(error=f"gateway_import_failed:{type(exc).__name__}:{exc}", provider_attempted=False, provider_present=False)
-
-    gateway = build_app_llm_gateway()
+        gateway = build_app_llm_gateway()
+    except Exception as exc:
+        gateway = None
+        error = f"gateway_import_failed:{type(exc).__name__}:{exc}"
     if gateway is None:
-        return _failed_drain_payload(error="runtime_llm_gateway_unavailable", provider_attempted=False, provider_present=False)
-
+        error = locals().get("error", "runtime_llm_gateway_unavailable")
+        return {"source": RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE, "narration_status": "failed", "narration": "", "runtime_narration_diagnostics": {"provider_error_type": classify_runtime_narration_error(error), "provider_errors": [error], "provider_valid": False}}
     context = grounded_runtime_narration_context(turn_summary)
-    context_chars = _context_char_count(context)
-    prompt = (
-        "Write the final player-visible RPG narration for this already-resolved turn.\n"
-        "Use only the compact grounded context. Do not invent locations, rewards, injuries, NPCs, prices, or quest progress.\n"
-        "If an NPC speaks, keep it consistent with the provided NPC/context.\n"
-        "Return only narration text in 1-3 short paragraphs, with one concrete next choice when appropriate."
-    )
     try:
-        text = _safe_str(gateway.generate(prompt, context=context, timeout_s=timeout_s)).strip()
-    except Exception as exc:  # pragma: no cover - provider failures are live-environment specific
-        return _failed_drain_payload(error=f"{type(exc).__name__}:{exc}", provider_attempted=True, provider_present=True, context_chars=context_chars)
-    if not text:
-        return _failed_drain_payload(error="empty_runtime_deferred_narration", provider_attempted=True, provider_present=True, context_chars=context_chars)
-    return {
-        "format_version": "rpg_narration_v2",
-        "source": "provider_runtime_narration",
-        "narration_status": "completed",
-        "narration": text,
-        "npc": {},
-        "runtime_narration_diagnostics": {
-            "provider_attempted": True,
-            "provider_present": True,
-            "provider_valid": True,
-            "provider_errors": [],
-            "context_format_version": RUNTIME_DEFERRED_NARRATION_CONTEXT_VERSION,
-            "context_char_count": context_chars,
-            "provider_call_diagnostics": {"source": RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE},
-        },
-    }
+        text = _safe_str(gateway.generate("Write final grounded RPG narration for this already-resolved turn. Return only narration text.", context=context, timeout_s=timeout_s)).strip()
+    except Exception as exc:
+        error = f"{type(exc).__name__}:{exc}"
+        return {"source": RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE, "narration_status": "failed", "narration": "", "runtime_narration_diagnostics": {"provider_error_type": classify_runtime_narration_error(error), "provider_errors": [error], "provider_valid": False}}
+    return {"format_version": "rpg_narration_v2", "source": "provider_runtime_narration", "narration_status": "completed", "narration": text, "runtime_narration_diagnostics": {"provider_valid": True, "provider_errors": [], "context_char_count": len(json.dumps(context, default=str))}}
 
 
 def apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Mapping[str, Any]) -> None:
@@ -316,106 +180,79 @@ def apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Map
     text = _narration_payload_text(payload).strip()
     if not text:
         return
-    payload.setdefault("format_version", "rpg_narration_v2")
     payload["source"] = _safe_str(payload.get("source") or "provider_runtime_narration")
     payload["narration_status"] = "completed"
     payload["narration"] = text
-    diagnostics = _safe_dict(payload.get("runtime_narration_diagnostics"))
-    diagnostics.setdefault("provider_attempted", True)
-    diagnostics.setdefault("provider_valid", True)
-    diagnostics.setdefault("provider_errors", [])
-    payload["runtime_narration_diagnostics"] = diagnostics
-
-    turn_summary["raw_narration"] = text
-    turn_summary["raw_narration_payload"] = deepcopy(payload)
-    turn_summary["runtime_narration_diagnostics"] = deepcopy(diagnostics)
-    turn_summary["llm_called"] = True
-    turn_summary["narration_source"] = payload["source"]
-    turn_summary["narration_status"] = "completed"
-
+    turn_summary.update({"raw_narration": text, "raw_narration_payload": deepcopy(payload), "llm_called": True, "narration_source": payload["source"], "narration_status": "completed"})
     raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
     if raw_result:
-        raw_result["narration"] = text
-        raw_result["final_narration"] = text
-        raw_result["narration_status"] = "completed"
-        raw_result["llm_called"] = True
-        raw_result["narration_source"] = payload["source"]
-        raw_result["narration_payload"] = deepcopy(payload)
-        raw_result["structured_narration"] = deepcopy(payload)
+        raw_result.update({"narration": text, "final_narration": text, "narration_status": "completed", "llm_called": True, "narration_source": payload["source"], "narration_payload": deepcopy(payload), "structured_narration": deepcopy(payload)})
         nested = _safe_dict(raw_result.get("result"))
         if nested:
-            nested["narration"] = text
-            nested["final_narration"] = text
-            nested["narration_status"] = "completed"
-            nested["llm_called"] = True
-            nested["narration_source"] = payload["source"]
-            nested["narration_payload"] = deepcopy(payload)
-            nested["structured_narration"] = deepcopy(payload)
+            nested.update({"narration": text, "final_narration": text, "narration_status": "completed", "llm_called": True, "narration_source": payload["source"], "narration_payload": deepcopy(payload)})
             raw_result["result"] = nested
         turn_summary["raw_result"] = raw_result
         if "result" in turn_summary:
             turn_summary["result"] = raw_result
 
 
-def completed_provider_payload_for_turn(turn_summary: Mapping[str, Any]) -> dict[str, Any]:
-    raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
-    for key in ("narration_payload", "structured_narration", "narration_result"):
-        payload = _safe_dict(raw_result.get(key))
-        if _payload_is_completed_llm_narration(payload):
-            return payload
-    nested = _safe_dict(raw_result.get("result"))
-    for key in ("narration_payload", "structured_narration", "narration_result"):
-        payload = _safe_dict(nested.get(key))
-        if _payload_is_completed_llm_narration(payload):
-            return payload
-    return _find_completed_narration_payload(raw_result)
+def drain_deferred_runtime_narration_turn(*, turn_summary: dict[str, Any], session_id: str = "", turn_index: int = 0, player_input: str = "", drain_func: Callable[..., Mapping[str, Any] | None] | None = None) -> dict[str, Any]:
+    requires = _turn_requires_runtime_narration(turn_summary)
+    result = {"turn_index": int(turn_index or turn_summary.get("turn_index") or 0), "player_input": _safe_str(player_input or turn_summary.get("player_input")), "session_id": _safe_str(session_id), "pending_before": requires, "requires_provider_narration": requires, "before_source": _safe_str(turn_summary.get("narration_source")), "completed": False, "timed_out": False, "source": "not_pending", "error": "", "error_type": ""}
+    if not requires:
+        turn_summary["deferred_narration_drain"] = result
+        return result
+    payload = completed_provider_payload_for_turn(turn_summary)
+    if not payload and drain_func is not None:
+        payload = drain_func(turn_summary=turn_summary, session_id=session_id, turn_index=turn_index, player_input=player_input)
+    if not payload:
+        payload = generate_runtime_deferred_narration_payload(turn_summary=turn_summary)
+    if _payload_is_completed_llm_narration(_safe_dict(payload)):
+        apply_completed_narration_payload(turn_summary, _safe_dict(payload))
+        result.update({"completed": True, "source": _safe_str(_safe_dict(payload).get("source") or "provider_runtime_narration")})
+    else:
+        diagnostics = _safe_dict(_safe_dict(payload).get("runtime_narration_diagnostics"))
+        errors = _safe_list(diagnostics.get("provider_errors"))
+        result.update({"timed_out": True, "source": _safe_str(_safe_dict(payload).get("source") or RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE), "error": _safe_str(errors[0] if errors else "runtime_narration_failed"), "error_type": _safe_str(diagnostics.get("provider_error_type") or classify_runtime_narration_error(errors[0] if errors else ""))})
+    result["after_source"] = _safe_str(turn_summary.get("narration_source"))
+    turn_summary["deferred_narration_drain"] = result
+    return result
 
 
 def normalize_runtime_narration_transcript_payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     normalized = deepcopy(_safe_dict(payload))
-    summary = {
-        "format_version": RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION,
-        "turn_count": 0,
-        "normalized_count": 0,
-        "already_normalized_count": 0,
-        "skipped_count": 0,
-        "turns": [],
-    }
+    summary = {"format_version": RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION, "turn_count": 0, "normalized_count": 0, "already_normalized_count": 0, "late_repair_required_count": 0, "late_repair_completed_count": 0, "late_repair_timeout_count": 0, "skipped_count": 0, "error_types": [], "turns": []}
     turns = normalized.get("turns")
     if not isinstance(turns, list):
         summary["skipped_count"] = 1
         return normalized, summary
     summary["turn_count"] = len(turns)
-    next_turns: list[Any] = []
+    next_turns = []
     for index, item in enumerate(turns, start=1):
         if not isinstance(item, Mapping):
             summary["skipped_count"] += 1
             next_turns.append(item)
             continue
         turn = dict(item)
+        before = _safe_str(turn.get("narration_source"))
+        if _source_requires_runtime_narration(before) and not completed_provider_payload_for_turn(turn):
+            drain = drain_deferred_runtime_narration_turn(turn_summary=turn, session_id=_safe_str(_safe_dict(normalized.get("summary")).get("session_id")), turn_index=int(turn.get("turn_index") or index), player_input=_safe_str(turn.get("player_input")))
+            summary["late_repair_required_count"] += 1
+            summary["late_repair_completed_count"] += int(bool(drain.get("completed")))
+            summary["late_repair_timeout_count"] += int(bool(drain.get("timed_out")))
+            if drain.get("error_type") and drain.get("error_type") not in summary["error_types"]:
+                summary["error_types"].append(drain.get("error_type"))
         payload_dict = completed_provider_payload_for_turn(turn)
-        drain = _safe_dict(turn.get("deferred_narration_drain"))
-        should_normalize = bool(drain.get("completed")) or bool(payload_dict)
-        if not should_normalize:
-            summary["skipped_count"] += 1
-            next_turns.append(turn)
-            continue
-        before_source = _safe_str(turn.get("narration_source"))
         if payload_dict:
             apply_completed_narration_payload(turn, payload_dict)
-        after_source = _safe_str(turn.get("narration_source"))
-        if before_source == after_source and after_source == "provider_runtime_narration" and bool(turn.get("llm_called")):
-            summary["already_normalized_count"] += 1
+            after = _safe_str(turn.get("narration_source"))
+            if before == after == "provider_runtime_narration" and turn.get("llm_called"):
+                summary["already_normalized_count"] += 1
+            else:
+                summary["normalized_count"] += 1
+            summary["turns"].append({"turn_index": int(turn.get("turn_index") or index), "before_source": before, "after_source": after, "llm_called": bool(turn.get("llm_called")), "late_repair_required": _source_requires_runtime_narration(before)})
         else:
-            summary["normalized_count"] += 1
-        summary["turns"].append(
-            {
-                "turn_index": int(turn.get("turn_index") or index),
-                "before_source": before_source,
-                "after_source": after_source,
-                "llm_called": bool(turn.get("llm_called")),
-            }
-        )
+            summary["skipped_count"] += 1
         next_turns.append(turn)
     normalized["turns"] = next_turns
     normalized["runtime_transcript_provenance_normalization"] = summary
@@ -431,92 +268,13 @@ def normalize_runtime_narration_transcript_file(transcript_path: str | Path) -> 
     except json.JSONDecodeError as exc:
         return {"format_version": RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION, "error": f"invalid_transcript_json:{exc}", "normalized_count": 0}
     normalized, summary = normalize_runtime_narration_transcript_payload(payload)
-    if summary.get("normalized_count") or summary.get("already_normalized_count"):
+    if summary.get("normalized_count") or summary.get("already_normalized_count") or summary.get("late_repair_required_count"):
         path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     return summary
 
 
-def drain_deferred_runtime_narration_turn(
-    *,
-    turn_summary: dict[str, Any],
-    session_id: str = "",
-    turn_index: int = 0,
-    player_input: str = "",
-    drain_func: Callable[..., Mapping[str, Any] | None] | None = None,
-) -> dict[str, Any]:
-    requires_contract = _turn_requires_runtime_narration(turn_summary)
-    before_source = _safe_str(turn_summary.get("narration_source"))
-    result = {
-        "turn_index": int(turn_index or turn_summary.get("turn_index") or 0),
-        "player_input": _safe_str(player_input or turn_summary.get("player_input")),
-        "session_id": _safe_str(session_id),
-        "pending_before": bool(requires_contract),
-        "requires_provider_narration": bool(requires_contract),
-        "before_source": before_source,
-        "completed": False,
-        "timed_out": False,
-        "source": "not_pending",
-        "error": "",
-        "error_type": "",
-    }
-    if not requires_contract:
-        turn_summary["deferred_narration_drain"] = result
-        return result
-
-    payload: Mapping[str, Any] | None = None
-    existing_payload = completed_provider_payload_for_turn(turn_summary)
-    if existing_payload:
-        payload = existing_payload
-    elif drain_func is not None:
-        try:
-            payload = drain_func(turn_summary=turn_summary, session_id=session_id, turn_index=turn_index, player_input=player_input)
-        except Exception as exc:  # pragma: no cover - defensive hook isolation
-            result["error"] = f"drain_func_error:{type(exc).__name__}:{exc}"
-            result["error_type"] = classify_runtime_narration_error(result["error"])
-
-    if not payload:
-        payload = _find_completed_narration_payload(turn_summary)
-    if not payload:
-        payload = generate_runtime_deferred_narration_payload(turn_summary=turn_summary)
-
-    payload_dict = _safe_dict(payload)
-    if _payload_is_completed_llm_narration(payload_dict):
-        apply_completed_narration_payload(turn_summary, payload_dict)
-        result["completed"] = True
-        result["source"] = _safe_str(payload_dict.get("source") or "provider_runtime_narration")
-    else:
-        result["timed_out"] = True
-        result["source"] = _safe_str(payload_dict.get("source") or RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE)
-        diagnostics = _safe_dict(payload_dict.get("runtime_narration_diagnostics"))
-        errors = _safe_list(diagnostics.get("provider_errors"))
-        if errors and not result["error"]:
-            result["error"] = _safe_str(errors[0])
-        result["error_type"] = _safe_str(diagnostics.get("provider_error_type") or classify_runtime_narration_error(result["error"]))
-    result["after_source"] = _safe_str(turn_summary.get("narration_source"))
-    turn_summary["deferred_narration_drain"] = result
-    return result
-
-
 def new_runtime_narration_contract_summary(*, enabled: bool) -> dict[str, Any]:
-    return {
-        "format_version": RUNTIME_NARRATION_CONTRACT_VERSION,
-        "enabled": bool(enabled),
-        "visible_repair_sources_requiring_provider": sorted(RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES),
-        "deferred_narration_drain": {
-            "format_version": "runtime_deferred_narration_drain_summary_v2",
-            "enabled": bool(enabled),
-            "pending_count": 0,
-            "completed_count": 0,
-            "timeout_count": 0,
-            "visible_repair_required_count": 0,
-            "error_types": [],
-            "turns": [],
-        },
-        "transcript_provenance_normalization": {
-            "format_version": RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION,
-            "normalized_count": 0,
-        },
-    }
+    return {"format_version": RUNTIME_NARRATION_CONTRACT_VERSION, "enabled": bool(enabled), "visible_repair_sources_requiring_provider": sorted(RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES), "deferred_narration_drain": {"format_version": "runtime_deferred_narration_drain_summary_v2", "enabled": bool(enabled), "pending_count": 0, "completed_count": 0, "timeout_count": 0, "visible_repair_required_count": 0, "error_types": [], "turns": []}, "transcript_provenance_normalization": {"format_version": RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION, "normalized_count": 0}}
 
 
 def record_runtime_narration_drain(summary: dict[str, Any], drain_result: Mapping[str, Any]) -> None:
