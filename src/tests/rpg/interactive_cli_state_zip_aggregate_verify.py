@@ -178,6 +178,47 @@ def parse_state_zip_verification_aggregate_read_status_marker(line: str) -> dict
     }
 
 
+def verify_state_zip_aggregate_read_artifact_bundle(*, aggregate_path: str | Path, status_marker: str) -> dict[str, Any]:
+    """Verify that a persisted aggregate artifact and its scrapeable read marker agree."""
+
+    read_result = read_state_zip_verification_aggregate(aggregate_path)
+    marker_result = parse_state_zip_verification_aggregate_read_status_marker(status_marker)
+    if not marker_result.get("ok"):
+        return {
+            "ok": False,
+            "error": "aggregate_read_marker_invalid",
+            "read_result": read_result,
+            "marker_result": marker_result,
+        }
+
+    aggregate = read_result.get("aggregate") if isinstance(read_result.get("aggregate"), Mapping) else {}
+    expected = {
+        "read_ok": bool(read_result.get("ok")),
+        "aggregate_ok": bool(aggregate.get("ok")),
+        "summary_count": _safe_int(aggregate.get("summary_count")),
+        "failed": _safe_int(aggregate.get("failed")),
+        "read_error": str(read_result.get("error") or "none"),
+    }
+    mismatches = {
+        key: {"expected": expected[key], "actual": marker_result.get(key)}
+        for key in expected
+        if marker_result.get(key) != expected[key]
+    }
+    if mismatches:
+        return {
+            "ok": False,
+            "error": "aggregate_read_marker_mismatch",
+            "mismatches": mismatches,
+            "read_result": read_result,
+            "marker_result": marker_result,
+        }
+    return {
+        "ok": bool(read_result.get("ok")) and bool(marker_result.get("read_ok")),
+        "read_result": read_result,
+        "marker_result": marker_result,
+    }
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read and validate a persisted state ZIP aggregate verifier JSON artifact.")
     parser.add_argument("aggregate_path", help="Path to a persisted state ZIP aggregate JSON artifact.")
