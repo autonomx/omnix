@@ -13,8 +13,9 @@ import json
 import os
 import sys
 import uuid
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 THIS_FILE = Path(__file__).resolve()
 TESTS_ROOT = THIS_FILE.parents[1]
@@ -34,6 +35,7 @@ from tests.rpg.interactive_cli_live_quality_eval import (  # noqa: E402
 LIVE_LLM_PLAYTEST_VERSION = "rpg_live_llm_playtest_v1"
 LIVE_LLM_PLAYTEST_STATUS_MARKER = "RPG_LIVE_LLM_PLAYTEST"
 LIVE_LLM_PLAYTEST_ENV_FLAG = "RPG_RUN_LIVE_LLM_PLAYTEST"
+LIVE_DEFERRED_NARRATION_DRAIN_SOURCE = "live_llm_playtest_deferred_narration_drain_v1"
 DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS = (
     "Bran, remember this: my trail name is Ash Lantern.",
     "I ask Bran what trouble he has heard on the road.",
@@ -67,6 +69,10 @@ LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
 
 def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _safe_str(value: Any) -> str:
@@ -118,6 +124,332 @@ def _load_commands(
     return packed or list(DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS)
 
 
+def _narration_payload_text(payload: Mapping[str, Any]) -> str:
+    payload = _safe_dict(payload)
+    for key in ("narration", "final_narration", "rendered_narration", "text", "message"):
+        text = _safe_str(payload.get(key)).strip()
+        if text:
+            return text
+    return ""
+
+
+def _payload_is_pending(payload: Mapping[str, Any]) -> bool:
+    payload = _safe_dict(payload)
+    source = _safe_str(payload.get("source")).strip()
+    status = _safe_str(payload.get("narration_status") or payload.get("status")).strip().lower()
+    return source == "deferred_runtime_narration_pending" or status in {"pending", "queued"}
+
+
+def _payload_is_completed_llm_narration(payload: Mapping[str, Any]) -> bool:
+    payload = _safe_dict(payload)
+    if not _narration_payload_text(payload):
+        return False
+    if _payload_is_pending(payload):
+        return False
+    source = _safe_str(payload.get("source")).strip()
+    status = _safe_str(payload.get("narration_status") or payload.get("status")).strip().lower()
+    return source in {"provider_runtime_narration", "deferred_llm_narration", "combat_narration"} or status == "completed"
+
+
+def _iter_mapping_values(value: Any, *, max_depth: int = 6):
+    seen: set[int] = set()
+
+    def walk(node: Any, depth: int):
+        if depth > max_depth or not isinstance(node, (Mapping, list)):
+            return
+        node_id = id(node)
+        if node_id in seen:
+            return
+        seen.add(node_id)
+        if isinstance(node, Mapping):
+            yield node
+            for nested in node.values():
+                yield from walk(nested, depth + 1)
+        elif isinstance(node, list):
+            for nested in node:
+                yield from walk(nested, depth + 1)
+
+    yield from walk(value, 0)
+
+
+def _find_completed_narration_payload(value: Any) -> dict[str, Any]:
+    for item in _iter_mapping_values(value):
+        payload = _safe_dict(item)
+        if _payload_is_completed_llm_narration(payload):
+            return payload
+    return {}
+
+
+def _turn_has_pending_deferred_narration(turn_summary: Mapping[str, Any]) -> bool:
+    turn_summary = _safe_dict(turn_summary)
+    if _safe_str(turn_summary.get("narration_source")) == "deferred_runtime_narration_pending":
+        return True
+    if _payload_is_pending(_safe_dict(turn_summary.get("raw_narration_payload"))):
+        return True
+    raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    if _safe_str(raw_result.get("narration_status")).lower() in {"pending", "queued"}:
+        return True
+    for key in ("narration_payload", "structured_narration", "narration_result"):
+        if _payload_is_pending(_safe_dict(raw_result.get(key))):
+            return True
+    return False
+
+
+def _grounded_live_narration_context(turn_summary: Mapping[str, Any]) -> dict[str, Any]:
+    turn_summary = _safe_dict(turn_summary)
+    raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    resolved = _safe_dict(raw_result.get("resolved_result") or _safe_dict(raw_result.get("result")))
+    turn_contract = _safe_dict(turn_summary.get("raw_turn_contract") or raw_result.get("turn_contract"))
+    session = _safe_dict(raw_result.get("session"))
+    runtime_state = _safe_dict(session.get("runtime_state") or raw_result.get("runtime_state"))
+    simulation_state = _safe_dict(session.get("simulation_state") or raw_result.get("simulation_state"))
+    player_state = _safe_dict(simulation_state.get("player_state"))
+    return {
+        "player_input": _safe_str(turn_summary.get("player_input")),
+        "turn_index": turn_summary.get("turn_index"),
+        "action_type": _safe_str(resolved.get("action_type") or raw_result.get("action_type")),
+        "visible_interaction_reason": _safe_str(resolved.get("visible_interaction_reason") or raw_result.get("visible_interaction_reason")),
+        "resolved_result": resolved,
+        "turn_contract": turn_contract,
+        "combat_result": _safe_dict(raw_result.get("combat_result") or resolved.get("combat_result")),
+        "travel_result": _safe_dict(raw_result.get("travel_result") or resolved.get("travel_result")),
+        "service_result": _safe_dict(raw_result.get("service_result") or resolved.get("service_result")),
+        "npc": _safe_dict(raw_result.get("npc") or turn_summary.get("raw_npc")),
+        "current_scene": _safe_dict(runtime_state.get("current_scene")),
+        "player_state": {
+            "location_id": _safe_str(player_state.get("location_id")),
+            "nearby_npc_ids": _safe_list(player_state.get("nearby_npc_ids"))[:8],
+            "inventory_state": _safe_dict(player_state.get("inventory_state")),
+        },
+        "recent_authoritative_facts": _safe_list(_safe_dict(raw_result.get("narration_context")).get("recent_authoritative_facts"))[:5],
+        "forbidden_narration": _safe_list(resolved.get("forbidden_narration"))[:12],
+    }
+
+
+def _generate_live_deferred_narration_payload(
+    *,
+    turn_summary: Mapping[str, Any],
+    timeout_s: float = 45.0,
+) -> dict[str, Any]:
+    """Best-effort live provider drain for deferred runtime narration.
+
+    The normal runtime owns state.  This hook only renders the already-resolved
+    post-runtime turn into final visible narration for live-quality artifacts.
+    """
+
+    try:
+        from app.rpg.llm_app_gateway import build_app_llm_gateway
+    except Exception as exc:  # pragma: no cover - import failure is environment-specific
+        return {
+            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
+            "narration_status": "failed",
+            "narration": "",
+            "runtime_narration_diagnostics": {
+                "provider_attempted": False,
+                "provider_present": False,
+                "provider_errors": [f"gateway_import_failed:{type(exc).__name__}:{exc}"],
+            },
+        }
+
+    gateway = build_app_llm_gateway()
+    if gateway is None:
+        return {
+            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
+            "narration_status": "failed",
+            "narration": "",
+            "runtime_narration_diagnostics": {
+                "provider_attempted": False,
+                "provider_present": False,
+                "provider_errors": ["live_llm_gateway_unavailable"],
+            },
+        }
+
+    context = _grounded_live_narration_context(turn_summary)
+    prompt = (
+        "Write the final player-visible RPG narration for this already-resolved turn.\n"
+        "Use only the grounded context. Do not invent locations, rewards, injuries, NPCs, prices, or quest progress.\n"
+        "If an NPC speaks, keep it consistent with the provided NPC/context.\n"
+        "Return only the narration text, in 1-3 short paragraphs, with a concrete next choice when appropriate."
+    )
+    try:
+        text = _safe_str(gateway.generate(prompt, context=context, timeout_s=timeout_s)).strip()
+    except Exception as exc:  # pragma: no cover - provider failures are live-environment specific
+        return {
+            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
+            "narration_status": "failed",
+            "narration": "",
+            "runtime_narration_diagnostics": {
+                "provider_attempted": True,
+                "provider_present": True,
+                "provider_valid": False,
+                "provider_errors": [f"{type(exc).__name__}:{exc}"],
+            },
+        }
+    if not text:
+        return {
+            "source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE,
+            "narration_status": "failed",
+            "narration": "",
+            "runtime_narration_diagnostics": {
+                "provider_attempted": True,
+                "provider_present": True,
+                "provider_valid": False,
+                "provider_errors": ["empty_live_deferred_narration"],
+            },
+        }
+    return {
+        "format_version": "rpg_narration_v2",
+        "source": "provider_runtime_narration",
+        "narration_status": "completed",
+        "narration": text,
+        "npc": {},
+        "runtime_narration_diagnostics": {
+            "provider_attempted": True,
+            "provider_present": True,
+            "provider_valid": True,
+            "provider_errors": [],
+            "provider_call_diagnostics": {"source": LIVE_DEFERRED_NARRATION_DRAIN_SOURCE},
+        },
+    }
+
+
+def _apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Mapping[str, Any]) -> None:
+    payload = deepcopy(_safe_dict(payload))
+    text = _narration_payload_text(payload).strip()
+    if not text:
+        return
+    payload.setdefault("format_version", "rpg_narration_v2")
+    payload["source"] = _safe_str(payload.get("source") or "provider_runtime_narration")
+    payload["narration_status"] = "completed"
+    payload["narration"] = text
+    payload.setdefault("runtime_narration_diagnostics", {})
+    diagnostics = _safe_dict(payload.get("runtime_narration_diagnostics"))
+    diagnostics.setdefault("provider_attempted", True)
+    diagnostics.setdefault("provider_valid", True)
+    payload["runtime_narration_diagnostics"] = diagnostics
+
+    turn_summary["raw_narration"] = text
+    turn_summary["raw_narration_payload"] = deepcopy(payload)
+    turn_summary["runtime_narration_diagnostics"] = deepcopy(diagnostics)
+    turn_summary["llm_called"] = True
+    turn_summary["narration_source"] = payload["source"]
+
+    raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    if raw_result:
+        raw_result["narration"] = text
+        raw_result["final_narration"] = text
+        raw_result["narration_status"] = "completed"
+        raw_result["llm_called"] = True
+        raw_result["narration_payload"] = deepcopy(payload)
+        raw_result["structured_narration"] = deepcopy(payload)
+        nested = _safe_dict(raw_result.get("result"))
+        if nested:
+            nested["narration"] = text
+            nested["final_narration"] = text
+            nested["narration_status"] = "completed"
+            nested["llm_called"] = True
+            nested["narration_payload"] = deepcopy(payload)
+            nested["structured_narration"] = deepcopy(payload)
+            raw_result["result"] = nested
+        turn_summary["raw_result"] = raw_result
+
+
+def drain_deferred_live_narration_turn(
+    *,
+    turn_summary: dict[str, Any],
+    session_id: str = "",
+    turn_index: int = 0,
+    player_input: str = "",
+    drain_func: Callable[..., Mapping[str, Any] | None] | None = None,
+) -> dict[str, Any]:
+    """Resolve one pending deferred narration turn before artifacts are scored."""
+
+    pending = _turn_has_pending_deferred_narration(turn_summary)
+    result = {
+        "turn_index": int(turn_index or turn_summary.get("turn_index") or 0),
+        "player_input": _safe_str(player_input or turn_summary.get("player_input")),
+        "session_id": _safe_str(session_id),
+        "pending_before": bool(pending),
+        "completed": False,
+        "timed_out": False,
+        "source": "not_pending",
+        "error": "",
+    }
+    if not pending:
+        turn_summary["deferred_narration_drain"] = result
+        return result
+
+    payload: Mapping[str, Any] | None = None
+    if drain_func is not None:
+        try:
+            payload = drain_func(
+                turn_summary=turn_summary,
+                session_id=session_id,
+                turn_index=turn_index,
+                player_input=player_input,
+            )
+        except Exception as exc:  # pragma: no cover - defensive hook isolation
+            result["error"] = f"drain_func_error:{type(exc).__name__}:{exc}"
+
+    if not payload:
+        payload = _find_completed_narration_payload(turn_summary)
+    if not payload:
+        payload = _generate_live_deferred_narration_payload(turn_summary=turn_summary)
+
+    payload_dict = _safe_dict(payload)
+    if _payload_is_completed_llm_narration(payload_dict):
+        _apply_completed_narration_payload(turn_summary, payload_dict)
+        result["completed"] = True
+        result["source"] = _safe_str(payload_dict.get("source") or "provider_runtime_narration")
+    else:
+        result["timed_out"] = True
+        result["source"] = _safe_str(payload_dict.get("source") or LIVE_DEFERRED_NARRATION_DRAIN_SOURCE)
+        diagnostics = _safe_dict(payload_dict.get("runtime_narration_diagnostics"))
+        errors = _safe_list(diagnostics.get("provider_errors"))
+        if errors and not result["error"]:
+            result["error"] = _safe_str(errors[0])
+    turn_summary["deferred_narration_drain"] = result
+    return result
+
+
+def _new_deferred_drain_summary() -> dict[str, Any]:
+    return {
+        "format_version": "live_deferred_narration_drain_summary_v1",
+        "enabled": True,
+        "pending_count": 0,
+        "completed_count": 0,
+        "timeout_count": 0,
+        "turns": [],
+    }
+
+
+def _build_deferred_narration_after_turn_hook(
+    summary: dict[str, Any],
+    *,
+    drain_func: Callable[..., Mapping[str, Any] | None] | None = None,
+):
+    def after_turn_hook(**kwargs: Any) -> None:
+        turn_summary = kwargs.get("turn_summary")
+        if not isinstance(turn_summary, dict):
+            return
+        drain_result = drain_deferred_live_narration_turn(
+            turn_summary=turn_summary,
+            session_id=_safe_str(kwargs.get("session_id")),
+            turn_index=int(kwargs.get("turn_index") or turn_summary.get("turn_index") or 0),
+            player_input=_safe_str(kwargs.get("player_input") or turn_summary.get("player_input")),
+            drain_func=drain_func,
+        )
+        if drain_result.get("pending_before"):
+            summary["pending_count"] += 1
+        if drain_result.get("completed"):
+            summary["completed_count"] += 1
+        if drain_result.get("timed_out"):
+            summary["timeout_count"] += 1
+        summary["turns"].append(drain_result)
+
+    return after_turn_hook
+
+
 def render_live_llm_playtest_status_marker(result: Mapping[str, Any]) -> str:
     """Render a one-line marker for scraping live playtest logs."""
 
@@ -155,6 +487,8 @@ def run_live_llm_playtest(
     artifact_detail: str = "debug",
     summary_path: str | Path | None = None,
     defer_runtime_narration: bool = True,
+    drain_deferred_narration: bool = True,
+    deferred_narration_drain_func: Callable[..., Mapping[str, Any] | None] | None = None,
     campaign_runner: Any | None = None,
 ) -> dict[str, Any]:
     """Run an opt-in scripted live LLM playtest and evaluate its transcript."""
@@ -182,6 +516,16 @@ def run_live_llm_playtest(
     resolved_output_dir = Path(output_dir) if output_dir else _default_output_dir(resolved_run_id)
     resolved_turns = int(turns or len(scripted_commands) or len(DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS))
     runner = campaign_runner or cli.run_interactive_campaign
+    deferred_drain_summary = _new_deferred_drain_summary()
+    deferred_drain_summary["enabled"] = bool(defer_runtime_narration and drain_deferred_narration)
+    after_turn_hook = (
+        _build_deferred_narration_after_turn_hook(
+            deferred_drain_summary,
+            drain_func=deferred_narration_drain_func,
+        )
+        if defer_runtime_narration and drain_deferred_narration
+        else None
+    )
 
     campaign_result = runner(
         turns=resolved_turns,
@@ -195,6 +539,7 @@ def run_live_llm_playtest(
         enable_llm_intent_fallback=True,
         seed_live_survival=seed_live_survival,
         defer_runtime_narration=defer_runtime_narration,
+        after_turn_hook=after_turn_hook,
     )
     artifacts = _safe_dict(campaign_result.get("artifacts"))
     transcript_path = Path(_safe_str(artifacts.get("transcript_path")) or (resolved_output_dir / "interactive-transcript.json"))
@@ -218,6 +563,8 @@ def run_live_llm_playtest(
         "transcript_path": str(transcript_path),
         "quality_summary_path": str(resolved_summary_path),
         "defer_runtime_narration": bool(defer_runtime_narration),
+        "drain_deferred_narration": bool(drain_deferred_narration),
+        "deferred_narration_drain": deferred_drain_summary,
         "campaign_artifacts": artifacts,
         "quality": quality,
     }
@@ -239,6 +586,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--console-llm", action="store_true", help="Print manual LLM console diagnostics per turn.")
     parser.add_argument("--no-live-survival-seed", action="store_true", help="Do not seed starter survival needs/items/currency.")
     parser.add_argument("--no-deferred-runtime-narration", action="store_true", help="Debug only: do not force deferred post-runtime LLM narration.")
+    parser.add_argument("--no-drain-deferred-narration", action="store_true", help="Debug only: score artifacts without draining pending deferred narration first.")
     parser.add_argument("--artifact-detail", choices=["summary", "debug", "full"], default="debug")
     parser.add_argument("--summary-path", default="", help="Optional path to persist the live-quality summary JSON.")
     return parser
@@ -262,6 +610,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         console_llm=bool(args.console_llm),
         seed_live_survival=not bool(args.no_live_survival_seed),
         defer_runtime_narration=not bool(args.no_deferred_runtime_narration),
+        drain_deferred_narration=not bool(args.no_drain_deferred_narration),
         artifact_detail=args.artifact_detail,
         summary_path=args.summary_path or None,
     )
