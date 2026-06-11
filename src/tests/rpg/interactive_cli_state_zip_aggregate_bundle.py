@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 import zipfile
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
-from tests.rpg import interactive_cli_state_zip_aggregate_verify as aggregate_verify
-from tests.rpg import interactive_cli_state_zip_verify as verify_cli
+THIS_FILE = Path(__file__).resolve()
+TESTS_ROOT = THIS_FILE.parents[1]
+SRC_ROOT = THIS_FILE.parents[2]
+REPO_ROOT = THIS_FILE.parents[3]
+for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+from tests.rpg import interactive_cli_state_zip_aggregate_verify as aggregate_verify  # noqa: E402
+from tests.rpg import interactive_cli_state_zip_verify as verify_cli  # noqa: E402
 
 STATE_ZIP_AGGREGATE_ALL_BUNDLE_VERSION = "interactive_cli_state_zip_aggregate_all_bundle_v1"
 STATE_ZIP_AGGREGATE_ALL_BUNDLE_MANIFEST = "state-zip-aggregate-bundle-manifest.json"
@@ -201,3 +211,39 @@ def verify_state_zip_aggregate_all_bundle(bundle_zip_path: str | Path) -> dict[s
         "marker_result": marker_result,
         "bundle_summary": bundle_summary,
     }
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Write or verify all-in-one state ZIP aggregate bundles.")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    write_parser = subparsers.add_parser("write", help="Create an all-in-one aggregate bundle ZIP.")
+    write_parser.add_argument("aggregate_path", help="Path to a persisted state ZIP aggregate JSON artifact.")
+    write_parser.add_argument("bundle_zip_path", help="Path where the all-in-one aggregate bundle ZIP should be written.")
+    write_parser.add_argument(
+        "--status-marker",
+        default="",
+        help="Optional aggregate-read status marker. When omitted, a marker is rendered from the aggregate JSON.",
+    )
+
+    verify_parser = subparsers.add_parser("verify", help="Verify an all-in-one aggregate bundle ZIP.")
+    verify_parser.add_argument("bundle_zip_path", help="Path to the all-in-one aggregate bundle ZIP to verify.")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_arg_parser().parse_args(argv)
+    if args.command == "write":
+        result = write_state_zip_aggregate_all_bundle(
+            aggregate_path=Path(args.aggregate_path),
+            bundle_zip_path=Path(args.bundle_zip_path),
+            status_marker=args.status_marker or None,
+        )
+    else:
+        result = verify_state_zip_aggregate_all_bundle(Path(args.bundle_zip_path))
+    print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
+    return 0 if result.get("ok") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
