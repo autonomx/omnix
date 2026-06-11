@@ -41,6 +41,28 @@ DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS = (
     "I head north toward the old road and watch for bandits.",
     "I ask what choice I should make next.",
 )
+LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
+    "tavern-memory": (
+        "Bran, remember this: my trail name is Ash Lantern.",
+        "I ask Bran what trouble he has heard on the road tonight.",
+        "I ask Bran what name he should use if he needs to warn me later.",
+        "I ask what concrete lead I should follow next.",
+    ),
+    "commerce-travel": (
+        "I ask Elara what trail food she recommends for the north road.",
+        "I buy two rations and ask the exact price.",
+        "I check my pack and coin before leaving the market.",
+        "I head north toward the old road and watch for landmarks.",
+        "I ask what choices I have now that I am on the road.",
+    ),
+    "combat-tension": (
+        "I follow the bandit tracks north from the tavern.",
+        "I draw my sword and warn the bandit to drop his weapon.",
+        "I attack only if the bandit lunges first.",
+        "I check whether the fight changed my injuries, gear, or reward.",
+        "I ask what danger remains nearby.",
+    ),
+}
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -63,11 +85,37 @@ def _default_output_dir(run_id: str) -> Path:
     return cli.DEFAULT_OUTPUT_ROOT / f"interactive-cli-live-llm-playtest-{run_id}"
 
 
-def _load_commands(*, script_file: str | Path | None = None, commands: Sequence[str] | None = None) -> list[str]:
+def list_live_llm_playtest_scenario_packs() -> dict[str, list[str]]:
+    """Return deterministic named live playtest scenario packs."""
+
+    return {name: list(commands) for name, commands in sorted(LIVE_LLM_PLAYTEST_SCENARIO_PACKS.items())}
+
+
+def resolve_live_llm_playtest_scenario_pack(name: str) -> list[str]:
+    """Resolve one named scenario pack or raise a stable ValueError."""
+
+    key = _safe_str(name).strip()
+    if not key:
+        return []
+    if key not in LIVE_LLM_PLAYTEST_SCENARIO_PACKS:
+        available = ", ".join(sorted(LIVE_LLM_PLAYTEST_SCENARIO_PACKS))
+        raise ValueError(f"unknown_live_llm_playtest_scenario_pack:{key};available={available}")
+    return list(LIVE_LLM_PLAYTEST_SCENARIO_PACKS[key])
+
+
+def _load_commands(
+    *,
+    script_file: str | Path | None = None,
+    commands: Sequence[str] | None = None,
+    scenario_pack: str = "",
+) -> list[str]:
     if script_file:
         return cli.read_scripted_commands(script_file)
     explicit = [_safe_str(command).strip() for command in commands or [] if _safe_str(command).strip()]
-    return explicit or list(DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS)
+    if explicit:
+        return explicit
+    packed = resolve_live_llm_playtest_scenario_pack(scenario_pack)
+    return packed or list(DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS)
 
 
 def render_live_llm_playtest_status_marker(result: Mapping[str, Any]) -> str:
@@ -99,6 +147,7 @@ def run_live_llm_playtest(
     output_dir: str | Path | None = None,
     commands: Sequence[str] | None = None,
     script_file: str | Path | None = None,
+    scenario_pack: str = "",
     allow_live: bool = False,
     reset_session: bool = True,
     console_llm: bool = False,
@@ -118,10 +167,19 @@ def run_live_llm_playtest(
             "required_env": LIVE_LLM_PLAYTEST_ENV_FLAG,
         }
 
+    try:
+        scripted_commands = _load_commands(script_file=script_file, commands=commands, scenario_pack=scenario_pack)
+    except ValueError as exc:
+        return {
+            "format_version": LIVE_LLM_PLAYTEST_VERSION,
+            "ok": False,
+            "skipped": False,
+            "error": str(exc),
+        }
+
     resolved_run_id = _safe_str(run_id).strip() or _default_run_id()
     resolved_session_id = _safe_str(session_id).strip() or f"interactive_cli_{resolved_run_id}"
     resolved_output_dir = Path(output_dir) if output_dir else _default_output_dir(resolved_run_id)
-    scripted_commands = _load_commands(script_file=script_file, commands=commands)
     resolved_turns = int(turns or len(scripted_commands) or len(DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS))
     runner = campaign_runner or cli.run_interactive_campaign
 
@@ -153,6 +211,7 @@ def run_live_llm_playtest(
         "run_id": resolved_run_id,
         "session_id": resolved_session_id,
         "turn_count": int(quality.get("turn_count") or 0),
+        "scenario_pack": _safe_str(scenario_pack).strip(),
         "commands": scripted_commands,
         "output_dir": str(resolved_output_dir),
         "transcript_path": str(transcript_path),
@@ -171,6 +230,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default="", help="Optional output directory for campaign artifacts.")
     parser.add_argument("--script-file", default="", help="Optional newline-delimited player commands for the live playtest.")
     parser.add_argument("--command", action="append", default=[], help="Scripted player command; may be repeated.")
+    parser.add_argument("--scenario-pack", choices=sorted(LIVE_LLM_PLAYTEST_SCENARIO_PACKS), default="", help="Named built-in live playtest command pack.")
+    parser.add_argument("--list-scenario-packs", action="store_true", help="List built-in scenario packs and exit without running a provider.")
     parser.add_argument("--allow-live", action="store_true", help=f"Allow live provider execution without setting {LIVE_LLM_PLAYTEST_ENV_FLAG}=1.")
     parser.add_argument("--no-reset-session-state", action="store_true", help="Do not delete saved session files before starting.")
     parser.add_argument("--console-llm", action="store_true", help="Print manual LLM console diagnostics per turn.")
@@ -182,6 +243,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
+    if args.list_scenario_packs:
+        print(json.dumps({"scenario_packs": list_live_llm_playtest_scenario_packs()}, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
     result = run_live_llm_playtest(
         turns=int(args.turns or 0) or None,
         session_id=args.session_id,
@@ -189,6 +253,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_dir=args.output_dir or None,
         commands=args.command,
         script_file=args.script_file or None,
+        scenario_pack=args.scenario_pack,
         allow_live=bool(args.allow_live),
         reset_session=not bool(args.no_reset_session_state),
         console_llm=bool(args.console_llm),
