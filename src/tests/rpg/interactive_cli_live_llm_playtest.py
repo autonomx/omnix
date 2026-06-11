@@ -34,6 +34,7 @@ from tests.rpg.manual import runtime_narration_contract as narration_contract  #
 LIVE_LLM_PLAYTEST_VERSION = "rpg_live_llm_playtest_v1"
 LIVE_LLM_PLAYTEST_STATUS_MARKER = "RPG_LIVE_LLM_PLAYTEST"
 LIVE_LLM_PLAYTEST_ENV_FLAG = "RPG_RUN_LIVE_LLM_PLAYTEST"
+LIVE_MECHANIC_SEMANTIC_ASSERTION_VERSION = "rpg_live_mechanic_semantic_assertions_v1"
 LIVE_DEFERRED_NARRATION_DRAIN_SOURCE = narration_contract.RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE
 LIVE_DEFERRED_NARRATION_CONTEXT_VERSION = narration_contract.RUNTIME_DEFERRED_NARRATION_CONTEXT_VERSION
 LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION = narration_contract.RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION
@@ -113,6 +114,27 @@ LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+LIVE_MECHANIC_SEMANTIC_REQUIREMENTS: dict[str, dict[str, tuple[str, ...]]] = {
+    "party-companion": {
+        "companion_or_party": ("companion", "party", "joins", "joined", "travel with", "travels with", "travelling with", "traveling with"),
+    },
+    "quest-investigation": {
+        "investigation_lead": ("clue", "witness", "tracks", "trail", "lead", "objective", "bandit"),
+    },
+    "inn-service-economy": {
+        "service_payment": ("price", "room", "rent", "silver", "coin", "pay", "paid", "rest", "resting"),
+    },
+    "travel-encounter": {
+        "location_or_path": ("road", "path", "paths", "landmark", "location", "north", "travel", "shelter", "where you are"),
+    },
+    "combat-resolution": {
+        "combat_consequence": ("fight", "combat", "injury", "injuries", "reward", "threat", "bandit", "over", "cost", "xp", "wound"),
+    },
+    "memory-recall-cross-scene": {
+        "memory_recall": ("blue ember", "passphrase", "remember", "remembered", "recall", "bran"),
+    },
+}
+
 
 def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
@@ -165,6 +187,101 @@ def _load_commands(
         return explicit
     packed = resolve_live_llm_playtest_scenario_pack(scenario_pack)
     return packed or list(DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS)
+
+
+def _extract_semantic_turns(transcript_or_result: Mapping[str, Any]) -> list[dict[str, Any]]:
+    turns = transcript_or_result.get("turns")
+    if isinstance(turns, list):
+        return [_safe_dict(turn) for turn in turns]
+    transcript = _safe_dict(transcript_or_result.get("transcript"))
+    turns = transcript.get("turns")
+    if isinstance(turns, list):
+        return [_safe_dict(turn) for turn in turns]
+    return []
+
+
+def _turn_visible_semantic_text(turn: Mapping[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("raw_narration", "narration", "visible_response"):
+        value = _safe_str(turn.get(key)).strip()
+        if value:
+            parts.append(value)
+    raw = _safe_dict(turn.get("raw_result") or turn.get("result"))
+    for key in ("final_narration", "narration", "response", "visible_response", "text"):
+        value = _safe_str(raw.get(key)).strip()
+        if value:
+            parts.append(value)
+    raw_npc = _safe_dict(turn.get("raw_npc") or raw.get("npc"))
+    for key in ("speaker", "line"):
+        value = _safe_str(raw_npc.get(key)).strip()
+        if value:
+            parts.append(value)
+    structured = _safe_dict(turn.get("structured_narration") or raw.get("structured_narration"))
+    for key in ("narration", "line", "text", "summary"):
+        value = _safe_str(structured.get(key)).strip()
+        if value:
+            parts.append(value)
+    return "\n".join(parts)
+
+
+def _semantic_transcript_text(transcript_or_result: Mapping[str, Any]) -> str:
+    return "\n".join(_turn_visible_semantic_text(turn) for turn in _extract_semantic_turns(transcript_or_result)).lower()
+
+
+def evaluate_live_mechanic_semantics(transcript_or_result: Mapping[str, Any], *, scenario_pack: str) -> dict[str, Any]:
+    """Evaluate scenario-pack-specific mechanic evidence in the visible transcript."""
+
+    pack = _safe_str(scenario_pack).strip()
+    requirements = LIVE_MECHANIC_SEMANTIC_REQUIREMENTS.get(pack, {})
+    text = _semantic_transcript_text(transcript_or_result)
+    matched: dict[str, dict[str, Any]] = {}
+    failures: list[str] = []
+    for requirement, phrases in sorted(requirements.items()):
+        matched_phrase = next((phrase for phrase in phrases if phrase in text), "")
+        matched[requirement] = {
+            "ok": bool(matched_phrase),
+            "matched_phrase": matched_phrase,
+            "accepted_phrases": list(phrases),
+        }
+        if not matched_phrase:
+            failures.append(f"semantic_{pack.replace('-', '_')}_{requirement}_missing")
+    return {
+        "format_version": LIVE_MECHANIC_SEMANTIC_ASSERTION_VERSION,
+        "ok": not failures,
+        "scenario_pack": pack,
+        "requirement_count": len(requirements),
+        "missing_count": len(failures),
+        "failures": failures,
+        "warnings": [],
+        "matched": matched,
+    }
+
+
+def apply_live_mechanic_semantics_to_quality(quality: Mapping[str, Any], semantics: Mapping[str, Any]) -> dict[str, Any]:
+    """Merge mechanic assertion failures into the quality summary that matrix aggregation reads."""
+
+    result = dict(quality)
+    semantic_failures = [_safe_str(item) for item in _safe_list(semantics.get("failures")) if _safe_str(item)]
+    semantic_warnings = [_safe_str(item) for item in _safe_list(semantics.get("warnings")) if _safe_str(item)]
+    failures = sorted(set(_safe_list(result.get("failures")) + semantic_failures))
+    warnings = sorted(set(_safe_list(result.get("warnings")) + semantic_warnings))[:100]
+    result["failures"] = failures
+    result["warnings"] = warnings
+    result["mechanic_semantics"] = dict(semantics)
+    signals = _safe_dict(result.get("signals"))
+    signals["mechanic_semantic_requirement_count"] = int(semantics.get("requirement_count") or 0)
+    signals["mechanic_semantic_missing_count"] = int(semantics.get("missing_count") or 0)
+    result["signals"] = signals
+    result["ok"] = bool(result.get("ok")) and bool(semantics.get("ok"))
+    return result
+
+
+def _read_transcript_payload(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return dict(payload) if isinstance(payload, Mapping) else None
 
 
 def _empty_contract_summary(enabled: bool) -> dict[str, Any]:
@@ -260,10 +377,13 @@ def run_live_llm_playtest(
     transcript_path = Path(_safe_str(artifacts.get("transcript_path")) or (resolved_output_dir / "interactive-transcript.json"))
     runtime_contract = _contract_from_campaign_result(campaign_result, enabled=contract_enabled)
     transcript_normalization = _safe_dict(runtime_contract.get("transcript_provenance_normalization"))
+    transcript_payload = _read_transcript_payload(transcript_path) if transcript_path.exists() else None
     if transcript_path.exists():
         quality = read_live_quality_transcript(transcript_path)
     else:
         quality = evaluate_live_quality_transcript(campaign_result)
+    semantics = evaluate_live_mechanic_semantics(transcript_payload or campaign_result, scenario_pack=scenario_pack)
+    quality = apply_live_mechanic_semantics_to_quality(quality, semantics)
     resolved_summary_path = Path(summary_path) if summary_path else resolved_output_dir / "live-quality-summary.json"
     write_live_quality_eval_summary(result=quality, summary_path=resolved_summary_path)
 
@@ -285,6 +405,7 @@ def run_live_llm_playtest(
         "deferred_narration_drain": _safe_dict(runtime_contract.get("deferred_narration_drain")),
         "transcript_provenance_normalization": transcript_normalization,
         "campaign_artifacts": artifacts,
+        "mechanic_semantics": semantics,
         "quality": quality,
     }
     return result
