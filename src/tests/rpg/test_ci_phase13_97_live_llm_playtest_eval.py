@@ -14,12 +14,16 @@ def _write_transcript(path: Path) -> None:
                 "turn_index": 1,
                 "player_input": "Bran, remember this: my trail name is Ash Lantern.",
                 "raw_narration": "Bran nods behind the Rusty Flagon bar. Ash Lantern, he repeats, and warns you the north road carries fresh bandit tracks. What will you ask him next?",
+                "llm_called": True,
+                "narration_source": "deferred_llm_narration",
                 "interactive_cli_state_bundle": {"states": {"memory": {"facts": {"trail_name": "Ash Lantern"}}}},
             },
             {
                 "turn_index": 2,
                 "player_input": "I buy two rations for the trail.",
                 "raw_narration": "Elara counts out two wrapped rations for your pack and names the silver cost before pointing toward the market gate. You can haggle, pay, or ask about road supplies.",
+                "llm_called": True,
+                "narration_source": "deferred_llm_narration",
                 "interactive_cli_commerce_state": {"last_purchase": "two rations"},
             },
         ],
@@ -71,7 +75,9 @@ def test_phase13_97_live_playtest_runs_campaign_and_evaluates_transcript(tmp_pat
     assert result["run_id"] == "quality-smoke"
     assert result["session_id"] == "session-quality-smoke"
     assert result["turn_count"] == 2
+    assert result["defer_runtime_narration"] is True
     assert result["quality"]["ok"] is True
+    assert result["quality"]["signals"]["llm_narration_ratio"] == 1.0
     assert Path(result["quality_summary_path"]).exists()
     assert captured["turns"] == 2
     assert captured["scripted_commands"] == ["first", "second"]
@@ -79,6 +85,38 @@ def test_phase13_97_live_playtest_runs_campaign_and_evaluates_transcript(tmp_pat
     assert captured["console_llm"] is False
     assert captured["seed_live_survival"] is True
     assert captured["enable_llm_intent_fallback"] is True
+    assert captured["defer_runtime_narration"] is True
+
+
+def test_phase14_01_live_playtest_can_disable_deferred_runtime_narration_for_debug(tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_runner(**kwargs):
+        captured.update(kwargs)
+        return {
+            "summary": {"completed_turns": 1},
+            "turns": [
+                {
+                    "turn_index": 1,
+                    "player_input": "I ask Bran about the road.",
+                    "raw_narration": "Bran points toward the old road and warns you about a bandit trail. Do you follow it?",
+                    "llm_called": True,
+                    "narration_source": "deferred_llm_narration",
+                    "interactive_cli_state_bundle": {"states": {}},
+                }
+            ],
+            "artifacts": {"transcript_path": str(tmp_path / "missing-transcript.json")},
+        }
+
+    result = playtest.run_live_llm_playtest(
+        allow_live=True,
+        output_dir=tmp_path / "out",
+        defer_runtime_narration=False,
+        campaign_runner=fake_runner,
+    )
+
+    assert result["defer_runtime_narration"] is False
+    assert captured["defer_runtime_narration"] is False
 
 
 def test_phase13_97_live_playtest_falls_back_to_campaign_result_when_transcript_missing(tmp_path: Path) -> None:
@@ -90,6 +128,8 @@ def test_phase13_97_live_playtest_falls_back_to_campaign_result_when_transcript_
                     "turn_index": 1,
                     "player_input": "I ask Bran about the road.",
                     "raw_narration": "Bran points toward the old road and warns you about a bandit trail. Do you follow it?",
+                    "llm_called": True,
+                    "narration_source": "deferred_llm_narration",
                     "interactive_cli_state_bundle": {"states": {}},
                 }
             ],
@@ -172,6 +212,7 @@ def test_phase13_97_live_playtest_cli_wires_options(monkeypatch, tmp_path: Path,
             "--no-reset-session-state",
             "--console-llm",
             "--no-live-survival-seed",
+            "--no-deferred-runtime-narration",
             "--artifact-detail",
             "summary",
             "--summary-path",
@@ -190,6 +231,7 @@ def test_phase13_97_live_playtest_cli_wires_options(monkeypatch, tmp_path: Path,
     assert captured["reset_session"] is False
     assert captured["console_llm"] is True
     assert captured["seed_live_survival"] is False
+    assert captured["defer_runtime_narration"] is False
     assert captured["artifact_detail"] == "summary"
     assert captured["summary_path"] == str(tmp_path / "quality.json")
 
@@ -230,6 +272,8 @@ def test_phase13_98_scenario_pack_feeds_runner_when_no_explicit_commands(tmp_pat
                     "turn_index": 1,
                     "player_input": "I ask Elara what trail food she recommends for the north road.",
                     "raw_narration": "Elara recommends rations for the north road and asks whether you want to buy two before leaving town.",
+                    "llm_called": True,
+                    "narration_source": "deferred_llm_narration",
                 }
             ],
             "artifacts": {"transcript_path": str(tmp_path / "missing-transcript.json")},
@@ -246,6 +290,7 @@ def test_phase13_98_scenario_pack_feeds_runner_when_no_explicit_commands(tmp_pat
     assert result["commands"] == list(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS["commerce-travel"])
     assert captured["scripted_commands"] == list(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS["commerce-travel"])
     assert captured["turns"] == len(playtest.LIVE_LLM_PLAYTEST_SCENARIO_PACKS["commerce-travel"])
+    assert captured["defer_runtime_narration"] is True
 
 
 def test_phase13_98_explicit_commands_override_scenario_pack(tmp_path: Path) -> None:
@@ -259,7 +304,9 @@ def test_phase13_98_explicit_commands_override_scenario_pack(tmp_path: Path) -> 
                 {
                     "turn_index": 1,
                     "player_input": "custom",
-                    "raw_narration": "Bran answers your custom question and gives you a specific road choice.",
+                    "raw_narration": "Bran follows the script command and offers a road choice.",
+                    "llm_called": True,
+                    "narration_source": "deferred_llm_narration",
                 }
             ],
             "artifacts": {"transcript_path": str(tmp_path / "missing-transcript.json")},
@@ -291,6 +338,8 @@ def test_phase13_98_script_file_overrides_scenario_pack(tmp_path: Path) -> None:
                     "turn_index": 1,
                     "player_input": "from script",
                     "raw_narration": "Bran follows the script command and offers a road choice.",
+                    "llm_called": True,
+                    "narration_source": "deferred_llm_narration",
                 }
             ],
             "artifacts": {"transcript_path": str(tmp_path / "missing-transcript.json")},
