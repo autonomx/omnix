@@ -214,3 +214,54 @@ def test_phase13_86_aggregate_read_status_marker_rejects_malformed_values() -> N
     assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(bad_bool)["error"] == "aggregate_read_marker_bool_invalid"
     assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(bad_count)["error"] == "aggregate_read_marker_count_invalid"
     assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(negative_count)["error"] == "aggregate_read_marker_count_negative"
+
+
+def test_phase13_87_aggregate_read_artifact_bundle_accepts_matching_marker(tmp_path: Path) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    read_result = aggregate_verify.read_state_zip_verification_aggregate(path)
+    marker = aggregate_verify.render_state_zip_verification_aggregate_read_status_marker(read_result)
+
+    result = aggregate_verify.verify_state_zip_aggregate_read_artifact_bundle(
+        aggregate_path=path,
+        status_marker=marker,
+    )
+
+    assert result["ok"] is True
+    assert result["marker_result"] == {
+        "ok": True,
+        "read_ok": True,
+        "aggregate_ok": True,
+        "summary_count": 1,
+        "failed": 0,
+        "read_error": "none",
+    }
+
+
+def test_phase13_87_aggregate_read_artifact_bundle_rejects_invalid_marker(tmp_path: Path) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+
+    result = aggregate_verify.verify_state_zip_aggregate_read_artifact_bundle(
+        aggregate_path=path,
+        status_marker="[OTHER] ok=true",
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "aggregate_read_marker_invalid"
+    assert result["marker_result"]["error"] == "aggregate_read_marker_prefix_mismatch"
+
+
+def test_phase13_87_aggregate_read_artifact_bundle_rejects_mismatched_marker(tmp_path: Path) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload(ok=False))
+    marker = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=0 error=none"
+
+    result = aggregate_verify.verify_state_zip_aggregate_read_artifact_bundle(
+        aggregate_path=path,
+        status_marker=marker,
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "aggregate_read_marker_mismatch"
+    assert result["mismatches"] == {
+        "aggregate_ok": {"expected": False, "actual": True},
+        "failed": {"expected": 1, "actual": 0},
+    }
