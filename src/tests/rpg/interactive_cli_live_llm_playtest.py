@@ -37,6 +37,7 @@ LIVE_LLM_PLAYTEST_STATUS_MARKER = "RPG_LIVE_LLM_PLAYTEST"
 LIVE_LLM_PLAYTEST_ENV_FLAG = "RPG_RUN_LIVE_LLM_PLAYTEST"
 LIVE_DEFERRED_NARRATION_DRAIN_SOURCE = "live_llm_playtest_deferred_narration_drain_v1"
 LIVE_DEFERRED_NARRATION_CONTEXT_VERSION = "live_deferred_narration_context_v2"
+LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION = "live_transcript_provenance_normalization_v1"
 LIVE_DEFERRED_NARRATION_MAX_CONTEXT_CHARS = 6500
 DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS = (
     "Bran, remember this: my trail name is Ash Lantern.",
@@ -205,11 +206,7 @@ def _clip_str(value: Any, *, max_chars: int = 900) -> str:
 
 
 def _compact_jsonable(value: Any, *, max_depth: int = 3, max_items: int = 8, max_chars: int = 900) -> Any:
-    """Return a compact JSON-safe snapshot for live narration prompts.
-
-    This avoids sending the entire runtime/session transcript back to LM Studio
-    while preserving the authoritative facts needed for post-runtime narration.
-    """
+    """Return a compact JSON-safe snapshot for live narration prompts."""
 
     if max_depth < 0:
         return "[truncated]"
@@ -219,12 +216,7 @@ def _compact_jsonable(value: Any, *, max_depth: int = 3, max_items: int = 8, max
             if index >= max_items:
                 compact["__truncated_items__"] = max(0, len(value) - max_items)
                 break
-            compact[_safe_str(key)] = _compact_jsonable(
-                nested,
-                max_depth=max_depth - 1,
-                max_items=max_items,
-                max_chars=max_chars,
-            )
+            compact[_safe_str(key)] = _compact_jsonable(nested, max_depth=max_depth - 1, max_items=max_items, max_chars=max_chars)
         return compact
     if isinstance(value, list):
         return [
@@ -302,7 +294,6 @@ def _grounded_live_narration_context(turn_summary: Mapping[str, Any]) -> dict[st
     encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, default=str)
     if len(encoded) <= LIVE_DEFERRED_NARRATION_MAX_CONTEXT_CHARS:
         return context
-    # Last-resort trim keeps the highest-signal fields and drops optional bulky sections.
     context["context_trimmed"] = True
     for key in ("turn_contract", "recent_authoritative_facts", "forbidden_narration"):
         context.pop(key, None)
@@ -357,19 +348,11 @@ def _generate_live_deferred_narration_payload(
     try:
         from app.rpg.llm_app_gateway import build_app_llm_gateway
     except Exception as exc:  # pragma: no cover - import failure is environment-specific
-        return _failed_drain_payload(
-            error=f"gateway_import_failed:{type(exc).__name__}:{exc}",
-            provider_attempted=False,
-            provider_present=False,
-        )
+        return _failed_drain_payload(error=f"gateway_import_failed:{type(exc).__name__}:{exc}", provider_attempted=False, provider_present=False)
 
     gateway = build_app_llm_gateway()
     if gateway is None:
-        return _failed_drain_payload(
-            error="live_llm_gateway_unavailable",
-            provider_attempted=False,
-            provider_present=False,
-        )
+        return _failed_drain_payload(error="live_llm_gateway_unavailable", provider_attempted=False, provider_present=False)
 
     context = _grounded_live_narration_context(turn_summary)
     context_chars = _context_char_count(context)
@@ -382,19 +365,9 @@ def _generate_live_deferred_narration_payload(
     try:
         text = _safe_str(gateway.generate(prompt, context=context, timeout_s=timeout_s)).strip()
     except Exception as exc:  # pragma: no cover - provider failures are live-environment specific
-        return _failed_drain_payload(
-            error=f"{type(exc).__name__}:{exc}",
-            provider_attempted=True,
-            provider_present=True,
-            context_chars=context_chars,
-        )
+        return _failed_drain_payload(error=f"{type(exc).__name__}:{exc}", provider_attempted=True, provider_present=True, context_chars=context_chars)
     if not text:
-        return _failed_drain_payload(
-            error="empty_live_deferred_narration",
-            provider_attempted=True,
-            provider_present=True,
-            context_chars=context_chars,
-        )
+        return _failed_drain_payload(error="empty_live_deferred_narration", provider_attempted=True, provider_present=True, context_chars=context_chars)
     return {
         "format_version": "rpg_narration_v2",
         "source": "provider_runtime_narration",
@@ -459,6 +432,95 @@ def _apply_completed_narration_payload(turn_summary: dict[str, Any], payload: Ma
             turn_summary["result"] = raw_result
 
 
+def _completed_provider_payload_for_turn(turn_summary: Mapping[str, Any]) -> dict[str, Any]:
+    raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    for key in ("narration_payload", "structured_narration", "narration_result"):
+        payload = _safe_dict(raw_result.get(key))
+        if _payload_is_completed_llm_narration(payload):
+            return payload
+    nested = _safe_dict(raw_result.get("result"))
+    for key in ("narration_payload", "structured_narration", "narration_result"):
+        payload = _safe_dict(nested.get(key))
+        if _payload_is_completed_llm_narration(payload):
+            return payload
+    return _find_completed_narration_payload(raw_result)
+
+
+def normalize_deferred_live_narration_transcript_payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Normalize stale transcript-level provenance after deferred live narration drain."""
+
+    normalized = deepcopy(_safe_dict(payload))
+    summary = {
+        "format_version": LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION,
+        "turn_count": 0,
+        "normalized_count": 0,
+        "already_normalized_count": 0,
+        "skipped_count": 0,
+        "turns": [],
+    }
+    turns = normalized.get("turns")
+    if not isinstance(turns, list):
+        summary["skipped_count"] = 1
+        return normalized, summary
+    summary["turn_count"] = len(turns)
+    next_turns: list[Any] = []
+    for index, item in enumerate(turns, start=1):
+        if not isinstance(item, Mapping):
+            summary["skipped_count"] += 1
+            next_turns.append(item)
+            continue
+        turn = dict(item)
+        payload_dict = _completed_provider_payload_for_turn(turn)
+        drain = _safe_dict(turn.get("deferred_narration_drain"))
+        should_normalize = bool(drain.get("completed")) or bool(payload_dict)
+        if not should_normalize:
+            summary["skipped_count"] += 1
+            next_turns.append(turn)
+            continue
+        before_source = _safe_str(turn.get("narration_source"))
+        if payload_dict:
+            _apply_completed_narration_payload(turn, payload_dict)
+        after_source = _safe_str(turn.get("narration_source"))
+        if before_source == after_source and after_source == "provider_runtime_narration" and bool(turn.get("llm_called")):
+            summary["already_normalized_count"] += 1
+        else:
+            summary["normalized_count"] += 1
+        summary["turns"].append(
+            {
+                "turn_index": int(turn.get("turn_index") or index),
+                "before_source": before_source,
+                "after_source": after_source,
+                "llm_called": bool(turn.get("llm_called")),
+            }
+        )
+        next_turns.append(turn)
+    normalized["turns"] = next_turns
+    normalized["live_transcript_provenance_normalization"] = summary
+    return normalized, summary
+
+
+def normalize_deferred_live_narration_transcript_file(transcript_path: str | Path) -> dict[str, Any]:
+    path = Path(transcript_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {
+            "format_version": LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION,
+            "error": "transcript_not_found",
+            "normalized_count": 0,
+        }
+    except json.JSONDecodeError as exc:
+        return {
+            "format_version": LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION,
+            "error": f"invalid_transcript_json:{exc}",
+            "normalized_count": 0,
+        }
+    normalized, summary = normalize_deferred_live_narration_transcript_payload(payload)
+    if summary.get("normalized_count") or summary.get("already_normalized_count"):
+        path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    return summary
+
+
 def drain_deferred_live_narration_turn(
     *,
     turn_summary: dict[str, Any],
@@ -488,12 +550,7 @@ def drain_deferred_live_narration_turn(
     payload: Mapping[str, Any] | None = None
     if drain_func is not None:
         try:
-            payload = drain_func(
-                turn_summary=turn_summary,
-                session_id=session_id,
-                turn_index=turn_index,
-                player_input=player_input,
-            )
+            payload = drain_func(turn_summary=turn_summary, session_id=session_id, turn_index=turn_index, player_input=player_input)
         except Exception as exc:  # pragma: no cover - defensive hook isolation
             result["error"] = f"drain_func_error:{type(exc).__name__}:{exc}"
             result["error_type"] = _classify_live_deferred_narration_error(result["error"])
@@ -634,10 +691,7 @@ def run_live_llm_playtest(
     deferred_drain_summary = _new_deferred_drain_summary()
     deferred_drain_summary["enabled"] = bool(defer_runtime_narration and drain_deferred_narration)
     after_turn_hook = (
-        _build_deferred_narration_after_turn_hook(
-            deferred_drain_summary,
-            drain_func=deferred_narration_drain_func,
-        )
+        _build_deferred_narration_after_turn_hook(deferred_drain_summary, drain_func=deferred_narration_drain_func)
         if defer_runtime_narration and drain_deferred_narration
         else None
     )
@@ -658,7 +712,12 @@ def run_live_llm_playtest(
     )
     artifacts = _safe_dict(campaign_result.get("artifacts"))
     transcript_path = Path(_safe_str(artifacts.get("transcript_path")) or (resolved_output_dir / "interactive-transcript.json"))
+    transcript_normalization = {
+        "format_version": LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION,
+        "normalized_count": 0,
+    }
     if transcript_path.exists():
+        transcript_normalization = normalize_deferred_live_narration_transcript_file(transcript_path)
         quality = read_live_quality_transcript(transcript_path)
     else:
         quality = evaluate_live_quality_transcript(campaign_result)
@@ -680,6 +739,7 @@ def run_live_llm_playtest(
         "defer_runtime_narration": bool(defer_runtime_narration),
         "drain_deferred_narration": bool(drain_deferred_narration),
         "deferred_narration_drain": deferred_drain_summary,
+        "transcript_provenance_normalization": transcript_normalization,
         "campaign_artifacts": artifacts,
         "quality": quality,
     }
