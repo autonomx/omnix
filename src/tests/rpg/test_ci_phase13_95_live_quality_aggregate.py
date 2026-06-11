@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from tests.rpg import interactive_cli_live_quality_eval as quality
 
 
@@ -153,3 +156,95 @@ def test_phase13_95_aggregate_preserves_schema_errors() -> None:
             },
         }
     ]
+
+
+def test_phase13_96_reads_and_aggregates_summary_files(tmp_path: Path) -> None:
+    first = tmp_path / "first-summary.json"
+    second = tmp_path / "second-summary.json"
+    first.write_text(json.dumps(_summary(turn_count=2, avg_score=4.0, fun=4.2)), encoding="utf-8")
+    second.write_text(json.dumps(_summary(turn_count=4, avg_score=3.5, fun=3.7)), encoding="utf-8")
+
+    aggregate = quality.aggregate_live_quality_eval_summary_files([first, second])
+
+    assert aggregate["ok"] is True
+    assert aggregate["summary_count"] == 2
+    assert aggregate["total_turn_count"] == 6
+    assert aggregate["entries"][0]["source_path"] == str(first)
+    assert aggregate["entries"][1]["source_path"] == str(second)
+
+
+def test_phase13_96_summary_reader_reports_missing_and_invalid_files(tmp_path: Path) -> None:
+    invalid = tmp_path / "invalid-summary.json"
+    invalid.write_text("not-json", encoding="utf-8")
+
+    missing_result = quality.read_live_quality_eval_summary(tmp_path / "missing-summary.json")
+    invalid_result = quality.read_live_quality_eval_summary(invalid)
+
+    assert missing_result["error"] == "live_quality_summary_missing"
+    assert invalid_result["error"] == "live_quality_summary_json_invalid"
+
+
+def test_phase13_96_aggregate_cli_writes_output_for_success(tmp_path: Path, capsys) -> None:
+    first = tmp_path / "first-summary.json"
+    second = tmp_path / "second-summary.json"
+    aggregate_path = tmp_path / "nested" / "aggregate.json"
+    first.write_text(json.dumps(_summary(turn_count=1, avg_score=4.0, fun=4.0)), encoding="utf-8")
+    second.write_text(json.dumps(_summary(turn_count=1, avg_score=4.0, fun=4.0)), encoding="utf-8")
+
+    assert quality.main(
+        [
+            "--aggregate-summary",
+            str(first),
+            "--aggregate-summary",
+            str(second),
+            "--aggregate-path",
+            str(aggregate_path),
+        ]
+    ) == 0
+
+    output = capsys.readouterr()
+    stdout_payload = json.loads(output.out)
+    aggregate_payload = json.loads(aggregate_path.read_text(encoding="utf-8"))
+    assert output.err == ""
+    assert stdout_payload["ok"] is True
+    assert aggregate_payload["aggregate_format_version"] == quality.LIVE_QUALITY_AGGREGATE_VERSION
+    assert aggregate_payload["passed"] == 2
+
+
+def test_phase13_96_aggregate_cli_returns_one_for_failed_summary(tmp_path: Path, capsys) -> None:
+    summary_path = tmp_path / "failed-summary.json"
+    summary_path.write_text(json.dumps(_summary(ok=False, avg_score=2.5, fun=2.0)), encoding="utf-8")
+
+    assert quality.main(["--aggregate-summary", str(summary_path)]) == 1
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert output.err == ""
+    assert payload["ok"] is False
+    assert payload["failed"] == 1
+    assert payload["failure_types"] == ["average_quality_score_below_threshold"]
+
+
+def test_phase13_96_aggregate_writer_rejects_bad_payload(tmp_path: Path) -> None:
+    try:
+        quality.write_live_quality_aggregate_summary(
+            result={"aggregate_format_version": "old", "ok": True},
+            aggregate_path=tmp_path / "aggregate.json",
+        )
+    except ValueError as exc:
+        assert str(exc) == "live_quality_aggregate_version_mismatch"
+    else:  # pragma: no cover - defensive branch
+        raise AssertionError("expected aggregate writer to reject bad version")
+
+
+def test_phase13_96_cli_requires_transcript_when_not_aggregating(capsys) -> None:
+    assert quality.main([]) == 2
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert output.err == ""
+    assert payload == {
+        "error": "transcript_path_required",
+        "format_version": quality.LIVE_QUALITY_EVAL_VERSION,
+        "ok": False,
+    }
