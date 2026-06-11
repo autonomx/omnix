@@ -28,7 +28,6 @@ from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 from tests.rpg.interactive_cli_live_quality_eval import (  # noqa: E402
     evaluate_live_quality_transcript,
     read_live_quality_transcript,
-    render_live_quality_status_marker,
     write_live_quality_eval_summary,
 )
 
@@ -80,7 +79,12 @@ def render_live_llm_playtest_status_marker(result: Mapping[str, Any]) -> str:
     turn_count = int(quality.get("turn_count") or result.get("turn_count") or 0)
     avg_score = float(quality.get("avg_score") or 0.0)
     fun_score = float(_safe_dict(quality.get("scores")).get("fun") or 0.0)
-    error = _safe_str(result.get("error") or quality.get("error") or (quality.get("failures") or ["none"])[0] if quality.get("failures") else "none")
+    quality_failures = quality.get("failures") if isinstance(quality.get("failures"), list) else []
+    error = _safe_str(
+        result.get("error")
+        or quality.get("error")
+        or (quality_failures[0] if quality_failures else "none")
+    )
     return (
         f"[{LIVE_LLM_PLAYTEST_STATUS_MARKER}] ok={ok} skipped={skipped} "
         f"turn_count={turn_count} avg_score={avg_score:.3f} fun={fun_score:.3f} error={error}"
