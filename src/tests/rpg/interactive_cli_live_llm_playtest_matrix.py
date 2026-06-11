@@ -36,6 +36,8 @@ from tests.rpg.interactive_cli_live_quality_eval import (  # noqa: E402
 LIVE_LLM_PLAYTEST_MATRIX_VERSION = "rpg_live_llm_playtest_matrix_v1"
 LIVE_LLM_PLAYTEST_MATRIX_STATUS_MARKER = "RPG_LIVE_LLM_PLAYTEST_MATRIX"
 DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_DIRNAME = "live-llm-playtest-matrix"
+DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_ROOT = Path("resources") / "data" / "test-results"
+DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_OUTPUT_DIR = DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_ROOT / DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_DIRNAME
 
 
 def _safe_str(value: Any) -> str:
@@ -62,6 +64,12 @@ def _slug(value: str) -> str:
     while "--" in slug:
         slug = slug.replace("--", "-")
     return slug or "scenario"
+
+
+def default_live_llm_playtest_matrix_output_dir() -> Path:
+    """Return the default artifact directory for live LLM matrix runs."""
+
+    return DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_OUTPUT_DIR
 
 
 def resolve_live_llm_playtest_matrix_packs(packs: Sequence[str] | None = None) -> list[str]:
@@ -146,7 +154,7 @@ def run_live_llm_playtest_matrix(
     if error:
         return error
     packs = resolve_live_llm_playtest_matrix_packs(requested_packs)
-    resolved_output_dir = Path(output_dir) if output_dir else Path("artifacts") / DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_DIRNAME
+    resolved_output_dir = Path(output_dir) if output_dir else default_live_llm_playtest_matrix_output_dir()
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
     runner = playtest_runner or run_live_llm_playtest
 
@@ -210,7 +218,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list-scenario-packs", action="store_true", help="List built-in scenario packs and exit.")
     parser.add_argument("--allow-live", action="store_true", help=f"Allow live provider execution without setting {LIVE_LLM_PLAYTEST_ENV_FLAG}=1.")
     parser.add_argument("--turns", type=int, default=0, help="Optional turn override for each pack.")
-    parser.add_argument("--output-dir", default="", help="Output directory for all pack runs and aggregate summary.")
+    parser.add_argument("--output-dir", default="", help=f"Output directory for all pack runs and aggregate summary. Defaults to {DEFAULT_LIVE_LLM_PLAYTEST_MATRIX_OUTPUT_DIR}.")
     parser.add_argument("--aggregate-path", default="", help="Optional path to persist aggregate quality JSON.")
     parser.add_argument("--run-id-prefix", default="live-matrix")
     parser.add_argument("--session-id-prefix", default="interactive_cli_live_matrix")
