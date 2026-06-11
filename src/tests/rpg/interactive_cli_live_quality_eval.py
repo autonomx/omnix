@@ -95,6 +95,7 @@ GROUNDING_KEYS = (
     "turn_contract",
 )
 
+SPECIFICITY_STOPWORDS = frozenset({"a", "an", "as", "do", "he", "she", "the", "they", "this", "will", "you"})
 SCORE_KEYS = ("coherence", "agency", "specificity", "continuity", "fun")
 
 
@@ -117,6 +118,18 @@ def _words(text: str) -> list[str]:
 def _contains_any(text: str, phrases: Iterable[str]) -> bool:
     lowered = text.lower()
     return any(phrase in lowered for phrase in phrases)
+
+
+def _has_specific_detail(text: str) -> bool:
+    """Detect concrete named/details while ignoring sentence-start filler words."""
+
+    named_candidates = [match.group(0).lower() for match in re.finditer(r"\b[A-Z][a-z]+\b", text)]
+    has_named_detail = any(candidate not in SPECIFICITY_STOPWORDS for candidate in named_candidates)
+    has_world_detail = any(
+        token in text.lower()
+        for token in ("tavern", "road", "market", "inn", "bandit", "bran", "elara", "captain", "gold", "silver", "quest")
+    )
+    return has_named_detail or has_world_detail
 
 
 def _extract_turns(transcript_or_result: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -162,10 +175,7 @@ def _turn_score(*, player_input: str, narration: str, previous_player_inputs: Se
     overlap = len(player_words.intersection(narration_words))
     has_action_reflection = overlap > 0 or _contains_any(text, ACTION_VERBS)
     has_hook = text.endswith("?") or _contains_any(text, HOOK_PHRASES)
-    has_specificity = bool(re.search(r"\b[A-Z][a-z]+\b", text)) or any(
-        token in text.lower()
-        for token in ("tavern", "road", "market", "inn", "bandit", "bran", "elara", "captain", "gold", "silver", "quest")
-    )
+    has_specificity = _has_specific_detail(text)
     has_continuity = any(word in text.lower() for prior in previous_player_inputs[-3:] for word in _words(prior) if len(word) >= 5)
     generic = _contains_any(text, GENERIC_PHRASES)
     too_short = len(words) < 8
