@@ -115,6 +115,18 @@ def test_phase13_97_live_playtest_status_marker_reports_quality() -> None:
     assert marker == "[RPG_LIVE_LLM_PLAYTEST] ok=true skipped=false turn_count=3 avg_score=4.125 fun=3.750 error=none"
 
 
+def test_phase13_97_live_playtest_status_marker_reports_skip_error() -> None:
+    marker = playtest.render_live_llm_playtest_status_marker(
+        {
+            "ok": False,
+            "skipped": True,
+            "error": "live_llm_playtest_not_enabled",
+        }
+    )
+
+    assert marker == "[RPG_LIVE_LLM_PLAYTEST] ok=false skipped=true turn_count=0 avg_score=0.000 fun=0.000 error=live_llm_playtest_not_enabled"
+
+
 def test_phase13_97_live_playtest_cli_returns_two_when_not_enabled(monkeypatch, capsys) -> None:
     monkeypatch.delenv(playtest.LIVE_LLM_PLAYTEST_ENV_FLAG, raising=False)
 
@@ -124,7 +136,7 @@ def test_phase13_97_live_playtest_cli_returns_two_when_not_enabled(monkeypatch, 
     payload = json.loads(output.out)
     assert payload["skipped"] is True
     assert payload["error"] == "live_llm_playtest_not_enabled"
-    assert "[RPG_LIVE_LLM_PLAYTEST]" in output.err
+    assert output.err.strip() == "[RPG_LIVE_LLM_PLAYTEST] ok=false skipped=true turn_count=0 avg_score=0.000 fun=0.000 error=live_llm_playtest_not_enabled"
 
 
 def test_phase13_97_live_playtest_cli_wires_options(monkeypatch, tmp_path: Path, capsys) -> None:
