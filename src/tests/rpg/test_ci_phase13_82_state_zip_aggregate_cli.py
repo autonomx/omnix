@@ -92,3 +92,72 @@ def test_phase13_82_verify_cli_requires_zip_path_without_aggregate_mode() -> Non
         assert str(exc) == "zip_path is required unless --aggregate-summary is provided"
     else:
         raise AssertionError("expected SystemExit")
+
+
+def test_phase13_83_aggregate_status_marker_round_trips_success() -> None:
+    marker = verify_cli.render_state_zip_verification_aggregate_status_marker(
+        {
+            "ok": True,
+            "summary_count": 2,
+            "passed": 2,
+            "failed": 0,
+            "invalid_summary_count": 0,
+        }
+    )
+
+    assert marker == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE] ok=true summary_count=2 passed=2 failed=0 invalid_summary_count=0"
+    assert verify_cli.parse_state_zip_verification_aggregate_status_marker(marker) == {
+        "ok": True,
+        "aggregate_ok": True,
+        "summary_count": 2,
+        "passed": 2,
+        "failed": 0,
+        "invalid_summary_count": 0,
+    }
+
+
+def test_phase13_83_aggregate_status_marker_round_trips_failure() -> None:
+    marker = verify_cli.render_state_zip_verification_aggregate_status_marker(
+        {
+            "ok": False,
+            "summary_count": 2,
+            "passed": 1,
+            "failed": 1,
+            "invalid_summary_count": 0,
+        }
+    )
+
+    assert marker == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE] ok=false summary_count=2 passed=1 failed=1 invalid_summary_count=0"
+    assert verify_cli.parse_state_zip_verification_aggregate_status_marker(marker) == {
+        "ok": True,
+        "aggregate_ok": False,
+        "summary_count": 2,
+        "passed": 1,
+        "failed": 1,
+        "invalid_summary_count": 0,
+    }
+
+
+def test_phase13_83_aggregate_cli_emits_status_marker_to_stderr(tmp_path: Path, capsys) -> None:
+    first = _write_summary(tmp_path / "first.json", _summary(ok=True, checkpoint_count=1, restored_turns=[1]))
+
+    exit_code = verify_cli.main(["--aggregate-summary", str(first)])
+
+    output = capsys.readouterr()
+    assert exit_code == 0
+    assert json.loads(output.out)["ok"] is True
+    assert output.err.strip() == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE] ok=true summary_count=1 passed=1 failed=0 invalid_summary_count=0"
+
+
+def test_phase13_83_aggregate_status_marker_rejects_malformed_values() -> None:
+    wrong_prefix = "[OTHER] ok=true summary_count=1 passed=1 failed=0 invalid_summary_count=0"
+    missing_key = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE] ok=true summary_count=1 passed=1 failed=0"
+    invalid_ok = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE] ok=yes summary_count=1 passed=1 failed=0 invalid_summary_count=0"
+    invalid_count = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE] ok=true summary_count=x passed=1 failed=0 invalid_summary_count=0"
+    negative_count = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE] ok=true summary_count=1 passed=-1 failed=0 invalid_summary_count=0"
+
+    assert verify_cli.parse_state_zip_verification_aggregate_status_marker(wrong_prefix)["error"] == "aggregate_status_marker_prefix_mismatch"
+    assert verify_cli.parse_state_zip_verification_aggregate_status_marker(missing_key)["error"] == "aggregate_status_marker_required_keys_missing"
+    assert verify_cli.parse_state_zip_verification_aggregate_status_marker(invalid_ok)["error"] == "aggregate_status_marker_ok_invalid"
+    assert verify_cli.parse_state_zip_verification_aggregate_status_marker(invalid_count)["error"] == "aggregate_status_marker_count_invalid"
+    assert verify_cli.parse_state_zip_verification_aggregate_status_marker(negative_count)["error"] == "aggregate_status_marker_count_negative"
