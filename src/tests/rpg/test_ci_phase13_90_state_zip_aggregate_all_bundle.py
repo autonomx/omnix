@@ -159,3 +159,57 @@ def test_phase13_90_all_bundle_write_reports_marker_mismatch(tmp_path: Path) -> 
     assert result["ok"] is False
     assert result["error"] == "aggregate_bundle_verification_failed"
     assert result["bundle_summary"]["error"] == "aggregate_read_marker_mismatch"
+
+
+def test_phase13_91_all_bundle_write_cli_creates_bundle(tmp_path: Path, capsys) -> None:
+    aggregate_path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    bundle_path = tmp_path / "cli" / "state-zip-aggregate-all-bundle.zip"
+
+    assert all_bundle.main(["write", str(aggregate_path), str(bundle_path)]) == 0
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["ok"] is True
+    assert payload["bundle_path"] == str(bundle_path)
+    assert all_bundle.verify_state_zip_aggregate_all_bundle(bundle_path)["ok"] is True
+
+
+def test_phase13_91_all_bundle_verify_cli_accepts_valid_bundle(tmp_path: Path, capsys) -> None:
+    aggregate_path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    bundle_path = tmp_path / "state-zip-aggregate-all-bundle.zip"
+    assert all_bundle.write_state_zip_aggregate_all_bundle(
+        aggregate_path=aggregate_path,
+        bundle_zip_path=bundle_path,
+    )["ok"] is True
+
+    assert all_bundle.main(["verify", str(bundle_path)]) == 0
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["ok"] is True
+    assert payload["aggregate"]["ok"] is True
+
+
+def test_phase13_91_all_bundle_cli_returns_one_for_invalid_inputs(tmp_path: Path, capsys) -> None:
+    missing_aggregate = tmp_path / "missing-aggregate.json"
+    bundle_path = tmp_path / "state-zip-aggregate-all-bundle.zip"
+
+    assert all_bundle.main(["write", str(missing_aggregate), str(bundle_path)]) == 1
+    write_output = capsys.readouterr()
+    assert json.loads(write_output.out)["error"] == "aggregate_read_failed"
+
+    assert all_bundle.main(["verify", str(tmp_path / "missing-bundle.zip")]) == 1
+    verify_output = capsys.readouterr()
+    assert json.loads(verify_output.out)["error"] == "aggregate_all_bundle_missing"
+
+
+def test_phase13_91_all_bundle_write_cli_uses_supplied_marker(tmp_path: Path, capsys) -> None:
+    aggregate_path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    bundle_path = tmp_path / "state-zip-aggregate-all-bundle.zip"
+    marker = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=0 error=none"
+
+    assert all_bundle.main(["write", str(aggregate_path), str(bundle_path), "--status-marker", marker]) == 0
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["manifest"]["status_marker"] == marker
