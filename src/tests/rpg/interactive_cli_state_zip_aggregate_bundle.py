@@ -25,10 +25,97 @@ STATE_ZIP_AGGREGATE_ALL_BUNDLE_MANIFEST = "state-zip-aggregate-bundle-manifest.j
 STATE_ZIP_AGGREGATE_ALL_BUNDLE_AGGREGATE = "state-zip-aggregate.json"
 STATE_ZIP_AGGREGATE_ALL_BUNDLE_MARKER = "state-zip-aggregate-read-status-marker.txt"
 STATE_ZIP_AGGREGATE_ALL_BUNDLE_SUMMARY = "state-zip-aggregate-read-bundle-summary.json"
+STATE_ZIP_AGGREGATE_ALL_BUNDLE_STATUS_MARKER = "INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_ALL_BUNDLE"
 
 
 def _json_bytes(payload: Mapping[str, Any]) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return 0
+
+
+def render_state_zip_aggregate_all_bundle_status_marker(result: Mapping[str, Any], *, command: str) -> str:
+    """Render a one-line all-bundle status marker for CI log scraping."""
+
+    manifest = result.get("manifest") if isinstance(result.get("manifest"), Mapping) else {}
+    bundle_summary = result.get("bundle_summary") if isinstance(result.get("bundle_summary"), Mapping) else {}
+    ok = "true" if bool(result.get("ok")) else "false"
+    bundle_summary_ok = "true" if bool(bundle_summary.get("ok")) else "false"
+    return (
+        f"[{STATE_ZIP_AGGREGATE_ALL_BUNDLE_STATUS_MARKER}] "
+        f"command={command} ok={ok} "
+        f"summary_count={_safe_int(manifest.get('summary_count'))} "
+        f"failed={_safe_int(manifest.get('failed'))} "
+        f"bundle_summary_ok={bundle_summary_ok} error={str(result.get('error') or 'none')}"
+    )
+
+
+def parse_state_zip_aggregate_all_bundle_status_marker(line: str) -> dict[str, Any]:
+    """Parse the one-line all-bundle status marker emitted to stderr."""
+
+    text = str(line or "").strip()
+    prefix = f"[{STATE_ZIP_AGGREGATE_ALL_BUNDLE_STATUS_MARKER}] "
+    if not text.startswith(prefix):
+        return {
+            "ok": False,
+            "error": "aggregate_all_bundle_status_marker_prefix_mismatch",
+        }
+    fields: dict[str, str] = {}
+    for token in text[len(prefix):].split():
+        if "=" not in token:
+            return {
+                "ok": False,
+                "error": "aggregate_all_bundle_status_marker_token_malformed",
+                "token": token,
+            }
+        key, value = token.split("=", 1)
+        if not key or key in fields:
+            return {
+                "ok": False,
+                "error": "aggregate_all_bundle_status_marker_key_invalid",
+                "key": key,
+            }
+        fields[key] = value
+    required = {"command", "ok", "summary_count", "failed", "bundle_summary_ok", "error"}
+    missing = sorted(required.difference(fields))
+    if missing:
+        return {
+            "ok": False,
+            "error": "aggregate_all_bundle_status_marker_required_keys_missing",
+            "missing_keys": missing,
+        }
+    if fields["ok"] not in {"true", "false"} or fields["bundle_summary_ok"] not in {"true", "false"}:
+        return {
+            "ok": False,
+            "error": "aggregate_all_bundle_status_marker_bool_invalid",
+        }
+    try:
+        summary_count = int(fields["summary_count"])
+        failed = int(fields["failed"])
+    except ValueError:
+        return {
+            "ok": False,
+            "error": "aggregate_all_bundle_status_marker_count_invalid",
+        }
+    if summary_count < 0 or failed < 0:
+        return {
+            "ok": False,
+            "error": "aggregate_all_bundle_status_marker_count_negative",
+        }
+    return {
+        "ok": True,
+        "command": fields["command"],
+        "bundle_ok": fields["ok"] == "true",
+        "summary_count": summary_count,
+        "failed": failed,
+        "bundle_summary_ok": fields["bundle_summary_ok"] == "true",
+        "bundle_error": fields["error"],
+    }
 
 
 def build_state_zip_aggregate_all_bundle_manifest(
@@ -242,6 +329,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         result = verify_state_zip_aggregate_all_bundle(Path(args.bundle_zip_path))
     print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
+    print(render_state_zip_aggregate_all_bundle_status_marker(result, command=args.command), file=sys.stderr)
     return 0 if result.get("ok") else 1
 
 
