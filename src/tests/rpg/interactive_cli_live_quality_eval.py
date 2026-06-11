@@ -359,6 +359,43 @@ def validate_live_quality_eval_summary(payload: Mapping[str, Any]) -> dict[str, 
     return {"ok": True, "format_version": LIVE_QUALITY_EVAL_VERSION}
 
 
+def read_live_quality_eval_summary(path: str | Path) -> dict[str, Any]:
+    """Read a persisted live-quality summary for aggregate mode without raising on expected bad inputs."""
+
+    candidate = Path(path)
+    if not candidate.exists():
+        return {"format_version": LIVE_QUALITY_EVAL_VERSION, "ok": False, "error": "live_quality_summary_missing", "source_path": str(candidate)}
+    try:
+        payload = json.loads(candidate.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"format_version": LIVE_QUALITY_EVAL_VERSION, "ok": False, "error": "live_quality_summary_json_invalid", "source_path": str(candidate)}
+    if not isinstance(payload, Mapping):
+        return {"format_version": LIVE_QUALITY_EVAL_VERSION, "ok": False, "error": "live_quality_summary_payload_not_object", "source_path": str(candidate)}
+    result = dict(payload)
+    result.setdefault("source_path", str(candidate))
+    return result
+
+
+def aggregate_live_quality_eval_summary_files(paths: Sequence[str | Path]) -> dict[str, Any]:
+    """Read and aggregate persisted live-quality summary JSON files."""
+
+    return aggregate_live_quality_eval_summaries([read_live_quality_eval_summary(path) for path in paths])
+
+
+def write_live_quality_aggregate_summary(*, result: Mapping[str, Any], aggregate_path: str | Path) -> Path:
+    """Persist an aggregate live-quality summary as deterministic JSON."""
+
+    path = Path(aggregate_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = dict(result)
+    if payload.get("aggregate_format_version") != LIVE_QUALITY_AGGREGATE_VERSION:
+        raise ValueError("live_quality_aggregate_version_mismatch")
+    if not isinstance(payload.get("ok"), bool):
+        raise ValueError("live_quality_aggregate_ok_not_bool")
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+    return path
+
+
 def aggregate_live_quality_eval_summaries(summaries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Aggregate multiple live-quality summary payloads for nightly/playtest review."""
 
@@ -377,6 +414,8 @@ def aggregate_live_quality_eval_summaries(summaries: Sequence[Mapping[str, Any]]
         payload = dict(summary)
         validation = validate_live_quality_eval_summary(payload)
         entry: dict[str, Any] = {"index": index, "schema_ok": bool(validation.get("ok"))}
+        if payload.get("source_path"):
+            entry["source_path"] = _safe_str(payload.get("source_path"))
         if not validation.get("ok"):
             invalid_summary_count += 1
             failed += 1
@@ -450,13 +489,29 @@ def render_live_quality_status_marker(result: Mapping[str, Any]) -> str:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate live interactive RPG transcript quality without calling an LLM judge.")
-    parser.add_argument("transcript_path", help="Path to interactive-transcript.json or compatible JSON payload.")
+    parser.add_argument("transcript_path", nargs="?", help="Path to interactive-transcript.json or compatible JSON payload.")
     parser.add_argument("--summary-path", default="", help="Optional path to persist the quality evaluation JSON.")
+    parser.add_argument(
+        "--aggregate-summary",
+        action="append",
+        default=[],
+        help="Persisted live-quality summary JSON to include in aggregate mode; may be repeated.",
+    )
+    parser.add_argument("--aggregate-path", default="", help="Optional path to persist aggregate mode JSON output.")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
+    if args.aggregate_summary:
+        result = aggregate_live_quality_eval_summary_files(args.aggregate_summary)
+        if args.aggregate_path:
+            write_live_quality_aggregate_summary(result=result, aggregate_path=args.aggregate_path)
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
+        return 0 if result.get("ok") else 1
+    if not args.transcript_path:
+        print(json.dumps({"format_version": LIVE_QUALITY_EVAL_VERSION, "ok": False, "error": "transcript_path_required"}, indent=2, sort_keys=True))
+        return 2
     result = read_live_quality_transcript(args.transcript_path)
     if args.summary_path:
         write_live_quality_eval_summary(result=result, summary_path=args.summary_path)
