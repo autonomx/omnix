@@ -135,7 +135,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             result["summary"]["interactive_cli_state_checkpoint"] = checkpoint_cleanup
             matrix_zip._rewrite_matrix_artifacts_after_cleanup(result, output_root)
             _write_feature_matrix_summary_artifacts(result, output_root)
-    zip_path = matrix_zip.zip_matrix_output(output_root, Path(args.zip_path) if args.zip_path else None)
+    requested_zip_path = Path(args.zip_path) if args.zip_path else output_root.with_suffix(".zip")
+    result["summary"]["zip_path"] = str(requested_zip_path)
+    _write_feature_matrix_summary_artifacts(result, output_root)
+    zip_path = matrix_zip.zip_matrix_output(output_root, requested_zip_path)
     result["summary"]["zip_path"] = str(zip_path)
     _write_feature_matrix_summary_artifacts(result, output_root)
     print(json.dumps(result["summary"], indent=2, ensure_ascii=False, sort_keys=True, default=str))
