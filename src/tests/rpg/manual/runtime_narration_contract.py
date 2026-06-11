@@ -1,7 +1,7 @@
-"""Phase 14.05 — shared manual-runtime narration contract helpers.
+"""Phase 14.05+ — shared manual-runtime narration contract helpers.
 
 The interactive campaign runner owns this contract so live matrix tests exercise the
-same path that writes runtime-driven campaign artifacts.  Live playtest wrappers may
+same path that writes runtime-driven campaign artifacts. Live playtest wrappers may
 orchestrate/scoring, but deferred narration drain and provenance normalization live
 here.
 """
@@ -17,6 +17,17 @@ RUNTIME_DEFERRED_NARRATION_DRAIN_SOURCE = "runtime_deferred_narration_drain_v1"
 RUNTIME_DEFERRED_NARRATION_CONTEXT_VERSION = "runtime_deferred_narration_context_v1"
 RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION = "runtime_transcript_provenance_normalization_v1"
 RUNTIME_DEFERRED_NARRATION_MAX_CONTEXT_CHARS = 6500
+RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES = frozenset(
+    {
+        "dialogue_repaired",
+        "quest_repaired",
+        "survival_repaired",
+        "commerce_repaired",
+        "commerce_followup_repaired",
+        "service_repaired",
+        "visible_response_repaired",
+    }
+)
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -87,19 +98,39 @@ def _find_completed_narration_payload(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _turn_has_pending_deferred_narration(turn_summary: Mapping[str, Any]) -> bool:
+def _source_requires_runtime_narration(source: Any) -> bool:
+    source_text = _safe_str(source).strip()
+    if source_text == "deferred_runtime_narration_pending":
+        return True
+    if source_text in RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES:
+        return True
+    return source_text.endswith("_repaired")
+
+
+def _turn_requires_runtime_narration(turn_summary: Mapping[str, Any]) -> bool:
     turn_summary = _safe_dict(turn_summary)
-    if _safe_str(turn_summary.get("narration_source")) == "deferred_runtime_narration_pending":
+    if _source_requires_runtime_narration(turn_summary.get("narration_source")):
         return True
     if _payload_is_pending(_safe_dict(turn_summary.get("raw_narration_payload"))):
         return True
     raw_result = _safe_dict(turn_summary.get("raw_result") or turn_summary.get("result"))
+    if _source_requires_runtime_narration(raw_result.get("narration_source")):
+        return True
     if _safe_str(raw_result.get("narration_status")).lower() in {"pending", "queued"}:
+        return True
+    nested = _safe_dict(raw_result.get("result"))
+    if _source_requires_runtime_narration(nested.get("narration_source")):
         return True
     for key in ("narration_payload", "structured_narration", "narration_result"):
         if _payload_is_pending(_safe_dict(raw_result.get(key))):
             return True
+        if _payload_is_pending(_safe_dict(nested.get(key))):
+            return True
     return False
+
+
+# Backward-compatible private name used by earlier Phase 14 tests.
+_turn_has_pending_deferred_narration = _turn_requires_runtime_narration
 
 
 def _clip_str(value: Any, *, max_chars: int = 900) -> str:
@@ -413,24 +444,30 @@ def drain_deferred_runtime_narration_turn(
     player_input: str = "",
     drain_func: Callable[..., Mapping[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
-    pending = _turn_has_pending_deferred_narration(turn_summary)
+    requires_contract = _turn_requires_runtime_narration(turn_summary)
+    before_source = _safe_str(turn_summary.get("narration_source"))
     result = {
         "turn_index": int(turn_index or turn_summary.get("turn_index") or 0),
         "player_input": _safe_str(player_input or turn_summary.get("player_input")),
         "session_id": _safe_str(session_id),
-        "pending_before": bool(pending),
+        "pending_before": bool(requires_contract),
+        "requires_provider_narration": bool(requires_contract),
+        "before_source": before_source,
         "completed": False,
         "timed_out": False,
         "source": "not_pending",
         "error": "",
         "error_type": "",
     }
-    if not pending:
+    if not requires_contract:
         turn_summary["deferred_narration_drain"] = result
         return result
 
     payload: Mapping[str, Any] | None = None
-    if drain_func is not None:
+    existing_payload = completed_provider_payload_for_turn(turn_summary)
+    if existing_payload:
+        payload = existing_payload
+    elif drain_func is not None:
         try:
             payload = drain_func(turn_summary=turn_summary, session_id=session_id, turn_index=turn_index, player_input=player_input)
         except Exception as exc:  # pragma: no cover - defensive hook isolation
@@ -455,6 +492,7 @@ def drain_deferred_runtime_narration_turn(
         if errors and not result["error"]:
             result["error"] = _safe_str(errors[0])
         result["error_type"] = _safe_str(diagnostics.get("provider_error_type") or classify_runtime_narration_error(result["error"]))
+    result["after_source"] = _safe_str(turn_summary.get("narration_source"))
     turn_summary["deferred_narration_drain"] = result
     return result
 
@@ -463,12 +501,14 @@ def new_runtime_narration_contract_summary(*, enabled: bool) -> dict[str, Any]:
     return {
         "format_version": RUNTIME_NARRATION_CONTRACT_VERSION,
         "enabled": bool(enabled),
+        "visible_repair_sources_requiring_provider": sorted(RUNTIME_VISIBLE_REPAIR_NARRATION_SOURCES),
         "deferred_narration_drain": {
-            "format_version": "runtime_deferred_narration_drain_summary_v1",
+            "format_version": "runtime_deferred_narration_drain_summary_v2",
             "enabled": bool(enabled),
             "pending_count": 0,
             "completed_count": 0,
             "timeout_count": 0,
+            "visible_repair_required_count": 0,
             "error_types": [],
             "turns": [],
         },
@@ -485,6 +525,8 @@ def record_runtime_narration_drain(summary: dict[str, Any], drain_result: Mappin
         return
     if drain_result.get("pending_before"):
         drain["pending_count"] += 1
+    if _source_requires_runtime_narration(drain_result.get("before_source")) and _safe_str(drain_result.get("before_source")) != "deferred_runtime_narration_pending":
+        drain["visible_repair_required_count"] = int(drain.get("visible_repair_required_count") or 0) + 1
     if drain_result.get("completed"):
         drain["completed_count"] += 1
     if drain_result.get("timed_out"):
