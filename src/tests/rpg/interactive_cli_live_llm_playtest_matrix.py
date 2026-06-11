@@ -46,6 +46,10 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def _safe_list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
 def _slug(value: str) -> str:
     text = _safe_str(value).strip().lower()
     out = []
@@ -107,7 +111,12 @@ def render_live_llm_playtest_matrix_status_marker(result: Mapping[str, Any]) -> 
     failed = int(aggregate.get("failed") or 0)
     avg_score = float(aggregate.get("avg_score") or 0.0)
     fun = float(_safe_dict(aggregate.get("scores")).get("fun") or 0.0)
-    error = _safe_str(result.get("error") or aggregate.get("error") or (aggregate.get("failure_types") or ["none"])[0] if aggregate.get("failure_types") else "none")
+    failure_types = _safe_list(aggregate.get("failure_types"))
+    error = _safe_str(
+        result.get("error")
+        or aggregate.get("error")
+        or (failure_types[0] if failure_types else "none")
+    )
     return (
         f"[{LIVE_LLM_PLAYTEST_MATRIX_STATUS_MARKER}] ok={ok} skipped={skipped} "
         f"pack_count={pack_count} passed={passed} failed={failed} "
@@ -190,7 +199,7 @@ def run_live_llm_playtest_matrix(
     }
     if len(summary_paths) != len(packs):
         result["ok"] = False
-        result["error"] = "live_llm_playtest_matrix_missing_summaries"
+        result["error"] = next((run.get("error") for run in runs if run.get("skipped") and run.get("error") != "none"), "live_llm_playtest_matrix_missing_summaries")
         result["missing_summary_count"] = len(packs) - len(summary_paths)
     return result
 
