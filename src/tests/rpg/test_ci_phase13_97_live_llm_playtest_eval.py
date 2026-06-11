@@ -76,6 +76,8 @@ def test_phase13_97_live_playtest_runs_campaign_and_evaluates_transcript(tmp_pat
     assert result["session_id"] == "session-quality-smoke"
     assert result["turn_count"] == 2
     assert result["defer_runtime_narration"] is True
+    assert result["drain_deferred_narration"] is True
+    assert result["deferred_narration_drain"]["enabled"] is True
     assert result["quality"]["ok"] is True
     assert result["quality"]["signals"]["llm_narration_ratio"] == 1.0
     assert Path(result["quality_summary_path"]).exists()
@@ -86,6 +88,7 @@ def test_phase13_97_live_playtest_runs_campaign_and_evaluates_transcript(tmp_pat
     assert captured["seed_live_survival"] is True
     assert captured["enable_llm_intent_fallback"] is True
     assert captured["defer_runtime_narration"] is True
+    assert callable(captured["after_turn_hook"])
 
 
 def test_phase14_01_live_playtest_can_disable_deferred_runtime_narration_for_debug(tmp_path: Path) -> None:
@@ -116,7 +119,128 @@ def test_phase14_01_live_playtest_can_disable_deferred_runtime_narration_for_deb
     )
 
     assert result["defer_runtime_narration"] is False
+    assert result["deferred_narration_drain"]["enabled"] is False
     assert captured["defer_runtime_narration"] is False
+    assert captured["after_turn_hook"] is None
+
+
+def test_phase14_02_live_playtest_drains_deferred_narration_before_quality_scoring(tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+    completed_narration = (
+        "Bran lowers his voice inside the Rusty Flagon, pointing you toward the old north road where "
+        "bandit tracks cut through fresh mud. He gives you a clear choice: question Elara for supplies, "
+        "follow the trail now, or ask the guard about recent attacks."
+    )
+
+    def fake_drain_func(**kwargs):
+        return {
+            "format_version": "rpg_narration_v2",
+            "source": "provider_runtime_narration",
+            "narration_status": "completed",
+            "narration": completed_narration,
+            "runtime_narration_diagnostics": {
+                "provider_attempted": True,
+                "provider_present": True,
+                "provider_valid": True,
+                "provider_errors": [],
+            },
+        }
+
+    def fake_runner(**kwargs):
+        captured.update(kwargs)
+        output_dir = Path(kwargs["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        turn_summary = {
+            "turn_index": 1,
+            "player_input": "I ask Bran what danger remains nearby.",
+            "raw_narration": "The moment responds without producing a major new consequence.",
+            "llm_called": False,
+            "narration_source": "deferred_runtime_narration_pending",
+            "raw_narration_payload": {
+                "source": "deferred_runtime_narration_pending",
+                "narration_status": "pending",
+                "narration": "The moment responds without producing a major new consequence.",
+                "runtime_narration_diagnostics": {
+                    "provider_attempted": False,
+                    "provider_valid": False,
+                },
+            },
+            "raw_result": {
+                "ok": True,
+                "llm_called": False,
+                "narration_status": "queued",
+                "narration_mode": "deferred",
+                "narration": "The moment responds without producing a major new consequence.",
+                "narration_payload": {
+                    "source": "deferred_runtime_narration_pending",
+                    "narration_status": "pending",
+                    "narration": "The moment responds without producing a major new consequence.",
+                },
+                "result": {
+                    "action_type": "observe",
+                    "visible_interaction_reason": "road_danger_inquiry",
+                },
+                "turn_contract": {"player_input": "I ask Bran what danger remains nearby."},
+                "npc": {"speaker": "Bran", "line": ""},
+                "session": {
+                    "runtime_state": {"current_scene": {"scene": "The Rusty Flagon tavern"}},
+                    "simulation_state": {
+                        "player_state": {
+                            "location_id": "loc:rusty_flagon",
+                            "nearby_npc_ids": ["npc:bran"],
+                            "inventory_state": {"items": [], "currency": {"silver": 10}},
+                        }
+                    },
+                },
+            },
+            "interactive_cli_state_bundle": {"states": {}},
+        }
+        kwargs["after_turn_hook"](
+            session_id=kwargs["session_id"],
+            turn_summary=turn_summary,
+            turn_index=1,
+            player_input=turn_summary["player_input"],
+        )
+        transcript_path = output_dir / "interactive-transcript.json"
+        transcript_path.write_text(
+            json.dumps(
+                {
+                    "format_version": "interactive_cli_campaign_v4",
+                    "summary": {"completed_turns": 1},
+                    "turns": [turn_summary],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return {
+            "summary": {"completed_turns": 1},
+            "turns": [turn_summary],
+            "artifacts": {"transcript_path": str(transcript_path)},
+        }
+
+    result = playtest.run_live_llm_playtest(
+        allow_live=True,
+        output_dir=tmp_path / "out",
+        commands=["I ask Bran what danger remains nearby."],
+        campaign_runner=fake_runner,
+        deferred_narration_drain_func=fake_drain_func,
+    )
+
+    transcript = json.loads(Path(result["transcript_path"]).read_text(encoding="utf-8"))
+    turn = transcript["turns"][0]
+    assert result["ok"] is True
+    assert result["quality"]["ok"] is True
+    assert result["quality"]["signals"]["llm_narration_ratio"] == 1.0
+    assert result["deferred_narration_drain"]["pending_count"] == 1
+    assert result["deferred_narration_drain"]["completed_count"] == 1
+    assert result["deferred_narration_drain"]["timeout_count"] == 0
+    assert turn["raw_narration"] == completed_narration
+    assert turn["llm_called"] is True
+    assert turn["narration_source"] == "provider_runtime_narration"
+    assert turn["raw_narration_payload"]["narration_status"] == "completed"
+    assert turn["raw_result"]["narration_payload"]["source"] == "provider_runtime_narration"
+    assert captured["defer_runtime_narration"] is True
+    assert callable(captured["after_turn_hook"])
 
 
 def test_phase13_97_live_playtest_falls_back_to_campaign_result_when_transcript_missing(tmp_path: Path) -> None:
@@ -213,6 +337,7 @@ def test_phase13_97_live_playtest_cli_wires_options(monkeypatch, tmp_path: Path,
             "--console-llm",
             "--no-live-survival-seed",
             "--no-deferred-runtime-narration",
+            "--no-drain-deferred-narration",
             "--artifact-detail",
             "summary",
             "--summary-path",
@@ -232,6 +357,7 @@ def test_phase13_97_live_playtest_cli_wires_options(monkeypatch, tmp_path: Path,
     assert captured["console_llm"] is True
     assert captured["seed_live_survival"] is False
     assert captured["defer_runtime_narration"] is False
+    assert captured["drain_deferred_narration"] is False
     assert captured["artifact_detail"] == "summary"
     assert captured["summary_path"] == str(tmp_path / "quality.json")
 
