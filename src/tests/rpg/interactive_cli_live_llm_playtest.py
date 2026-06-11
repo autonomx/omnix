@@ -1,8 +1,8 @@
-"""Phase 13.97+ — opt-in live LLM RPG playtest runner with quality evaluation.
+"""Opt-in live LLM RPG playtest runner with deterministic quality checks.
 
-The live runner orchestrates scripted packs and scoring only. Deferred narration
-completion/provenance is owned by ``interactive_cli_campaign.run_interactive_campaign``
-through the shared Phase 14.05 runtime narration contract.
+The live runner orchestrates scripted scenario packs and scoring only. Deferred
+narration completion/provenance is owned by ``interactive_cli_campaign`` through
+the shared runtime narration contract.
 """
 
 from __future__ import annotations
@@ -40,8 +40,8 @@ LIVE_DEFERRED_NARRATION_CONTEXT_VERSION = narration_contract.RUNTIME_DEFERRED_NA
 LIVE_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION = narration_contract.RUNTIME_TRANSCRIPT_PROVENANCE_NORMALIZATION_VERSION
 LIVE_DEFERRED_NARRATION_MAX_CONTEXT_CHARS = narration_contract.RUNTIME_DEFERRED_NARRATION_MAX_CONTEXT_CHARS
 
-# Backward-compatible aliases for earlier Phase 14 deterministic tests.  They now
-# point at the shared runtime-owned contract helpers.
+# Backward-compatible aliases for earlier deterministic tests. They point at the
+# runtime-owned contract helpers.
 _grounded_live_narration_context = narration_contract.grounded_runtime_narration_context
 _classify_live_deferred_narration_error = narration_contract.classify_runtime_narration_error
 drain_deferred_live_narration_turn = narration_contract.drain_deferred_runtime_narration_turn
@@ -55,6 +55,7 @@ DEFAULT_LIVE_LLM_PLAYTEST_COMMANDS = (
     "I head north toward the old road and watch for bandits.",
     "I ask what choice I should make next.",
 )
+
 LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
     "tavern-memory": (
         "Bran, remember this: my trail name is Ash Lantern.",
@@ -116,7 +117,21 @@ LIVE_LLM_PLAYTEST_SCENARIO_PACKS: dict[str, tuple[str, ...]] = {
 
 LIVE_MECHANIC_SEMANTIC_REQUIREMENTS: dict[str, dict[str, tuple[str, ...]]] = {
     "party-companion": {
-        "companion_or_party": ("companion", "party", "joins", "joined", "travel with", "travels with", "travelling with", "traveling with"),
+        "companion_or_party": (
+            "companion",
+            "party",
+            "joins",
+            "joined",
+            "join you",
+            "travel with",
+            "travels with",
+            "travelling with",
+            "traveling with",
+            "accompany",
+            "accompanies",
+            "accompanying",
+            "company",
+        ),
     },
     "quest-investigation": {
         "investigation_lead": ("clue", "witness", "tracks", "trail", "lead", "objective", "bandit"),
@@ -387,7 +402,7 @@ def run_live_llm_playtest(
     resolved_summary_path = Path(summary_path) if summary_path else resolved_output_dir / "live-quality-summary.json"
     write_live_quality_eval_summary(result=quality, summary_path=resolved_summary_path)
 
-    result = {
+    return {
         "format_version": LIVE_LLM_PLAYTEST_VERSION,
         "ok": bool(quality.get("ok")),
         "skipped": False,
@@ -408,7 +423,6 @@ def run_live_llm_playtest(
         "mechanic_semantics": semantics,
         "quality": quality,
     }
-    return result
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
