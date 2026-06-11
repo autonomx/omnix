@@ -156,3 +156,61 @@ def test_phase13_85_aggregate_read_cli_returns_one_for_schema_error(tmp_path: Pa
     assert payload["ok"] is False
     assert payload["error"] == "aggregate_format_version_mismatch"
     assert payload["validation"]["expected"] == verify_cli.STATE_ZIP_VERIFY_AGGREGATE_VERSION
+
+
+def test_phase13_86_aggregate_read_status_marker_reports_success() -> None:
+    marker = aggregate_verify.render_state_zip_verification_aggregate_read_status_marker(
+        {"ok": True, "aggregate": {"ok": True, "summary_count": 2, "failed": 0}}
+    )
+
+    assert marker == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=2 failed=0 error=none"
+    assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(marker) == {
+        "ok": True,
+        "read_ok": True,
+        "aggregate_ok": True,
+        "summary_count": 2,
+        "failed": 0,
+        "read_error": "none",
+    }
+
+
+def test_phase13_86_aggregate_read_status_marker_reports_read_failure() -> None:
+    marker = aggregate_verify.render_state_zip_verification_aggregate_read_status_marker(
+        {"ok": False, "error": "aggregate_file_missing"}
+    )
+
+    assert marker == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=false aggregate_ok=false summary_count=0 failed=0 error=aggregate_file_missing"
+    assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(marker) == {
+        "ok": True,
+        "read_ok": False,
+        "aggregate_ok": False,
+        "summary_count": 0,
+        "failed": 0,
+        "read_error": "aggregate_file_missing",
+    }
+
+
+def test_phase13_86_aggregate_read_cli_emits_status_marker_to_stderr(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+
+    assert aggregate_verify.main([str(path)]) == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["ok"] is True
+    assert output.err.strip() == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=0 error=none"
+
+
+def test_phase13_86_aggregate_read_status_marker_rejects_malformed_values() -> None:
+    assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker("[OTHER] ok=true") == {
+        "ok": False,
+        "error": "aggregate_read_marker_prefix_mismatch",
+    }
+    missing = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 error=none"
+    bad_bool = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=yes aggregate_ok=true summary_count=1 failed=0 error=none"
+    bad_count = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=x failed=0 error=none"
+    negative_count = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=-1 error=none"
+
+    assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(missing)["error"] == "aggregate_read_marker_required_keys_missing"
+    assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(bad_bool)["error"] == "aggregate_read_marker_bool_invalid"
+    assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(bad_count)["error"] == "aggregate_read_marker_count_invalid"
+    assert aggregate_verify.parse_state_zip_verification_aggregate_read_status_marker(negative_count)["error"] == "aggregate_read_marker_count_negative"
