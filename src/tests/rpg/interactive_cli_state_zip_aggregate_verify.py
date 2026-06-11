@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
+
+THIS_FILE = Path(__file__).resolve()
+TESTS_ROOT = THIS_FILE.parents[1]
+SRC_ROOT = THIS_FILE.parents[2]
+REPO_ROOT = THIS_FILE.parents[3]
+for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 from tests.rpg import interactive_cli_state_zip_verify as verify_cli
 
@@ -80,3 +90,20 @@ def read_state_zip_verification_aggregate(path: str | Path) -> dict[str, Any]:
         "path": str(aggregate_path),
         "aggregate": payload,
     }
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Read and validate a persisted state ZIP aggregate verifier JSON artifact.")
+    parser.add_argument("aggregate_path", help="Path to a persisted state ZIP aggregate JSON artifact.")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_arg_parser().parse_args(argv)
+    result = read_state_zip_verification_aggregate(Path(args.aggregate_path))
+    print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
+    return 0 if result.get("ok") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
