@@ -222,11 +222,24 @@ def verify_state_zip_aggregate_read_artifact_bundle(*, aggregate_path: str | Pat
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read and validate a persisted state ZIP aggregate verifier JSON artifact.")
     parser.add_argument("aggregate_path", help="Path to a persisted state ZIP aggregate JSON artifact.")
+    parser.add_argument(
+        "--status-marker",
+        default="",
+        help="Optional aggregate-read status marker line to verify against the aggregate JSON artifact.",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
+    if args.status_marker:
+        result = verify_state_zip_aggregate_read_artifact_bundle(
+            aggregate_path=Path(args.aggregate_path),
+            status_marker=args.status_marker,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
+        return 0 if result.get("ok") else 1
+
     result = read_state_zip_verification_aggregate(Path(args.aggregate_path))
     print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
     print(render_state_zip_verification_aggregate_read_status_marker(result), file=sys.stderr)

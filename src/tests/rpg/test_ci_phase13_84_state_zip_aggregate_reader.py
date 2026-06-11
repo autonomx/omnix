@@ -265,3 +265,41 @@ def test_phase13_87_aggregate_read_artifact_bundle_rejects_mismatched_marker(tmp
         "aggregate_ok": {"expected": False, "actual": True},
         "failed": {"expected": 1, "actual": 0},
     }
+
+
+def test_phase13_88_aggregate_read_cli_bundle_mode_accepts_matching_marker(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    marker = aggregate_verify.render_state_zip_verification_aggregate_read_status_marker(
+        aggregate_verify.read_state_zip_verification_aggregate(path)
+    )
+
+    assert aggregate_verify.main([str(path), "--status-marker", marker]) == 0
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert output.err == ""
+    assert payload["ok"] is True
+    assert payload["marker_result"]["read_ok"] is True
+
+
+def test_phase13_88_aggregate_read_cli_bundle_mode_rejects_mismatched_marker(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload(ok=False))
+    marker = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=0 error=none"
+
+    assert aggregate_verify.main([str(path), "--status-marker", marker]) == 1
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert output.err == ""
+    assert payload["ok"] is False
+    assert payload["error"] == "aggregate_read_marker_mismatch"
+
+
+def test_phase13_88_aggregate_read_cli_read_mode_still_emits_marker(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+
+    assert aggregate_verify.main([str(path)]) == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out)["ok"] is True
+    assert output.err.strip() == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=0 error=none"
