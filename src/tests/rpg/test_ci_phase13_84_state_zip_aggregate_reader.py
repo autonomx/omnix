@@ -303,3 +303,69 @@ def test_phase13_88_aggregate_read_cli_read_mode_still_emits_marker(tmp_path: Pa
     output = capsys.readouterr()
     assert json.loads(output.out)["ok"] is True
     assert output.err.strip() == "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=0 error=none"
+
+
+def test_phase13_89_bundle_summary_writer_persists_success_result(tmp_path: Path) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    marker = aggregate_verify.render_state_zip_verification_aggregate_read_status_marker(
+        aggregate_verify.read_state_zip_verification_aggregate(path)
+    )
+    result = aggregate_verify.verify_state_zip_aggregate_read_artifact_bundle(
+        aggregate_path=path,
+        status_marker=marker,
+    )
+
+    summary_path = aggregate_verify.write_state_zip_aggregate_read_bundle_summary(
+        result=result,
+        summary_path=tmp_path / "nested" / "aggregate-bundle-summary.json",
+    )
+
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert payload["bundle_summary_format_version"] == aggregate_verify.STATE_ZIP_VERIFY_AGGREGATE_BUNDLE_SUMMARY_VERSION
+    assert payload["ok"] is True
+    assert payload["marker_result"]["read_ok"] is True
+
+
+def test_phase13_89_bundle_summary_writer_rejects_non_bool_ok(tmp_path: Path) -> None:
+    try:
+        aggregate_verify.write_state_zip_aggregate_read_bundle_summary(
+            result={"ok": "true"},
+            summary_path=tmp_path / "summary.json",
+        )
+    except ValueError as exc:
+        assert str(exc) == "aggregate_bundle_summary_ok_not_bool"
+    else:
+        raise AssertionError("expected non-boolean ok to be rejected")
+
+
+def test_phase13_89_aggregate_read_cli_bundle_mode_writes_summary(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload())
+    marker = aggregate_verify.render_state_zip_verification_aggregate_read_status_marker(
+        aggregate_verify.read_state_zip_verification_aggregate(path)
+    )
+    summary_path = tmp_path / "out" / "aggregate-bundle-summary.json"
+
+    assert aggregate_verify.main([str(path), "--status-marker", marker, "--summary-path", str(summary_path)]) == 0
+
+    output = capsys.readouterr()
+    stdout_payload = json.loads(output.out)
+    summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert stdout_payload["ok"] is True
+    assert summary_payload["bundle_summary_format_version"] == aggregate_verify.STATE_ZIP_VERIFY_AGGREGATE_BUNDLE_SUMMARY_VERSION
+    assert summary_payload["ok"] is True
+
+
+def test_phase13_89_aggregate_read_cli_bundle_mode_writes_mismatch_summary(tmp_path: Path, capsys) -> None:
+    path = _write_json(tmp_path / "state-zip-aggregate.json", _aggregate_payload(ok=False))
+    marker = "[INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ] ok=true aggregate_ok=true summary_count=1 failed=0 error=none"
+    summary_path = tmp_path / "aggregate-bundle-summary.json"
+
+    assert aggregate_verify.main([str(path), "--status-marker", marker, "--summary-path", str(summary_path)]) == 1
+
+    output = capsys.readouterr()
+    stdout_payload = json.loads(output.out)
+    summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert stdout_payload["error"] == "aggregate_read_marker_mismatch"
+    assert summary_payload["bundle_summary_format_version"] == aggregate_verify.STATE_ZIP_VERIFY_AGGREGATE_BUNDLE_SUMMARY_VERSION
+    assert summary_payload["ok"] is False
+    assert summary_payload["error"] == "aggregate_read_marker_mismatch"
