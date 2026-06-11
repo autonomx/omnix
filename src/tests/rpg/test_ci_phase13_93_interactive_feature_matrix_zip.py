@@ -122,7 +122,7 @@ def test_phase13_93_feature_matrix_zip_runs_all_cleanup_adapters_and_revalidates
     cleanup_calls: list[str] = []
     calls: dict[str, Any] = {}
 
-    def cleanup_result(name: str, changed_turns: int) -> dict[str, Any]:
+    def cleanup_result(name: str, changed_turns: int) -> Any:
         def apply(result: dict[str, Any]) -> dict[str, Any]:
             cleanup_calls.append(name)
             result.setdefault("cleanup_seen", []).append(name)
@@ -143,7 +143,7 @@ def test_phase13_93_feature_matrix_zip_runs_all_cleanup_adapters_and_revalidates
         calls["rewrite"] = {"result": result, "output_root": output_root}
 
     def fake_zip(output_root: Path, zip_path: Path | None = None) -> Path:
-        resolved = output_root.with_suffix(".zip")
+        resolved = Path(zip_path or output_root.with_suffix(".zip"))
         with zipfile.ZipFile(resolved, "w") as archive:
             archive.writestr("placeholder.txt", "ok")
         return resolved
@@ -229,7 +229,7 @@ def test_phase13_93_feature_matrix_zip_exit_code_tracks_failed_summary(monkeypat
     )
 
 
-def test_phase13_93_feature_matrix_zip_zip_contains_pre_zip_summary_state(monkeypatch, tmp_path: Path) -> None:
+def test_phase13_93_feature_matrix_zip_zip_contains_final_summary_state(monkeypatch, tmp_path: Path) -> None:
     def fake_run_feature_matrix(**kwargs: Any) -> dict[str, Any]:
         output_root = Path(kwargs["output_root"])
         output_root.mkdir(parents=True, exist_ok=True)
@@ -265,6 +265,9 @@ def test_phase13_93_feature_matrix_zip_zip_contains_pre_zip_summary_state(monkey
 
     disk_summary = json.loads((output_root / "interactive-feature-matrix-summary.json").read_text(encoding="utf-8"))
     with zipfile.ZipFile(zip_path) as archive:
-        names = set(archive.namelist())
-        assert "interactive-feature-matrix-summary.json" not in names
+        zip_summary = json.loads(archive.read("interactive-feature-matrix-summary.json").decode("utf-8"))
+        assert "interactive-feature-matrix-performance.json" in set(archive.namelist())
+        assert "interactive-feature-matrix-report.html" in set(archive.namelist())
     assert disk_summary["zip_path"] == str(zip_path)
+    assert zip_summary["zip_path"] == str(zip_path)
+    assert zip_summary["summary_path"] == str(output_root / "interactive-feature-matrix-summary.json")
