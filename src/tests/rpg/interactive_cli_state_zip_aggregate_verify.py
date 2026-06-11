@@ -20,6 +20,7 @@ from tests.rpg import interactive_cli_state_zip_verify as verify_cli
 
 STATE_ZIP_VERIFY_AGGREGATE_REQUIRED_KEYS = frozenset({"aggregate_format_version", "ok"})
 STATE_ZIP_VERIFY_AGGREGATE_READ_STATUS_MARKER = "INTERACTIVE_CLI_STATE_ZIP_AGGREGATE_READ"
+STATE_ZIP_VERIFY_AGGREGATE_BUNDLE_SUMMARY_VERSION = "interactive_cli_state_zip_aggregate_bundle_summary_v1"
 
 
 def validate_state_zip_verification_aggregate_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -219,6 +220,19 @@ def verify_state_zip_aggregate_read_artifact_bundle(*, aggregate_path: str | Pat
     }
 
 
+def write_state_zip_aggregate_read_bundle_summary(*, result: Mapping[str, Any], summary_path: str | Path) -> Path:
+    """Persist aggregate read bundle verification output as deterministic JSON."""
+
+    path = Path(summary_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = dict(result)
+    payload["bundle_summary_format_version"] = STATE_ZIP_VERIFY_AGGREGATE_BUNDLE_SUMMARY_VERSION
+    if not isinstance(payload.get("ok"), bool):
+        raise ValueError("aggregate_bundle_summary_ok_not_bool")
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True, default=str), encoding="utf-8")
+    return path
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read and validate a persisted state ZIP aggregate verifier JSON artifact.")
     parser.add_argument("aggregate_path", help="Path to a persisted state ZIP aggregate JSON artifact.")
@@ -226,6 +240,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--status-marker",
         default="",
         help="Optional aggregate-read status marker line to verify against the aggregate JSON artifact.",
+    )
+    parser.add_argument(
+        "--summary-path",
+        default="",
+        help="Optional path for writing bundle verification JSON when --status-marker is supplied.",
     )
     return parser
 
@@ -237,6 +256,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             aggregate_path=Path(args.aggregate_path),
             status_marker=args.status_marker,
         )
+        if args.summary_path:
+            write_state_zip_aggregate_read_bundle_summary(result=result, summary_path=Path(args.summary_path))
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str))
         return 0 if result.get("ok") else 1
 
