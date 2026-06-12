@@ -153,6 +153,12 @@ def normalize_player_personality_profile(raw_profile: Mapping[str, Any] | None =
     }
 
 
+def _sources(*, session: Mapping[str, Any] | None, simulation_state: Mapping[str, Any] | None, runtime_state: Mapping[str, Any] | None, result: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    result_dict = _d(result)
+    nested = _d(result_dict.get("result"))
+    return [_d(session), _d(simulation_state), _d(runtime_state), result_dict, nested]
+
+
 def extract_player_personality_profile(
     *,
     session: Mapping[str, Any] | None = None,
@@ -160,14 +166,21 @@ def extract_player_personality_profile(
     runtime_state: Mapping[str, Any] | None = None,
     result: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    sources = _sources(session=session, simulation_state=simulation_state, runtime_state=runtime_state, result=result)
+    for source in sources:
+        stable = _d(source.get("player_personality_profile"))
+        if stable:
+            return normalize_player_personality_profile(stable)
+        player_state_stable = _d(_d(source.get("player_state")).get("personality_profile"))
+        if player_state_stable:
+            return normalize_player_personality_profile(player_state_stable)
+
     candidates: list[dict[str, Any]] = []
-    for source in (_d(session), _d(simulation_state), _d(runtime_state), _d(result), _d(_d(result).get("result"))):
+    for source in sources:
         player_state = _d(source.get("player_state"))
         candidates.extend(
             _d(value)
             for value in (
-                source.get("player_personality_profile"),
-                player_state.get("personality_profile"),
                 source.get("player_personality"),
                 source.get("player_profile"),
                 source.get("persona"),
