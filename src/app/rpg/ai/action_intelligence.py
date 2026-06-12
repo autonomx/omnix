@@ -83,7 +83,7 @@ def _prompt_payload(prompt: str) -> Dict[str, Any]:
 def _attach_first_call_diagnostics(
     advisory: Dict[str, Any],
     *,
-    prompt: str,
+    prompt: str = "",
     raw_result: Any,
     raw_text: str = "",
     source: str,
@@ -92,7 +92,8 @@ def _attach_first_call_diagnostics(
     parse_ok: bool | None = None,
 ) -> Dict[str, Any]:
     advisory = _safe_dict(advisory)
-    payload = _prompt_payload(prompt)
+    prompt = _safe_str(prompt)
+    payload = _prompt_payload(prompt) if prompt else {}
     raw_text = _safe_str(raw_text)
     parsed_visible_response = bool(_safe_dict(advisory.get("visible_response")))
     if parse_ok is None:
@@ -113,11 +114,14 @@ def _attach_first_call_diagnostics(
         provider_status = "called_without_parseable_json"
     else:
         provider_status = "not_called"
+    prompt_built = bool(prompt)
     diagnostics = {
         "source": source,
         "prompt": prompt,
         "prompt_preview": prompt[:4000],
         "prompt_truncated": len(prompt) > 4000,
+        "prompt_built": prompt_built,
+        "prompt_available": prompt_built,
         "turn_grounding_packet": _safe_dict(payload.get("turn_grounding_packet")),
         "normalized_result": {k: v for k, v in advisory.items() if k != "first_call_grounding_diagnostics"},
         "raw_text": _clip_text(raw_text, 4000),
@@ -137,7 +141,7 @@ def _attach_first_call_diagnostics(
         "intent_llm_used": bool(provider_called and source != FAST_PATH_SOURCE),
         "intent_fast_path_reason": _safe_str(advisory.get("pre_runtime_intent_fast_path_reason")),
         "intent_fast_path_source": _safe_str(advisory.get("pre_runtime_intent_fast_path_source")),
-        "format_version": "first_call_grounding_diagnostics_v2",
+        "format_version": "first_call_grounding_diagnostics_v3",
     }
     advisory["first_call_grounding_diagnostics"] = diagnostics
     return advisory
@@ -297,7 +301,6 @@ def get_action_advisory(
     runtime_state: Dict[str, Any],
     candidate_action: Dict[str, Any],
 ) -> Dict[str, Any]:
-    prompt = build_action_intelligence_prompt(player_input, simulation_state, runtime_state, candidate_action)
     fast_path = classify_pre_runtime_intent_fast_path(
         player_input=player_input,
         candidate_action=candidate_action,
@@ -306,7 +309,6 @@ def get_action_advisory(
         advisory = normalize_action_advisory(fast_path, candidate_action)
         return _attach_first_call_diagnostics(
             advisory,
-            prompt=prompt,
             raw_result=fast_path,
             raw_text=json.dumps(fast_path, ensure_ascii=False, sort_keys=True),
             source=FAST_PATH_SOURCE,
@@ -317,6 +319,7 @@ def get_action_advisory(
 
     if llm_gateway is None:
         return {}
+    prompt = build_action_intelligence_prompt(player_input, simulation_state, runtime_state, candidate_action)
     raw_result: Any = {}
     raw_text = ""
     source = "action_intelligence.complete"
