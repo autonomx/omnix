@@ -89,6 +89,14 @@ def _install_optional_fast_runtime_hooks() -> None:
         # Interactive result hook installation must never block normal session imports.
         return
 
+    try:
+        from .player_agency_runtime_hook import install_player_agency_runtime_hook
+
+        install_player_agency_runtime_hook()
+    except Exception:
+        # Agency-option attachment must never block normal session imports.
+        return
+
 
 _install_optional_fast_runtime_hooks()
 
