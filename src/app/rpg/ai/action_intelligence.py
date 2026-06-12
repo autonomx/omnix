@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from app.rpg.ai.pre_runtime_intent_fast_path import (
+    FAST_PATH_SOURCE,
+    classify_pre_runtime_intent_fast_path,
+)
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 
 _ALLOWED_ACTION_TYPES = {
@@ -95,7 +99,9 @@ def _attach_first_call_diagnostics(
         parse_ok = bool(_safe_dict(raw_result)) if isinstance(raw_result, dict) else bool(_extract_json_object(raw_text))
     provider_response_empty = provider_called and not raw_text.strip() and not parse_ok
     provider_malformed_json = provider_called and bool(raw_text.strip()) and not parse_ok
-    if provider_error:
+    if source == FAST_PATH_SOURCE:
+        provider_status = "fast_path"
+    elif provider_error:
         provider_status = "provider_error"
     elif provider_response_empty:
         provider_status = "empty_response"
@@ -117,7 +123,7 @@ def _attach_first_call_diagnostics(
         "raw_text": _clip_text(raw_text, 4000),
         "raw_text_length": len(raw_text),
         "raw_result_type": type(raw_result).__name__,
-        "provider_requested": True,
+        "provider_requested": source != FAST_PATH_SOURCE,
         "provider_called": provider_called,
         "provider_status": provider_status,
         "provider_error": provider_error,
@@ -127,7 +133,11 @@ def _attach_first_call_diagnostics(
         "provider_visible_response_present": parsed_visible_response,
         "provider_non_stateful": not _safe_bool(advisory.get("stateful"), True),
         "provider_needs_runtime_resolution": _safe_bool(advisory.get("needs_runtime_resolution"), True),
-        "format_version": "first_call_grounding_diagnostics_v1",
+        "intent_fast_path_used": source == FAST_PATH_SOURCE,
+        "intent_llm_used": bool(provider_called and source != FAST_PATH_SOURCE),
+        "intent_fast_path_reason": _safe_str(advisory.get("pre_runtime_intent_fast_path_reason")),
+        "intent_fast_path_source": _safe_str(advisory.get("pre_runtime_intent_fast_path_source")),
+        "format_version": "first_call_grounding_diagnostics_v2",
     }
     advisory["first_call_grounding_diagnostics"] = diagnostics
     return advisory
@@ -233,7 +243,7 @@ def normalize_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[s
         }
     stateful = _safe_bool(advisory.get("stateful"), True)
     needs_runtime_resolution = _safe_bool(advisory.get("needs_runtime_resolution"), stateful)
-    return {
+    normalized = {
         "action_type": action_type,
         "difficulty": difficulty,
         "skill_id": skill_id,
@@ -247,6 +257,10 @@ def normalize_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[s
         "grounding_packet_version": "turn_grounding_packet_v1",
         "reason": _clip_text(advisory.get("reason"), 160),
     }
+    for key in ("pre_runtime_intent_fast_path", "pre_runtime_intent_fast_path_reason", "pre_runtime_intent_fast_path_source"):
+        if key in advisory:
+            normalized[key] = advisory[key]
+    return normalized
 
 
 def merge_action_advisory(candidate_action: Dict[str, Any], advisory: Dict[str, Any]) -> Dict[str, Any]:
@@ -283,9 +297,26 @@ def get_action_advisory(
     runtime_state: Dict[str, Any],
     candidate_action: Dict[str, Any],
 ) -> Dict[str, Any]:
+    prompt = build_action_intelligence_prompt(player_input, simulation_state, runtime_state, candidate_action)
+    fast_path = classify_pre_runtime_intent_fast_path(
+        player_input=player_input,
+        candidate_action=candidate_action,
+    )
+    if fast_path:
+        advisory = normalize_action_advisory(fast_path, candidate_action)
+        return _attach_first_call_diagnostics(
+            advisory,
+            prompt=prompt,
+            raw_result=fast_path,
+            raw_text=json.dumps(fast_path, ensure_ascii=False, sort_keys=True),
+            source=FAST_PATH_SOURCE,
+            provider_called=False,
+            provider_error="",
+            parse_ok=True,
+        )
+
     if llm_gateway is None:
         return {}
-    prompt = build_action_intelligence_prompt(player_input, simulation_state, runtime_state, candidate_action)
     raw_result: Any = {}
     raw_text = ""
     source = "action_intelligence.complete"
