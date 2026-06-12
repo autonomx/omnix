@@ -1,4 +1,4 @@
-"""Phase 14.12 — opt-in 25-turn live LLM integrated endurance matrix."""
+"""Phase 14.12/14.13 — opt-in 25-turn live LLM integrated endurance matrix."""
 from __future__ import annotations
 
 import argparse, json, sys
@@ -17,8 +17,9 @@ from tests.rpg.interactive_cli_live_quality_eval import (  # noqa: E402
     write_live_quality_eval_summary,
 )
 
-LIVE_ENDURANCE_MATRIX_VERSION = "rpg_live_endurance_matrix_v1"
+LIVE_ENDURANCE_MATRIX_VERSION = "rpg_live_endurance_matrix_v2"
 LIVE_ENDURANCE_SEMANTIC_VERSION = "rpg_live_endurance_semantics_v1"
+LIVE_ENDURANCE_PERFORMANCE_VERSION = "rpg_live_endurance_performance_v1"
 LIVE_ENDURANCE_STATUS_MARKER = "RPG_LIVE_ENDURANCE_MATRIX"
 DEFAULT_LIVE_ENDURANCE_DIR = Path("resources") / "data" / "test-results" / "live-llm-endurance-matrix"
 
@@ -130,6 +131,12 @@ LIVE_ENDURANCE_REQUIREMENTS: dict[str, dict[str, dict[str, Any]]] = {
 def _s(value: Any) -> str: return "" if value is None else str(value)
 def _d(value: Any) -> dict[str, Any]: return dict(value) if isinstance(value, Mapping) else {}
 def _l(value: Any) -> list[Any]: return list(value) if isinstance(value, list) else []
+def _f(value: Any, default: float = 0.0) -> float:
+    try: return float(value)
+    except (TypeError, ValueError): return default
+def _i(value: Any, default: int = 0) -> int:
+    try: return int(value)
+    except (TypeError, ValueError): return default
 
 
 def _slug(value: str) -> str:
@@ -272,10 +279,126 @@ def apply_endurance_semantics_to_quality(quality: Mapping[str, Any], semantics: 
     result["warnings"] = sorted(set(_l(result.get("warnings")) + _l(semantics.get("warnings"))))[:100]
     result["live_endurance_semantics"] = dict(semantics)
     signals = _d(result.get("signals")); judge = _d(semantics.get("judge"))
-    signals.update({"live_endurance_requirement_count": int(semantics.get("requirement_count") or 0), "live_endurance_missing_count": int(semantics.get("missing_count") or 0), "live_endurance_judge_mode": _s(judge.get("mode")), "live_endurance_judge_used": bool(judge.get("used")), "live_endurance_judge_valid": bool(judge.get("valid"))})
+    signals.update({"live_endurance_requirement_count": _i(semantics.get("requirement_count")), "live_endurance_missing_count": _i(semantics.get("missing_count")), "live_endurance_judge_mode": _s(judge.get("mode")), "live_endurance_judge_used": bool(judge.get("used")), "live_endurance_judge_valid": bool(judge.get("valid"))})
     result["signals"] = signals
     result["ok"] = bool(result.get("ok")) and bool(semantics.get("ok"))
     return result
+
+
+def _dominant_phase(phase_totals: Mapping[str, Any]) -> tuple[str, float]:
+    excluded = {"turn_total_seconds"}
+    phases = {k: _f(v) for k, v in _d(phase_totals).items() if k not in excluded}
+    if not phases: return "unknown", 0.0
+    return max(phases.items(), key=lambda item: item[1])
+
+
+def evaluate_live_endurance_performance(performance: Mapping[str, Any], *, p95_warning_threshold_seconds: float = 10.0) -> dict[str, Any]:
+    phase_avg, phase_totals = _d(performance.get("phase_avg_seconds")), _d(performance.get("phase_totals_seconds"))
+    completed = _i(performance.get("completed_turns"))
+    p95 = _f(performance.get("p95_turn_seconds"))
+    avg = _f(performance.get("avg_turn_seconds"))
+    max_turn = _f(performance.get("max_turn_seconds"))
+    p50 = _f(performance.get("p50_turn_seconds"))
+    slow_count = _i(performance.get("slow_turn_count"))
+    slow_ratio = round(slow_count / completed, 4) if completed else 0.0
+    dominant_name, dominant_seconds = _dominant_phase(phase_totals)
+    total_seconds = _f(phase_totals.get("turn_total_seconds"), _f(performance.get("elapsed_seconds")))
+    dominant_ratio = round(dominant_seconds / total_seconds, 4) if total_seconds else 0.0
+    apply_avg = _f(phase_avg.get("runtime_apply_turn_seconds"))
+    narration_avg = _f(phase_avg.get("runtime_narration_contract_seconds"))
+    diagnostics = {
+        "format_version": LIVE_ENDURANCE_PERFORMANCE_VERSION,
+        "ok": True,
+        "completed_turns": completed,
+        "elapsed_seconds": _f(performance.get("elapsed_seconds")),
+        "avg_turn_seconds": avg,
+        "p50_turn_seconds": p50,
+        "p95_turn_seconds": p95,
+        "max_turn_seconds": max_turn,
+        "slow_turn_threshold_seconds": _f(performance.get("slow_turn_threshold_seconds")),
+        "slow_turn_count": slow_count,
+        "slow_turn_ratio": slow_ratio,
+        "p95_warning_threshold_seconds": float(p95_warning_threshold_seconds),
+        "phase_avg_seconds": phase_avg,
+        "phase_totals_seconds": phase_totals,
+        "runtime_apply_avg_seconds": apply_avg,
+        "runtime_narration_contract_avg_seconds": narration_avg,
+        "runtime_apply_share_of_avg_turn": round(apply_avg / avg, 4) if avg else 0.0,
+        "runtime_narration_contract_share_of_avg_turn": round(narration_avg / avg, 4) if avg else 0.0,
+        "dominant_phase": dominant_name,
+        "dominant_phase_total_seconds": dominant_seconds,
+        "dominant_phase_share_of_total": dominant_ratio,
+        "slow_turn_bucket_counts": {dominant_name: slow_count} if slow_count else {},
+        "warnings": [],
+        "failures": [],
+    }
+    if p95_warning_threshold_seconds > 0 and p95 > p95_warning_threshold_seconds:
+        diagnostics["warnings"].append("live_endurance_p95_turn_seconds_over_budget")
+    return diagnostics
+
+
+def apply_endurance_performance_to_quality(quality: Mapping[str, Any], diagnostics: Mapping[str, Any]) -> dict[str, Any]:
+    result = dict(quality)
+    result["warnings"] = sorted(set(_l(result.get("warnings")) + _l(diagnostics.get("warnings"))))[:100]
+    result["live_endurance_performance"] = dict(diagnostics)
+    signals = _d(result.get("signals"))
+    signals.update({
+        "live_endurance_avg_turn_seconds": _f(diagnostics.get("avg_turn_seconds")),
+        "live_endurance_p50_turn_seconds": _f(diagnostics.get("p50_turn_seconds")),
+        "live_endurance_p95_turn_seconds": _f(diagnostics.get("p95_turn_seconds")),
+        "live_endurance_max_turn_seconds": _f(diagnostics.get("max_turn_seconds")),
+        "live_endurance_slow_turn_count": _i(diagnostics.get("slow_turn_count")),
+        "live_endurance_slow_turn_ratio": _f(diagnostics.get("slow_turn_ratio")),
+        "live_endurance_dominant_phase": _s(diagnostics.get("dominant_phase")),
+        "live_endurance_runtime_apply_avg_seconds": _f(diagnostics.get("runtime_apply_avg_seconds")),
+        "live_endurance_runtime_narration_contract_avg_seconds": _f(diagnostics.get("runtime_narration_contract_avg_seconds")),
+    })
+    result["signals"] = signals
+    result["ok"] = bool(result.get("ok"))
+    return result
+
+
+def aggregate_live_endurance_performance(performance_items: Sequence[Mapping[str, Any]], *, p95_warning_threshold_seconds: float = 10.0) -> dict[str, Any]:
+    items = [dict(item) for item in performance_items if isinstance(item, Mapping)]
+    if not items:
+        return {"format_version": LIVE_ENDURANCE_PERFORMANCE_VERSION, "ok": True, "pack_count": 0, "warnings": [], "failures": []}
+    completed = sum(_i(item.get("completed_turns")) for item in items)
+    elapsed = sum(_f(item.get("elapsed_seconds")) for item in items)
+    slow_count = sum(_i(item.get("slow_turn_count")) for item in items)
+    max_turn = max((_f(item.get("max_turn_seconds")) for item in items), default=0.0)
+    p95_values = [_f(item.get("p95_turn_seconds")) for item in items]
+    p50_values = [_f(item.get("p50_turn_seconds")) for item in items]
+    avg_values = [_f(item.get("avg_turn_seconds")) for item in items]
+    phase_totals: dict[str, float] = {}
+    for item in items:
+        for key, value in _d(item.get("phase_totals_seconds")).items():
+            phase_totals[key] = phase_totals.get(key, 0.0) + _f(value)
+    dominant_name, dominant_seconds = _dominant_phase(phase_totals)
+    total_seconds = phase_totals.get("turn_total_seconds", elapsed)
+    warnings: list[str] = []
+    if p95_warning_threshold_seconds > 0 and max(p95_values, default=0.0) > p95_warning_threshold_seconds:
+        warnings.append("live_endurance_p95_turn_seconds_over_budget")
+    return {
+        "format_version": LIVE_ENDURANCE_PERFORMANCE_VERSION,
+        "ok": True,
+        "pack_count": len(items),
+        "completed_turns": completed,
+        "elapsed_seconds": round(elapsed, 4),
+        "avg_turn_seconds": round(sum(avg_values) / len(avg_values), 4),
+        "p50_turn_seconds": round(sum(p50_values) / len(p50_values), 4),
+        "p95_turn_seconds_max": round(max(p95_values, default=0.0), 4),
+        "max_turn_seconds": round(max_turn, 4),
+        "slow_turn_count": slow_count,
+        "slow_turn_ratio": round(slow_count / completed, 4) if completed else 0.0,
+        "p95_warning_threshold_seconds": float(p95_warning_threshold_seconds),
+        "phase_totals_seconds": {key: round(value, 4) for key, value in sorted(phase_totals.items())},
+        "dominant_phase": dominant_name,
+        "dominant_phase_total_seconds": round(dominant_seconds, 4),
+        "dominant_phase_share_of_total": round(dominant_seconds / total_seconds, 4) if total_seconds else 0.0,
+        "slow_turn_bucket_counts": {dominant_name: slow_count} if slow_count else {},
+        "warnings": warnings,
+        "failures": [],
+    }
 
 
 def _mark_incomplete(aggregate: Mapping[str, Any], *, expected: int, missing: int, errors: Sequence[str]) -> dict[str, Any]:
@@ -288,14 +411,14 @@ def _mark_incomplete(aggregate: Mapping[str, Any], *, expected: int, missing: in
     return result
 
 
-def run_live_endurance_matrix(*, packs: Sequence[str] | None = None, allow_live: bool = False, output_dir: str | Path | None = None, run_id_prefix: str = "endurance-25", session_id_prefix: str = "interactive_cli_endurance_25", reset_session: bool = True, console_llm: bool = False, seed_live_survival: bool = True, artifact_detail: str = "debug", aggregate_path: str | Path | None = None, playtest_runner: Any | None = None, semantic_judge_func: Callable[..., Any] | None = None, use_llm_judge: bool = True) -> dict[str, Any]:
+def run_live_endurance_matrix(*, packs: Sequence[str] | None = None, allow_live: bool = False, output_dir: str | Path | None = None, run_id_prefix: str = "endurance-25", session_id_prefix: str = "interactive_cli_endurance_25", reset_session: bool = True, console_llm: bool = False, seed_live_survival: bool = True, artifact_detail: str = "debug", aggregate_path: str | Path | None = None, playtest_runner: Any | None = None, semantic_judge_func: Callable[..., Any] | None = None, use_llm_judge: bool = True, p95_warning_threshold_seconds: float = 10.0) -> dict[str, Any]:
     try: selected = resolve_live_endurance_packs(packs)
     except ValueError as exc: return {"format_version": LIVE_ENDURANCE_MATRIX_VERSION, "ok": False, "skipped": False, "error": str(exc)}
     out = Path(output_dir) if output_dir else DEFAULT_LIVE_ENDURANCE_DIR; out.mkdir(parents=True, exist_ok=True)
     aggregate_file = Path(aggregate_path) if aggregate_path else out / "live-quality-aggregate.json"
     if aggregate_file.exists(): aggregate_file.unlink()
     runner = playtest_runner or run_live_llm_playtest
-    runs: list[dict[str, Any]] = []; summary_paths: list[Path] = []
+    runs: list[dict[str, Any]] = []; summary_paths: list[Path] = []; performance_items: list[dict[str, Any]] = []
     for index, pack in enumerate(selected, start=1):
         commands = list(LIVE_ENDURANCE_PACKS[pack])
         pack_dir = out / f"{index:02d}-{_slug(pack)}"; summary_path = pack_dir / "live-quality-summary.json"
@@ -305,8 +428,14 @@ def run_live_endurance_matrix(*, packs: Sequence[str] | None = None, allow_live:
             quality = _read_json(summary_path) or _d(result.get("quality"))
             semantics = evaluate_live_endurance_semantics(transcript or result, pack=pack, semantic_judge_func=semantic_judge_func, use_llm_judge=use_llm_judge)
             quality = apply_endurance_semantics_to_quality(quality, semantics)
+            performance_path = Path(_s(result.get("performance_path") or (pack_dir / "interactive-performance.json")))
+            performance = _read_json(performance_path)
+            perf_diag = evaluate_live_endurance_performance(performance, p95_warning_threshold_seconds=p95_warning_threshold_seconds) if performance else {}
+            if perf_diag:
+                quality = apply_endurance_performance_to_quality(quality, perf_diag)
+                performance_items.append(perf_diag)
             write_live_quality_eval_summary(result=quality, summary_path=summary_path)
-            result["ok"] = bool(quality.get("ok")); result["live_endurance_semantics"] = semantics
+            result["ok"] = bool(quality.get("ok")); result["live_endurance_semantics"] = semantics; result["live_endurance_performance"] = perf_diag
         except Exception as exc:
             result = {"ok": False, "skipped": False, "error": f"live_endurance_pack_exception:{type(exc).__name__}", "exception_type": type(exc).__name__, "exception": _s(exc)[:500]}
         runs.append({"scenario_pack": pack, "ok": bool(result.get("ok")), "skipped": bool(result.get("skipped")), "turn_count": len(commands), "output_dir": str(pack_dir), "quality_summary_path": str(summary_path), "error": _s(result.get("error") or "none")})
@@ -314,6 +443,10 @@ def run_live_endurance_matrix(*, packs: Sequence[str] | None = None, allow_live:
     errors = sorted(_s(run.get("error")) for run in runs if _s(run.get("error")) not in {"", "none"})
     missing = len(selected) - len(summary_paths)
     aggregate = _mark_incomplete(aggregate_live_quality_eval_summary_files(summary_paths), expected=len(selected), missing=missing, errors=errors)
+    perf_aggregate = aggregate_live_endurance_performance(performance_items, p95_warning_threshold_seconds=p95_warning_threshold_seconds)
+    aggregate["live_endurance_performance"] = perf_aggregate
+    aggregate["performance_warning_count"] = len(_l(perf_aggregate.get("warnings")))
+    aggregate["performance_warning_types"] = _l(perf_aggregate.get("warnings"))
     write_live_quality_aggregate_summary(result=aggregate, aggregate_path=aggregate_file)
     result = {"format_version": LIVE_ENDURANCE_MATRIX_VERSION, "ok": bool(aggregate.get("ok")) and missing == 0 and not errors, "skipped": bool(runs) and all(run.get("skipped") for run in runs), "pack_count": len(selected), "packs": selected, "output_dir": str(out), "aggregate_path": str(aggregate_file), "summary_paths": [str(path) for path in summary_paths], "runs": runs, "aggregate": aggregate}
     if missing: result.update({"ok": False, "missing_summary_count": missing, "error": next((run.get("error") for run in runs if run.get("error") != "none"), "live_endurance_missing_summaries")})
@@ -324,7 +457,8 @@ def run_live_endurance_matrix(*, packs: Sequence[str] | None = None, allow_live:
 def render_live_endurance_status_marker(result: Mapping[str, Any]) -> str:
     aggregate = _d(result.get("aggregate")); failure_types = _l(aggregate.get("failure_types"))
     error = _s(result.get("error") or aggregate.get("error") or (failure_types[0] if failure_types else "none"))
-    return f"[{LIVE_ENDURANCE_STATUS_MARKER}] ok={'true' if result.get('ok') else 'false'} skipped={'true' if result.get('skipped') else 'false'} pack_count={int(result.get('pack_count') or 0)} passed={int(aggregate.get('passed') or 0)} failed={int(aggregate.get('failed') or 0)} avg_score={float(aggregate.get('avg_score') or 0.0):.3f} error={error}"
+    perf = _d(aggregate.get("live_endurance_performance"))
+    return f"[{LIVE_ENDURANCE_STATUS_MARKER}] ok={'true' if result.get('ok') else 'false'} skipped={'true' if result.get('skipped') else 'false'} pack_count={int(result.get('pack_count') or 0)} passed={int(aggregate.get('passed') or 0)} failed={int(aggregate.get('failed') or 0)} avg_score={float(aggregate.get('avg_score') or 0.0):.3f} p95_max={float(perf.get('p95_turn_seconds_max') or 0.0):.3f} dominant_phase={_s(perf.get('dominant_phase') or 'unknown')} error={error}"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -340,6 +474,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--console-llm", action="store_true")
     parser.add_argument("--no-live-survival-seed", action="store_true")
     parser.add_argument("--no-llm-semantic-judge", action="store_true")
+    parser.add_argument("--p95-warning-threshold-seconds", type=float, default=10.0)
     parser.add_argument("--artifact-detail", choices=["summary", "debug", "full"], default="debug")
     return parser
 
@@ -348,7 +483,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
     if args.list_endurance_packs:
         print(json.dumps({"endurance_packs": list_live_endurance_packs()}, indent=2, ensure_ascii=False, sort_keys=True)); return 0
-    result = run_live_endurance_matrix(packs=args.pack, allow_live=bool(args.allow_live), output_dir=args.output_dir or None, run_id_prefix=args.run_id_prefix, session_id_prefix=args.session_id_prefix, reset_session=not bool(args.no_reset_session_state), console_llm=bool(args.console_llm), seed_live_survival=not bool(args.no_live_survival_seed), artifact_detail=args.artifact_detail, aggregate_path=args.aggregate_path or None, use_llm_judge=not bool(args.no_llm_semantic_judge))
+    result = run_live_endurance_matrix(packs=args.pack, allow_live=bool(args.allow_live), output_dir=args.output_dir or None, run_id_prefix=args.run_id_prefix, session_id_prefix=args.session_id_prefix, reset_session=not bool(args.no_reset_session_state), console_llm=bool(args.console_llm), seed_live_survival=not bool(args.no_live_survival_seed), artifact_detail=args.artifact_detail, aggregate_path=args.aggregate_path or None, use_llm_judge=not bool(args.no_llm_semantic_judge), p95_warning_threshold_seconds=float(args.p95_warning_threshold_seconds))
     print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True, default=str)); print(render_live_endurance_status_marker(result), file=sys.stderr)
     if result.get("skipped"): return 2
     return 0 if result.get("ok") else 1
