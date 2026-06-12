@@ -122,4 +122,3 @@ def test_phase14_14_status_marker_reports_top_event() -> None:
     assert "ok=true" in marker
     assert "pack_count=1" in marker
     assert "top_event=provider_generate_narration" in marker
-}
