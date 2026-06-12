@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 NEXT_ACTION_BUTTONS_VERSION = "rpg_next_action_buttons_v1"
+NEXT_ACTION_BUTTONS_SUMMARY_VERSION = "rpg_next_action_buttons_summary_v1"
 
 
 def _d(value: Any) -> dict[str, Any]:
@@ -20,6 +21,19 @@ def _s(value: Any) -> str:
 
 def _clip(value: Any, limit: int = 220) -> str:
     return _s(value).strip()[:limit]
+
+
+def _duplicate_ids(items: list[dict[str, Any]]) -> list[str]:
+    seen: set[str] = set()
+    dupes: set[str] = set()
+    for item in items:
+        item_id = _clip(item.get("id"), 90)
+        if not item_id:
+            continue
+        if item_id in seen:
+            dupes.add(item_id)
+        seen.add(item_id)
+    return sorted(dupes)
 
 
 def build_next_action_buttons(contract: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -73,6 +87,34 @@ def build_next_action_buttons(contract: Mapping[str, Any] | None) -> dict[str, A
             "label_is_presentation_only": True,
             "freeform_input_remains_primary": True,
         },
+    }
+
+
+def summarize_next_action_buttons(button_payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return deterministic report-facing counts for next-action button payloads."""
+
+    payload = _d(button_payload)
+    buttons = [_d(item) for item in _l(payload.get("buttons")) if _d(item)]
+    empty_submit_commands = [
+        _clip(button.get("id"), 90) or f"button-{index}"
+        for index, button in enumerate(buttons, start=1)
+        if not _clip(button.get("submit_command") or button.get("command"), 260)
+    ]
+    invalid_flags = [
+        _clip(button.get("id"), 90) or f"button-{index}"
+        for index, button in enumerate(buttons, start=1)
+        if button.get("validation_required") is not True or button.get("presentation_only") is not True
+    ]
+    tone_tags = sorted({tag for button in buttons for tag in [_clip(item, 32) for item in _l(button.get("tone_tags"))] if tag})
+    return {
+        "format_version": NEXT_ACTION_BUTTONS_SUMMARY_VERSION,
+        "button_count": len(buttons),
+        "button_ids": [_clip(button.get("id"), 90) for button in buttons if _clip(button.get("id"), 90)],
+        "duplicate_button_ids": _duplicate_ids(buttons),
+        "empty_submit_commands": empty_submit_commands,
+        "invalid_validation_or_presentation_flags": invalid_flags,
+        "tone_tags": tone_tags[:16],
+        "ok": not empty_submit_commands and not invalid_flags and not _duplicate_ids(buttons),
     }
 
 
