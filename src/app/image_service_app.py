@@ -2,6 +2,7 @@
 
 Run this in the rpg-flux environment:
 
+    set OMNIX_IMAGE_ENABLED=1
     python -m uvicorn app.image_service_app:app --host 127.0.0.1 --port 5301
 """
 from __future__ import annotations
@@ -12,6 +13,7 @@ from fastapi import FastAPI, Request
 
 os.environ["OMNIX_IMAGE_SERVICE_MODE"] = "1"
 
+from app.image.config import is_image_generation_enabled
 from app.image.lifecycle import (
     load_image_provider,
     unload_all_image_providers,
@@ -23,8 +25,20 @@ from app.image.service import generate_image_local
 app = FastAPI(title="Omnix Image Service")
 
 
+def _truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 @app.on_event("startup")
 async def startup_load_provider():
+    if not is_image_generation_enabled():
+        print("[IMAGE SERVICE] Image generation disabled; skipping provider preload and warmup.")
+        return
+
+    if not _truthy(os.environ.get("OMNIX_IMAGE_PRELOAD", "0")):
+        print("[IMAGE SERVICE] OMNIX_IMAGE_PRELOAD is off; skipping provider preload.")
+        return
+
     provider = os.environ.get("OMNIX_IMAGE_PROVIDER", "").strip() or None
     try:
         print("[IMAGE SERVICE] Preloading image provider...")
@@ -33,7 +47,7 @@ async def startup_load_provider():
     except Exception as exc:
         print("[IMAGE SERVICE] Image provider preload failed:", repr(exc))
 
-    if os.environ.get("OMNIX_IMAGE_WARMUP", "1").strip().lower() not in {"1", "true", "yes", "on"}:
+    if not _truthy(os.environ.get("OMNIX_IMAGE_WARMUP", "0")):
         return
 
     try:
@@ -59,6 +73,7 @@ async def health():
     return {
         "ok": True,
         "service": "image",
+        "enabled": is_image_generation_enabled(),
         "provider_mode": os.environ.get("OMNIX_IMAGE_SERVICE_MODE", ""),
         "runtime": validate_global_image_runtime(),
     }
@@ -85,6 +100,8 @@ async def generate(request: Request):
 
 @app.post("/provider/load")
 async def provider_load(request: Request):
+    if not is_image_generation_enabled():
+        return {"ok": False, "provider": "disabled", "error": "image_generation_disabled"}
     payload = await request.json()
     provider = payload.get("provider") if isinstance(payload, dict) else None
     return load_image_provider(provider)
