@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 
 _ALLOWED_ACTION_TYPES = {"attack_unarmed", "attack_melee", "attack_ranged", "block", "dodge", "parry", "persuade", "intimidate", "deceive", "sneak", "investigate", "hack", "cast_spell", "use_item", "pickup_item", "drop_item", "equip_item", "unequip_item", "observe", "social_activity", "social_competition", "social_affection", "social_performance", "trade", "ritual", "exploration", "threat"}
@@ -14,6 +15,7 @@ _ALLOWED_STAKES = {0, 1, 2, 3}
 _ALLOWED_EFFECT_AXES = {"camaraderie", "respect", "trust", "fear", "tension", "curiosity", "suspicion", "morale"}
 _ALLOWED_OBSERVER_HOOKS = {"spectacle", "conversation_seed", "crowd_attention", "authority_notice", "relationship_shift", "rumor_seed"}
 _ALLOWED_SCENE_IMPACTS = {"none", "minor_focus_shift", "gathers_attention", "disrupts_flow", "changes_mood"}
+_SEMANTIC_FAST_PATH_SOURCE = "phase14_18_semantic_reused_action_fast_path_v1"
 
 
 def _safe_dict(v: Any) -> Dict[str, Any]:
@@ -73,10 +75,37 @@ def _prompt_payload(prompt: str) -> Dict[str, Any]:
         return {}
 
 
+def _semantic_family_for_action(action_type: str) -> str:
+    action_type = _safe_str(action_type).strip().lower()
+    if action_type in {"attack_unarmed", "attack_melee", "attack_ranged"}:
+        return "combat"
+    if action_type in {"block", "dodge", "parry"}:
+        return "defense"
+    if action_type in {"social_activity", "social_competition", "social_affection", "social_performance", "persuade", "deceive"}:
+        return "social"
+    if action_type == "trade":
+        return "trade"
+    if action_type == "ritual":
+        return "ritual"
+    if action_type in {"exploration", "investigate"}:
+        return "exploration"
+    if action_type in {"intimidate", "threat"}:
+        return "threat"
+    if action_type == "sneak":
+        return "stealth"
+    if action_type == "cast_spell":
+        return "magic"
+    if action_type == "hack":
+        return "technical"
+    if action_type in {"pickup_item", "drop_item", "equip_item", "unequip_item", "use_item"}:
+        return "item"
+    return "observation"
+
+
 def _attach_first_call_diagnostics(
     advisory: Dict[str, Any],
     *,
-    prompt: str,
+    prompt: str = "",
     raw_result: Any,
     raw_text: str = "",
     source: str,
@@ -85,14 +114,18 @@ def _attach_first_call_diagnostics(
     parse_ok: bool | None = None,
 ) -> Dict[str, Any]:
     advisory = _safe_dict(advisory)
-    payload = _prompt_payload(prompt)
+    prompt = _safe_str(prompt)
+    payload = _prompt_payload(prompt) if prompt else {}
     raw_text = _safe_str(raw_text)
     parsed_visible_response = bool(_safe_dict(advisory.get("visible_response")))
     if parse_ok is None:
         parse_ok = bool(_safe_dict(raw_result)) if isinstance(raw_result, dict) else bool(_extract_json_object(raw_text))
     provider_response_empty = provider_called and not raw_text.strip() and not parse_ok
     provider_malformed_json = provider_called and bool(raw_text.strip()) and not parse_ok
-    if provider_error:
+    semantic_fast_path = source == _SEMANTIC_FAST_PATH_SOURCE
+    if semantic_fast_path:
+        provider_status = "semantic_reused_action_fast_path"
+    elif provider_error:
         provider_status = "provider_error"
     elif provider_response_empty:
         provider_status = "empty_response"
@@ -104,17 +137,22 @@ def _attach_first_call_diagnostics(
         provider_status = "called_without_parseable_json"
     else:
         provider_status = "not_called"
+    prompt_built = bool(prompt)
+    action_fast_path_reason = _safe_str(advisory.get("pre_runtime_intent_fast_path_reason"))
     diagnostics = {
         "source": source,
         "prompt": prompt,
         "prompt_preview": prompt[:4000],
         "prompt_truncated": len(prompt) > 4000,
+        "prompt_built": prompt_built,
+        "prompt_available": prompt_built,
+        "semantic_prompt_built": prompt_built,
         "turn_grounding_packet": _safe_dict(payload.get("turn_grounding_packet")),
         "normalized_result": {k: v for k, v in advisory.items() if k != "first_call_grounding_diagnostics"},
         "raw_text": _clip_text(raw_text, 4000),
         "raw_text_length": len(raw_text),
         "raw_result_type": type(raw_result).__name__,
-        "provider_requested": True,
+        "provider_requested": not semantic_fast_path,
         "provider_called": provider_called,
         "provider_status": provider_status,
         "provider_error": provider_error,
@@ -124,7 +162,16 @@ def _attach_first_call_diagnostics(
         "provider_visible_response_present": parsed_visible_response,
         "provider_non_stateful": not _safe_bool(advisory.get("stateful"), True),
         "provider_needs_runtime_resolution": _safe_bool(advisory.get("needs_runtime_resolution"), True),
-        "format_version": "first_call_grounding_diagnostics_v1",
+        "intent_fast_path_used": semantic_fast_path,
+        "intent_llm_used": bool(provider_called and not semantic_fast_path),
+        "intent_fast_path_reason": action_fast_path_reason,
+        "intent_fast_path_source": _safe_str(advisory.get("pre_runtime_intent_fast_path_source")),
+        "semantic_fast_path_used": semantic_fast_path,
+        "semantic_llm_used": bool(provider_called and not semantic_fast_path),
+        "semantic_reused_action_fast_path": semantic_fast_path,
+        "semantic_fast_path_reason": action_fast_path_reason or "action_fast_path_reused",
+        "semantic_fast_path_source": _SEMANTIC_FAST_PATH_SOURCE if semantic_fast_path else "",
+        "format_version": "first_call_grounding_diagnostics_v4",
     }
     advisory["first_call_grounding_diagnostics"] = diagnostics
     return advisory
@@ -212,27 +259,10 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         action_type = "observe"
     semantic_family = _safe_str(advisory.get("semantic_family")).strip().lower()
     if semantic_family not in _ALLOWED_SEMANTIC_FAMILIES:
-        if action_type in {"social_activity", "social_competition", "social_affection", "social_performance", "persuade", "deceive"}:
-            semantic_family = "social"
-        elif action_type in {"trade"}:
-            semantic_family = "trade"
-        elif action_type in {"ritual"}:
-            semantic_family = "ritual"
-        elif action_type in {"exploration", "investigate", "observe"}:
-            semantic_family = "exploration"
-        elif action_type in {"intimidate", "threat"}:
-            semantic_family = "threat"
-        elif action_type in {"sneak"}:
-            semantic_family = "stealth"
-        elif action_type in {"hack"}:
-            semantic_family = "technical"
-        elif action_type in {"pickup_item", "drop_item", "equip_item", "unequip_item", "use_item"}:
-            semantic_family = "item"
-        else:
-            semantic_family = "observation"
+        semantic_family = _semantic_family_for_action(action_type)
     interaction_mode = _safe_str(advisory.get("interaction_mode")).strip().lower()
     if interaction_mode not in _ALLOWED_INTERACTION_MODES:
-        interaction_mode = "direct" if _safe_str(advisory.get("target_id")) else "solo"
+        interaction_mode = "direct" if _safe_str(advisory.get("target_id") or candidate_action.get("target_id")) else "solo"
     visibility = _safe_str(advisory.get("visibility")).strip().lower()
     if visibility not in _ALLOWED_VISIBILITY:
         visibility = "local"
@@ -248,12 +278,12 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         stakes = 1
     if stakes not in _ALLOWED_STAKES:
         stakes = 1
-    observer_hooks = []
+    observer_hooks: list[str] = []
     for value in _safe_list(advisory.get("observer_hooks"))[:4]:
         hook = _safe_str(value).strip().lower()
         if hook in _ALLOWED_OBSERVER_HOOKS and hook not in observer_hooks:
             observer_hooks.append(hook)
-    social_axes = []
+    social_axes: list[dict[str, int | str]] = []
     for item in _safe_list(advisory.get("social_axes"))[:4]:
         item = _safe_dict(item)
         axis = _safe_str(item.get("axis")).strip().lower()
@@ -265,7 +295,7 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
             delta = 0
         if delta:
             social_axes.append({"axis": axis, "delta": max(-2, min(2, delta))})
-    secondary_actor_ids = []
+    secondary_actor_ids: list[str] = []
     for value in _safe_list(advisory.get("secondary_actor_ids"))[:4]:
         actor_id = _safe_str(value).strip()
         if actor_id and actor_id not in secondary_actor_ids:
@@ -280,7 +310,7 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         normalized_visible_response = {"narration": _clip_text(visible_response.get("narration"), 500), "npc": {"speaker": _clip_text(npc.get("speaker"), 80), "line": _clip_text(npc.get("line"), 900)}}
     stateful = _safe_bool(advisory.get("stateful"), True)
     needs_runtime_resolution = _safe_bool(advisory.get("needs_runtime_resolution"), stateful)
-    return {
+    normalized = {
         "action_type": action_type,
         "semantic_family": semantic_family,
         "interaction_mode": interaction_mode,
@@ -300,9 +330,78 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         "grounding_packet_version": "turn_grounding_packet_v1",
         "reason": _clip_text(advisory.get("reason"), 200),
     }
+    for key in (
+        "pre_runtime_intent_fast_path",
+        "pre_runtime_intent_fast_path_reason",
+        "pre_runtime_intent_fast_path_source",
+        "semantic_fast_path_used",
+        "semantic_reused_action_fast_path",
+    ):
+        if key in advisory:
+            normalized[key] = advisory[key]
+    return normalized
+
+
+def _is_action_fast_path_advisory(candidate_action: Dict[str, Any]) -> bool:
+    candidate_action = _safe_dict(candidate_action)
+    diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
+    return bool(
+        candidate_action.get("pre_runtime_intent_fast_path")
+        or diagnostics.get("intent_fast_path_used")
+        or diagnostics.get("source") == FAST_PATH_SOURCE
+        or diagnostics.get("provider_status") == "fast_path"
+    )
+
+
+def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+    candidate_action = _safe_dict(candidate_action)
+    diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
+    reason = _safe_str(
+        candidate_action.get("pre_runtime_intent_fast_path_reason")
+        or diagnostics.get("intent_fast_path_reason")
+        or "action_fast_path_reused"
+    )
+    action_type = _safe_str(candidate_action.get("action_type")).strip().lower()
+    raw = {
+        "action_type": action_type,
+        "semantic_family": _semantic_family_for_action(action_type),
+        "interaction_mode": "direct" if _safe_str(candidate_action.get("target_id")) else "solo",
+        "activity_label": "fast_path_" + (reason or action_type or "intent"),
+        "target_id": _safe_str(candidate_action.get("target_id")),
+        "target_name": _safe_str(candidate_action.get("target_name")),
+        "secondary_actor_ids": [],
+        "visibility": "local",
+        "intensity": 1,
+        "stakes": 1,
+        "social_axes": [],
+        "observer_hooks": [],
+        "scene_impact": "none",
+        "stateful": _safe_bool(candidate_action.get("stateful"), True),
+        "needs_runtime_resolution": _safe_bool(candidate_action.get("needs_runtime_resolution"), True),
+        "visible_response": _safe_dict(candidate_action.get("visible_response")),
+        "reason": f"semantic router reused action fast path: {reason}",
+        "pre_runtime_intent_fast_path": True,
+        "pre_runtime_intent_fast_path_reason": reason,
+        "pre_runtime_intent_fast_path_source": _safe_str(candidate_action.get("pre_runtime_intent_fast_path_source") or diagnostics.get("intent_fast_path_source") or FAST_PATH_SOURCE),
+        "semantic_fast_path_used": True,
+        "semantic_reused_action_fast_path": True,
+    }
+    return normalize_semantic_action_advisory(raw, candidate_action)
 
 
 def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+    candidate_action = _safe_dict(candidate_action)
+    if _is_action_fast_path_advisory(candidate_action):
+        advisory = _semantic_action_from_action_fast_path(candidate_action)
+        return _attach_first_call_diagnostics(
+            advisory,
+            raw_result=advisory,
+            raw_text=json.dumps(advisory, ensure_ascii=False, sort_keys=True),
+            source=_SEMANTIC_FAST_PATH_SOURCE,
+            provider_called=False,
+            provider_error="",
+            parse_ok=True,
+        )
     if llm_gateway is None:
         return {}
     prompt = build_semantic_action_prompt(player_input, simulation_state, runtime_state, candidate_action)
