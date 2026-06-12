@@ -51,3 +51,30 @@ def test_image_service_app_skips_preload_unless_enabled() -> None:
     assert 'os.environ.get("OMNIX_IMAGE_PRELOAD", "0")' in source
     assert 'os.environ.get("OMNIX_IMAGE_WARMUP", "0")' in source
     assert 'return {"ok": False, "provider": "disabled", "error": "image_generation_disabled"}' in source
+
+
+def test_rpg_image_generation_policy_defaults_disabled() -> None:
+    from app.rpg.media.image_generation_policy import build_rpg_image_generation_policy
+
+    policy = build_rpg_image_generation_policy({})
+
+    assert policy["enabled"] is False
+    assert policy["startup_service_allowed"] is False
+    assert policy["runtime_provider_allowed"] is False
+    assert policy["preload_allowed"] is False
+    assert policy["warmup_allowed"] is False
+    assert policy["default_provider_when_disabled"] == "mock"
+    assert policy["simulation_authority"] is False
+    assert policy["presentation_only"] is True
+
+
+def test_rpg_image_generation_policy_requires_explicit_startup_opt_in() -> None:
+    from app.rpg.media.image_generation_policy import build_rpg_image_generation_policy, is_rpg_image_generation_enabled
+
+    enabled_only = build_rpg_image_generation_policy({"OMNIX_IMAGE_ENABLED": "1"})
+    full_start = build_rpg_image_generation_policy({"OMNIX_IMAGE_ENABLED": "1", "OMNIX_START_IMAGE_SERVICE": "1"})
+
+    assert is_rpg_image_generation_enabled({"OMNIX_IMAGE_ENABLED": "1"}) is True
+    assert enabled_only["enabled"] is True
+    assert enabled_only["startup_service_allowed"] is False
+    assert full_start["startup_service_allowed"] is True
