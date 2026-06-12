@@ -4,6 +4,8 @@ import json
 from copy import deepcopy
 from typing import Any, Callable, Mapping
 
+from app.rpg.session.player_personality_profile import extract_player_personality_profile
+
 PLAYER_AGENCY_CONTRACT_VERSION = "rpg_player_agency_contract_v1"
 PLAYER_AGENCY_FLAVOR_VERSION = "rpg_player_agency_flavor_v1"
 _ALLOWED_ACTION_TYPES = {
@@ -72,54 +74,27 @@ def infer_player_personality(
     runtime_state: Mapping[str, Any] | None = None,
     result: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Collect player-personality hints without requiring a fixed schema.
+    """Collect player-personality hints through the stable profile contract.
 
-    The contract treats personality as presentation context only. It must never
-    mutate state or authorize actions.
+    Personality remains presentation context only. It must never mutate state or
+    authorize actions.
     """
 
-    candidates: list[dict[str, Any]] = []
-    session = _d(session)
-    simulation_state = _d(simulation_state)
-    runtime_state = _d(runtime_state)
-    for source in (session, simulation_state, runtime_state, *_result_sources(result)):
-        candidates.extend(
-            _nested_dicts(
-                source.get("player_personality"),
-                source.get("player_profile"),
-                source.get("persona"),
-                _d(source.get("player_state")).get("personality"),
-                _d(source.get("player_state")).get("profile"),
-            )
-        )
-    merged: dict[str, Any] = {}
-    for candidate in candidates:
-        for key, value in candidate.items():
-            if key not in merged and value not in (None, "", [], {}):
-                merged[key] = deepcopy(value)
-    text_parts: list[str] = []
-    for key in ("alignment", "morality", "temperament", "playstyle", "tone", "archetype", "name"):
-        if key in merged:
-            text_parts.append(f"{key}: {_clip(merged.get(key), 80)}")
-    traits = _l(merged.get("traits") or merged.get("personality_traits"))
-    if traits:
-        text_parts.append("traits: " + ", ".join(_clip(item, 32) for item in traits[:8] if _clip(item, 32)))
-    descriptor = "; ".join(part for part in text_parts if part).strip() or "neutral pragmatic player"
-    lowered = descriptor.lower()
-    if any(term in lowered for term in ("evil", "cruel", "ruthless", "villain", "dark", "menacing", "tyrant")):
-        tone = "dark"
-    elif any(term in lowered for term in ("hero", "kind", "good", "merciful", "honorable", "noble")):
-        tone = "heroic"
-    elif any(term in lowered for term in ("trick", "cunning", "sly", "rogue", "deceptive")):
-        tone = "cunning"
-    else:
-        tone = "neutral"
+    profile = extract_player_personality_profile(
+        session=session,
+        simulation_state=simulation_state,
+        runtime_state=runtime_state,
+        result=result,
+    )
     return {
-        "format_version": "rpg_player_personality_context_v1",
-        "descriptor": descriptor,
-        "tone_hint": tone,
-        "raw": merged,
-        "source": "session_simulation_runtime_result_profile_fields",
+        "format_version": "rpg_player_personality_context_v2",
+        "descriptor": _clip(profile.get("descriptor"), 500),
+        "tone_hint": _clip(profile.get("tone_hint"), 80) or "neutral",
+        "profile": deepcopy(profile),
+        "raw": deepcopy(_d(profile.get("raw"))),
+        "source": "player_personality_profile_contract",
+        "presentation_only": True,
+        "simulation_authority": False,
     }
 
 
