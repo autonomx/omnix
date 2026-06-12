@@ -61,6 +61,22 @@ def test_extract_profile_prefers_stable_profile_field() -> None:
     assert profile["alignment"] == "good"
 
 
+def test_extract_profile_falls_back_to_nested_result_simulation_player_personality() -> None:
+    result = {
+        "simulation_state": {
+            "player_state": {
+                "personality": {"alignment": "evil", "traits": ["ruthless", "patient"]},
+            }
+        }
+    }
+
+    profile = extract_player_personality_profile(result=result)
+
+    assert profile["tone_hint"] == "dark"
+    assert profile["alignment"] == "evil"
+    assert "ruthless" in profile["traits"]
+
+
 def test_attach_player_personality_profile_adds_top_level_and_player_state_profile() -> None:
     target = {"player_state": {"name": "Test Hero"}}
 
