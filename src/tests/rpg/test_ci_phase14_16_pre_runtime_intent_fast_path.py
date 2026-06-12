@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.rpg.ai import action_intelligence
+from app.rpg.ai import action_intelligence, semantic_action_intelligence
 from app.rpg.ai.action_intelligence import get_action_advisory
 from app.rpg.ai.pre_runtime_intent_fast_path import classify_pre_runtime_intent_fast_path
+from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 
 
 class CountingGateway:
@@ -13,6 +14,8 @@ class CountingGateway:
 
     def complete(self, prompt: str) -> str:
         self.calls.append(prompt)
+        if "semantic intent router" in prompt:
+            return '{"action_type":"investigate","semantic_family":"exploration","interaction_mode":"solo","activity_label":"clarify","target_id":"","target_name":"","secondary_actor_ids":[],"visibility":"local","intensity":1,"stakes":1,"social_axes":[],"observer_hooks":[],"scene_impact":"none","stateful":true,"needs_runtime_resolution":true,"visible_response":{},"reason":"semantic provider fallback"}'
         return '{"action_type":"investigate","difficulty":"normal","skill_id":"investigation","intent_tags":["ambiguous"],"narrative_goal":"clarify","target_id":"","target_name":"","stateful":true,"needs_runtime_resolution":true,"visible_response":{},"reason":"provider fallback"}'
 
 
@@ -84,6 +87,44 @@ def test_fast_path_skips_prompt_and_grounding_packet_construction(monkeypatch: p
     assert diagnostics.get("turn_grounding_packet") == {}
 
 
+def test_semantic_router_reuses_action_fast_path_without_llm_or_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_semantic_prompt_is_built(*args: object, **kwargs: object) -> dict:
+        raise AssertionError("semantic fast path should not build turn grounding packet")
+
+    monkeypatch.setattr(semantic_action_intelligence, "build_turn_grounding_packet", fail_if_semantic_prompt_is_built)
+    gateway = CountingGateway()
+    action_advisory = get_action_advisory(
+        llm_gateway=gateway,
+        player_input="I leave the Rusty Flagon and take the road toward the quarry.",
+        simulation_state={"expensive": object()},
+        runtime_state={"expensive": object()},
+        candidate_action={},
+    )
+
+    semantic_advisory = get_semantic_action_advisory(
+        llm_gateway=gateway,
+        player_input="I leave the Rusty Flagon and take the road toward the quarry.",
+        simulation_state={"expensive": object()},
+        runtime_state={"expensive": object()},
+        candidate_action=action_advisory,
+    )
+
+    diagnostics = _diag(semantic_advisory)
+    assert gateway.calls == []
+    assert semantic_advisory["action_type"] == "exploration"
+    assert semantic_advisory["semantic_family"] == "exploration"
+    assert diagnostics.get("semantic_fast_path_used") is True
+    assert diagnostics.get("semantic_reused_action_fast_path") is True
+    assert diagnostics.get("semantic_llm_used") is False
+    assert diagnostics.get("provider_called") is False
+    assert diagnostics.get("provider_requested") is False
+    assert diagnostics.get("provider_status") == "semantic_reused_action_fast_path"
+    assert diagnostics.get("semantic_prompt_built") is False
+    assert diagnostics.get("prompt") == ""
+    assert diagnostics.get("prompt_preview") == ""
+    assert diagnostics.get("turn_grounding_packet") == {}
+
+
 def test_ambiguous_input_still_falls_back_to_provider_classifier() -> None:
     gateway = CountingGateway()
     advisory = get_action_advisory(
@@ -103,6 +144,26 @@ def test_ambiguous_input_still_falls_back_to_provider_classifier() -> None:
     assert diagnostics.get("prompt_built") is True
     assert diagnostics.get("prompt_preview")
     assert advisory["action_type"] == "investigate"
+
+
+def test_semantic_router_still_calls_provider_for_ambiguous_action() -> None:
+    gateway = CountingGateway()
+    semantic_advisory = get_semantic_action_advisory(
+        llm_gateway=gateway,
+        player_input="I do the thing from before, but carefully.",
+        simulation_state={},
+        runtime_state={},
+        candidate_action={},
+    )
+
+    diagnostics = _diag(semantic_advisory)
+    assert len(gateway.calls) == 1
+    assert "semantic intent router" in gateway.calls[0]
+    assert diagnostics.get("semantic_fast_path_used") is False
+    assert diagnostics.get("semantic_llm_used") is True
+    assert diagnostics.get("provider_called") is True
+    assert diagnostics.get("prompt_built") is True
+    assert semantic_advisory["action_type"] == "investigate"
 
 
 def test_fast_path_helper_declines_empty_or_ambiguous_text() -> None:
