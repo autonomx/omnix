@@ -1,4 +1,4 @@
-"""Phase 14.15 — runtime-embedded stage diagnostics for live endurance artifacts.
+"""Phase 14.15/14.16 — runtime-embedded stage diagnostics for live endurance artifacts.
 
 Phase 14.14 aggregates manual-harness slowest-stage samples, but those samples
 include overlapping events such as ``manual_harness_total`` and
@@ -21,7 +21,7 @@ for path in (str(THIS_FILE.parents[1]), str(THIS_FILE.parents[2]), str(THIS_FILE
     if path not in sys.path:
         sys.path.insert(0, path)
 
-LIVE_ENDURANCE_RUNTIME_STAGE_DIAGNOSTICS_VERSION = "rpg_live_endurance_runtime_stage_diagnostics_v1"
+LIVE_ENDURANCE_RUNTIME_STAGE_DIAGNOSTICS_VERSION = "rpg_live_endurance_runtime_stage_diagnostics_v2"
 LIVE_ENDURANCE_RUNTIME_STAGE_DIAGNOSTICS_STATUS_MARKER = "RPG_LIVE_ENDURANCE_RUNTIME_STAGE_DIAGNOSTICS"
 DEFAULT_LIVE_ENDURANCE_DIR = Path("resources") / "data" / "test-results" / "live-llm-endurance-matrix"
 DEFAULT_DIAGNOSTICS_FILENAME = "live-endurance-runtime-stage-diagnostics.json"
@@ -113,6 +113,27 @@ def _runtime_timing_from_turn(turn: Mapping[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _intent_diagnostics_from_turn(turn: Mapping[str, Any]) -> dict[str, Any]:
+    direct = _d(turn.get("first_call_grounding_diagnostics"))
+    if direct:
+        return direct
+    raw = _d(turn.get("raw_result") or turn.get("result"))
+    nested = _d(raw.get("result"))
+    candidates = (
+        raw.get("first_call_grounding_diagnostics"),
+        nested.get("first_call_grounding_diagnostics"),
+        _d(raw.get("first_call_action_advisory")).get("first_call_grounding_diagnostics"),
+        _d(nested.get("first_call_action_advisory")).get("first_call_grounding_diagnostics"),
+        _d(raw.get("first_call_semantic_advisory")).get("first_call_grounding_diagnostics"),
+        _d(nested.get("first_call_semantic_advisory")).get("first_call_grounding_diagnostics"),
+    )
+    for candidate in candidates:
+        diagnostics = _d(candidate)
+        if diagnostics:
+            return diagnostics
+    return {}
+
+
 def _runtime_apply_seconds_for_turn(turn: Mapping[str, Any]) -> float:
     perf = _d(turn.get("interactive_cli_performance"))
     return _f(perf.get("runtime_apply_turn_seconds"))
@@ -165,6 +186,10 @@ def diagnose_live_endurance_runtime_stages(
     turns_with_timing = 0
     runtime_apply_total = 0.0
     embedded_stage_total = 0.0
+    fast_path_turns = 0
+    llm_intent_turns = 0
+    provider_called_turns = 0
+    provider_requested_turns = 0
 
     for transcript_path in files:
         transcript = _read_json(transcript_path)
@@ -178,8 +203,26 @@ def diagnose_live_endurance_runtime_stages(
             pack_runtime_apply_total = round(sum(_runtime_apply_seconds_for_turn(turn) for turn in turns), 4)
         pack_embedded_total = 0.0
         pack_turns_with_timing = 0
+        pack_fast_path_turns = 0
+        pack_llm_intent_turns = 0
+        pack_provider_called_turns = 0
+        pack_provider_requested_turns = 0
 
         for turn in turns:
+            intent_diagnostics = _intent_diagnostics_from_turn(turn)
+            if intent_diagnostics.get("intent_fast_path_used"):
+                fast_path_turns += 1
+                pack_fast_path_turns += 1
+            if intent_diagnostics.get("intent_llm_used"):
+                llm_intent_turns += 1
+                pack_llm_intent_turns += 1
+            if intent_diagnostics.get("provider_called"):
+                provider_called_turns += 1
+                pack_provider_called_turns += 1
+            if intent_diagnostics.get("provider_requested"):
+                provider_requested_turns += 1
+                pack_provider_requested_turns += 1
+
             timing = _runtime_timing_from_turn(turn)
             if not timing:
                 continue
@@ -209,6 +252,11 @@ def diagnose_live_endurance_runtime_stages(
             "runtime_apply_total_seconds": round(pack_runtime_apply_total, 4),
             "runtime_embedded_stage_total_seconds": round(pack_embedded_total, 4),
             "runtime_embedded_stage_share_of_apply": round(pack_embedded_total / pack_runtime_apply_total, 4) if pack_runtime_apply_total else 0.0,
+            "intent_fast_path_turns": pack_fast_path_turns,
+            "intent_llm_turns": pack_llm_intent_turns,
+            "intent_fast_path_ratio": round(pack_fast_path_turns / len(turns), 4) if turns else 0.0,
+            "provider_called_turns": pack_provider_called_turns,
+            "provider_requested_turns": pack_provider_requested_turns,
             "top_runtime_stages": _finalize_stages(pack_stage_buckets, limit=10),
         })
 
@@ -224,6 +272,11 @@ def diagnose_live_endurance_runtime_stages(
         "runtime_apply_total_seconds": round(runtime_apply_total, 4),
         "runtime_embedded_stage_total_seconds": round(embedded_stage_total, 4),
         "runtime_embedded_stage_share_of_apply": round(embedded_stage_total / runtime_apply_total, 4) if runtime_apply_total else 0.0,
+        "intent_fast_path_turns": fast_path_turns,
+        "intent_llm_turns": llm_intent_turns,
+        "intent_fast_path_ratio": round(fast_path_turns / completed_turns, 4) if completed_turns else 0.0,
+        "provider_called_turns": provider_called_turns,
+        "provider_requested_turns": provider_requested_turns,
         "top_runtime_stages": _finalize_stages(stage_buckets, limit=20),
         "packs": pack_rows,
         "warnings": sorted(set(warnings))[:100],
@@ -238,6 +291,9 @@ def diagnose_live_endurance_runtime_stages(
         aggregate["runtime_stage_diagnostics_path"] = str(diagnostics_file)
         aggregate["runtime_stage_diagnostics_warning_count"] = len(result["warnings"])
         aggregate["runtime_stage_diagnostics_warning_types"] = list(result["warnings"])
+        aggregate["intent_fast_path_ratio"] = result["intent_fast_path_ratio"]
+        aggregate["intent_fast_path_turns"] = result["intent_fast_path_turns"]
+        aggregate["intent_llm_turns"] = result["intent_llm_turns"]
         _write_json(aggregate_file, aggregate)
 
     return result
@@ -251,6 +307,7 @@ def render_runtime_stage_diagnostics_status_marker(result: Mapping[str, Any]) ->
         f"pack_count={_i(result.get('pack_count'))} "
         f"turns_with_timing={_i(result.get('turns_with_runtime_stage_timing'))} "
         f"embedded_share={_f(result.get('runtime_embedded_stage_share_of_apply')):.3f} "
+        f"intent_fast_path_ratio={_f(result.get('intent_fast_path_ratio')):.3f} "
         f"top_stage={_s(top.get('name') or 'none')} "
         f"top_total={_f(top.get('total_seconds')):.3f}"
     )
