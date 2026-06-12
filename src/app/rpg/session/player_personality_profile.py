@@ -156,7 +156,19 @@ def normalize_player_personality_profile(raw_profile: Mapping[str, Any] | None =
 def _sources(*, session: Mapping[str, Any] | None, simulation_state: Mapping[str, Any] | None, runtime_state: Mapping[str, Any] | None, result: Mapping[str, Any] | None) -> list[dict[str, Any]]:
     result_dict = _d(result)
     nested = _d(result_dict.get("result"))
-    return [_d(session), _d(simulation_state), _d(runtime_state), result_dict, nested]
+    result_session = _d(result_dict.get("session") or nested.get("session"))
+    result_simulation = _d(result_dict.get("simulation_state") or nested.get("simulation_state") or result_session.get("simulation_state"))
+    result_runtime = _d(result_dict.get("runtime_state") or nested.get("runtime_state") or result_session.get("runtime_state"))
+    return [
+        _d(session),
+        _d(simulation_state),
+        _d(runtime_state),
+        result_dict,
+        nested,
+        result_session,
+        result_simulation,
+        result_runtime,
+    ]
 
 
 def extract_player_personality_profile(
