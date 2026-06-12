@@ -7,6 +7,7 @@ from functools import wraps
 from types import ModuleType
 from typing import Any, Mapping
 
+from app.rpg.session.player_agency_buttons import attach_next_action_buttons
 from app.rpg.session.player_agency_contract import attach_player_agency_contract
 
 _INTERACTIVE_MODULE = "app.rpg.session.interactive_first_call_runtime"
@@ -62,7 +63,7 @@ def _optional_flavor_provider(enable_flavor: bool) -> Any:
 
 
 def attach_player_agency_to_runtime_result(result: dict[str, Any], *, call_context: Mapping[str, Any]) -> dict[str, Any]:
-    """Attach the Phase 14.19 next-action contract to a runtime turn result.
+    """Attach next-action contract and button payloads to a runtime turn result.
 
     This is presentation/affordance metadata only. Commands remain suggestions and
     must be sent back through normal runtime validation if clicked or typed.
@@ -80,9 +81,13 @@ def attach_player_agency_to_runtime_result(result: dict[str, Any], *, call_conte
             provider=provider,
             max_options=int(context.get("max_options") or 5),
         )
+        updated = attach_next_action_buttons(updated)
+        buttons = _d(updated.get("next_action_buttons"))
         updated["player_agency_runtime_hook"] = {
-            "format_version": "phase14_20_player_agency_runtime_hook_v1",
+            "format_version": "phase14_21_player_agency_runtime_hook_v2",
             "attached": True,
+            "button_payload_attached": True,
+            "button_count": int(buttons.get("button_count") or 0),
             "provider_flavor_requested": _b(context.get("enable_flavor"), False),
             "provider_flavor_available": provider is not None,
             "presentation_only": True,
@@ -95,8 +100,9 @@ def attach_player_agency_to_runtime_result(result: dict[str, Any], *, call_conte
         return updated
     except Exception as exc:
         result["player_agency_runtime_hook"] = {
-            "format_version": "phase14_20_player_agency_runtime_hook_v1",
+            "format_version": "phase14_21_player_agency_runtime_hook_v2",
             "attached": False,
+            "button_payload_attached": False,
             "error": f"{type(exc).__name__}: {exc}",
             "presentation_only": True,
             "runtime_validation_required": True,
