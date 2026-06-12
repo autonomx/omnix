@@ -8,12 +8,48 @@ import urllib.request
 from typing import Any, Dict
 
 
+def _truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def is_image_generation_enabled() -> bool:
+    """Return whether image generation is explicitly enabled.
+
+    Image generation is opt-in because FLUX/diffusers can consume substantial
+    GPU/VRAM when started or called. Set OMNIX_IMAGE_ENABLED=1 to re-enable.
+    """
+
+    return _truthy(os.environ.get("OMNIX_IMAGE_ENABLED", "0"))
+
+
 def _image_service_url() -> str:
+    if not is_image_generation_enabled():
+        return ""
     return os.environ.get("OMNIX_IMAGE_URL", "").strip().rstrip("/")
 
 
 def is_image_service_enabled() -> bool:
     return bool(_image_service_url())
+
+
+def image_disabled_response(source: str = "app") -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "provider": "disabled",
+        "status": "disabled",
+        "error": "image_generation_disabled",
+        "asset_url": "",
+        "local_path": "",
+        "seed": None,
+        "width": 0,
+        "height": 0,
+        "mime_type": "",
+        "metadata": {
+            "source": source,
+            "disabled_by": "OMNIX_IMAGE_ENABLED",
+            "enable_hint": "Set OMNIX_IMAGE_ENABLED=1 to enable image generation.",
+        },
+    }
 
 
 def post_image_service(path: str, payload: Dict[str, Any] | None = None, timeout: float = 600.0) -> Dict[str, Any]:
@@ -41,4 +77,6 @@ def post_image_service(path: str, payload: Dict[str, Any] | None = None, timeout
 
 
 def generate_image_via_service(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not is_image_generation_enabled():
+        return image_disabled_response(source="image_http_client")
     return post_image_service("/generate", payload, timeout=900.0)

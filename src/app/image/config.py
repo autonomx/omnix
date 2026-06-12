@@ -22,6 +22,16 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _truthy(value: Any) -> bool:
+    return _safe_str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def is_image_generation_enabled() -> bool:
+    """Image generation is opt-in because FLUX can consume substantial VRAM."""
+
+    return _truthy(os.environ.get("OMNIX_IMAGE_ENABLED", "0"))
+
+
 def get_image_settings() -> Dict[str, Any]:
     settings = load_settings()
     image_cfg = _safe_dict(settings.get("image"))
@@ -37,6 +47,9 @@ def get_image_settings() -> Dict[str, Any]:
 
 
 def get_active_image_provider_name() -> str:
+    if not is_image_generation_enabled():
+        return "mock"
+
     image_cfg = get_image_settings()
     provider = _safe_str(image_cfg.get("provider")).strip()
     if not provider:
