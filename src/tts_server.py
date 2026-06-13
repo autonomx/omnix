@@ -3,6 +3,9 @@ from __future__ import annotations
 import base64
 import io
 import os
+import socket
+import subprocess
+import sys
 import traceback
 import wave
 from typing import Any, Dict, List
@@ -64,6 +67,99 @@ def _provider_payload_fail(error: str, details: Dict[str, Any] | None = None) ->
         "error": str(error),
         "details": dict(details or {}),
     }
+
+
+def _normalize_bind_host(host: str) -> str:
+    host = str(host or "").strip() or "127.0.0.1"
+    if host in {"0.0.0.0", "::"}:
+        return "127.0.0.1"
+    return host
+
+
+def _can_bind_port(host: str, port: int) -> bool:
+    bind_host = _normalize_bind_host(host)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((bind_host, int(port)))
+        except OSError:
+            return False
+    return True
+
+
+def _windows_port_owner_pids(port: int) -> List[int]:
+    if os.name != "nt":
+        return []
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        "Get-NetTCPConnection -LocalPort "
+        + str(int(port))
+        + " -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique",
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+    except Exception:
+        return []
+    pids: List[int] = []
+    for line in (result.stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            pid = int(line)
+        except ValueError:
+            continue
+        if pid > 0 and pid != os.getpid():
+            pids.append(pid)
+    return sorted(set(pids))
+
+
+def _kill_windows_port_owners(port: int) -> List[int]:
+    killed: List[int] = []
+    for pid in _windows_port_owner_pids(port):
+        try:
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", f"Stop-Process -Id {pid} -Force"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            killed.append(pid)
+        except Exception:
+            continue
+    return killed
+
+
+def _preflight_tts_port(host: str, port: int) -> bool:
+    if _can_bind_port(host, port):
+        return True
+
+    should_kill = os.environ.get("OMNIX_LAUNCHER_KILL_PORT", "").strip().lower() in {"1", "true", "yes", "on"}
+    if should_kill and os.name == "nt":
+        killed = _kill_windows_port_owners(port)
+        if killed:
+            print(f"[TTS SERVER] stopped stale process(es) on port {port}: {', '.join(map(str, killed))}")
+        if _can_bind_port(host, port):
+            return True
+
+    print("\n" + "=" * 50)
+    print("Omnix TTS Server could not start")
+    print("=" * 50)
+    print(f"Port already in use: {host}:{port}")
+    print("Another TTS/server process is already bound to this port.")
+    print("")
+    print("Find the process using PowerShell:")
+    print(f"  Get-NetTCPConnection -LocalPort {port} | Select-Object LocalAddress,LocalPort,State,OwningProcess")
+    print("")
+    print("Then stop it, or kill the owning process:")
+    print("  Stop-Process -Id <OwningProcess> -Force")
+    print("")
+    print("Or allow Omnix to clean stale port owners before launch:")
+    print("  $env:OMNIX_LAUNCHER_KILL_PORT = '1'")
+    print("=" * 50)
+    return False
 
 
 def _load_qwen3_provider() -> Any:
@@ -334,4 +430,6 @@ if __name__ == "__main__":
 
     host = os.environ.get("OMNIX_TTS_HOST", "127.0.0.1")
     port = int(os.environ.get("OMNIX_TTS_PORT", "5101"))
+    if not _preflight_tts_port(host, port):
+        sys.exit(1)
     uvicorn.run(app, host=host, port=port)
