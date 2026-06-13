@@ -7,12 +7,13 @@ set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
 
 set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
+set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
 
 REM Image generation is disabled by default to avoid loading FLUX/diffusers or
 REM consuming GPU/VRAM during normal app startup. To re-enable later, run:
 REM   set OMNIX_IMAGE_ENABLED=1
 REM   set OMNIX_START_IMAGE_SERVICE=1
-REM before calling start_all.bat, or start app.image_service_app manually.
+REM before calling start_all.bat.
 if not defined OMNIX_IMAGE_ENABLED set "OMNIX_IMAGE_ENABLED=0"
 if not defined OMNIX_START_IMAGE_SERVICE set "OMNIX_START_IMAGE_SERVICE=0"
 set "OMNIX_IMAGE_URL="
@@ -20,37 +21,27 @@ if /I "%OMNIX_IMAGE_ENABLED%"=="1" if /I "%OMNIX_START_IMAGE_SERVICE%"=="1" set 
 
 set "OMNIX_TTS_MODELS_DIR=%~dp0resources\models\tts"
 set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_TTS_MODELS_DIR%\Qwen3-TTS-12Hz-0.6B-Base"
-
 set "OMNIX_TTS_MODEL_DIR="
 set "OMNIX_QWEN3_TTS_MODEL_DIR_ENV="
 
 if exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\config.json" if exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\preprocessor_config.json" (
     set "OMNIX_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR%"
     set "OMNIX_QWEN3_TTS_MODEL_DIR_ENV=%OMNIX_QWEN3_TTS_MODEL_DIR%"
-    echo [TTS] Using local downloaded model:
-    echo        %OMNIX_QWEN3_TTS_MODEL_DIR%
-) else (
-    echo [TTS][WARN] Local Qwen3-TTS model not found:
-    echo        %OMNIX_QWEN3_TTS_MODEL_DIR%
-    echo [TTS] Run setup first.
 )
 
 echo ========================================
-echo Starting Omnix with split runtime envs
+echo Omnix Launcher Control
 echo ========================================
+echo.
+echo This starts one launcher dashboard instead of opening separate service terminals.
+echo Dashboard: %OMNIX_LAUNCHER_URL%
+echo.
 echo [IMAGE] Enabled: %OMNIX_IMAGE_ENABLED%
 echo [IMAGE] Start service: %OMNIX_START_IMAGE_SERVICE%
 if defined OMNIX_IMAGE_URL (
     echo [IMAGE] Service URL: %OMNIX_IMAGE_URL%
 ) else (
-    echo [IMAGE] Disabled for this startup. No image service will be launched.
-)
-
-if defined OMNIX_TTS_MODEL_DIR (
-    echo [TTS] Using cached HF snapshot:
-    echo        !OMNIX_TTS_MODEL_DIR!
-) else (
-    echo [TTS] No cached HF snapshot found. Provider will use repo id/download path.
+    echo [IMAGE] Disabled for this startup. The launcher will not start image service.
 )
 
 if not exist "%RPG_FLUX_PYTHON%" (
@@ -78,100 +69,28 @@ echo.
 echo [ENV CHECK][APP]
 "%RPG_FLUX_PYTHON%" -c "import sys; print('[APP][PYTHON]', sys.executable)"
 set "PYTHONPATH=%~dp0src"
-"%RPG_FLUX_PYTHON%" -c "from app.providers.vendor.qwen3_tts.bootstrap import ensure_vendored_qwen3_tts_available; print('[APP][TTS][VENDORED]', ensure_vendored_qwen3_tts_available())"
+"%RPG_FLUX_PYTHON%" -c "import fastapi, uvicorn; print('[LAUNCHER] FastAPI/uvicorn OK')"
 if errorlevel 1 (
-    echo ERROR: app environment verification failed
-    pause
-    exit /b 1
-)
-
-if /I "%OMNIX_IMAGE_ENABLED%"=="1" if /I "%OMNIX_START_IMAGE_SERVICE%"=="1" (
-    echo.
-    echo [IMAGE SERVICE] Starting image service on %OMNIX_IMAGE_URL%...
-    start "Omnix Image Service" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_IMAGE_ENABLED=1"" && set ""OMNIX_IMAGE_SERVICE_MODE=1"" && set ""OMNIX_IMAGE_PRELOAD=1"" && set ""OMNIX_IMAGE_WARMUP=1"" && set ""OMNIX_IMAGE_URL="" && ""%RPG_FLUX_PYTHON%"" -m uvicorn app.image_service_app:app --host 127.0.0.1 --port 5301 2^>^&1"
-
-    echo Waiting for image service...
-    ping -n 4 127.0.0.1 >nul
-) else (
-    echo.
-    echo [IMAGE SERVICE] Skipped. Set OMNIX_IMAGE_ENABLED=1 and OMNIX_START_IMAGE_SERVICE=1 to enable.
-)
-
-echo.
-echo [ENV CHECK][TTS]
-"%RPG_TTS_PYTHON%" -c "import sys; print('[TTS][PYTHON]', sys.executable)"
-if errorlevel 1 (
-    echo ERROR: rpg-tts verification failed
-    pause
-    exit /b 1
-)
-
-if not exist "%OMNIX_QWEN3_TTS_MODEL_DIR%\config.json" (
-    echo ERROR: Qwen3-TTS model missing:
-    echo   %OMNIX_QWEN3_TTS_MODEL_DIR%
-    echo Run setup first.
+    echo ERROR: launcher environment verification failed
     pause
     exit /b 1
 )
 
 echo.
-echo [ENV CHECK][STT]
-"%RPG_STT_PYTHON%" -c "import sys; print('[STT][PYTHON]', sys.executable)"
-"%RPG_STT_PYTHON%" -c "import nemo.collections.asr as nemo_asr; print('[STT] NeMo ASR OK')"
-if errorlevel 1 (
-    echo ERROR: rpg-stt verification failed
-    pause
-    exit /b 1
-)
+echo Starting launcher dashboard in this window...
+echo Use Ctrl+C here to stop the launcher itself. Use the dashboard to stop services.
+echo Opening browser: %OMNIX_LAUNCHER_URL%
+start "" "%OMNIX_LAUNCHER_URL%"
 
-echo [STT] Verifying websocket support...
-"%RPG_STT_PYTHON%" -c "import websockets; print('[STT] websockets OK')"
-if errorlevel 1 (
-    echo [STT] websockets missing, installing...
-    "%RPG_STT_PYTHON%" -m pip install websockets
-    if errorlevel 1 (
-        echo ERROR: failed to install websockets into rpg-stt
-        pause
-        exit /b 1
-    )
-)
+set "PYTHONPATH=%~dp0src"
+set "OMNIX_TTS_URL=%OMNIX_TTS_URL%"
+set "OMNIX_STT_URL=%OMNIX_STT_URL%"
+set "OMNIX_IMAGE_ENABLED=%OMNIX_IMAGE_ENABLED%"
+set "OMNIX_START_IMAGE_SERVICE=%OMNIX_START_IMAGE_SERVICE%"
+set "OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"
+set "OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"
+set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"
 
-echo.
-echo ================================================
-echo LM Studio Chatbot - Launcher
-echo ================================================
-echo.
+"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.control_app:app --host 127.0.0.1 --port 5055
 
-echo [1/3] Starting Parakeet STT...
-start "Parakeet STT" cmd /k "cd /d ""%~dp0"" && ""%RPG_STT_PYTHON%"" -c "import sys; print('[STT][PYTHON]', sys.executable)" && ""%RPG_STT_PYTHON%"" src\parakeet_stt_server.py"
-
-echo Waiting for STT...
-ping -n 6 127.0.0.1 >nul
-
-echo.
-echo [2/3] Starting TTS...
-start "Omnix TTS" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"" && set ""OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"" && ""%RPG_TTS_PYTHON%"" src\tts_server.py 2^>^&1"
-
-echo Waiting for TTS...
-ping -n 4 127.0.0.1 >nul
-
-echo.
-echo [3/3] Starting Chatbot...
-start "Omnix FastAPI" cmd /k "cd /d ""%~dp0"" && set ""PYTHONPATH=%~dp0src"" && set ""OMNIX_TTS_URL=%OMNIX_TTS_URL%"" && set ""OMNIX_STT_URL=%OMNIX_STT_URL%"" && set ""OMNIX_IMAGE_ENABLED=%OMNIX_IMAGE_ENABLED%"" && set ""OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"" && set ""OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"" && set ""OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"" && ""%RPG_FLUX_PYTHON%"" -c "import sys; print('[APP][PYTHON]', sys.executable)" && ""%RPG_FLUX_PYTHON%"" src\launch.py 2^>^&1"
-
-echo Waiting for FastAPI...
-ping -n 4 127.0.0.1 >nul
-
-echo.
-echo [4/4] Services launched.
-echo.
-echo STT window should show:
-echo   [STT][PYTHON] C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe
-echo.
-echo App window should show:
-echo   [APP][PYTHON] C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe
-echo   [IMAGE] disabled unless OMNIX_IMAGE_ENABLED=1 is set
-echo.
-echo All enabled servers started!
-pause
 endlocal
