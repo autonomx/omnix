@@ -284,53 +284,6 @@
     return isPreviewSessionId(sid) ? sid : '';
   }
 
-  function previewTurnNarration(playerInput) {
-    var input = String(playerInput || '').toLowerCase();
-    if (input.indexOf('room') !== -1 || input.indexOf('rent') !== -1 || input.indexOf('sleep') !== -1 || input.indexOf('inn') !== -1) {
-      return 'Bran the Innkeeper looks up from the counter and gives you a practical nod. “A room is available. Five silver for the night, paid up front, and I will see that you are not disturbed.”';
-    }
-    if (input.indexOf('talk') !== -1 || input.indexOf('ask') !== -1 || input.indexOf('bran') !== -1) {
-      return 'Bran the Innkeeper turns his attention to you, ready to answer plainly while the tavern noise rolls on around you.';
-    }
-    return 'The scene responds immediately: your action is acknowledged, and the nearby characters shift their attention toward what you do next.';
-  }
-
-  function previewTurnStreamResponse(sessionId, body) {
-    var parsed = requestBodyObject(body);
-    var playerInput = String(parsed.player_input || parsed.input || '');
-    var turnId = 'preview_fast_' + Date.now().toString(36);
-    var tick = Math.floor(Date.now() / 1000);
-    var narration = previewTurnNarration(playerInput);
-    var payload = {
-      type: 'authoritative_result',
-      ok: true,
-      turn_id: turnId,
-      tick: tick,
-      resolved_result: {
-        ok: true,
-        action_type: 'dialogue',
-        semantic_action_type: 'dialogue',
-        summary: narration,
-        result: narration,
-        action: 'Result: ' + narration,
-        source: 'preview_fast_response',
-        preview_session_fast_path: true
-      },
-      summary: narration,
-      presentation: { narration: narration, source: 'preview_fast_response' },
-      fallback_narration: narration,
-      narration_status: 'completed',
-      live_draft_streaming: false,
-      narration_job: {},
-      preview_session_fast_path: true,
-      session_id: sessionId || ''
-    };
-    var sse = '' +
-      'data: ' + JSON.stringify({ type: 'accepted', preview_session_fast_path: true }) + '\n\n' +
-      'data: ' + JSON.stringify(payload) + '\n\n';
-    return new Response(sse, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-  }
-
   function patchFetchForTurnVisibility() {
     if (window.__rpgPlayerFocusFetchPatched) return;
     window.__rpgPlayerFocusFetchPatched = true;
@@ -356,15 +309,7 @@
       }
 
       var isTurnRequest = /\/api\/rpg\/(games\/[^/]+\/turn|session\/turn(?:\/stream)?|turn_stream|stream_turn)(?:$|[?#])/.test(url);
-      if (isTurnRequest) {
-        markTurnActive();
-        var previewTurnSid = bodyLooksLikePreviewSession(body);
-        if (!previewTurnSid && isPreviewSessionId(currentSavedSessionId())) previewTurnSid = currentSavedSessionId();
-        if (previewTurnSid && /\/api\/rpg\/session\/turn\/stream(?:$|[?#])/.test(url)) {
-          console.warn('[RPG] using preview fast response for turn stream', previewTurnSid);
-          return Promise.resolve(previewTurnStreamResponse(previewTurnSid, body));
-        }
-      }
+      if (isTurnRequest) markTurnActive();
 
       return originalFetch.apply(this, arguments).then(function (response) {
         if (isTurnRequest && !response.ok) {
@@ -468,9 +413,9 @@
     init: init,
     setFocusMode: setFocusMode,
     setDeveloperPanels: setDeveloperPanels,
-    showStartMenu: showStartMenu,
-    clearSavedRpgSession: clearSavedRpgSession,
     markTurnActive: markTurnActive,
-    markTurnDone: markTurnDone
+    markTurnDone: markTurnDone,
+    showStartMenu: showStartMenu,
+    clearSavedRpgSession: clearSavedRpgSession
   };
 }());
