@@ -152,6 +152,7 @@ body.rpg-player-focus.rpg-dev-panels-open .rpg-msg-actions {
   color: #fecaca;
 }
 
+.rpg-start-menu-overlay,
 .rpg-start-menu-backdrop {
   align-items: center;
   background: radial-gradient(circle at 50% 20%, rgba(92, 64, 51, 0.76), rgba(10, 7, 5, 0.9));
