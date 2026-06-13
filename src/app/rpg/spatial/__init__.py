@@ -15,6 +15,7 @@ from app.rpg.spatial.audibility import (
     can_hear_area,
     can_hear_entity,
 )
+from app.rpg.spatial.distance import euclidean_distance
 from app.rpg.spatial.graph import (
     ensure_spatial_graph,
     find_connection,
@@ -40,6 +41,7 @@ __all__ = [
     "can_see_area",
     "can_see_entity",
     "ensure_spatial_graph",
+    "euclidean_distance",
     "find_connection",
     "get_entity_area",
     "get_spatial_graph",
