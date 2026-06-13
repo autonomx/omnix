@@ -6,6 +6,7 @@ import os
 import socket
 import subprocess
 import sys
+import time
 import traceback
 import wave
 from typing import Any, Dict, List
@@ -87,6 +88,23 @@ def _can_bind_port(host: str, port: int) -> bool:
     return True
 
 
+def _wait_for_port_release(host: str, port: int, timeout_s: float = 8.0, interval_s: float = 0.25) -> bool:
+    """Wait briefly for Windows to release a port after Stop-Process.
+
+    Stop-Process can return before TCP owner state has fully disappeared, so a
+    single immediate bind probe can report a false failure.  Polling keeps the
+    launcher from erroring just after it successfully killed the stale owner.
+    """
+
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    while True:
+        if _can_bind_port(host, port):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(max(0.05, float(interval_s)))
+
+
 def _windows_port_owner_pids(port: int) -> List[int]:
     if os.name != "nt":
         return []
@@ -141,8 +159,14 @@ def _preflight_tts_port(host: str, port: int) -> bool:
         killed = _kill_windows_port_owners(port)
         if killed:
             print(f"[TTS SERVER] stopped stale process(es) on port {port}: {', '.join(map(str, killed))}")
-        if _can_bind_port(host, port):
+        wait_timeout_s = float(os.environ.get("OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT", "8") or 8)
+        if _wait_for_port_release(host, port, timeout_s=wait_timeout_s):
             return True
+        remaining = _windows_port_owner_pids(port)
+        if remaining:
+            print(f"[TTS SERVER] port {port} still owned after cleanup: {', '.join(map(str, remaining))}")
+        elif killed:
+            print(f"[TTS SERVER] port {port} did not become bindable within {wait_timeout_s:.1f}s after cleanup")
 
     print("\n" + "=" * 50)
     print("Omnix TTS Server could not start")
