@@ -175,6 +175,43 @@ def test_live_polling_endpoints_reject_missing_session_id_with_400(path):
 
 
 @pytest.mark.api
+def test_idle_tick_returns_safe_contract_when_runtime_tick_raises(monkeypatch):
+    """Idle polling must not surface runtime tick exceptions as HTTP 500s."""
+    from app.rpg.api import rpg_session_management_routes as routes
+
+    def fake_load_runtime_session(session_id):
+        return {
+            "session_id": session_id,
+            "runtime_state": {},
+            "simulation_state": {},
+        }
+
+    def fake_capture(session):
+        return session
+
+    class BrokenRuntime:
+        @staticmethod
+        def apply_idle_ticks(session_id, count, reason="heartbeat"):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(routes, "load_runtime_session", fake_load_runtime_session)
+    monkeypatch.setattr(routes, "save_runtime_session", lambda session: session)
+    monkeypatch.setattr(routes, "capture_semantic_state_change_proposals_for_session", fake_capture)
+    monkeypatch.setitem(sys.modules, "app.rpg.session.runtime", BrokenRuntime)
+
+    response = _client().post(
+        "/api/rpg/session/idle_tick",
+        json={"session_id": "runtime-error", "count": 1, "reason": "heartbeat"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"] == "idle_tick_failed"
+    assert payload["updates"] == []
+
+
+@pytest.mark.api
 @pytest.mark.parametrize(
     ("method", "path", "expected_status", "expected_error"),
     [
