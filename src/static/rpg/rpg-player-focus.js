@@ -162,8 +162,8 @@
     }
     note.classList.toggle('is-stalled', !!stalled);
     note.textContent = stalled
-      ? 'Still waiting for the final narration. The command was sent; this usually means the background narration worker is delayed or the endpoint returned an incomplete payload.'
-      : 'Command sent. Waiting for the response…';
+      ? 'Still waiting for the GM/NPC response. Your command was sent, but no response content has arrived yet.'
+      : 'Command sent. Waiting for the GM/NPC response…';
     feed.scrollTop = feed.scrollHeight;
   }
 
@@ -193,15 +193,35 @@
     clearPendingNote();
   }
 
+  function isPlayerMessageNode(node) {
+    if (!node || node.nodeType !== 1 || !node.classList) return false;
+    return node.classList.contains('rpg-msg--player');
+  }
+
+  function isResponseMessageNode(node) {
+    if (!node || node.nodeType !== 1 || !node.classList) return false;
+    if (!node.classList.contains('rpg-msg')) return false;
+    if (isPlayerMessageNode(node)) return false;
+    var text = String(node.textContent || '').trim();
+    if (!text) return false;
+    return true;
+  }
+
   function hasMeaningfulRpgContent(node) {
     if (!node || node.nodeType !== 1) return false;
     if (node.id === 'rpgPendingResponseNote') return false;
+    if (isResponseMessageNode(node)) return true;
     if (node.classList && (
-      node.classList.contains('rpg-msg') ||
       node.classList.contains('rpg-turn-narration') ||
       node.classList.contains('rpg-narration-final')
-    )) return true;
-    return !!(node.querySelector && node.querySelector('.rpg-msg, .rpg-turn-narration, .rpg-narration-final'));
+    )) return String(node.textContent || '').trim().length > 0;
+    if (!node.querySelectorAll) return false;
+    var candidates = node.querySelectorAll('.rpg-msg, .rpg-turn-narration, .rpg-narration-final');
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (isResponseMessageNode(candidates[i])) return true;
+      if (!isPlayerMessageNode(candidates[i]) && String(candidates[i].textContent || '').trim()) return true;
+    }
+    return false;
   }
 
   function isGenericAmbientFiller(text) {
@@ -335,58 +355,51 @@
     if ($(START_MENU_ID)) return;
     var rpgView = $('rpgView');
     if (!rpgView) return;
-    var hasSave = hasSavedRpgSession();
-    if (!force && !hasSave) return;
+    if (!force && !hasSavedRpgSession()) return;
 
+    var hasSave = hasSavedRpgSession();
     var overlay = document.createElement('div');
     overlay.id = START_MENU_ID;
-    overlay.className = 'rpg-start-menu-backdrop';
+    overlay.className = 'rpg-start-menu-overlay';
     overlay.innerHTML = '' +
-      '<section class="rpg-start-menu" role="dialog" aria-modal="true" aria-labelledby="rpgStartMenuTitle">' +
-        '<h2 id="rpgStartMenuTitle">RPG Adventure</h2>' +
-        '<p>Choose how to begin. Continuing keeps the previous saved session; starting a new adventure clears the saved RPG session first so it cannot silently resume.</p>' +
-        '<div class="rpg-start-menu-actions">' +
-          (hasSave ? '<button type="button" class="rpg-start-menu-btn" data-rpg-start-action="continue"><strong>Continue Previous Adventure</strong><span>Resume the saved RPG session.</span></button>' : '') +
-          '<button type="button" class="rpg-start-menu-btn rpg-start-menu-btn--danger" data-rpg-start-action="quick"><strong>New Quick Adventure</strong><span>Clear the old session and immediately start a default adventure.</span></button>' +
-          '<button type="button" class="rpg-start-menu-btn" data-rpg-start-action="setup"><strong>New Custom Adventure</strong><span>Clear the old session and open Adventure Setup.</span></button>' +
-        '</div>' +
-        (hasSave ? '<div class="rpg-start-menu-save-note">A saved RPG session was found. It will only resume if you choose Continue.</div>' : '') +
-      '</section>';
+      '<div class="rpg-start-menu-card" role="dialog" aria-modal="true" aria-label="RPG game menu">' +
+      '<div class="rpg-start-menu-kicker">Omnix RPG</div>' +
+      '<h2>Choose your adventure</h2>' +
+      '<p>Start fresh or continue your last runtime session.</p>' +
+      '<div class="rpg-start-menu-actions">' +
+      (hasSave ? '<button type="button" id="rpgStartContinue" class="rpg-start-primary">Continue Previous Adventure</button>' : '') +
+      '<button type="button" id="rpgStartQuick" class="rpg-start-secondary">New Quick Adventure</button>' +
+      '<button type="button" id="rpgStartSetup" class="rpg-start-secondary">New Custom Adventure</button>' +
+      '</div>' +
+      '</div>';
+    rpgView.appendChild(overlay);
 
-    overlay.addEventListener('click', function (event) {
-      var button = event.target && event.target.closest ? event.target.closest('[data-rpg-start-action]') : null;
-      if (!button) return;
-      var action = button.getAttribute('data-rpg-start-action');
-      if (action === 'continue') { removeStartMenu(); return; }
-      chooseFreshStart(action);
-    });
-
-    document.body.appendChild(overlay);
-    var first = overlay.querySelector('[data-rpg-start-action]');
-    if (first && first.focus) first.focus();
+    var continueBtn = $('rpgStartContinue');
+    var quickBtn = $('rpgStartQuick');
+    var setupBtn = $('rpgStartSetup');
+    if (continueBtn) continueBtn.addEventListener('click', removeStartMenu);
+    if (quickBtn) quickBtn.addEventListener('click', function () { chooseFreshStart('quick'); });
+    if (setupBtn) setupBtn.addEventListener('click', function () { chooseFreshStart('setup'); });
   }
 
-  function installStartMenuHooks() {
+  function ensureGameMenuButton() {
     var toolbar = $('rpgToolbar');
-    if (toolbar && !$('rpgStartMenuBtn')) {
-      addButton(toolbar, 'rpgStartMenuBtn', '🎲 Game Menu', 'Open RPG start menu', function () { showStartMenu(true); });
-    }
-    if (runDeferredStartAction()) return;
-    if (hasSavedRpgSession()) window.setTimeout(function () { showStartMenu(false); }, 250);
+    if (!toolbar || $('rpgGameMenuButton')) return;
+    addButton(toolbar, 'rpgGameMenuButton', '🎲 Game Menu', 'Open RPG game menu', function () {
+      showStartMenu(true);
+    });
   }
 
   function init() {
     ensureCombatControlHelper();
     ensureToolbarControls();
+    ensureGameMenuButton();
     setFocusMode(safeGet(STORAGE_KEY, '1') !== '0');
     setDeveloperPanels(safeGet(DEV_STORAGE_KEY, '0') === '1');
     observeNarrativeFeed();
     patchFetchForTurnVisibility();
-    installStartMenuHooks();
+    if (!runDeferredStartAction()) showStartMenu(false);
   }
-
-  ensureCombatControlHelper();
-  patchFetchForTurnVisibility();
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
@@ -398,7 +411,6 @@
     showStartMenu: showStartMenu,
     clearSavedRpgSession: clearSavedRpgSession,
     markTurnActive: markTurnActive,
-    markTurnDone: markTurnDone,
-    ensureCombatControlHelper: ensureCombatControlHelper
+    markTurnDone: markTurnDone
   };
 }());
