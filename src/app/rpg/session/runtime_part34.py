@@ -120,8 +120,10 @@ def _phase8_part34_existing_completed_llm_narration(payload: Dict[str, Any]) -> 
 
 
 # runtime_part31 looks up this helper through its module globals at call time.
-# Patch it so deterministic fallback text no longer prevents the real LLM
-# narrator from running for the visible player-turn response.
-_part31._phase8_part31_existing_completed_narration = _phase8_part34_existing_completed_llm_narration
+# Patch it immediately for already-imported callers.  Also export the same name
+# that runtime_part31 uses so runtime.py's split-module global mirroring preserves
+# this override instead of copying the original helper back over it.
+_phase8_part31_existing_completed_narration = _phase8_part34_existing_completed_llm_narration
+_part31._phase8_part31_existing_completed_narration = _phase8_part31_existing_completed_narration
 
 __all__ = [name for name in globals() if not name.startswith("__")]
