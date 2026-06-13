@@ -15,6 +15,17 @@ def test_sitecustomize_provides_opening_bonus_default():
     assert "resume/idle catch-up" in text
 
 
+def test_sitecustomize_adapts_lmstudio_for_rpg_narrator_interface():
+    sitecustomize = SRC / "sitecustomize.py"
+    text = sitecustomize.read_text(encoding="utf-8")
+
+    assert "_install_rpg_lmstudio_gateway_compat" in text
+    assert "LMStudioProvider.generate" in text
+    assert "LMStudioProvider.generate_stream" in text
+    assert "LMStudioProvider.call" in text
+    assert "chat_completion" in text
+
+
 def test_runtime_promotion_normalizes_missing_turn_ids_before_rpg_js():
     script = (STATIC / "rpg" / "runtime-promotion-panel.js").read_text(encoding="utf-8")
 
@@ -25,8 +36,20 @@ def test_runtime_promotion_normalizes_missing_turn_ids_before_rpg_js():
     assert "wrapTurnStreamIdentifiers" in script
 
 
+def test_runtime_promotion_improves_generic_bran_room_fallback():
+    script = (STATIC / "rpg" / "runtime-promotion-panel.js").read_text(encoding="utf-8")
+
+    assert "improveFallbackForCurrentCommand" in script
+    assert "serviceFallbackForCommand" in script
+    assert "mentionsRoom" in script
+    assert "mentionsBran" in script
+    assert "Five silver for the night" in script
+    assert "A deliberate action is taken" in script
+
+
 def test_runtime_promotion_exports_turn_stream_normalizer_for_debugging():
     script = (STATIC / "rpg" / "runtime-promotion-panel.js").read_text(encoding="utf-8")
 
     assert "window.RpgRuntimePromotionPanel" in script
     assert "normalizeTurnStreamEvent: normalizeTurnStreamEvent" in script
+    assert "improveFallbackForCurrentCommand: improveFallbackForCurrentCommand" in script
