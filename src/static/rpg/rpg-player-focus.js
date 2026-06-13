@@ -16,6 +16,12 @@
 
   function $(id) { return document.getElementById(id); }
 
+  function debugLog(label, data) {
+    try {
+      console.log('[RPG][TurnDebug] ' + label, data || {});
+    } catch (_) {}
+  }
+
   function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
   function safeGet(key, fallback) {
     try {
@@ -147,6 +153,7 @@
     chip.classList.toggle('is-active', !!active);
     chip.classList.toggle('is-stalled', !!stalled);
     chip.textContent = stalled ? 'Response is taking longer than expected…' : 'Waiting for response…';
+    debugLog('status_chip', { active: !!active, stalled: !!stalled });
   }
 
   function ensurePendingNote(stalled) {
@@ -165,6 +172,7 @@
       ? 'Still waiting for the GM/NPC response. The command was accepted, but the live narration stream has not returned response content yet.'
       : 'Command sent. Waiting for the GM/NPC response…';
     feed.scrollTop = feed.scrollHeight;
+    debugLog('pending_note', { stalled: !!stalled });
   }
 
   function clearPendingNote() {
@@ -175,11 +183,13 @@
   function markTurnActive() {
     if (!isRpgVisible()) return;
     lastActiveAt = Date.now();
+    debugLog('turn_active', { session_id: currentSavedSessionId() });
     updateStatusChip(true, false);
     ensurePendingNote(false);
     window.clearTimeout(watchdogTimer);
     watchdogTimer = window.setTimeout(function () {
       if (lastActiveAt && Date.now() - lastActiveAt >= WATCHDOG_MS) {
+        debugLog('watchdog_stalled', { age_ms: Date.now() - lastActiveAt });
         updateStatusChip(true, true);
         ensurePendingNote(true);
       }
@@ -187,6 +197,7 @@
   }
 
   function markTurnDone() {
+    debugLog('turn_done', { age_ms: lastActiveAt ? Date.now() - lastActiveAt : 0 });
     lastActiveAt = 0;
     window.clearTimeout(watchdogTimer);
     updateStatusChip(false, false);
@@ -249,6 +260,11 @@
         for (var j = 0; j < added.length; j += 1) {
           cleanAmbientNode(added[j]);
           if (hasMeaningfulRpgContent(added[j])) {
+            debugLog('feed_response_node', {
+              node_id: added[j].id || '',
+              class_name: added[j].className || '',
+              text: String(added[j].textContent || '').slice(0, 180)
+            });
             markTurnDone();
             return;
           }
@@ -284,93 +300,6 @@
     return isPreviewSessionId(sid) ? sid : '';
   }
 
-  function sse(data) {
-    return 'data: ' + JSON.stringify(data || {}) + '\n\n';
-  }
-
-  function encodeText(text) {
-    return new TextEncoder().encode(text || '');
-  }
-
-  function wrapTurnStreamResponseWithAuthoritativeFallback(response) {
-    if (!response || !response.body || typeof ReadableStream === 'undefined') return response;
-    var reader = response.body.getReader();
-    var decoder = new TextDecoder();
-    var buffer = '';
-    var fallbackEmitted = false;
-
-    var stream = new ReadableStream({
-      start: function (controller) {
-        function pump() {
-          reader.read().then(function (next) {
-            if (!next || next.done) {
-              if (!fallbackEmitted && buffer) controller.enqueue(encodeText(buffer));
-              controller.close();
-              return;
-            }
-
-            var chunkText = decoder.decode(next.value, { stream: true });
-            buffer += chunkText;
-            var parts = buffer.split('\n\n');
-            buffer = parts.pop() || '';
-
-            for (var i = 0; i < parts.length; i += 1) {
-              var raw = parts[i];
-              controller.enqueue(encodeText(raw + '\n\n'));
-              if (fallbackEmitted) continue;
-
-              var dataLines = String(raw || '').split('\n')
-                .filter(function (line) { return String(line || '').indexOf('data:') === 0; })
-                .map(function (line) { return line.slice(5).trim(); });
-              if (!dataLines.length) continue;
-
-              var evt = safeJsonParse(dataLines.join('\n'));
-              if (!evt || evt.type !== 'authoritative_result') continue;
-
-              var fallback = String(evt.fallback_narration || evt.summary || '').trim();
-              if (!fallback) continue;
-
-              fallbackEmitted = true;
-              var turnId = String(evt.turn_id || 'authoritative_fallback_' + Date.now());
-              controller.enqueue(encodeText(sse({
-                type: 'narration_artifact',
-                turn_id: turnId,
-                narration: fallback,
-                authoritative_action: fallback,
-                live_draft_streaming: true,
-                source: 'authoritative_fallback_before_live_narration'
-              })));
-              controller.enqueue(encodeText(sse({
-                type: 'done',
-                turn_id: turnId,
-                tick: evt.tick,
-                narration_status: 'authoritative_fallback',
-                live_draft_streaming: true
-              })));
-              try { reader.cancel('authoritative fallback delivered'); } catch (_) {}
-              controller.close();
-              return;
-            }
-
-            pump();
-          }).catch(function (err) {
-            controller.error(err);
-          });
-        }
-        pump();
-      },
-      cancel: function (reason) {
-        try { reader.cancel(reason); } catch (_) {}
-      }
-    });
-
-    return new Response(stream, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers
-    });
-  }
-
   function patchFetchForTurnVisibility() {
     if (window.__rpgPlayerFocusFetchPatched) return;
     window.__rpgPlayerFocusFetchPatched = true;
@@ -397,19 +326,25 @@
 
       var isTurnStreamRequest = /\/api\/rpg\/session\/turn\/stream(?:$|[?#])/.test(url);
       var isTurnRequest = /\/api\/rpg\/(games\/[^/]+\/turn|session\/turn(?:\/stream)?|turn_stream|stream_turn)(?:$|[?#])/.test(url);
-      if (isTurnRequest) markTurnActive();
+      if (isTurnRequest) {
+        debugLog('fetch_start', { url: url, stream: isTurnStreamRequest, body: requestBodyObject(body) });
+        markTurnActive();
+      }
 
       return originalFetch.apply(this, arguments).then(function (response) {
+        if (isTurnRequest) {
+          debugLog('fetch_response', { url: url, status: response.status, ok: response.ok, stream: isTurnStreamRequest });
+        }
         if (isTurnRequest && !response.ok) {
           updateStatusChip(true, true);
           ensurePendingNote(true);
         }
-        if (isTurnStreamRequest && response.ok) {
-          return wrapTurnStreamResponseWithAuthoritativeFallback(response);
-        }
+        // Do not wrap/cancel turn streams here. The runtime-promotion stream normalizer
+        // owns event normalization; this layer only provides visibility and diagnostics.
         return response;
       }).catch(function (err) {
         if (isTurnRequest) {
+          debugLog('fetch_error', { url: url, message: String(err && err.message || err) });
           updateStatusChip(true, true);
           ensurePendingNote(true);
         }
@@ -495,6 +430,7 @@
     observeNarrativeFeed();
     patchFetchForTurnVisibility();
     if (!runDeferredStartAction()) showStartMenu(false);
+    debugLog('init', { session_id: currentSavedSessionId() });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
