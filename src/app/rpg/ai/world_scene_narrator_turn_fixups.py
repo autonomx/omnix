@@ -10,6 +10,8 @@ import json
 import re
 from typing import Any, Dict
 
+from app.rpg.ai import world_scene_narrator_dialogue_grounding as _dialogue
+from app.rpg.ai import world_scene_narrator_payloads as _payloads
 from app.rpg.ai import world_scene_narrator_prompts as _prompts
 from app.rpg.ai import world_scene_narrator_service_grounding as _service
 
@@ -226,13 +228,104 @@ def _strip_basic_markdown(value: Any) -> str:
     return " ".join(text.split()).strip()
 
 
+def _line_has_strong_prior_memory_reference(line: str) -> bool:
+    lower = _safe_str(line).lower()
+    strong_markers = (
+        "remember",
+        "last time",
+        "earlier",
+        "same as before",
+        "as i told you",
+        "as i said",
+        "you came by",
+        "you asked",
+        "you bought",
+        "you tried",
+        "still short",
+        "short on coin",
+    )
+    return any(marker in lower for marker in strong_markers)
+
+
+def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
+    """Return a service-grounded fallback only for actual service turns.
+
+    This helper was referenced by the split dialogue grounding module but was
+    never defined, which caused valid LLM narration artifacts to fail during
+    sanitization.  Keep it conservative: non-service conversation lines should
+    remain model-authored rather than being replaced by generic service text.
+    """
+
+    narration_context = _safe_dict(narration_context)
+    try:
+        service_result = _safe_dict(_dialogue._service_result_from_context(narration_context))
+    except Exception:
+        service_result = {}
+    if not service_result.get("matched"):
+        return ""
+
+    purchase = _safe_dict(service_result.get("purchase"))
+    service_application = _safe_dict(narration_context.get("service_application"))
+    provider_name = _safe_str(service_result.get("provider_name") or "I").strip() or "I"
+    service_name = _safe_str(
+        purchase.get("service_name")
+        or service_result.get("service_name")
+        or service_result.get("service_kind")
+        or "that service"
+    ).strip()
+    blocked_reason = _safe_str(
+        service_application.get("blocked_reason")
+        or purchase.get("blocked_reason")
+    ).strip()
+
+    if blocked_reason == "insufficient_funds":
+        return f"{provider_name} says, 'You're a bit short for {service_name}; settle the coin and I'll help you.'"
+    if purchase.get("purchased") or service_application.get("applied"):
+        return f"{provider_name} says, 'Done. {service_name} is settled.'"
+    return f"{provider_name} says, 'I can help with {service_name}; tell me exactly what you need.'"
+
+
+def _strip_unbacked_memory_reference_from_npc_line(
+    line: str,
+    narration_context: Dict[str, Any],
+) -> str:
+    """Avoid erasing normal dialogue because of weak words like 'again'."""
+
+    line = _safe_str(line)
+    if not line:
+        return ""
+    if not _line_has_strong_prior_memory_reference(line):
+        return line
+
+    try:
+        grounded = _ORIGINAL_STRIP_UNBACKED_MEMORY_REFERENCE(line, narration_context)
+    except NameError:
+        grounded = _service_grounded_npc_line(narration_context)
+    if grounded and grounded != "What can I help you with?":
+        return grounded
+
+    # If there is no actual service result, do not replace conversational NPC
+    # dialogue with a generic shopkeeper fallback.
+    try:
+        service_result = _safe_dict(_dialogue._service_result_from_context(narration_context))
+    except Exception:
+        service_result = {}
+    if not service_result.get("matched"):
+        return line
+    return grounded or line
+
+
 _ORIGINAL_PARSE_SCENE_RESPONSE = _prompts.parse_scene_response
 _ORIGINAL_SERVICE_CLAIM_NEEDS_GROUNDING = _service._service_claim_needs_grounding
+_ORIGINAL_STRIP_UNBACKED_MEMORY_REFERENCE = _dialogue._strip_unbacked_memory_reference_from_npc_line
 
 # Patch split modules that imported helpers before the facade import completes.
 _prompts.parse_scene_response = parse_scene_response
 _service._player_input_action_text = _player_input_action_text
 _service._service_claim_needs_grounding = _service_claim_needs_grounding
+_dialogue._service_grounded_npc_line = _service_grounded_npc_line
+_dialogue._strip_unbacked_memory_reference_from_npc_line = _strip_unbacked_memory_reference_from_npc_line
+_payloads._strip_unbacked_memory_reference_from_npc_line = _strip_unbacked_memory_reference_from_npc_line
 
 try:  # Runtime has already star-imported the original helpers during facade load.
     from app.rpg.ai import world_scene_narrator_runtime as _runtime
@@ -254,4 +347,6 @@ __all__ = [
     "parse_scene_response",
     "_player_input_action_text",
     "_service_claim_needs_grounding",
+    "_service_grounded_npc_line",
+    "_strip_unbacked_memory_reference_from_npc_line",
 ]
