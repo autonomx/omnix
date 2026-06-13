@@ -103,3 +103,14 @@ def test_player_focus_does_not_short_circuit_turn_stream_llm_calls():
     assert "preview_session_fast_path" not in script
     assert "A room is available. Five silver for the night" not in script
     assert "/api\\/rpg\\/session\\/turn" in script
+
+
+def test_player_focus_renders_authoritative_fallback_before_live_narration_wait():
+    script = (STATIC / "rpg" / "rpg-player-focus.js").read_text(encoding="utf-8")
+
+    assert "wrapTurnStreamResponseWithAuthoritativeFallback" in script
+    assert "authoritative_result" in script
+    assert "fallback_narration" in script
+    assert "authoritative_fallback_before_live_narration" in script
+    assert "reader.cancel('authoritative fallback delivered')" in script
+    assert "narration_artifact" in script
