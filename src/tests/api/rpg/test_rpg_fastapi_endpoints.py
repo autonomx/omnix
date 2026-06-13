@@ -175,6 +175,28 @@ def test_live_polling_endpoints_reject_missing_session_id_with_400(path):
 
 
 @pytest.mark.api
+def test_idle_tick_returns_safe_contract_when_session_load_raises(monkeypatch):
+    """Idle polling must not surface session-load exceptions as HTTP 500s."""
+    from app.rpg.api import rpg_session_management_routes as routes
+
+    def broken_load_runtime_session(session_id):
+        raise RuntimeError("load boom")
+
+    monkeypatch.setattr(routes, "load_runtime_session", broken_load_runtime_session)
+
+    response = _client().post(
+        "/api/rpg/session/idle_tick",
+        json={"session_id": "load-error", "count": 1, "reason": "heartbeat"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"] == "session_load_failed"
+    assert payload["updates"] == []
+
+
+@pytest.mark.api
 def test_idle_tick_returns_safe_contract_when_runtime_tick_raises(monkeypatch):
     """Idle polling must not surface runtime tick exceptions as HTTP 500s."""
     from app.rpg.api import rpg_session_management_routes as routes
@@ -208,6 +230,50 @@ def test_idle_tick_returns_safe_contract_when_runtime_tick_raises(monkeypatch):
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"] == "idle_tick_failed"
+    assert payload["updates"] == []
+
+
+@pytest.mark.api
+def test_idle_tick_returns_safe_contract_when_runtime_result_is_malformed(monkeypatch):
+    """Idle polling must not 500 when runtime returns an unexpected payload."""
+    from app.rpg.api import rpg_session_management_routes as routes
+
+    def fake_load_runtime_session(session_id):
+        return {
+            "session_id": session_id,
+            "runtime_state": {},
+            "simulation_state": {},
+        }
+
+    def fake_capture(session):
+        return session
+
+    class MalformedRuntime:
+        @staticmethod
+        def apply_idle_ticks(session_id, count, reason="heartbeat"):
+            return {
+                "ok": True,
+                "updates": None,
+                "latest_seq": "not-an-int",
+                "ticks_applied": "not-an-int",
+                "idle_debug_trace": None,
+                "settings": None,
+            }
+
+    monkeypatch.setattr(routes, "load_runtime_session", fake_load_runtime_session)
+    monkeypatch.setattr(routes, "save_runtime_session", lambda session: session)
+    monkeypatch.setattr(routes, "capture_semantic_state_change_proposals_for_session", fake_capture)
+    monkeypatch.setitem(sys.modules, "app.rpg.session.runtime", MalformedRuntime)
+
+    response = _client().post(
+        "/api/rpg/session/idle_tick",
+        json={"session_id": "malformed-result", "count": "bad", "reason": "heartbeat"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"] == "idle_tick_response_failed"
     assert payload["updates"] == []
 
 
