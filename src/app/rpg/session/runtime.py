@@ -49,7 +49,7 @@ for _module in _PART_MODULES:
         {
             _name: _value
             for _name, _value in _module.__dict__.items()
-            if not _name.startswith("__")
+            if not _name.startswith("__") and not _name.startswith("_base_")
         }
     )
 
