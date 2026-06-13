@@ -212,7 +212,9 @@ def _phase8_patch_visible_fallback(authoritative_result: Dict[str, Any]) -> Dict
         return authoritative_result
 
     authoritative_result = dict(authoritative_result)
-    authoritative_result.setdefault("deterministic_fallback_narration", fallback_text)
+    # Assign instead of setdefault: existing values may be [], {}, or another
+    # non-visible container that would otherwise render literally in the UI.
+    authoritative_result["deterministic_fallback_narration"] = fallback_text
     authoritative_result.setdefault("fallback_narration_source", _PHASE8_NARRATION_FALLBACK_SOURCE)
 
     for key in ("result", "authoritative", "payload"):
@@ -220,7 +222,7 @@ def _phase8_patch_visible_fallback(authoritative_result: Dict[str, Any]) -> Dict
         if not payload:
             continue
         patched = dict(payload)
-        patched.setdefault("deterministic_fallback_narration", fallback_text)
+        patched["deterministic_fallback_narration"] = fallback_text
         patched.setdefault("fallback_narration_source", _PHASE8_NARRATION_FALLBACK_SOURCE)
         authoritative_result[key] = patched
 
