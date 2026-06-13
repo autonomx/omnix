@@ -53,3 +53,16 @@ def test_runtime_promotion_exports_turn_stream_normalizer_for_debugging():
     assert "window.RpgRuntimePromotionPanel" in script
     assert "normalizeTurnStreamEvent: normalizeTurnStreamEvent" in script
     assert "improveFallbackForCurrentCommand: improveFallbackForCurrentCommand" in script
+
+
+def test_player_focus_logs_turn_stream_without_wrapping_or_canceling_it():
+    script = (STATIC / "rpg" / "rpg-player-focus.js").read_text(encoding="utf-8")
+
+    assert "[RPG][TurnDebug]" in script
+    assert "fetch_start" in script
+    assert "fetch_response" in script
+    assert "watchdog_stalled" in script
+    assert "feed_response_node" in script
+    assert "Do not wrap/cancel turn streams here" in script
+    assert "wrapTurnStreamResponseWithAuthoritativeFallback" not in script
+    assert "reader.cancel('authoritative fallback delivered')" not in script
