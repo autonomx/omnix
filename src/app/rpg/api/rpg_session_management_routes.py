@@ -137,16 +137,36 @@ async def delete_rpg_session(request: Request):
 
 
 async def idle_tick_rpg_session(request: Request):
-    """Advance world simulation by idle ticks without player action."""
-    data = await request.json()
-    session_id = _safe_str(data.get("session_id")).strip()
-    count = int(data.get("count", 1) or 1)
-    reason = _safe_str(data.get("reason") or "heartbeat").strip()
+    """Advance world simulation by idle ticks without player action.
 
+    This endpoint is called by a browser heartbeat. Apart from a genuinely
+    malformed request with no session id, it must never surface runtime errors
+    as HTTP 500s because that creates noisy, repeated console failures while a
+    game is loading or a simulation subsystem is degraded.
+    """
+    try:
+        data = await request.json()
+    except Exception as exc:
+        return _empty_idle_tick_payload("invalid_json", repr(exc))
+
+    data = _safe_dict(data)
+    session_id = _safe_str(data.get("session_id")).strip()
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
 
-    session = load_runtime_session(session_id)
+    try:
+        count = int(data.get("count", 1) or 1)
+    except Exception:
+        count = 1
+    count = max(1, min(count, 10))
+    reason = _safe_str(data.get("reason") or "heartbeat").strip() or "heartbeat"
+
+    try:
+        session = load_runtime_session(session_id)
+    except Exception as exc:
+        print("[RPG][idle_tick] load_runtime_session failed:", repr(exc))
+        return _empty_idle_tick_payload("session_load_failed", repr(exc))
+
     if session is None:
         # This endpoint is polled by the live UI while sessions are still being
         # created/loaded. Treat a missing session as an empty heartbeat result
@@ -169,51 +189,63 @@ async def idle_tick_rpg_session(request: Request):
     try:
         from app.rpg.session.runtime import apply_idle_ticks
 
-        result = apply_idle_ticks(session_id, count, reason=reason)
+        result = _safe_dict(apply_idle_ticks(session_id, count, reason=reason))
     except Exception as exc:
         print("[RPG][idle_tick] apply_idle_ticks failed:", repr(exc))
         return _empty_idle_tick_payload("idle_tick_failed", repr(exc))
 
-    if not result.get("ok"):
-        err = _safe_str(result.get("error") or "idle_tick_failed")
-        if err == "session_not_found":
-            return _empty_idle_tick_payload("session_not_found")
-        return _empty_idle_tick_payload(err)
+    try:
+        if not result.get("ok"):
+            err = _safe_str(result.get("error") or "idle_tick_failed")
+            if err == "session_not_found":
+                return _empty_idle_tick_payload("session_not_found")
+            return _empty_idle_tick_payload(err)
 
-    session = load_runtime_session(session_id)
-    if session:
-        sim = _safe_dict(session.get("simulation_state"))
-        rt = _safe_dict(session.get("runtime_state"))
-        print("POST-IDLE SIM TICK =", sim.get("tick"), sim.get("current_tick"))
-        print("POST-IDLE RUNTIME TICK =", rt.get("tick"))
-
-    session = load_runtime_session(session_id)
-    if session:
-        runtime_state = _safe_dict(session.get("runtime_state"))
-        if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
+        try:
+            session = load_runtime_session(session_id)
+        except Exception as exc:
+            print("[RPG][idle_tick] post-idle load_runtime_session failed:", repr(exc))
+            session = None
+        if session:
+            sim = _safe_dict(session.get("simulation_state"))
             rt = _safe_dict(session.get("runtime_state"))
-            print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
-            print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
-            print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
-            try:
-                session = capture_semantic_state_change_proposals_for_session(session)
-                try:
-                    save_runtime_session(session)
-                except Exception:
-                    pass
-            except Exception as exc:
-                print("[RPG][idle_tick] post-idle semantic proposal capture failed:", repr(exc))
+            print("POST-IDLE SIM TICK =", sim.get("tick"), sim.get("current_tick"))
+            print("POST-IDLE RUNTIME TICK =", rt.get("tick"))
 
-    return {
-        "ok": True,
-        "updates": _safe_list(result.get("updates")),
-        "latest_seq": int(result.get("latest_seq", 0) or 0),
-        "ticks_applied": int(result.get("ticks_applied", 0) or 0),
-        "idle_debug_trace": result.get("idle_debug_trace", {}),
-        "idle_seconds": result.get("idle_seconds", 0),
-        "idle_gate_open": result.get("idle_gate_open", False),
-        "settings": result.get("settings", {}),
-    }
+        try:
+            session = load_runtime_session(session_id)
+        except Exception as exc:
+            print("[RPG][idle_tick] final load_runtime_session failed:", repr(exc))
+            session = None
+        if session:
+            runtime_state = _safe_dict(session.get("runtime_state"))
+            if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
+                rt = _safe_dict(session.get("runtime_state"))
+                print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
+                print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
+                print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
+                try:
+                    session = capture_semantic_state_change_proposals_for_session(session)
+                    try:
+                        save_runtime_session(session)
+                    except Exception:
+                        pass
+                except Exception as exc:
+                    print("[RPG][idle_tick] post-idle semantic proposal capture failed:", repr(exc))
+
+        return {
+            "ok": True,
+            "updates": _safe_list(result.get("updates")),
+            "latest_seq": int(result.get("latest_seq", 0) or 0),
+            "ticks_applied": int(result.get("ticks_applied", 0) or 0),
+            "idle_debug_trace": _safe_dict(result.get("idle_debug_trace")),
+            "idle_seconds": result.get("idle_seconds", 0) or 0,
+            "idle_gate_open": bool(result.get("idle_gate_open", False)),
+            "settings": _safe_dict(result.get("settings")),
+        }
+    except Exception as exc:
+        print("[RPG][idle_tick] response contract failed:", repr(exc))
+        return _empty_idle_tick_payload("idle_tick_response_failed", repr(exc))
 
 
 def register_rpg_session_management_routes(router: APIRouter) -> None:
