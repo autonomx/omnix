@@ -4,13 +4,13 @@ import html
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from app.launcher.service_manager import LAUNCHER_MANAGER_VERSION, get_default_manager
 
 app = FastAPI(title="Omnix Launcher Control", version=LAUNCHER_MANAGER_VERSION)
 
-_HTML = """
+_HTML = r"""
 <!doctype html>
 <html lang="en">
 <head>
@@ -22,6 +22,7 @@ _HTML = """
     body { margin: 0; padding: 24px; background: radial-gradient(circle at top, #1c2330, #101216 55%); }
     header { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:18px; }
     h1 { margin:0; font-size:24px; }
+    h2 { margin:0; font-size:17px; }
     .sub { color:#aeb8cc; margin-top:6px; }
     .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; }
     .card { border:1px solid #2a3142; border-radius:14px; background:#161a22dd; padding:14px; box-shadow:0 10px 28px #0006; }
@@ -38,6 +39,7 @@ _HTML = """
     button:disabled { opacity:.45; cursor:not-allowed; }
     pre { white-space:pre-wrap; overflow:auto; max-height:240px; background:#0d1017; color:#d7e0ff; padding:10px; border-radius:10px; border:1px solid #272e3d; font-size:12px; }
     .toolbar { margin: 12px 0 18px; }
+    .error { display:none; border:1px solid #704141; background:#2c1717; color:#ffd6d6; padding:10px; border-radius:10px; margin-bottom:14px; white-space:pre-wrap; }
     a { color:#9fc3ff; }
   </style>
 </head>
@@ -47,42 +49,102 @@ _HTML = """
       <h1>Omnix Launcher Control</h1>
       <div class="sub">Start, stop, restart, and watch logs for local services from one window.</div>
     </div>
-    <div><a href="/api/services" target="_blank">JSON</a></div>
+    <div><a href="/api/services" target="_blank" rel="noreferrer">JSON</a></div>
   </header>
+  <div id="error" class="error"></div>
   <div class="toolbar">
-    <button onclick="startAuto()">Start enabled services</button>
-    <button class="stop" onclick="stopAll()">Stop all</button>
+    <button id="start-auto" type="button">Start enabled services</button>
+    <button id="stop-all" class="stop" type="button">Stop all</button>
   </div>
   <div id="services" class="grid"></div>
 <script>
-const $ = (id) => document.getElementById(id);
-function esc(s){ return String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-async function api(path, opts){ const r = await fetch(path, opts || {}); if(!r.ok) throw new Error(await r.text()); return r.json(); }
-async function action(id, verb){ await api(`/api/services/${encodeURIComponent(id)}/${verb}`, {method:'POST'}); await refresh(); }
-async function startAuto(){ await api('/api/services/start-auto', {method:'POST'}); await refresh(); }
-async function stopAll(){ await api('/api/services/stop-all', {method:'POST'}); await refresh(); }
-function render(service){
-  const running = service.status === 'running';
-  const disabled = service.status === 'disabled' || !service.enabled;
-  const logs = (service.recent_logs || []).map(esc).join('\n');
-  return `<section class="card">
-    <div class="row"><h2>${esc(service.label)}</h2><span class="status ${esc(service.status)}">${esc(service.status)}</span></div>
-    <p class="desc">${esc(service.description)}</p>
-    <div>PID: ${esc(service.pid || '-')} · uptime: ${Math.round(service.uptime_seconds || 0)}s</div>
-    <div style="margin:10px 0">
-      <button onclick="action('${esc(service.id)}','start')" ${running || disabled ? 'disabled' : ''}>Start</button>
-      <button class="stop" onclick="action('${esc(service.id)}','stop')" ${!running ? 'disabled' : ''}>Stop</button>
-      <button onclick="action('${esc(service.id)}','restart')" ${disabled ? 'disabled' : ''}>Restart</button>
-    </div>
-    <pre>${logs || '[no logs yet]'}</pre>
-  </section>`;
-}
-async function refresh(){
-  const data = await api('/api/services');
-  $('services').innerHTML = data.services.map(render).join('');
-}
-refresh();
-setInterval(refresh, 2000);
+(() => {
+  const byId = (id) => document.getElementById(id);
+  const servicesEl = byId('services');
+  const errorEl = byId('error');
+  let busy = false;
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[char]));
+  }
+
+  function showError(message) {
+    if (!errorEl) return;
+    const text = String(message || '').trim();
+    errorEl.textContent = text;
+    errorEl.style.display = text ? 'block' : 'none';
+  }
+
+  async function api(path, options) {
+    const response = await fetch(path, options || {});
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return response.json();
+  }
+
+  async function runAction(path) {
+    if (busy) return;
+    busy = true;
+    showError('');
+    try {
+      await api(path, { method: 'POST' });
+      await refresh();
+    } catch (error) {
+      showError(error && error.message ? error.message : String(error));
+    } finally {
+      busy = false;
+    }
+  }
+
+  function render(service) {
+    const running = service.status === 'running';
+    const disabled = service.status === 'disabled' || !service.enabled;
+    const logs = (service.recent_logs || []).map(esc).join('\n');
+    const id = esc(service.id);
+    return `<section class="card">
+      <div class="row"><h2>${esc(service.label)}</h2><span class="status ${esc(service.status)}">${esc(service.status)}</span></div>
+      <p class="desc">${esc(service.description)}</p>
+      <div>PID: ${esc(service.pid || '-')} · uptime: ${Math.round(service.uptime_seconds || 0)}s</div>
+      <div style="margin:10px 0">
+        <button type="button" data-service-id="${id}" data-action="start" ${running || disabled ? 'disabled' : ''}>Start</button>
+        <button type="button" class="stop" data-service-id="${id}" data-action="stop" ${!running ? 'disabled' : ''}>Stop</button>
+        <button type="button" data-service-id="${id}" data-action="restart" ${disabled ? 'disabled' : ''}>Restart</button>
+      </div>
+      <pre>${logs || '[no logs yet]'}</pre>
+    </section>`;
+  }
+
+  async function refresh() {
+    try {
+      const data = await api('/api/services');
+      servicesEl.innerHTML = (data.services || []).map(render).join('');
+      showError('');
+    } catch (error) {
+      showError(error && error.message ? error.message : String(error));
+    }
+  }
+
+  byId('start-auto').addEventListener('click', () => runAction('/api/services/start-auto'));
+  byId('stop-all').addEventListener('click', () => runAction('/api/services/stop-all'));
+  servicesEl.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-service-id][data-action]');
+    if (!button || button.disabled) return;
+    const serviceId = encodeURIComponent(button.dataset.serviceId || '');
+    const verb = encodeURIComponent(button.dataset.action || '');
+    if (!serviceId || !verb) return;
+    runAction(`/api/services/${serviceId}/${verb}`);
+  });
+
+  refresh();
+  window.setInterval(refresh, 2000);
+})();
 </script>
 </body>
 </html>
@@ -92,6 +154,11 @@ setInterval(refresh, 2000);
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> str:
     return _HTML
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/api/services")
