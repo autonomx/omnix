@@ -160,6 +160,22 @@
     document.head.appendChild(script);
   }
 
+  function appendStylesheet(id, href) {
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function ensurePlayerFocusAssets() {
+    appendStylesheet("rpg-player-focus-css", "/static/rpg/rpg-player-focus.css");
+    if (!window.RpgPlayerFocus && !document.getElementById("rpg-player-focus-script")) {
+      appendDeferredScript("rpg-player-focus-script", "/static/rpg/rpg-player-focus.js");
+    }
+  }
+
   function ensureCommandBridgeScript() {
     if (window.RpgCommandBridge || document.getElementById("rpg-command-bridge-script")) return;
     appendDeferredScript("rpg-command-bridge-script", "/static/rpg/rpg-command-bridge.js");
@@ -242,6 +258,7 @@
     loadSettings,
     saveSettings,
     attachToPayload,
+    ensurePlayerFocusAssets,
     ensureCommandBridgeScript,
     ensureLivePayloadBridgeScript,
     ensurePanelLayoutRegistryScript,
@@ -257,24 +274,8 @@
     ensureSurvivalInspectorScript,
   };
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      ensureCommandBridgeScript();
-      ensureLivePayloadBridgeScript();
-      ensurePanelLayoutRegistryScript();
-      ensurePanelChromeScript();
-      render();
-      ensureMapLocationPanelScript();
-      ensurePlayerHudScript();
-      ensureObjectiveJournalPanelScript();
-      ensureCombatActionPanelScript();
-      ensureInventoryPartyPanelScript();
-      ensureRecentActivityPanelScript();
-      ensureSuggestedActionsPanelScript();
-      ensureNextActionButtonsScript();
-      ensureSurvivalInspectorScript();
-    });
-  } else {
+  function initConversationSettings() {
+    ensurePlayerFocusAssets();
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
     ensurePanelLayoutRegistryScript();
@@ -289,5 +290,11 @@
     ensureSuggestedActionsPanelScript();
     ensureNextActionButtonsScript();
     ensureSurvivalInspectorScript();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initConversationSettings);
+  } else {
+    initConversationSettings();
   }
 })();
