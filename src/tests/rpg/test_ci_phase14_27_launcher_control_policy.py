@@ -28,3 +28,10 @@ def test_launcher_policy_lists_required_and_optional_services() -> None:
     assert service_by_id["fastapi"]["required"] is True
     assert service_by_id["image"]["required"] is False
     assert service_by_id["image"]["enabled"] is True
+
+
+def test_launcher_policy_requires_event_bound_dashboard_controls() -> None:
+    policy = build_launcher_control_policy({})
+
+    assert policy["dashboard_controls_event_bound"] is True
+    assert policy["dashboard_inline_global_handlers_allowed"] is False
