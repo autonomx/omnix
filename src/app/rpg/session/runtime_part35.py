@@ -8,6 +8,8 @@ from typing import Any, Dict, Iterable
 # do not spend another blocking LLM call asking the full narrator to rephrase it.
 from .runtime_part34 import *  # noqa: F401,F403
 from .runtime_part33 import _apply_turn_authoritative as _PHASE8_PART35_BASE_APPLY_TURN_AUTHORITATIVE
+from .runtime_part03 import _enqueue_narration_request as _PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST
+from . import runtime_part03 as _part03
 from . import runtime_part04 as _part04
 from . import runtime_part31 as _part31
 
@@ -170,7 +172,74 @@ def _compile_semantic_action_record(
     return record
 
 
-def _phase8_part35_patch_semantic_visible_response(payload: Any) -> Any:
+def _phase8_part35_payload_turn_id(payload: Dict[str, Any]) -> str:
+    payload = _safe_dict(payload)
+    for source in _phase8_part35_iter_dicts(payload):
+        turn_id = _safe_str(source.get("turn_id")).strip()
+        if turn_id:
+            return turn_id
+    return ""
+
+
+def _phase8_part35_payload_tick(payload: Dict[str, Any]) -> int:
+    payload = _safe_dict(payload)
+    for source in _phase8_part35_iter_dicts(payload):
+        try:
+            tick = int(source.get("tick") or 0)
+        except Exception:
+            tick = 0
+        if tick:
+            return tick
+    return 0
+
+
+def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str, Any], fields: Dict[str, Any]) -> None:
+    session_id = _safe_str(session_id).strip()
+    turn_id = _phase8_part35_payload_turn_id(payload)
+    if not session_id or not turn_id:
+        return
+    try:
+        session = load_runtime_session(session_id)
+    except Exception:
+        return
+    if session is None:
+        return
+    runtime_state = _copy_dict(session.get("runtime_state"))
+    existing = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+    if existing:
+        return
+    tick = _phase8_part35_payload_tick(payload)
+    artifact = {
+        "turn_id": turn_id,
+        "tick": tick,
+        "narration": _safe_str(fields.get("narration") or fields.get("final_narration")),
+        "final_narration": _safe_str(fields.get("final_narration") or fields.get("narration")),
+        "narration_json": _safe_dict(fields.get("narration_json")),
+        "npc": _safe_dict(fields.get("npc")),
+        "used_llm": True,
+        "source": _PHASE8_PART35_SOURCE,
+        "artifact_kind": "player_turn_narration",
+        "staleness_policy": "append_only_by_turn_id",
+        "is_append_only_visible_response": True,
+        "semantic_visible_response": _safe_dict(fields.get("semantic_visible_response")),
+    }
+    try:
+        runtime_state = _store_narration_artifact(runtime_state, artifact)
+    except Exception:
+        artifacts = _safe_list(runtime_state.get("narration_artifacts"))
+        artifacts.append(artifact)
+        runtime_state["narration_artifacts"] = artifacts[-50:]
+        by_turn = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+        by_turn[turn_id] = artifact
+        runtime_state["narration_artifacts_by_turn"] = by_turn
+    session["runtime_state"] = runtime_state
+    try:
+        save_runtime_session(session)
+    except Exception:
+        return
+
+
+def _phase8_part35_patch_semantic_visible_response(payload: Any, *, session_id: str = "") -> Any:
     if not isinstance(payload, dict):
         return payload
     fields = _phase8_part35_semantic_visible_response_fields(payload)
@@ -198,7 +267,41 @@ def _phase8_part35_patch_semantic_visible_response(payload: Any) -> Any:
         patched["result"] = {key: value for key, value in patched.items() if key != "authoritative"}
     if not _safe_dict(patched.get("authoritative")):
         patched["authoritative"] = dict(_safe_dict(patched.get("result")))
+    _phase8_part35_persist_semantic_artifact(session_id, patched, fields)
     return patched
+
+
+def _enqueue_narration_request(
+    runtime_state: Dict[str, Any],
+    turn_id: str,
+    tick: int,
+    narration_request: Dict[str, Any],
+    job_kind: str = "player_turn",
+    priority: int = 100,
+) -> tuple[Dict[str, Any], Dict[str, Any], bool]:
+    existing_artifact = _safe_dict(
+        _safe_dict(_safe_dict(runtime_state).get("narration_artifacts_by_turn")).get(_safe_str(turn_id).strip())
+    )
+    if existing_artifact:
+        return _copy_dict(runtime_state), {
+            "job_id": f"narration:{_safe_str(turn_id).strip()}",
+            "turn_id": _safe_str(turn_id).strip(),
+            "tick": int(tick or 0),
+            "job_kind": _safe_str(job_kind).strip() or "player_turn",
+            "priority": priority,
+            "status": "completed",
+            "completed_at": _utc_now_iso(),
+            "error": "",
+            "deduped_by_existing_artifact": True,
+        }, False
+    return _PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST(
+        runtime_state,
+        turn_id,
+        tick,
+        narration_request,
+        job_kind,
+        priority,
+    )
 
 
 def _apply_turn_authoritative(
@@ -215,10 +318,11 @@ def _apply_turn_authoritative(
         action,
         performance_override=performance_override,
     )
-    return _phase8_part35_patch_semantic_visible_response(payload)
+    return _phase8_part35_patch_semantic_visible_response(payload, session_id=session_id)
 
 
 # Patch split modules whose functions resolve these names from their own globals.
+_part03._enqueue_narration_request = _enqueue_narration_request
 _part04._compile_semantic_action_record = _compile_semantic_action_record
 _part31._phase8_part31_existing_completed_narration = _phase8_part31_existing_completed_narration
 _part31._phase8_part31_should_sync_narration = _phase8_part31_should_sync_narration
