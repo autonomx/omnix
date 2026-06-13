@@ -12,8 +12,9 @@ from app.rpg.ai.world_scene_narrator_runtime import *
 from app.rpg.ai.world_scene_narrator_ambient import *
 
 # Imported last on purpose: patches split-module cached helpers so valid
-# rpg_narration_candidates_v1 payloads are accepted and service turns keep
-# grounded action/NPC text instead of stale raw fallback dialogue.
+# rpg_narration_candidates_v1 payloads are accepted and current-turn dialogue
+# keeps the latest player question ahead of stale context.
 from app.rpg.ai.world_scene_narrator_turn_fixups import *
+from app.rpg.ai.world_scene_narrator_current_turn_fixups import *
 
 __all__ = [name for name in globals() if not name.startswith("__")]
