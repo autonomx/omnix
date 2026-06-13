@@ -56,6 +56,29 @@ def test_launcher_dashboard_lists_services_without_starting_processes() -> None:
     assert services["disabled"]["status"] == "disabled"
 
 
+def test_launcher_dashboard_html_uses_safe_script_and_event_handlers() -> None:
+    client = TestClient(app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    text = response.text
+    assert "join('\\n')" in text
+    assert "join('\n')" not in text
+    assert "onclick=" not in text
+    assert "id=\"start-auto\"" in text
+    assert "id=\"stop-all\"" in text
+    assert "addEventListener('click'" in text
+    assert "data-service-id=" in text
+    assert "data-action=\"start\"" in text
+
+
+def test_launcher_dashboard_favicon_is_no_content() -> None:
+    client = TestClient(app)
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 204
+
+
 def test_launcher_dashboard_rejects_unknown_service() -> None:
     manager = LauncherServiceManager([])
     reset_default_manager_for_tests(manager)
