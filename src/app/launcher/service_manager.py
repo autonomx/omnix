@@ -1,0 +1,274 @@
+from __future__ import annotations
+
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Mapping
+
+LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
+DEFAULT_LOG_LIMIT = 1200
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _s(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _python_env(name: str, fallback: str) -> str:
+    return os.environ.get(name, fallback)
+
+
+@dataclass(frozen=True)
+class ServiceSpec:
+    service_id: str
+    label: str
+    command: list[str]
+    cwd: Path
+    env: dict[str, str] = field(default_factory=dict)
+    optional: bool = False
+    enabled: bool = True
+    auto_start: bool = True
+    description: str = ""
+
+
+@dataclass
+class ManagedProcess:
+    spec: ServiceSpec
+    process: subprocess.Popen[str] | None = None
+    started_at: float = 0.0
+    logs: deque[str] = field(default_factory=lambda: deque(maxlen=DEFAULT_LOG_LIMIT))
+    last_returncode: int | None = None
+    lock: threading.RLock = field(default_factory=threading.RLock)
+
+    def status(self) -> str:
+        with self.lock:
+            if not self.spec.enabled:
+                return "disabled"
+            if self.process is None:
+                return "stopped"
+            returncode = self.process.poll()
+            if returncode is None:
+                return "running"
+            self.last_returncode = int(returncode)
+            self.process = None
+            return "exited"
+
+    def snapshot(self) -> dict[str, Any]:
+        status = self.status()
+        with self.lock:
+            return {
+                "id": self.spec.service_id,
+                "label": self.spec.label,
+                "status": status,
+                "enabled": bool(self.spec.enabled),
+                "optional": bool(self.spec.optional),
+                "auto_start": bool(self.spec.auto_start),
+                "description": self.spec.description,
+                "pid": self.process.pid if self.process is not None and status == "running" else None,
+                "started_at": self.started_at if self.started_at else None,
+                "uptime_seconds": max(0.0, time.time() - self.started_at) if self.started_at and status == "running" else 0.0,
+                "last_returncode": self.last_returncode,
+                "recent_logs": list(self.logs)[-80:],
+            }
+
+
+class LauncherServiceManager:
+    def __init__(self, specs: list[ServiceSpec], *, log_limit: int = DEFAULT_LOG_LIMIT) -> None:
+        self._services: dict[str, ManagedProcess] = {
+            spec.service_id: ManagedProcess(spec=spec, logs=deque(maxlen=log_limit)) for spec in specs
+        }
+        self._lock = threading.RLock()
+
+    def list_services(self) -> list[dict[str, Any]]:
+        return [service.snapshot() for service in self._services.values()]
+
+    def service_snapshot(self, service_id: str) -> dict[str, Any]:
+        return self._service(service_id).snapshot()
+
+    def logs(self, service_id: str, *, limit: int = 300) -> list[str]:
+        service = self._service(service_id)
+        with service.lock:
+            return list(service.logs)[-max(1, min(2000, int(limit or 300))):]
+
+    def start_auto_services(self) -> dict[str, Any]:
+        results: dict[str, Any] = {}
+        for service_id, service in self._services.items():
+            if service.spec.enabled and service.spec.auto_start:
+                results[service_id] = self.start(service_id)
+        return {"format_version": LAUNCHER_MANAGER_VERSION, "started": results}
+
+    def start(self, service_id: str) -> dict[str, Any]:
+        service = self._service(service_id)
+        with service.lock:
+            if not service.spec.enabled:
+                self._append(service, "[launcher] service disabled; not starting")
+                return {"ok": False, "error": "service_disabled", "service": service.snapshot()}
+            if service.process is not None and service.process.poll() is None:
+                return {"ok": True, "already_running": True, "service": service.snapshot()}
+            env = os.environ.copy()
+            env.update(service.spec.env)
+            service.spec.cwd.mkdir(parents=True, exist_ok=True)
+            self._append(service, "[launcher] starting: " + " ".join(service.spec.command))
+            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+            process = subprocess.Popen(
+                service.spec.command,
+                cwd=str(service.spec.cwd),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                creationflags=creationflags,
+            )
+            service.process = process
+            service.started_at = time.time()
+            service.last_returncode = None
+            thread = threading.Thread(target=self._pump_logs, args=(service,), daemon=True)
+            thread.start()
+            return {"ok": True, "service": service.snapshot()}
+
+    def stop(self, service_id: str, *, timeout_s: float = 8.0) -> dict[str, Any]:
+        service = self._service(service_id)
+        with service.lock:
+            process = service.process
+            if process is None or process.poll() is not None:
+                service.process = None
+                return {"ok": True, "already_stopped": True, "service": service.snapshot()}
+            self._append(service, "[launcher] stopping")
+            try:
+                if os.name == "nt":
+                    process.send_signal(signal.CTRL_BREAK_EVENT)
+                else:
+                    process.terminate()
+                process.wait(timeout=timeout_s)
+            except Exception:
+                self._append(service, "[launcher] terminate timed out; killing")
+                try:
+                    process.kill()
+                    process.wait(timeout=5)
+                except Exception as exc:
+                    self._append(service, f"[launcher] kill failed: {type(exc).__name__}: {exc}")
+            service.last_returncode = process.poll()
+            service.process = None
+            return {"ok": True, "service": service.snapshot()}
+
+    def restart(self, service_id: str) -> dict[str, Any]:
+        stop_result = self.stop(service_id)
+        start_result = self.start(service_id)
+        return {"ok": bool(stop_result.get("ok")) and bool(start_result.get("ok")), "stop": stop_result, "start": start_result}
+
+    def stop_all(self) -> dict[str, Any]:
+        results: dict[str, Any] = {}
+        for service_id in reversed(list(self._services.keys())):
+            results[service_id] = self.stop(service_id)
+        return {"ok": True, "stopped": results}
+
+    def _service(self, service_id: str) -> ManagedProcess:
+        service = self._services.get(service_id)
+        if service is None:
+            raise KeyError(f"unknown_service:{service_id}")
+        return service
+
+    def _append(self, service: ManagedProcess, line: str) -> None:
+        with service.lock:
+            stamp = time.strftime("%H:%M:%S")
+            service.logs.append(f"[{stamp}] {line.rstrip()}")
+
+    def _pump_logs(self, service: ManagedProcess) -> None:
+        process = service.process
+        if process is None or process.stdout is None:
+            return
+        try:
+            for line in process.stdout:
+                self._append(service, line)
+        finally:
+            with service.lock:
+                if process.poll() is not None:
+                    service.last_returncode = process.returncode
+                    if service.process is process:
+                        service.process = None
+                    self._append(service, f"[launcher] exited with code {process.returncode}")
+
+
+def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
+    root = root or _repo_root()
+    app_python = _python_env("RPG_FLUX_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe")
+    tts_python = _python_env("RPG_TTS_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe")
+    stt_python = _python_env("RPG_STT_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe")
+    image_enabled = _env_flag("OMNIX_IMAGE_ENABLED") and _env_flag("OMNIX_START_IMAGE_SERVICE")
+    common = {
+        "PYTHONPATH": str(root / "src"),
+        "OMNIX_TTS_URL": os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
+        "OMNIX_STT_URL": os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
+        "OMNIX_IMAGE_ENABLED": os.environ.get("OMNIX_IMAGE_ENABLED", "0"),
+        "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
+    }
+    tts_model_dir = os.environ.get("OMNIX_TTS_MODEL_DIR", str(root / "resources" / "models" / "tts" / "Qwen3-TTS-12Hz-0.6B-Base"))
+    return [
+        ServiceSpec(
+            service_id="stt",
+            label="Parakeet STT",
+            command=[stt_python, str(root / "src" / "parakeet_stt_server.py")],
+            cwd=root,
+            env=dict(common),
+            description="Speech-to-text websocket service on 127.0.0.1:5201.",
+        ),
+        ServiceSpec(
+            service_id="tts",
+            label="Omnix TTS",
+            command=[tts_python, str(root / "src" / "tts_server.py")],
+            cwd=root,
+            env={**common, "OMNIX_TTS_MODEL_DIR": tts_model_dir, "OMNIX_QWEN3_TTS_MODEL_DIR": tts_model_dir},
+            description="Text-to-speech service on 127.0.0.1:5101.",
+        ),
+        ServiceSpec(
+            service_id="app",
+            label="Omnix FastAPI App",
+            command=[app_python, str(root / "src" / "launch.py")],
+            cwd=root,
+            env=dict(common),
+            description="Main FastAPI/UI app.",
+        ),
+        ServiceSpec(
+            service_id="image",
+            label="Image Service",
+            command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", "127.0.0.1", "--port", "5301"],
+            cwd=root,
+            env={**common, "OMNIX_IMAGE_ENABLED": "1", "OMNIX_IMAGE_SERVICE_MODE": "1", "OMNIX_IMAGE_PRELOAD": "1", "OMNIX_IMAGE_WARMUP": "1", "OMNIX_IMAGE_URL": ""},
+            optional=True,
+            enabled=image_enabled,
+            auto_start=image_enabled,
+            description="Optional FLUX/image generation service. Disabled unless OMNIX_IMAGE_ENABLED=1 and OMNIX_START_IMAGE_SERVICE=1.",
+        ),
+    ]
+
+
+_manager: LauncherServiceManager | None = None
+
+
+def get_default_manager() -> LauncherServiceManager:
+    global _manager
+    if _manager is None:
+        _manager = LauncherServiceManager(build_default_service_specs())
+    return _manager
+
+
+def reset_default_manager_for_tests(manager: LauncherServiceManager | None = None) -> None:
+    global _manager
+    _manager = manager
