@@ -1,0 +1,153 @@
+/* Player-facing RPG focus mode.
+   Keeps the deterministic/runtime panels available, but collapses developer chrome
+   out of the primary story loop by default. */
+
+body.rpg-player-focus #rpgToolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+}
+
+body.rpg-player-focus #rpgToolbar .rpg-toolbar-btn {
+  min-height: 34px;
+}
+
+body.rpg-player-focus #rpgToolbar .rpg-toolbar-btn:nth-of-type(2),
+body.rpg-player-focus #rpgToolbar .rpg-toolbar-btn:nth-of-type(3),
+body.rpg-player-focus #rpgToolbar .rpg-toolbar-btn:nth-of-type(4),
+body.rpg-player-focus #rpgToolbar .rpg-tts-controls {
+  display: none;
+}
+
+body.rpg-player-focus .rpg-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+body.rpg-player-focus #rpgTopPanels,
+body.rpg-player-focus #rpgMemoryPanelWrapper,
+body.rpg-player-focus #rpg-player-journal-panel,
+body.rpg-player-focus #rpg-inspector-tabs,
+body.rpg-player-focus #rpg-characters-section,
+body.rpg-player-focus #rpg-world-section,
+body.rpg-player-focus #rpg-visuals-section,
+body.rpg-player-focus #rpg-gm-section,
+body.rpg-player-focus #rpg-package-section,
+body.rpg-player-focus #rpg-content-pack-section,
+body.rpg-player-focus #rpg-wizard-section,
+body.rpg-player-focus #rpg-session-section,
+body.rpg-player-focus #rpg-memory-section,
+body.rpg-player-focus #rpg-inspector-toggle-btn,
+body.rpg-player-focus #rpg-inspector-shell,
+body.rpg-player-focus .rpg-living-world-debug-panel,
+body.rpg-player-focus .rpg-conversation-settings-panel {
+  display: none !important;
+}
+
+body.rpg-player-focus.rpg-dev-panels-open #rpgTopPanels,
+body.rpg-player-focus.rpg-dev-panels-open #rpgMemoryPanelWrapper,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-player-journal-panel,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-inspector-tabs,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-characters-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-world-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-visuals-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-gm-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-package-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-content-pack-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-wizard-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-session-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-memory-section,
+body.rpg-player-focus.rpg-dev-panels-open #rpg-inspector-toggle-btn,
+body.rpg-player-focus.rpg-dev-panels-open .rpg-living-world-debug-panel,
+body.rpg-player-focus.rpg-dev-panels-open .rpg-conversation-settings-panel {
+  display: revert !important;
+}
+
+body.rpg-player-focus #rpgNarrativeFeed {
+  flex: 1 1 auto;
+  min-height: min(56vh, 720px);
+  margin: 8px 12px 10px;
+  overflow-y: auto;
+}
+
+body.rpg-player-focus .rpg-msg {
+  max-width: 980px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+body.rpg-player-focus .rpg-msg-actions {
+  display: none;
+}
+
+body.rpg-player-focus.rpg-dev-panels-open .rpg-msg-actions {
+  display: block;
+}
+
+.rpg-player-focus-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.rpg-player-focus-toggle:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.rpg-turn-status-chip {
+  align-items: center;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 999px;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--rpg-gold-bright, #ffd700);
+  display: none;
+  font-size: 12px;
+  gap: 6px;
+  margin-left: auto;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.rpg-turn-status-chip.is-active {
+  display: inline-flex;
+}
+
+.rpg-turn-status-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.rpg-turn-status-chip.is-stalled {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fca5a5;
+}
+
+.rpg-pending-response-note {
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 12px;
+  background: rgba(212, 175, 55, 0.12);
+  color: var(--rpg-parchment-light, #fff8e1);
+  font-style: normal;
+  margin: 10px auto;
+  max-width: 980px;
+  padding: 10px 12px;
+}
+
+.rpg-pending-response-note.is-stalled {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}
