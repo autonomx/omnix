@@ -42,6 +42,7 @@ _PART_MODULE_NAMES = [
     'runtime_part30',
     'runtime_part31',
     'runtime_part32',
+    'runtime_part33',
 ]
 _PART_MODULES = [
     _import_module(f"{__package__}.{name}") for name in _PART_MODULE_NAMES
@@ -76,7 +77,7 @@ _EXPECTED_RUNTIME_WRAPPER_MANIFEST = {
         "app.rpg.session.runtime_part25",
         "app.rpg.session.runtime_part26",
     ],
-    "final_apply_turn_authoritative_module": "app.rpg.session.runtime_part31",
+    "final_apply_turn_authoritative_module": "app.rpg.session.runtime_part33",
     "final_apply_attack_combat_action_module": "app.rpg.session.runtime_part23",
 }
 
