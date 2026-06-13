@@ -83,10 +83,73 @@ from app.rpg.api.rpg_world_routes import (
 
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
+_LIVE_FIRST_DRAFT_TIMEOUT_S = 12.0
+_LIVE_FIRST_DRAFT_MAX_TIMEOUT_S = 60.0
 
 
 def _sse(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return float(default)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _has_stream_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (dict, list, tuple, set)):
+        return bool(value)
+    return True
+
+
+def _stream_authoritative_payload(authoritative_result: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the turn payload shape used by the streaming route.
+
+    Some runtime paths expose completed turn fields under ``result`` and some
+    older/tests paths expose them under ``authoritative``. The stream route
+    needs the same filled fields either way.
+    """
+    authoritative_result = _safe_dict(authoritative_result)
+    result_payload = _safe_dict(authoritative_result.get("result"))
+    authoritative = _safe_dict(authoritative_result.get("authoritative"))
+    merged = dict(result_payload)
+    for key, value in authoritative.items():
+        if _has_stream_value(value) or key not in merged:
+            merged[key] = value
+    return merged
+
+
+def _stream_narration_request(authoritative_result: Dict[str, Any]) -> Dict[str, Any]:
+    authoritative_result = _safe_dict(authoritative_result)
+    return (
+        _safe_dict(authoritative_result.get("narration_request"))
+        or _safe_dict(_safe_dict(authoritative_result.get("authoritative")).get("narration_request"))
+        or _safe_dict(_safe_dict(authoritative_result.get("result")).get("narration_request"))
+    )
+
+
+def _live_first_draft_enabled(perf: Dict[str, Any]) -> bool:
+    perf = _safe_dict(perf)
+    return perf.get("enable_live_first_draft_stream") is True
+
+
+def _live_first_draft_timeout_s(perf: Dict[str, Any]) -> float:
+    perf = _safe_dict(perf)
+    timeout_s = _safe_float(
+        perf.get("live_first_draft_timeout_s"),
+        _LIVE_FIRST_DRAFT_TIMEOUT_S,
+    )
+    if timeout_s <= 0:
+        timeout_s = _LIVE_FIRST_DRAFT_TIMEOUT_S
+    return min(timeout_s, _LIVE_FIRST_DRAFT_MAX_TIMEOUT_S)
 
 
 def _start_live_first_draft_thread(
@@ -147,6 +210,15 @@ def _enqueue_and_signal_narration_job(
     tick: int,
     narration_request: Dict[str, Any],
 ) -> tuple[Dict[str, Any], Dict[str, Any], bool]:
+    runtime_state = _copy_dict(runtime_state)
+    runtime_state["session_id"] = session_id
+    narration_request = _safe_dict(narration_request)
+    narration_request["session_id"] = session_id
+    if turn_id and not _safe_str(narration_request.get("turn_id")).strip():
+        narration_request["turn_id"] = turn_id
+    if tick and not int(narration_request.get("tick", 0) or 0):
+        narration_request["tick"] = tick
+
     runtime_state, narration_job, is_new = _enqueue_narration_request(
         runtime_state,
         turn_id,
@@ -313,6 +385,8 @@ async def execute_rpg_session_turn_stream(request: Request):
                 action=action,
                 performance_override=request_performance or None,
             )
+            authoritative = _stream_authoritative_payload(authoritative_result)
+            narration_request = _stream_narration_request(authoritative_result)
 
             t_authoritative_done = time.monotonic()
             _logger.info(
@@ -321,8 +395,8 @@ async def execute_rpg_session_turn_stream(request: Request):
                 turn_request_id,
                 t_authoritative_done - t0,
                 authoritative_result.get("ok"),
-                _safe_dict(authoritative_result.get("authoritative")).get("turn_id"),
-                _safe_dict(authoritative_result.get("authoritative")).get("tick"),
+                authoritative.get("turn_id"),
+                authoritative.get("tick"),
             )
 
             if not authoritative_result.get("ok"):
@@ -330,21 +404,22 @@ async def execute_rpg_session_turn_stream(request: Request):
                 yield _sse({"type": "error", "error": err})
                 return
 
-            authoritative = _safe_dict(authoritative_result.get("authoritative"))
-            narration_request = _safe_dict(authoritative_result.get("narration_request"))
-
             session = load_runtime_session(session_id)
             if session is None:
                 yield _sse({"type": "error", "error": "session_not_found_after_authoritative"})
                 return
             runtime_state = _copy_dict(session.get("runtime_state"))
-            turn_id = _safe_str(authoritative.get("turn_id")).strip()
-            tick = int(authoritative.get("tick", 0) or 0)
+            turn_id = _safe_str(authoritative.get("turn_id") or narration_request.get("turn_id")).strip()
+            tick = int(authoritative.get("tick") or narration_request.get("tick") or 0)
+            if turn_id and not _safe_str(narration_request.get("turn_id")).strip():
+                narration_request["turn_id"] = turn_id
+            if tick and not int(narration_request.get("tick", 0) or 0):
+                narration_request["tick"] = tick
+            runtime_state["session_id"] = session_id
+            narration_request["session_id"] = session_id
 
             perf = _safe_dict(narration_request.get("performance"))
-            live_first_draft_stream = bool(
-                perf.get("enable_live_first_draft_stream", True)
-            )
+            live_first_draft_stream = _live_first_draft_enabled(perf)
 
             authoritative_turn_id = turn_id
             narration_status = "streaming" if live_first_draft_stream else "queued"
@@ -352,7 +427,7 @@ async def execute_rpg_session_turn_stream(request: Request):
             yield _sse({
                 "type": "authoritative_result",
                 "turn_id": authoritative_turn_id,
-                "tick": authoritative.get("tick"),
+                "tick": tick,
                 "resolved_result": authoritative.get("resolved_result"),
                 "combat_result": authoritative.get("combat_result"),
                 "xp_result": authoritative.get("xp_result"),
@@ -378,10 +453,30 @@ async def execute_rpg_session_turn_stream(request: Request):
                 event_q = _start_live_first_draft_thread(session_id, narration_request)
                 live_result = {}
                 live_error = ""
+                live_timeout_s = _live_first_draft_timeout_s(perf)
+                live_started_at = time.monotonic()
 
                 while True:
+                    elapsed_s = time.monotonic() - live_started_at
+                    remaining_s = live_timeout_s - elapsed_s
+                    if remaining_s <= 0:
+                        live_error = f"live_first_draft_timeout_after_{live_timeout_s:.3f}s"
+                        _logger.warning(
+                            "[RPG TURN STREAM] live_first_draft_timeout session=%s req=%s turn_id=%s timeout_s=%.3f",
+                            session_id,
+                            turn_request_id,
+                            authoritative_turn_id,
+                            live_timeout_s,
+                        )
+                        yield _sse({
+                            "type": "live_first_draft_timeout",
+                            "turn_id": authoritative_turn_id,
+                            "timeout_s": live_timeout_s,
+                        })
+                        break
+
                     try:
-                        evt = event_q.get(timeout=0.10)
+                        evt = event_q.get(timeout=min(0.10, max(remaining_s, 0.001)))
                     except queue.Empty:
                         # Keep the HTTP stream active even if the model has not
                         # yielded a chunk yet.

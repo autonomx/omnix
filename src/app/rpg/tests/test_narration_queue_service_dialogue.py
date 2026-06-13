@@ -1,5 +1,6 @@
 """Tests for narration job queue functionality."""
 import json
+import queue
 from unittest.mock import patch
 
 import pytest
@@ -467,6 +468,8 @@ def test_enqueue_narration_request_is_single_flight_per_turn_id():
     )
 
     assert job1["job_id"] == job2["job_id"]
+    assert runtime_state["session_id"] == "test_session"
+    assert job1["narration_request"]["session_id"] == "test_session"
     assert len(runtime_state["narration_jobs"]) == 1
     assert runtime_state["narration_jobs_by_turn"]["turn:7"]["job_id"] == job1["job_id"]
 
@@ -699,6 +702,217 @@ def test_turn_stream_emits_live_first_draft_artifact(client):
     assert '"live_draft_streaming": true' in body
     assert mock_worker.call_count == 0
     assert mock_signal.call_count == 0
+
+def test_turn_stream_uses_result_envelope_when_authoritative_envelope_missing(client):
+    session_id = "test_session"
+
+    authoritative_result = {
+        "ok": True,
+        "session": {
+            "session_id": session_id,
+            "runtime_state": {"tick": 9},
+        },
+        "turn_contract": {},
+        "result": {
+            "turn_id": "turn:9",
+            "tick": 9,
+            "resolved_result": {"ok": True},
+            "combat_result": {},
+            "xp_result": {},
+            "skill_xp_result": {},
+            "level_up": [],
+            "skill_level_ups": [],
+            "summary": "The turn resolves.",
+            "presentation": {},
+            "response_length": "short",
+            "narration": "The turn resolves.",
+            "narration_status": "queued",
+        },
+        "narration_request": {
+            "turn_id": "turn:9",
+            "tick": 9,
+            "scene": {"title": "The Rusty Flagon Tavern"},
+            "narration_context": {"player_input": "how do you do bran?"},
+            "performance": {
+                "enable_live_first_draft_stream": True,
+                "enable_live_narration_llm": True,
+            },
+        },
+    }
+
+    artifact_result = {
+        "ok": True,
+        "artifact": {
+            "turn_id": "turn:9",
+            "tick": 9,
+            "narration": "Bran nods from behind the bar.",
+            "used_llm": True,
+            "raw_llm_narrative": "{\"narration\":\"Bran nods.\"}",
+            "narration_json": {"narration": "Bran nods."},
+            "speaker_presentation": {},
+            "format_warning": False,
+            "artifact_type": "turn_narration",
+        },
+    }
+
+    seen_request = {}
+
+    def _fake_generate(session_id_arg, narration_request_arg, on_chunk=None):
+        seen_request.update(narration_request_arg)
+        return artifact_result
+
+    with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result), \
+         patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=authoritative_result["session"]), \
+         patch("app.rpg.api.rpg_session_routes._generate_turn_narration_artifact", side_effect=_fake_generate):
+        response = client.post("/api/rpg/session/turn/stream", json={
+            "session_id": session_id,
+            "input": "how do you do bran?",
+        })
+
+    assert response.status_code == 200
+    body = response.text
+    assert '"type": "authoritative_result"' in body
+    assert '"turn_id": "turn:9"' in body
+    assert '"tick": 9' in body
+    assert seen_request["turn_id"] == "turn:9"
+    assert seen_request["scene"]["title"] == "The Rusty Flagon Tavern"
+
+def test_turn_stream_defaults_to_queued_narration_when_live_draft_not_explicit(client):
+    session_id = "test_session"
+
+    authoritative_result = {
+        "ok": True,
+        "authoritative": {
+            "turn_id": "turn:6",
+            "tick": 6,
+            "resolved_result": {},
+            "combat_result": {},
+            "xp_result": {},
+            "skill_xp_result": {},
+            "level_up": [],
+            "skill_level_ups": [],
+            "summary": "Bran considers the room request.",
+            "presentation": {},
+            "response_length": "short",
+            "deterministic_fallback_narration": "Bran names the going room rate.",
+        },
+        "narration_request": {
+            "turn_id": "turn:6",
+            "tick": 6,
+            "scene": {"title": "The Rusty Flagon Tavern"},
+            "narration_context": {"player_input": "how much for a room bran?"},
+            "performance": {
+                "enable_live_narration_llm": True,
+            },
+        },
+    }
+
+    mock_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 6,
+            "narration_jobs": [],
+            "narration_jobs_by_turn": {},
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result), \
+         patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.api.rpg_session_routes.save_runtime_session") as mock_save, \
+         patch("app.rpg.api.rpg_session_routes._start_live_first_draft_thread") as mock_live_thread, \
+         patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_worker, \
+         patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
+        response = client.post("/api/rpg/session/turn/stream", json={
+            "session_id": session_id,
+            "input": "how much for a room bran?",
+        })
+
+    assert response.status_code == 200
+    body = response.text
+    assert '"type": "authoritative_result"' in body
+    assert '"type": "narration_job"' in body
+    assert '"type": "done"' in body
+    assert '"narration_status": "queued"' in body
+    assert '"live_draft_streaming": false' in body
+    assert '"type": "token"' not in body
+    assert mock_live_thread.call_count == 0
+    assert mock_save.call_count == 1
+    assert mock_worker.call_count == 1
+    assert mock_signal.call_count == 1
+    saved_session = mock_save.call_args.args[0]
+    saved_runtime_state = saved_session["runtime_state"]
+    saved_job = saved_runtime_state["narration_jobs_by_turn"]["turn:6"]
+    assert saved_runtime_state["session_id"] == session_id
+    assert saved_job["narration_request"]["session_id"] == session_id
+
+def test_turn_stream_times_out_live_first_draft_and_falls_back_to_queue(client):
+    session_id = "test_session"
+
+    authoritative_result = {
+        "ok": True,
+        "authoritative": {
+            "turn_id": "turn:7",
+            "tick": 7,
+            "resolved_result": {},
+            "combat_result": {},
+            "xp_result": {},
+            "skill_xp_result": {},
+            "level_up": [],
+            "skill_level_ups": [],
+            "summary": "Bran starts to answer.",
+            "presentation": {},
+            "response_length": "short",
+            "deterministic_fallback_narration": "Bran checks the room ledger.",
+        },
+        "narration_request": {
+            "turn_id": "turn:7",
+            "tick": 7,
+            "scene": {"title": "The Rusty Flagon Tavern"},
+            "narration_context": {"player_input": "how much for a room bran?"},
+            "performance": {
+                "enable_live_first_draft_stream": True,
+                "enable_live_narration_llm": True,
+                "live_first_draft_timeout_s": 0.001,
+            },
+        },
+    }
+
+    mock_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 7,
+            "narration_jobs": [],
+            "narration_jobs_by_turn": {},
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result), \
+         patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.api.rpg_session_routes.save_runtime_session") as mock_save, \
+         patch("app.rpg.api.rpg_session_routes._start_live_first_draft_thread", return_value=queue.Queue()) as mock_live_thread, \
+         patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_worker, \
+         patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
+        response = client.post("/api/rpg/session/turn/stream", json={
+            "session_id": session_id,
+            "input": "how much for a room bran?",
+        })
+
+    assert response.status_code == 200
+    body = response.text
+    assert '"type": "authoritative_result"' in body
+    assert '"type": "live_first_draft_timeout"' in body
+    assert '"type": "narration_job"' in body
+    assert '"type": "done"' in body
+    assert '"narration_status": "queued"' in body
+    assert '"live_draft_streaming": false' in body
+    assert mock_live_thread.call_count == 1
+    assert mock_save.call_count == 1
+    assert mock_worker.call_count == 1
+    assert mock_signal.call_count == 1
 
 def test_process_next_narration_job_skips_when_authoritative_job_already_processing():
     session_id = "test_session"

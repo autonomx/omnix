@@ -183,7 +183,7 @@ def _parse_llm_narration_payload(raw: Any) -> Dict[str, Any]:
     if parsed_json:
         return parsed_json
 
-    return parse_scene_response(text)
+    return _recover_narration_from_raw_text(text)
 
 
 def _strict_narration_payload(value: Dict[str, Any]) -> Dict[str, Any]:
@@ -882,10 +882,33 @@ def _recover_narration_from_raw_text(text: str) -> Dict[str, Any]:
     })
 
 
-def _structured_fallback_response() -> str:
-    return (
-        "NARRATOR: [ERROR: LLM FORMAT INVALID]\n"
-        "ACTION: [NO VALID RESPONSE]\n"
-    )
+def _structured_fallback_response(narration_context: Dict[str, Any] | None = None) -> str:
+    narration_context = _safe_dict(narration_context)
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    visible_response = _safe_dict(resolved.get("visible_response"))
+    npc = _safe_dict(visible_response.get("npc") or resolved.get("npc"))
+
+    npc_speaker = _safe_str(npc.get("speaker") or npc.get("name")).strip()
+    npc_line = _safe_str(npc.get("line") or npc.get("text")).strip()
+    narration = _safe_str(
+        visible_response.get("narration")
+        or resolved.get("final_narration")
+        or resolved.get("narration")
+        or resolved.get("message")
+        or resolved.get("summary")
+        or "The moment settles, and the scene waits for your next move."
+    ).strip()
+    action = _authoritative_action_text(narration_context) or "The action resolves."
+
+    parts = [
+        f"NARRATOR: {_bound_text(narration, 260)}",
+        f"ACTION: {_bound_text(action, 180)}",
+    ]
+    if npc_line:
+        if npc_speaker:
+            parts.append(f'NPC: {npc_speaker}: "{_bound_text(npc_line, 180)}"')
+        else:
+            parts.append(f'NPC: "{_bound_text(npc_line, 180)}"')
+    return "\n".join(parts)
 
 __all__ = [name for name in globals() if not name.startswith("__")]

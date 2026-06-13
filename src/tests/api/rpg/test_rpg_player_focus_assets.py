@@ -116,3 +116,6 @@ def test_turn_submit_watchdog_asset_is_loaded_and_recovers_missing_stream_submit
     assert "/api/rpg/session/turn/stream" in script
     assert "ambient_ignored" in script
     assert "rpg-ambient" in script
+    assert "FETCH_SEEN_GRACE_MS" in script
+    assert "recentTurnStreamFetchSeen" in script
+    assert "turn_stream_fetch_already_seen" in script

@@ -16,6 +16,13 @@ def _enqueue_narration_request(
     turn_id = _safe_str(turn_id).strip()
     tick = int(tick or 0)
     narration_request = _safe_dict(narration_request)
+    request_session_id = _safe_str(narration_request.get("session_id")).strip()
+    if request_session_id:
+        runtime_state["session_id"] = request_session_id
+    else:
+        runtime_session_id = _safe_str(runtime_state.get("session_id")).strip()
+        if runtime_session_id:
+            narration_request["session_id"] = runtime_session_id
     job_kind = _safe_str(job_kind).strip() or "player_turn"
     is_new = False
 

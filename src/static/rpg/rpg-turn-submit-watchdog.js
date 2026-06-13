@@ -4,6 +4,7 @@
   var SESSION_KEY = 'omnix_rpg_session_id';
   var STATE_KEY = 'omnix_rpg_state';
   var WAIT_MS = 1800;
+  var FETCH_SEEN_GRACE_MS = 5000;
   var activeAt = 0;
   var lastFetchAt = 0;
   var lastCommand = '';
@@ -155,6 +156,11 @@
     });
   }
 
+  function recentTurnStreamFetchSeen() {
+    if (!activeAt || !lastFetchAt) return false;
+    return lastFetchAt >= (activeAt - FETCH_SEEN_GRACE_MS);
+  }
+
   function arm(command) {
     lastCommand = normalizeCommand(command);
     activeAt = Date.now();
@@ -162,7 +168,15 @@
     window.clearTimeout(timer);
     timer = window.setTimeout(function () {
       if (!activeAt) return;
-      if (lastFetchAt && lastFetchAt >= activeAt) return;
+      if (recentTurnStreamFetchSeen()) {
+        log('turn_stream_fetch_already_seen', {
+          age_ms: Date.now() - activeAt,
+          fetch_delta_ms: lastFetchAt - activeAt,
+          session_id: sessionId(),
+          command: lastCommand
+        });
+        return;
+      }
       log('no_turn_stream_fetch_detected', {
         age_ms: Date.now() - activeAt,
         session_id: sessionId(),

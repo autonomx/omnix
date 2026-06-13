@@ -462,7 +462,11 @@ def _generate_live_narrative(
         raise RuntimeError(
             "live_llm_required_but_llm_failed: empty_response_from_provider"
         )
-    return llm_narrative if 'llm_narrative' in locals() and llm_narrative else _structured_fallback_response()
+    return (
+        llm_narrative
+        if 'llm_narrative' in locals() and llm_narrative
+        else _structured_fallback_response(narration_context)
+    )
 
 
 def _simulate_narrative(scene: Dict[str, Any], narration_context: Dict[str, Any], tone: str = "dramatic") -> str:

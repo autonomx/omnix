@@ -66,3 +66,37 @@ def test_player_focus_logs_turn_stream_without_wrapping_or_canceling_it():
     assert "Do not wrap/cancel turn streams here" in script
     assert "wrapTurnStreamResponseWithAuthoritativeFallback" not in script
     assert "reader.cancel('authoritative fallback delivered')" not in script
+
+
+def test_rpg_stream_done_preserves_authoritative_result_payload_type():
+    script = (STATIC / "rpg" / "rpg.js").read_text(encoding="utf-8")
+
+    assert "done_event: evt" in script
+    assert "stream_done: true" in script
+    assert "if (!finalPayload.type) finalPayload.type = 'done'" in script
+    assert "if (!finalData.type) finalData.type = 'done'" in script
+
+
+def test_rpg_turn_console_performance_logs_stream_milestones():
+    script = (STATIC / "rpg" / "rpg.js").read_text(encoding="utf-8")
+
+    assert "[RPG][TurnPerf]" in script
+    assert "createTurnPerformanceTracker" in script
+    assert "trackTurnStreamPerformanceEvent" in script
+    assert "ui_submit_start" in script
+    assert "response_headers" in script
+    assert "perf.mark('sse_' + type" in script
+    assert "summarizeTurnStreamEvent" in script
+    assert "stream_returned_to_ui" in script
+    assert "ui_complete_loading_off" in script
+
+
+def test_rpg_narration_failed_status_preserves_existing_turn_text():
+    script = (STATIC / "rpg" / "rpg.js").read_text(encoding="utf-8")
+
+    assert "turnBodyHasNarrationText" in script
+    assert "narrationFailureMessage" in script
+    assert "data-narration-failure" in script
+    assert "Narration unavailable" in script
+    assert "The authoritative turn is still saved." in script
+    assert "job.error || 'The narration stream did not complete.'" not in script

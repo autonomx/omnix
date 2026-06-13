@@ -280,6 +280,28 @@
         );
     }
 
+    function turnBodyHasNarrationText(body) {
+        if (!body) return false;
+        var clone = body.cloneNode(true);
+        Array.prototype.slice.call(clone.querySelectorAll(
+            '.rpg-turn-narration-placeholder, .rpg-generating-inline, .rpg-inline-status-badge'
+        )).forEach(function (node) {
+            try { node.remove(); } catch (_err) {}
+        });
+        var text = coerceText(clone.textContent || '').trim();
+        if (!text) return false;
+        return !/^generating narration\.?$/i.test(text);
+    }
+
+    function narrationFailureMessage(job) {
+        var error = _safeStr(job && job.error || '');
+        var lower = error.toLowerCase();
+        if (lower.indexOf('no models loaded') >= 0 || lower.indexOf('provider') >= 0) {
+            return 'The deferred narration model is unavailable. The authoritative turn is still saved.';
+        }
+        return 'The deferred narration could not complete. The authoritative turn is still saved.';
+    }
+
     function getNarrationJson(artifact) {
         artifact = artifact || {};
         return artifact.narration_json || {};
@@ -2935,11 +2957,20 @@
                         var evt = JSON.parse(part.slice(6));
                         if (evt.type === 'authoritative_result') {
                             // Do NOT cancel — narration comes after this
-                            window.__RPG_LAST_AUTHORITATIVE__ = evt.data;
+                            window.__RPG_LAST_AUTHORITATIVE__ = evt;
+                            finalData = Object.assign({}, finalData || {}, evt);
                             continue;
                         } else if (evt.type === 'done') {
                             // Keep the authoritative payload if we already have it.
-                            if (!finalData) finalData = evt;
+                            finalData = Object.assign({}, finalData || {}, {
+                                done_event: evt,
+                                stream_done: true,
+                                turn_id: (finalData && finalData.turn_id) || evt.turn_id,
+                                tick: (finalData && finalData.tick) || evt.tick,
+                                narration_status: evt.narration_status || (finalData && finalData.narration_status),
+                                live_draft_streaming: evt.live_draft_streaming || (finalData && finalData.live_draft_streaming),
+                            });
+                            if (!finalData.type) finalData.type = 'done';
                         } else if (evt.type === 'error') {
                             throw new Error(evt.error || 'Stream error');
                         }
@@ -3109,11 +3140,15 @@
                             root.querySelector('.rpg-turn-narration-body') ||
                             root.querySelector('.rpg-turn-body') ||
                             root;
-                        body.innerHTML = buildSystemNoteHtml(
-                            job.status === 'stale' ? 'Narration stale' : 'Narration failed',
-                            _safeStr(job.error || 'The narration stream did not complete.'),
-                            job.status === 'stale' ? 'warning' : 'error'
-                        );
+                        if (turnBodyHasNarrationText(body)) {
+                            body.setAttribute('data-narration-failure', _safeStr(job.error || job.status || 'failed'));
+                        } else {
+                            body.innerHTML = buildSystemNoteHtml(
+                                job.status === 'stale' ? 'Narration stale' : 'Narration unavailable',
+                                narrationFailureMessage(job),
+                                job.status === 'stale' ? 'warning' : 'error'
+                            );
+                        }
                     }
                 }
                 updateState({ isGeneratingNarration: false });
@@ -3425,8 +3460,96 @@
         return normalized;
     }
 
+    function turnPerfNow() {
+        if (window.performance && typeof window.performance.now === 'function') {
+            return window.performance.now();
+        }
+        return Date.now();
+    }
+
+    function roundTurnPerfMs(value) {
+        value = Number(value || 0);
+        return Math.round(value * 10) / 10;
+    }
+
+    function createTurnPerformanceTracker(input, meta) {
+        var startedAt = turnPerfNow();
+        var finished = false;
+        var baseMeta = (meta && typeof meta === 'object') ? meta : {};
+        var id = 'turn_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        var command = String(input || '');
+
+        function log(label, extra) {
+            var now = turnPerfNow();
+            var payload = Object.assign({
+                id: id,
+                label: label,
+                elapsed_ms: roundTurnPerfMs(now - startedAt),
+                input_len: command.length,
+                input_preview: command.slice(0, 80),
+            }, baseMeta, extra || {});
+            try {
+                console.info('[RPG][TurnPerf] ' + label, payload);
+            } catch (_err) {
+                // Console logging must never affect turn submission.
+            }
+        }
+
+        return {
+            id: id,
+            mark: log,
+            finish: function (label, extra) {
+                if (finished) return;
+                finished = true;
+                log(label || 'complete', extra || {});
+            }
+        };
+    }
+
+    function summarizeTurnStreamEvent(evt) {
+        evt = (evt && typeof evt === 'object') ? evt : {};
+        return {
+            event_type: evt.type || '',
+            stage: evt.stage || '',
+            turn_id: evt.turn_id || '',
+            tick: evt.tick,
+            narration_status: evt.narration_status || evt.status || '',
+            live_draft_streaming: !!evt.live_draft_streaming,
+            text_len: String(evt.text || evt.token || '').length,
+            has_narration: !!evt.narration,
+            has_artifact: evt.type === 'narration_artifact',
+        };
+    }
+
+    function trackTurnStreamPerformanceEvent(perf, evt, counters) {
+        if (!perf || !evt || typeof perf.mark !== 'function') return;
+        counters = counters || {};
+        var type = String(evt.type || 'unknown');
+        if (type === 'heartbeat') {
+            counters.heartbeatCount = (counters.heartbeatCount || 0) + 1;
+            if (counters.heartbeatCount === 1 || counters.heartbeatCount % 25 === 0) {
+                perf.mark('sse_heartbeat', Object.assign(
+                    { heartbeat_count: counters.heartbeatCount },
+                    summarizeTurnStreamEvent(evt)
+                ));
+            }
+            return;
+        }
+        if (type === 'token') {
+            counters.tokenCount = (counters.tokenCount || 0) + 1;
+            if (counters.tokenCount === 1) {
+                perf.mark('sse_first_token', Object.assign(
+                    { token_count: counters.tokenCount },
+                    summarizeTurnStreamEvent(evt)
+                ));
+            }
+            return;
+        }
+        perf.mark('sse_' + type, summarizeTurnStreamEvent(evt));
+    }
+
     /** Send a turn with a structured action payload (streaming). */
-    async function apiSendTurnStreamWithAction(sessionId, input, action, onToken) {
+    async function apiSendTurnStreamWithAction(sessionId, input, action, onToken, perf) {
         let payload = { session_id: sessionId, input: input, player_input: input, action: action };
         if (
           window.RpgConversationSettings &&
@@ -3434,11 +3557,25 @@
         ) {
           payload = window.RpgConversationSettings.attachToPayload(payload);
         }
+        if (perf && typeof perf.mark === 'function') {
+            perf.mark('fetch_start', {
+                session_id: sessionId,
+                has_action: true,
+                payload_keys: Object.keys(payload || {}),
+            });
+        }
         var res = await fetch('/api/rpg/session/turn/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
+        if (perf && typeof perf.mark === 'function') {
+            perf.mark('response_headers', {
+                status: res.status,
+                ok: !!res.ok,
+                has_body: !!res.body,
+            });
+        }
         if (!res.ok) {
             return buildTurnClientError('turn_stream_http_' + res.status, {
                 status: res.status,
@@ -3450,6 +3587,7 @@
         var decoder = new TextDecoder();
         var buf = '';
         var finalData = null;
+        var streamCounters = {};
 
         while (true) {
             var readResult = await reader.read();
@@ -3464,6 +3602,7 @@
                 if (part.startsWith('data: ')) {
                     try {
                         var evt = JSON.parse(part.slice(6));
+                        trackTurnStreamPerformanceEvent(perf, evt, streamCounters);
                         if (evt.type === 'token' && typeof onToken === 'function') {
                             onToken(evt.token || evt.text || '');
                             continue;
@@ -3476,7 +3615,15 @@
                                 live_draft_streaming: true,
                             });
                         } else if (evt.type === 'done') {
-                            finalData = Object.assign({}, finalData || {}, evt);
+                            finalData = Object.assign({}, finalData || {}, {
+                                done_event: evt,
+                                stream_done: true,
+                                turn_id: (finalData && finalData.turn_id) || evt.turn_id,
+                                tick: (finalData && finalData.tick) || evt.tick,
+                                narration_status: evt.narration_status || (finalData && finalData.narration_status),
+                                live_draft_streaming: evt.live_draft_streaming || (finalData && finalData.live_draft_streaming),
+                            });
+                            if (!finalData.type) finalData.type = 'done';
                         } else if (evt.type === 'error') {
                             finalData = evt;
                         }
@@ -3649,10 +3796,20 @@
 
     async function handleRPGInput(input, structuredAction) {
         if (!input || rpgState.isLoading) return;
+        var turnPerf = createTurnPerformanceTracker(input, {
+            has_structured_action: !!structuredAction,
+            session_id: rpgState.sessionId || '',
+        });
+        var finalTurnPayload = null;
+        turnPerf.mark('ui_submit_start', {
+            loading_before_submit: !!rpgState.isLoading,
+        });
         markRealPlayerActivity('send_turn');
 
         appendMessage({ type: 'player', content: input });
+        turnPerf.mark('player_message_appended');
         setLoading(true);
+        turnPerf.mark('loading_on');
 
         // Create a streaming narration element that fills as tokens arrive
         var streamingDiv = null;
@@ -3710,10 +3867,18 @@
             if (!sid) return buildTurnClientError('session_id_required', { sessionId: sid });
             try {
                 if (structuredAction) {
-                    d = await apiSendTurnStreamWithAction(sid, input, structuredAction, onToken);
+                    d = await apiSendTurnStreamWithAction(sid, input, structuredAction, onToken, turnPerf);
                 } else {
-                    d = await apiSendTurnStream(sid, input, onToken);
+                    d = await apiSendTurnStream(sid, input, onToken, turnPerf);
                 }
+                turnPerf.mark('stream_returned_to_ui', {
+                    session_id: sid,
+                    response_type: d && d.type,
+                    turn_id: d && d.turn_id,
+                    stream_done: !!(d && d.stream_done),
+                    narration_status: d && d.narration_status,
+                    live_draft_streaming: !!(d && d.live_draft_streaming),
+                });
             } catch (err) {
                 var msg = (err && err.message) ? String(err.message) : 'turn_stream_request_failed';
                 if (msg.indexOf('404') >= 0) {
@@ -3827,6 +3992,15 @@
                 sessionId: rpgState.sessionId,
                 phase: 'post_submit',
             });
+            finalTurnPayload = data;
+            turnPerf.mark('post_submit_payload', {
+                response_type: data && data.type,
+                turn_id: data && data.turn_id,
+                tick: data && data.tick,
+                narration_status: data && data.narration_status,
+                live_draft_streaming: !!(data && data.live_draft_streaming),
+                stream_done: !!(data && data.stream_done),
+            });
 
             if (data.type === 'error') {
                 var msg = coerceText(data.error || 'Turn failed.');
@@ -3834,6 +4008,10 @@
                     type: 'system',
                     role: 'error',
                     content: '❌ Error: ' + msg,
+                });
+                turnPerf.mark('ui_error_rendered', {
+                    error: msg,
+                    turn_id: data && data.turn_id,
                 });
                 setLoading(false);
                 return;
@@ -3846,6 +4024,7 @@
 
             if (data.type === 'needs_setup') {
                 openAdventureBuilder();
+                turnPerf.mark('needs_setup_opened');
                 setLoading(false);
                 return;
             }
@@ -3868,10 +4047,17 @@
                         role: 'error',
                         content: '❌ Error: turn result missing turn_id',
                     });
+                    turnPerf.mark('missing_turn_id_rendered', {
+                        response_type: data && data.type,
+                    });
                     setLoading(false);
                     return;
                 }
                 updateState({ currentTurnId: turnId, isGeneratingNarration: true });
+                turnPerf.mark('authoritative_render_start', {
+                    turn_id: turnId,
+                    narration_status: data.narration_status,
+                });
 
                 // Watchdog to prevent stuck state
                 setTimeout(() => {
@@ -3895,6 +4081,10 @@
                     presentation: data.presentation,
                 });
                 applyUpdate(update);
+                turnPerf.mark('authoritative_rendered', {
+                    turn_id: turnId,
+                    message_count: update && update.messages ? update.messages.length : 0,
+                });
                 updateRpgServiceActionsFromPayload(data || {});
                 if (window.RpgLivingWorldInspector && typeof window.RpgLivingWorldInspector.render === "function") {
                     window.RpgLivingWorldInspector.render(data);
@@ -3963,6 +4153,10 @@
 
                     clearNarrationPlaceholder(turnId);
                     resetStreamingNarrationState(turnId);
+                    turnPerf.mark('live_narration_rendered', {
+                        turn_id: turnId,
+                        narration_len: String(liveNarration || liveAuthoritativeAction || '').length,
+                    });
                 } else {
                     // Show narration pending with badge
                     const fallbackContent = coerceText(data.fallback_narration || data.deterministic_fallback_narration);
@@ -3974,6 +4168,10 @@
                             content: fallbackContent,
                             turnId: turnId
                         });
+                        turnPerf.mark('fallback_narration_rendered', {
+                            turn_id: turnId,
+                            narration_len: fallbackContent.length,
+                        });
                     } else {
                         // Create pending placeholder with status badge
                         appendMessage({
@@ -3982,6 +4180,10 @@
                             narrationState: 'pending',
                             content: '',
                             turnId: turnId
+                        });
+                        turnPerf.mark('pending_narration_placeholder_rendered', {
+                            turn_id: turnId,
+                            narration_status: data.narration_status || 'queued',
                         });
                         
                         // Add the placeholder badge after DOM is created
@@ -4008,6 +4210,10 @@
                 // Legacy handling
                 var update = transformResponse(data);
                 applyUpdate(update);
+                turnPerf.mark('legacy_response_rendered', {
+                    response_type: data && data.type,
+                    message_count: update && update.messages ? update.messages.length : 0,
+                });
                 if (update.player) {
                     updateState({ player: update.player });
                     renderPlayerPanel(update.player);
@@ -4029,8 +4235,18 @@
         } catch (err) {
             if (streamingDiv) { streamingDiv.remove(); streamingDiv = null; }
             appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
+            turnPerf.mark('ui_exception_rendered', {
+                error: String(err && err.message || err),
+            });
         } finally {
             setLoading(false);
+            turnPerf.finish('ui_complete_loading_off', {
+                response_type: finalTurnPayload && finalTurnPayload.type,
+                turn_id: finalTurnPayload && finalTurnPayload.turn_id,
+                narration_status: finalTurnPayload && finalTurnPayload.narration_status,
+                live_draft_streaming: !!(finalTurnPayload && finalTurnPayload.live_draft_streaming),
+                stream_done: !!(finalTurnPayload && finalTurnPayload.stream_done),
+            });
             persistSnapshot();
             if (rpgState.sessionId) {
                 startLivingWorld();
@@ -4039,7 +4255,7 @@
         }
     }
 
-    async function apiSendTurnStream(sessionId, input, onToken) {
+    async function apiSendTurnStream(sessionId, input, onToken, perf) {
         let payload = { session_id: sessionId, input: input, player_input: input };
         if (
           window.RpgConversationSettings &&
@@ -4047,11 +4263,25 @@
         ) {
           payload = window.RpgConversationSettings.attachToPayload(payload);
         }
+        if (perf && typeof perf.mark === 'function') {
+            perf.mark('fetch_start', {
+                session_id: sessionId,
+                has_action: false,
+                payload_keys: Object.keys(payload || {}),
+            });
+        }
         const response = await fetch('/api/rpg/session/turn/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
+        if (perf && typeof perf.mark === 'function') {
+            perf.mark('response_headers', {
+                status: response.status,
+                ok: !!response.ok,
+                has_body: !!response.body,
+            });
+        }
 
         if (!response.ok) {
             return buildTurnClientError('turn_stream_http_' + response.status, {
@@ -4068,6 +4298,7 @@
         const decoder = new TextDecoder();
         let buffer = '';
         let finalPayload = null;
+        let streamCounters = {};
 
         while (true) {
             const next = await reader.read();
@@ -4093,6 +4324,7 @@
                 }
 
                 if (!evt || typeof evt !== 'object') continue;
+                trackTurnStreamPerformanceEvent(perf, evt, streamCounters);
 
                 if (evt.type === 'token' && typeof onToken === 'function') {
                     onToken(evt.token || evt.text || '');
@@ -4119,7 +4351,15 @@
                 }
 
                 if (evt.type === 'done') {
-                    finalPayload = Object.assign({}, finalPayload || {}, evt);
+                    finalPayload = Object.assign({}, finalPayload || {}, {
+                        done_event: evt,
+                        stream_done: true,
+                        turn_id: (finalPayload && finalPayload.turn_id) || evt.turn_id,
+                        tick: (finalPayload && finalPayload.tick) || evt.tick,
+                        narration_status: evt.narration_status || (finalPayload && finalPayload.narration_status),
+                        live_draft_streaming: evt.live_draft_streaming || (finalPayload && finalPayload.live_draft_streaming),
+                    });
+                    if (!finalPayload.type) finalPayload.type = 'done';
                     continue;
                 }
             }

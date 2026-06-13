@@ -135,6 +135,88 @@ def build_turn_narration_request(
     }
 
 
+def _looks_like_internal_narration_instruction(text: str) -> bool:
+    normalized = _safe_str(text).strip().lower()
+    if not normalized:
+        return False
+    instruction_markers = (
+        "npc should answer naturally",
+        "narrate ",
+        "narration may ",
+        "narration must ",
+        "must not invent",
+        "do not invent",
+    )
+    if any(marker in normalized for marker in instruction_markers):
+        return True
+    return normalized.startswith(
+        (
+            "the player asks ",
+            "the player attempts:",
+            "the player takes hostile",
+            "the player apologizes ",
+            "the player performs ",
+            "the player is making a deterministic service inquiry",
+        )
+    )
+
+
+def _fallback_candidate_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return "\n\n".join(
+            _safe_str(item).strip()
+            for item in value
+            if _safe_str(item).strip()
+        ).strip()
+    return ""
+
+
+def _visible_text_from_resolved_result(resolved_result: Dict[str, Any]) -> str:
+    result = _safe_dict(resolved_result)
+    sources = [result, _safe_dict(result.get("result"))]
+    for source in sources:
+        visible_response = _safe_dict(source.get("visible_response"))
+        npc = _safe_dict(visible_response.get("npc") or source.get("npc"))
+        speaker = _safe_str(npc.get("speaker")).strip()
+        line = _safe_str(npc.get("line")).strip()
+        if line:
+            text = f'{speaker}: "{line}"' if speaker else line
+            if not _looks_like_internal_narration_instruction(text):
+                return text
+
+        narration = _safe_str(visible_response.get("narration")).strip()
+        if narration and not _looks_like_internal_narration_instruction(narration):
+            return narration
+
+        for key in ("dialogue", "final_narration", "narration", "message", "summary"):
+            text = _fallback_candidate_text(source.get(key))
+            if text and not _looks_like_internal_narration_instruction(text):
+                return text
+    return ""
+
+
+def _sanitize_queued_fallback_narration(
+    fallback_narration: str,
+    *,
+    resolved_result: Dict[str, Any],
+    narration_request: Dict[str, Any],
+) -> str:
+    fallback_narration = _safe_str(fallback_narration).strip()
+    if not fallback_narration:
+        return ""
+    if not _looks_like_internal_narration_instruction(fallback_narration):
+        return fallback_narration
+
+    visible = _visible_text_from_resolved_result(resolved_result)
+    if visible:
+        return visible
+
+    request_context = _safe_dict(narration_request.get("narration_context"))
+    return _visible_text_from_resolved_result(_safe_dict(request_context.get("resolved_result")))
+
+
 def assemble_turn_narration_response(
     *,
     session: Dict[str, Any],
@@ -163,6 +245,11 @@ def assemble_turn_narration_response(
         )
     if not fallback_narration:
         fallback_narration = _safe_str(_safe_dict(turn_contract.get("narration_brief")).get("summary")).strip()
+    fallback_narration = _sanitize_queued_fallback_narration(
+        fallback_narration,
+        resolved_result=resolved_result,
+        narration_request=narration_request,
+    )
 
     authoritative["turn_id"] = _safe_str(
         authoritative.get("turn_id") or narration_request.get("turn_id")
@@ -330,7 +417,9 @@ def assemble_turn_narration_response(
     return {
         "ok": True,
         "session": session,
+        "authoritative": authoritative,
         "turn_contract": _safe_dict(authoritative.get("turn_contract") or turn_contract),
+        "narration_request": narration_request,
         "result": {
             "turn_id": authoritative.get("turn_id"),
             "tick": authoritative.get("tick"),

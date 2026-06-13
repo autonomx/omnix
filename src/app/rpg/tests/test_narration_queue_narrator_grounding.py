@@ -237,6 +237,23 @@ def test_narrate_scene_does_not_emit_format_invalid_on_non_json_llm_text():
     assert "[ERROR: LLM FORMAT INVALID]" not in result.get("narration", "")
     assert result.get("used_llm") is True
 
+
+def test_llm_narration_payload_parser_recovers_plain_text_without_nameerror():
+    from app.rpg.ai.world_scene_narrator_payloads import _parse_llm_narration_payload
+
+    result = _parse_llm_narration_payload(
+        'NARRATOR: Bran pauses with the towel still in his hand.\n'
+        'ACTION: You ask Bran how things are going.\n'
+        'NPC: Bran: "Busy, but I have seen worse mornings."'
+    )
+
+    assert result["format_version"] == "rpg_narration_v2"
+    assert result["narration"] == "Bran pauses with the towel still in his hand."
+    assert result["action"] == "You ask Bran how things are going."
+    assert result["npc"]["speaker"] == "Bran"
+    assert result["npc"]["line"] == "Busy, but I have seen worse mornings."
+
+
 def test_narrate_scene_force_sync_can_fallback_when_provider_fails():
     from app.rpg.ai.world_scene_narrator import narrate_scene
 
@@ -294,6 +311,90 @@ def test_assemble_turn_narration_response_sync_does_not_force_live_llm():
     assert result["result"]["narration"] == "You wait and watch the room."
     assert captured["narration_context"]["force_sync_narration"] is True
     assert captured["narration_context"]["require_live_llm_narration"] is False
+
+
+def test_assemble_turn_narration_response_queued_hides_internal_ask_brief():
+    from app.rpg.session.narration_runtime import assemble_turn_narration_response
+
+    result = assemble_turn_narration_response(
+        session={"session_id": "test_session"},
+        authoritative={},
+        turn_contract={
+            "narration_brief": {
+                "summary": (
+                    "The player asks Bran: i ask bran how his day is going?. "
+                    "The NPC should answer naturally, using their current mood, "
+                    "memories, and the scene context."
+                ),
+            },
+        },
+        narration_request={
+            "turn_id": "turn:3",
+            "tick": 3,
+            "scene": {"title": "The Rusty Flagon Tavern"},
+            "narration_context": {
+                "player_input": "i ask bran how his day is going?",
+            },
+        },
+        runtime_state={
+            "force_sync_narration": False,
+            "performance": {},
+            "runtime_settings": {"response_length": "short"},
+        },
+        perf={"enable_live_narration_llm": True},
+        resolved_result={"ok": True},
+    )
+
+    assert result["result"]["narration_status"] == "queued"
+    assert result["result"]["narration"] == ""
+    assert result["authoritative"]["deterministic_fallback_narration"] == ""
+    assert "NPC should answer naturally" not in result["result"]["narration"]
+
+
+def test_assemble_turn_narration_response_queued_keeps_real_visible_dialogue():
+    from app.rpg.session.narration_runtime import assemble_turn_narration_response
+
+    result = assemble_turn_narration_response(
+        session={"session_id": "test_session"},
+        authoritative={},
+        turn_contract={
+            "narration_brief": {
+                "summary": (
+                    "The player asks Bran: how are you?. "
+                    "The NPC should answer naturally, using their current mood, "
+                    "memories, and the scene context."
+                ),
+            },
+        },
+        narration_request={
+            "turn_id": "turn:4",
+            "tick": 4,
+            "scene": {"title": "The Rusty Flagon Tavern"},
+            "narration_context": {
+                "player_input": "how are you?",
+            },
+        },
+        runtime_state={
+            "force_sync_narration": False,
+            "performance": {},
+            "runtime_settings": {"response_length": "short"},
+        },
+        perf={"enable_live_narration_llm": True},
+        resolved_result={
+            "ok": True,
+            "visible_response": {
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Busy, but still standing. What can I get you?",
+                },
+            },
+        },
+    )
+
+    assert result["result"]["narration_status"] == "queued"
+    assert result["result"]["narration"] == 'Bran: "Busy, but still standing. What can I get you?"'
+    assert "NPC should answer naturally" not in result["result"]["narration"]
+
 
 def test_assemble_turn_narration_response_sync_recomputes_service_recall_when_missing():
     from app.rpg.session.narration_runtime import assemble_turn_narration_response
@@ -414,6 +515,10 @@ def test_assemble_turn_narration_response_sync_preserves_structural_result_field
     assert result["result"]["xp_result"]["player_xp"] == 1
     assert result["result"]["presentation"]["available_actions"][0]["action_id"] == "service:purchase:bran_meal_stew"
     assert result["result"]["response_length"] == "short"
+    assert result["authoritative"]["turn_id"] == "turn:42"
+    assert result["authoritative"]["tick"] == 42
+    assert result["narration_request"]["turn_id"] == "turn:42"
+    assert result["narration_request"]["scene"]["title"] == "The Rusty Flagon Tavern"
 
 def test_narrator_reward_and_action_are_authoritative_only():
     from app.rpg.ai.world_scene_narrator import narrate_scene
