@@ -24,6 +24,24 @@ from app.rpg.session.runtime import (
 )
 
 
+def _empty_idle_tick_payload(error: str = "session_not_found", details: object | None = None) -> dict:
+    """Return the non-throwing contract expected by live UI polling."""
+    payload = {
+        "ok": False,
+        "error": _safe_str(error or "idle_tick_failed"),
+        "updates": [],
+        "latest_seq": 0,
+        "ticks_applied": 0,
+        "idle_debug_trace": {},
+        "idle_seconds": 0,
+        "idle_gate_open": False,
+        "settings": {},
+    }
+    if details is not None:
+        payload["details"] = _safe_str(details)
+    return payload
+
+
 async def post_rpg_menu_action(request: Request):
     payload = await request.json() or {}
     session_id = _safe_str(payload.get("session_id"))
@@ -133,46 +151,34 @@ async def idle_tick_rpg_session(request: Request):
         # This endpoint is polled by the live UI while sessions are still being
         # created/loaded. Treat a missing session as an empty heartbeat result
         # so the browser console does not report route-looking 404 noise.
-        return {
-            "ok": False,
-            "error": "session_not_found",
-            "updates": [],
-            "latest_seq": 0,
-            "ticks_applied": 0,
-            "idle_debug_trace": {},
-            "idle_seconds": 0,
-            "idle_gate_open": False,
-            "settings": {},
-        }
+        return _empty_idle_tick_payload("session_not_found")
 
-    rt = _safe_dict(session.get("runtime_state"))
-    print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
-    print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
-    print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
-    session = capture_semantic_state_change_proposals_for_session(session)
     try:
-        save_runtime_session(session)
-    except Exception:
-        pass
+        rt = _safe_dict(session.get("runtime_state"))
+        print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
+        print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
+        print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
+        session = capture_semantic_state_change_proposals_for_session(session)
+        try:
+            save_runtime_session(session)
+        except Exception:
+            pass
+    except Exception as exc:
+        print("[RPG][idle_tick] semantic proposal capture failed:", repr(exc))
 
-    from app.rpg.session.runtime import apply_idle_ticks
+    try:
+        from app.rpg.session.runtime import apply_idle_ticks
 
-    result = apply_idle_ticks(session_id, count, reason=reason)
+        result = apply_idle_ticks(session_id, count, reason=reason)
+    except Exception as exc:
+        print("[RPG][idle_tick] apply_idle_ticks failed:", repr(exc))
+        return _empty_idle_tick_payload("idle_tick_failed", repr(exc))
+
     if not result.get("ok"):
         err = _safe_str(result.get("error") or "idle_tick_failed")
         if err == "session_not_found":
-            return {
-                "ok": False,
-                "error": "session_not_found",
-                "updates": [],
-                "latest_seq": 0,
-                "ticks_applied": 0,
-                "idle_debug_trace": {},
-                "idle_seconds": 0,
-                "idle_gate_open": False,
-                "settings": {},
-            }
-        return JSONResponse({"ok": False, "error": err}, status_code=500)
+            return _empty_idle_tick_payload("session_not_found")
+        return _empty_idle_tick_payload(err)
 
     session = load_runtime_session(session_id)
     if session:
@@ -189,11 +195,14 @@ async def idle_tick_rpg_session(request: Request):
             print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
             print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
             print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
-            session = capture_semantic_state_change_proposals_for_session(session)
             try:
-                save_runtime_session(session)
-            except Exception:
-                pass
+                session = capture_semantic_state_change_proposals_for_session(session)
+                try:
+                    save_runtime_session(session)
+                except Exception:
+                    pass
+            except Exception as exc:
+                print("[RPG][idle_tick] post-idle semantic proposal capture failed:", repr(exc))
 
     return {
         "ok": True,
