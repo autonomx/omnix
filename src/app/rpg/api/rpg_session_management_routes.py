@@ -1,6 +1,8 @@
 """Management endpoints for RPG sessions."""
 from __future__ import annotations
 
+import threading
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -40,6 +42,92 @@ def _empty_idle_tick_payload(error: str = "session_not_found", details: object |
     if details is not None:
         payload["details"] = _safe_str(details)
     return payload
+
+
+def _semantic_capture_already_active(runtime_state: dict) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    capture = _safe_dict(runtime_state.get("semantic_capture_worker"))
+    return _safe_str(capture.get("status")).strip().lower() == "running"
+
+
+def _mark_semantic_capture_worker(session_id: str, status: str, reason: str = "") -> None:
+    try:
+        session = load_runtime_session(session_id)
+        if session is None:
+            return
+        runtime_state = _safe_dict(session.get("runtime_state"))
+        runtime_state["semantic_capture_worker"] = {
+            "status": _safe_str(status),
+            "reason": _safe_str(reason),
+        }
+        session["runtime_state"] = runtime_state
+        save_runtime_session(session)
+    except Exception:
+        pass
+
+
+def _run_semantic_capture_background(session_id: str, reason: str = "idle_tick") -> bool:
+    """Schedule semantic/ambient LLM capture off the request path.
+
+    Idle semantic capture can call the LLM.  Running it inside the heartbeat route
+    competes with player-turn narration and makes the UI feel blocked.  The
+    background worker keeps the world alive without delaying the player-facing
+    response path.
+    """
+    session_id = _safe_str(session_id).strip()
+    if not session_id:
+        return False
+    try:
+        session = load_runtime_session(session_id)
+    except Exception as exc:
+        print("[RPG][idle_tick] semantic background load failed:", repr(exc))
+        return False
+    if session is None:
+        return False
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    if _semantic_capture_already_active(runtime_state):
+        return False
+
+    runtime_state["semantic_capture_worker"] = {
+        "status": "running",
+        "reason": _safe_str(reason),
+    }
+    session["runtime_state"] = runtime_state
+    try:
+        save_runtime_session(session)
+    except Exception:
+        pass
+
+    def _worker() -> None:
+        try:
+            captured_session = load_runtime_session(session_id)
+            if captured_session is None:
+                return
+            rt = _safe_dict(captured_session.get("runtime_state"))
+            print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
+            print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
+            print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
+            captured_session = capture_semantic_state_change_proposals_for_session(captured_session)
+            rt = _safe_dict(captured_session.get("runtime_state"))
+            rt["semantic_capture_worker"] = {
+                "status": "completed",
+                "reason": _safe_str(reason),
+            }
+            captured_session["runtime_state"] = rt
+            try:
+                save_runtime_session(captured_session)
+            except Exception:
+                pass
+        except Exception as exc:
+            print("[RPG][idle_tick] background semantic proposal capture failed:", repr(exc))
+            _mark_semantic_capture_worker(session_id, "failed", repr(exc))
+
+    threading.Thread(
+        target=_worker,
+        name=f"rpg-idle-semantic-capture:{session_id}",
+        daemon=True,
+    ).start()
+    return True
 
 
 async def post_rpg_menu_action(request: Request):
@@ -173,18 +261,12 @@ async def idle_tick_rpg_session(request: Request):
         # so the browser console does not report route-looking 404 noise.
         return _empty_idle_tick_payload("session_not_found")
 
+    # Semantic capture may call the LLM, so schedule it after accepting the
+    # heartbeat instead of blocking this HTTP request.
     try:
-        rt = _safe_dict(session.get("runtime_state"))
-        print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
-        print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
-        print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
-        session = capture_semantic_state_change_proposals_for_session(session)
-        try:
-            save_runtime_session(session)
-        except Exception:
-            pass
+        _run_semantic_capture_background(session_id, reason="pre_idle_tick")
     except Exception as exc:
-        print("[RPG][idle_tick] semantic proposal capture failed:", repr(exc))
+        print("[RPG][idle_tick] semantic proposal scheduling failed:", repr(exc))
 
     try:
         from app.rpg.session.runtime import apply_idle_ticks
@@ -211,27 +293,8 @@ async def idle_tick_rpg_session(request: Request):
             rt = _safe_dict(session.get("runtime_state"))
             print("POST-IDLE SIM TICK =", sim.get("tick"), sim.get("current_tick"))
             print("POST-IDLE RUNTIME TICK =", rt.get("tick"))
-
-        try:
-            session = load_runtime_session(session_id)
-        except Exception as exc:
-            print("[RPG][idle_tick] final load_runtime_session failed:", repr(exc))
-            session = None
-        if session:
-            runtime_state = _safe_dict(session.get("runtime_state"))
-            if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
-                rt = _safe_dict(session.get("runtime_state"))
-                print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
-                print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
-                print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
-                try:
-                    session = capture_semantic_state_change_proposals_for_session(session)
-                    try:
-                        save_runtime_session(session)
-                    except Exception:
-                        pass
-                except Exception as exc:
-                    print("[RPG][idle_tick] post-idle semantic proposal capture failed:", repr(exc))
+            if not _safe_list(rt.get("recorded_semantic_llm_proposals")):
+                _run_semantic_capture_background(session_id, reason="post_idle_tick")
 
         return {
             "ok": True,
@@ -242,6 +305,7 @@ async def idle_tick_rpg_session(request: Request):
             "idle_seconds": result.get("idle_seconds", 0) or 0,
             "idle_gate_open": bool(result.get("idle_gate_open", False)),
             "settings": _safe_dict(result.get("settings")),
+            "semantic_capture_background": True,
         }
     except Exception as exc:
         print("[RPG][idle_tick] response contract failed:", repr(exc))
