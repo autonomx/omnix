@@ -134,6 +134,33 @@ def _write_text_atomic(path: Path, text: str) -> None:
                 pass
 
 
+def _read_text_with_retry(path: Path, *, attempts: int = 8, base_delay_s: float = 0.02) -> str:
+    """Best-effort Windows-safe read with short retry/backoff.
+
+    Idle ticks, stream turns, and panel refreshes can overlap on Windows. During
+    an atomic replace or antivirus/indexer scan, Path.read_text may briefly
+    raise PermissionError even though the session file is healthy. Treat that as
+    transient before surfacing session_read_failed to the UI.
+    """
+
+    last_exc: OSError | None = None
+    for attempt in range(attempts):
+        try:
+            return path.read_text(encoding="utf-8")
+        except PermissionError as exc:
+            last_exc = exc
+        except OSError as exc:
+            last_exc = exc
+
+        if attempt >= attempts - 1:
+            break
+        time.sleep(base_delay_s * (attempt + 1))
+
+    if last_exc is not None:
+        raise last_exc
+    return path.read_text(encoding="utf-8")
+
+
 def _quarantine_corrupt_session_file(path: Path) -> Path:
     """Move a corrupt session aside so repeated resume attempts do not crash forever."""
     quarantine_path = path.with_name(f"{path.stem}.corrupt.{int(time.time() * 1000)}{path.suffix}")
@@ -153,7 +180,7 @@ def _quarantine_corrupt_session_file(path: Path) -> Path:
 def _read_payload_json(path: Path, session_id: str) -> Dict[str, Any]:
     """Read raw JSON payload with corruption detection + quarantine."""
     try:
-        text = path.read_text(encoding="utf-8")
+        text = _read_text_with_retry(path)
     except OSError as exc:
         raise SessionStoreError(f"session_read_failed:{session_id}") from exc
 
