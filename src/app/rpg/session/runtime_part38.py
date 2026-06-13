@@ -14,6 +14,9 @@ from . import runtime_part35 as _part35
 
 _PHASE8_PART38_SOURCE = "phase8_fast_semantic_direct_dialogue_response"
 _PHASE8_PART38_TEXT_NONE = {"", "[]", "{}", "null", "none", "false", "true"}
+_PHASE8_PART38_ORIGINAL_PART35_SEMANTIC_VISIBLE_RESPONSE_FIELDS = _part35._phase8_part35_semantic_visible_response_fields
+_PHASE8_PART38_ORIGINAL_PART35_EXISTING_COMPLETED_NARRATION = _part35._phase8_part31_existing_completed_narration
+_PHASE8_PART38_ORIGINAL_PART35_PERSIST_SEMANTIC_ARTIFACT = _part35._phase8_part35_persist_semantic_artifact
 
 
 
@@ -64,7 +67,7 @@ def _phase8_part38_direct_safe(source: Dict[str, Any]) -> bool:
     utterance_mode = _phase8_part38_clean_text(source.get("utterance_mode")).casefold()
     interaction_mode = _phase8_part38_clean_text(source.get("interaction_mode")).casefold()
     risk_domain = _phase8_part38_clean_text(source.get("risk_domain")).casefold()
-    risk_flags = { _phase8_part38_clean_text(item).casefold() for item in _safe_list(gate.get("risk_flags")) }
+    risk_flags = {_phase8_part38_clean_text(item).casefold() for item in _safe_list(gate.get("risk_flags"))}
 
     is_social_dialogue = bool(
         semantic_family in {"social", "dialogue", "conversation"}
@@ -228,7 +231,7 @@ def _phase8_part38_semantic_visible_fields(payload: Dict[str, Any]) -> Dict[str,
         if fields:
             return fields
     try:
-        fields = _part35._phase8_part35_semantic_visible_response_fields(payload)
+        fields = _PHASE8_PART38_ORIGINAL_PART35_SEMANTIC_VISIBLE_RESPONSE_FIELDS(payload)
         if fields:
             fields = dict(fields)
             fields["fallback_narration_source"] = _PHASE8_PART38_SOURCE
@@ -244,7 +247,7 @@ def _phase8_part31_existing_completed_narration(payload: Dict[str, Any]) -> str:
     if fields:
         return _phase8_part38_clean_text(fields.get("final_narration") or fields.get("narration"))
     try:
-        return _part35._phase8_part31_existing_completed_narration(payload)
+        return _PHASE8_PART38_ORIGINAL_PART35_EXISTING_COMPLETED_NARRATION(payload)
     except Exception:
         return ""
 
@@ -296,7 +299,7 @@ def _phase8_part38_patch_semantic_visible(payload: Any, *, session_id: str = "")
     if not _safe_dict(patched.get("authoritative")):
         patched["authoritative"] = dict(_safe_dict(patched.get("result")))
     try:
-        _part35._phase8_part35_persist_semantic_artifact(session_id, patched, fields)
+        _PHASE8_PART38_ORIGINAL_PART35_PERSIST_SEMANTIC_ARTIFACT(session_id, patched, fields)
     except Exception:
         pass
     return patched
