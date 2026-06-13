@@ -10,6 +10,10 @@ The spatial package is simulation-authoritative.  It answers questions such as:
 LLM narration may describe these results, but must not invent them.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from app.rpg.spatial.audibility import (
     audible_entities_from,
     can_hear_area,
@@ -33,13 +37,37 @@ from app.rpg.spatial.visibility import (
     visible_entities_from,
 )
 
+
+def distance(a: Any, b: Any) -> float:
+    """Compatibility alias for legacy NPC planner imports."""
+
+    return euclidean_distance(a, b)
+
+
+def astar(start: Any, goal: Any, session: Any | None = None) -> list[Any]:
+    """Return a deterministic legacy path between two positions.
+
+    Older NPC planner code imports ``astar`` directly from ``app.rpg.spatial``
+    during app startup.  The current spatial graph layer owns area movement, so
+    this compatibility helper intentionally avoids inventing graph state.  It
+    returns the minimal valid path shape expected by the planner: ``[start]``
+    when already at the goal, otherwise ``[start, goal]``.
+    """
+
+    if start == goal:
+        return [start]
+    return [start, goal]
+
+
 __all__ = [
+    "astar",
     "audible_entities_from",
     "can_hear_area",
     "can_hear_entity",
     "can_move_between",
     "can_see_area",
     "can_see_entity",
+    "distance",
     "ensure_spatial_graph",
     "euclidean_distance",
     "find_connection",
