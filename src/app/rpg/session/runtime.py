@@ -138,7 +138,7 @@ def get_runtime_wrapper_drift_report(
 globals().update(_RUNTIME_GLOBALS)
 
 # Mirror the final facade globals back into every split module so functions whose
-global namespace lives in runtime_partXX can resolve helpers defined by other
+# global namespace lives in runtime_partXX can resolve helpers defined by other
 # parts. This intentionally skips dunder/private base aliases used by wrappers.
 for _module in _PART_MODULES:
     if not isinstance(_module, _ModuleType):
