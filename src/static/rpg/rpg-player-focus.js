@@ -284,6 +284,93 @@
     return isPreviewSessionId(sid) ? sid : '';
   }
 
+  function sse(data) {
+    return 'data: ' + JSON.stringify(data || {}) + '\n\n';
+  }
+
+  function encodeText(text) {
+    return new TextEncoder().encode(text || '');
+  }
+
+  function wrapTurnStreamResponseWithAuthoritativeFallback(response) {
+    if (!response || !response.body || typeof ReadableStream === 'undefined') return response;
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = '';
+    var fallbackEmitted = false;
+
+    var stream = new ReadableStream({
+      start: function (controller) {
+        function pump() {
+          reader.read().then(function (next) {
+            if (!next || next.done) {
+              if (!fallbackEmitted && buffer) controller.enqueue(encodeText(buffer));
+              controller.close();
+              return;
+            }
+
+            var chunkText = decoder.decode(next.value, { stream: true });
+            buffer += chunkText;
+            var parts = buffer.split('\n\n');
+            buffer = parts.pop() || '';
+
+            for (var i = 0; i < parts.length; i += 1) {
+              var raw = parts[i];
+              controller.enqueue(encodeText(raw + '\n\n'));
+              if (fallbackEmitted) continue;
+
+              var dataLines = String(raw || '').split('\n')
+                .filter(function (line) { return String(line || '').indexOf('data:') === 0; })
+                .map(function (line) { return line.slice(5).trim(); });
+              if (!dataLines.length) continue;
+
+              var evt = safeJsonParse(dataLines.join('\n'));
+              if (!evt || evt.type !== 'authoritative_result') continue;
+
+              var fallback = String(evt.fallback_narration || evt.summary || '').trim();
+              if (!fallback) continue;
+
+              fallbackEmitted = true;
+              var turnId = String(evt.turn_id || 'authoritative_fallback_' + Date.now());
+              controller.enqueue(encodeText(sse({
+                type: 'narration_artifact',
+                turn_id: turnId,
+                narration: fallback,
+                authoritative_action: fallback,
+                live_draft_streaming: true,
+                source: 'authoritative_fallback_before_live_narration'
+              })));
+              controller.enqueue(encodeText(sse({
+                type: 'done',
+                turn_id: turnId,
+                tick: evt.tick,
+                narration_status: 'authoritative_fallback',
+                live_draft_streaming: true
+              })));
+              try { reader.cancel('authoritative fallback delivered'); } catch (_) {}
+              controller.close();
+              return;
+            }
+
+            pump();
+          }).catch(function (err) {
+            controller.error(err);
+          });
+        }
+        pump();
+      },
+      cancel: function (reason) {
+        try { reader.cancel(reason); } catch (_) {}
+      }
+    });
+
+    return new Response(stream, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+  }
+
   function patchFetchForTurnVisibility() {
     if (window.__rpgPlayerFocusFetchPatched) return;
     window.__rpgPlayerFocusFetchPatched = true;
@@ -308,6 +395,7 @@
         }
       }
 
+      var isTurnStreamRequest = /\/api\/rpg\/session\/turn\/stream(?:$|[?#])/.test(url);
       var isTurnRequest = /\/api\/rpg\/(games\/[^/]+\/turn|session\/turn(?:\/stream)?|turn_stream|stream_turn)(?:$|[?#])/.test(url);
       if (isTurnRequest) markTurnActive();
 
@@ -315,6 +403,9 @@
         if (isTurnRequest && !response.ok) {
           updateStatusChip(true, true);
           ensurePendingNote(true);
+        }
+        if (isTurnStreamRequest && response.ok) {
+          return wrapTurnStreamResponseWithAuthoritativeFallback(response);
         }
         return response;
       }).catch(function (err) {
