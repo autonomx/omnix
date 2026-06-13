@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+from typing import Any, Dict, Iterable, List
+
+# Generated split module for app.rpg.session.runtime.
+# Phase 8.29: ensure player turns always carry a visible fallback narration
+# so the UI never gets stuck on a queued placeholder when a deferred job is
+# missing, missed by SSE, or still pending.
+from .runtime_part27 import *  # noqa: F401,F403
+from .runtime_part27 import _apply_turn_authoritative as _base_apply_turn_authoritative
+
+_PHASE8_NARRATION_FALLBACK_SOURCE = "deterministic_phase8_queued_narration_visible_fallback_gate"
+
+
+def _phase8_safe_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _phase8_safe_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _phase8_safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _phase8_first_text(values: Iterable[Any]) -> str:
+    for value in values:
+        text = _phase8_safe_str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _phase8_payload_candidates(authoritative_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    authoritative_result = _phase8_safe_dict(authoritative_result)
+    candidates: List[Dict[str, Any]] = []
+    for key in ("result", "authoritative", "payload"):
+        candidate = _phase8_safe_dict(authoritative_result.get(key))
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+
+    # Some call sites pass the authoritative fields directly at top level.
+    top_level_keys = {
+        "narration",
+        "summary",
+        "presentation",
+        "structured_narration",
+        "raw_llm_narrative",
+        "deterministic_fallback_narration",
+    }
+    if any(key in authoritative_result for key in top_level_keys):
+        candidates.insert(0, authoritative_result)
+
+    return candidates
+
+
+def _phase8_dialogue_line(npc_payload: Dict[str, Any]) -> str:
+    npc_payload = _phase8_safe_dict(npc_payload)
+    speaker = _phase8_first_text((
+        npc_payload.get("speaker"),
+        npc_payload.get("name"),
+        npc_payload.get("speaker_id"),
+    ))
+    line = _phase8_first_text((
+        npc_payload.get("line"),
+        npc_payload.get("text"),
+        npc_payload.get("dialogue"),
+    ))
+    if speaker and line:
+        return f'{speaker}: "{line}"'
+    return line
+
+
+def _phase8_structured_narration_text(payload: Dict[str, Any]) -> str:
+    payload = _phase8_safe_dict(payload)
+    structured = _phase8_safe_dict(payload.get("structured_narration"))
+    narration_json = _phase8_safe_dict(payload.get("narration_json"))
+    if not structured and narration_json:
+        structured = narration_json
+
+    narration = _phase8_first_text((
+        structured.get("narration"),
+        payload.get("narration"),
+        payload.get("final_narration"),
+    ))
+    action = _phase8_first_text((
+        structured.get("action"),
+        payload.get("action"),
+    ))
+    npc_line = _phase8_dialogue_line(
+        _phase8_safe_dict(structured.get("npc"))
+        or _phase8_safe_dict(payload.get("npc"))
+    )
+    reward = _phase8_first_text((structured.get("reward"), payload.get("reward")))
+
+    parts: List[str] = []
+    if narration:
+        parts.append("Scene\n" + narration)
+    if action:
+        parts.append("Action\n" + action)
+    if npc_line:
+        parts.append(npc_line)
+    if reward:
+        parts.append("Rewards\n" + reward)
+    return "\n".join(parts).strip()
+
+
+def _phase8_presentation_text(payload: Dict[str, Any]) -> str:
+    presentation = _phase8_safe_dict(payload.get("presentation"))
+    if not presentation:
+        turn_contract = _phase8_safe_dict(payload.get("turn_contract"))
+        presentation = _phase8_safe_dict(turn_contract.get("presentation"))
+
+    direct = _phase8_first_text((
+        presentation.get("narration"),
+        presentation.get("response"),
+        presentation.get("message"),
+        presentation.get("text"),
+        presentation.get("summary"),
+        presentation.get("action_summary"),
+    ))
+    if direct:
+        return direct
+
+    speaker_turns = _phase8_safe_list(presentation.get("speaker_turns") or payload.get("speaker_turns"))
+    lines: List[str] = []
+    for raw in speaker_turns:
+        raw = _phase8_safe_dict(raw)
+        line = _phase8_dialogue_line(raw)
+        if line:
+            lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _phase8_visible_fallback_text(authoritative_result: Dict[str, Any]) -> str:
+    for payload in _phase8_payload_candidates(authoritative_result):
+        structured_text = _phase8_structured_narration_text(payload)
+        if structured_text:
+            return structured_text
+
+        direct_text = _phase8_first_text((
+            payload.get("deterministic_fallback_narration"),
+            payload.get("fallback_narration"),
+            payload.get("narration"),
+            payload.get("final_narration"),
+            payload.get("raw_llm_narrative"),
+            payload.get("summary"),
+            payload.get("result_summary"),
+            payload.get("outcome"),
+        ))
+        if direct_text:
+            return direct_text
+
+        presentation_text = _phase8_presentation_text(payload)
+        if presentation_text:
+            return presentation_text
+
+    player_input = _phase8_first_text((
+        authoritative_result.get("player_input"),
+        _phase8_safe_dict(authoritative_result.get("result")).get("player_input"),
+        _phase8_safe_dict(authoritative_result.get("authoritative")).get("player_input"),
+    ))
+    if player_input:
+        return f"You continue: {player_input}"
+    return "The turn is resolved and recorded."
+
+
+def _phase8_patch_visible_fallback(authoritative_result: Dict[str, Any]) -> Dict[str, Any]:
+    authoritative_result = _phase8_safe_dict(authoritative_result)
+    if not authoritative_result:
+        return authoritative_result
+
+    fallback_text = _phase8_visible_fallback_text(authoritative_result).strip()
+    if not fallback_text:
+        return authoritative_result
+
+    authoritative_result = dict(authoritative_result)
+    authoritative_result.setdefault("deterministic_fallback_narration", fallback_text)
+    authoritative_result.setdefault("fallback_narration_source", _PHASE8_NARRATION_FALLBACK_SOURCE)
+
+    for key in ("result", "authoritative", "payload"):
+        payload = _phase8_safe_dict(authoritative_result.get(key))
+        if not payload:
+            continue
+        patched = dict(payload)
+        patched.setdefault("deterministic_fallback_narration", fallback_text)
+        patched.setdefault("fallback_narration_source", _PHASE8_NARRATION_FALLBACK_SOURCE)
+        authoritative_result[key] = patched
+
+    return authoritative_result
+
+
+def _apply_turn_authoritative(
+    session_id: str,
+    player_input: str,
+    action: Dict[str, Any] | None = None,
+    performance_override: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    result = _base_apply_turn_authoritative(
+        session_id,
+        player_input,
+        action=action,
+        performance_override=performance_override,
+    )
+    return _phase8_patch_visible_fallback(result)
