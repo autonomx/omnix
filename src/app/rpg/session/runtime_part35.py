@@ -17,6 +17,7 @@ _PHASE8_PART35_SOURCE = "semantic_classifier_visible_response"
 _PHASE8_PART35_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD = _part04._compile_semantic_action_record
 
 
+
 def _phase8_part35_iter_dicts(value: Any) -> Iterable[Dict[str, Any]]:
     if isinstance(value, dict):
         yield value
@@ -27,11 +28,13 @@ def _phase8_part35_iter_dicts(value: Any) -> Iterable[Dict[str, Any]]:
             yield from _phase8_part35_iter_dicts(child)
 
 
+
 def _phase8_part35_clean_text(value: Any) -> str:
     if not isinstance(value, str):
         return ""
     text = value.strip()
     return "" if text.casefold() in {"", "[]", "{}", "null", "none"} else text
+
 
 
 def _phase8_part35_bool_false(value: Any) -> bool:
@@ -44,19 +47,132 @@ def _phase8_part35_bool_false(value: Any) -> bool:
     return False
 
 
+
+def _phase8_part35_bool_true(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().casefold() in {"true", "yes", "1"}
+    if isinstance(value, int):
+        return value == 1
+    return False
+
+
+
+def _phase8_part35_norm(value: Any) -> str:
+    text = _phase8_part35_clean_text(value).casefold()
+    return " ".join("".join(ch if ch.isalnum() else " " for ch in text).split())
+
+
+
+def _phase8_part35_list_text(value: Any) -> str:
+    if isinstance(value, list):
+        return " ".join(_phase8_part35_clean_text(item) for item in value if _phase8_part35_clean_text(item))
+    return _phase8_part35_clean_text(value)
+
+
+
+def _phase8_part35_player_utterance(source: Dict[str, Any]) -> str:
+    source = _safe_dict(source)
+    explicit = _phase8_part35_clean_text(
+        source.get("player_utterance")
+        or source.get("utterance")
+        or source.get("player_input")
+    )
+    if explicit:
+        return explicit
+    evidence = _phase8_part35_list_text(source.get("evidence_spans"))
+    if evidence:
+        return evidence
+    return _phase8_part35_clean_text(source.get("intent_summary"))
+
+
+
+def _phase8_part35_line_is_player_restatement(npc_line: str, source: Dict[str, Any]) -> bool:
+    line = _phase8_part35_clean_text(npc_line)
+    if not line:
+        return False
+    lowered = line.casefold()
+    # These phrases are narration of the player speaking, not NPC dialogue.
+    player_narration_markers = (
+        " you tell ",
+        " you say",
+        " you respond",
+        " you reply",
+        " you answer",
+        "you tell him",
+        "you tell her",
+        "you tell them",
+        "you say to",
+        "you respond to",
+        "you reply to",
+    )
+    padded = f" {lowered} "
+    if any(marker in padded for marker in player_narration_markers):
+        return True
+
+    utterance = _phase8_part35_player_utterance(source)
+    norm_line = _phase8_part35_norm(line)
+    norm_utterance = _phase8_part35_norm(utterance)
+    # Avoid overmatching one-word replies, but catch the observed failure where
+    # an NPC line embeds the player's full response as if the NPC spoke it.
+    if norm_line and norm_utterance and len(norm_utterance) >= 18:
+        if norm_utterance in norm_line or norm_line in norm_utterance:
+            return True
+        utterance_words = set(norm_utterance.split())
+        line_words = set(norm_line.split())
+        if len(utterance_words) >= 5:
+            overlap = len(utterance_words & line_words) / max(len(utterance_words), 1)
+            if overlap >= 0.80:
+                return True
+    return False
+
+
+
+def _phase8_part35_direct_response_safe(source: Dict[str, Any]) -> bool:
+    source = _safe_dict(source)
+    gate = _safe_dict(source.get("direct_response_gate"))
+    if not _phase8_part35_bool_true(gate.get("safe_to_display_now")):
+        return False
+
+    semantic_family = _phase8_part35_clean_text(source.get("semantic_family")).casefold()
+    action_type = _phase8_part35_clean_text(source.get("action_type")).casefold()
+    utterance_mode = _phase8_part35_clean_text(source.get("utterance_mode")).casefold()
+    interaction_mode = _phase8_part35_clean_text(source.get("interaction_mode")).casefold()
+    risk_domain = _phase8_part35_clean_text(source.get("risk_domain")).casefold()
+
+    return bool(
+        semantic_family in {"social", "dialogue", "conversation"}
+        or action_type in {"dialogue", "social", "social_activity", "conversation"}
+        or utterance_mode in {"response", "reply", "dialogue", "question", "inquiry"}
+        or interaction_mode in {"direct", "dialogue", "conversation"}
+        or risk_domain == "social"
+    )
+
+
+
 def _phase8_part35_semantic_visible_candidate(source: Dict[str, Any]) -> Dict[str, Any]:
     source = _safe_dict(source)
     visible = _safe_dict(source.get("visible_response"))
     if not visible:
         return {}
-    if not _phase8_part35_bool_false(source.get("stateful")):
-        return {}
-    if not _phase8_part35_bool_false(source.get("needs_runtime_resolution")):
-        return {}
+
+    # Original one-call shortcut: display only stateless/non-runtime semantic
+    # responses immediately.  New direct-response shortcut: a grounded semantic
+    # packet may explicitly mark low-risk dialogue as safe to display now even
+    # when it also records social state metadata for the runtime.
+    safe_direct_dialogue = _phase8_part35_direct_response_safe(source)
+    if not safe_direct_dialogue:
+        if not _phase8_part35_bool_false(source.get("stateful")):
+            return {}
+        if not _phase8_part35_bool_false(source.get("needs_runtime_resolution")):
+            return {}
 
     narration = _phase8_part35_clean_text(visible.get("narration") or visible.get("text"))
     npc = _safe_dict(visible.get("npc"))
     npc_line = _phase8_part35_clean_text(npc.get("line") or npc.get("text"))
+    if _phase8_part35_line_is_player_restatement(npc_line, source):
+        npc_line = ""
     if not narration and not npc_line:
         return {}
 
@@ -66,10 +182,13 @@ def _phase8_part35_semantic_visible_candidate(source: Dict[str, Any]) -> Dict[st
         or source.get("target_name")
         or ""
     )
+    if not npc_line:
+        speaker = ""
+
     if npc_line and speaker:
-        final = f"{narration}\n\n{speaker}: \"{npc_line}\"" if narration else f"{speaker}: \"{npc_line}\""
+        final = f'{narration}\n\n{speaker}: "{npc_line}"' if narration else f'{speaker}: "{npc_line}"'
     elif npc_line:
-        final = f"NPC: \"{npc_line}\""
+        final = f'NPC: "{npc_line}"'
     else:
         final = narration
 
@@ -91,11 +210,13 @@ def _phase8_part35_semantic_visible_candidate(source: Dict[str, Any]) -> Dict[st
             "npc": {"speaker": speaker, "line": npc_line} if (speaker or npc_line) else None,
             "semantic_family": _safe_str(source.get("semantic_family")),
             "interaction_mode": _safe_str(source.get("interaction_mode")),
+            "direct_response_gate": _safe_dict(source.get("direct_response_gate")),
         },
         "npc": {"speaker": speaker, "line": npc_line} if (speaker or npc_line) else {},
         "fallback_narration_source": _PHASE8_PART35_SOURCE,
         "skip_full_structured_narrator": True,
     }
+
 
 
 def _phase8_part35_semantic_visible_response_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -105,6 +226,7 @@ def _phase8_part35_semantic_visible_response_fields(payload: Dict[str, Any]) -> 
         if fields:
             return fields
     return {}
+
 
 
 def _phase8_part35_existing_completed_semantic_or_llm_narration(payload: Dict[str, Any]) -> str:
@@ -117,8 +239,10 @@ def _phase8_part35_existing_completed_semantic_or_llm_narration(payload: Dict[st
         return ""
 
 
+
 def _phase8_part31_existing_completed_narration(payload: Dict[str, Any]) -> str:
     return _phase8_part35_existing_completed_semantic_or_llm_narration(payload)
+
 
 
 def _phase8_part31_should_sync_narration(payload: Dict[str, Any]) -> bool:
@@ -139,6 +263,7 @@ def _phase8_part31_should_sync_narration(payload: Dict[str, Any]) -> bool:
     scene = _safe_dict(request.get("scene"))
     context = _safe_dict(request.get("narration_context"))
     return bool(scene or context)
+
 
 
 def _compile_semantic_action_record(
@@ -166,10 +291,28 @@ def _compile_semantic_action_record(
         record["stateful"] = bool(advisory.get("stateful"))
     if "needs_runtime_resolution" in advisory:
         record["needs_runtime_resolution"] = bool(advisory.get("needs_runtime_resolution"))
-    for key in ("semantic_family", "interaction_mode", "activity_label", "target_id", "target_name", "action_type"):
-        if _safe_str(advisory.get(key)) and not _safe_str(record.get(key)):
-            record[key] = advisory.get(key)
+    for key in (
+        "semantic_family",
+        "interaction_mode",
+        "activity_label",
+        "target_id",
+        "target_name",
+        "action_type",
+        "utterance_mode",
+        "risk_domain",
+        "intent_summary",
+        "player_utterance",
+        "direct_response_gate",
+        "evidence_spans",
+    ):
+        value = advisory.get(key)
+        if isinstance(value, (dict, list)):
+            if value and not record.get(key):
+                record[key] = value
+        elif _safe_str(value) and not _safe_str(record.get(key)):
+            record[key] = value
     return record
+
 
 
 def _phase8_part35_payload_turn_id(payload: Dict[str, Any]) -> str:
@@ -179,6 +322,7 @@ def _phase8_part35_payload_turn_id(payload: Dict[str, Any]) -> str:
         if turn_id:
             return turn_id
     return ""
+
 
 
 def _phase8_part35_payload_tick(payload: Dict[str, Any]) -> int:
@@ -191,6 +335,7 @@ def _phase8_part35_payload_tick(payload: Dict[str, Any]) -> int:
         if tick:
             return tick
     return 0
+
 
 
 def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str, Any], fields: Dict[str, Any]) -> None:
@@ -239,6 +384,7 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str,
         return
 
 
+
 def _phase8_part35_patch_semantic_visible_response(payload: Any, *, session_id: str = "") -> Any:
     if not isinstance(payload, dict):
         return payload
@@ -269,6 +415,7 @@ def _phase8_part35_patch_semantic_visible_response(payload: Any, *, session_id: 
         patched["authoritative"] = dict(_safe_dict(patched.get("result")))
     _phase8_part35_persist_semantic_artifact(session_id, patched, fields)
     return patched
+
 
 
 def _enqueue_narration_request(
@@ -302,6 +449,7 @@ def _enqueue_narration_request(
         job_kind,
         priority,
     )
+
 
 
 def _apply_turn_authoritative(
