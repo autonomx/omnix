@@ -36,10 +36,14 @@ _HTML = r"""
     button:hover { background:#415476; }
     button.stop { background:#5a3332; }
     button.stop:hover { background:#774442; }
+    button.copy { background:#2f4f66; }
+    button.copy:hover { background:#3e6988; }
     button:disabled { opacity:.45; cursor:not-allowed; }
     pre { white-space:pre-wrap; overflow:auto; max-height:240px; background:#0d1017; color:#d7e0ff; padding:10px; border-radius:10px; border:1px solid #272e3d; font-size:12px; }
     .toolbar { margin: 12px 0 18px; }
     .error { display:none; border:1px solid #704141; background:#2c1717; color:#ffd6d6; padding:10px; border-radius:10px; margin-bottom:14px; white-space:pre-wrap; }
+    .notice { display:none; border:1px solid #3f5d7b; background:#142237; color:#c9e2ff; padding:10px; border-radius:10px; margin-bottom:14px; white-space:pre-wrap; }
+    .copy-source { position:fixed; left:-9999px; top:-9999px; width:1px; height:1px; opacity:0; }
     a { color:#9fc3ff; }
   </style>
 </head>
@@ -51,7 +55,9 @@ _HTML = r"""
     </div>
     <div><a href="/api/services" target="_blank" rel="noreferrer">JSON</a></div>
   </header>
+  <div id="notice" class="notice"></div>
   <div id="error" class="error"></div>
+  <textarea id="copy-source" class="copy-source" aria-hidden="true" tabindex="-1"></textarea>
   <div class="toolbar">
     <button id="start-auto" type="button">Start enabled services</button>
     <button id="stop-all" class="stop" type="button">Stop all</button>
@@ -62,6 +68,8 @@ _HTML = r"""
   const byId = (id) => document.getElementById(id);
   const servicesEl = byId('services');
   const errorEl = byId('error');
+  const noticeEl = byId('notice');
+  const copySourceEl = byId('copy-source');
   let busy = false;
 
   function esc(value) {
@@ -81,12 +89,53 @@ _HTML = r"""
     errorEl.style.display = text ? 'block' : 'none';
   }
 
+  function showNotice(message) {
+    if (!noticeEl) return;
+    const text = String(message || '').trim();
+    noticeEl.textContent = text;
+    noticeEl.style.display = text ? 'block' : 'none';
+    if (text) window.setTimeout(() => showNotice(''), 2500);
+  }
+
   async function api(path, options) {
     const response = await fetch(path, options || {});
     if (!response.ok) {
       throw new Error(await response.text());
     }
     return response.json();
+  }
+
+  async function textApi(path) {
+    const response = await fetch(path);
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return response.text();
+  }
+
+  async function copyText(value) {
+    const text = String(value || '');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    copySourceEl.value = text;
+    copySourceEl.focus();
+    copySourceEl.select();
+    document.execCommand('copy');
+  }
+
+  async function copyLogs(serviceId, label) {
+    if (!serviceId) return;
+    showError('');
+    try {
+      const logs = await textApi(`/api/services/${encodeURIComponent(serviceId)}/logs?limit=500`);
+      const header = `# Omnix launcher logs: ${label || serviceId}\n# Service id: ${serviceId}\n# Copied: ${new Date().toISOString()}\n\n`;
+      await copyText(header + (logs || '[no logs yet]'));
+      showNotice(`Copied logs for ${label || serviceId}`);
+    } catch (error) {
+      showError(error && error.message ? error.message : String(error));
+    }
   }
 
   async function runAction(path) {
@@ -116,6 +165,7 @@ _HTML = r"""
         <button type="button" data-service-id="${id}" data-action="start" ${running || disabled ? 'disabled' : ''}>Start</button>
         <button type="button" class="stop" data-service-id="${id}" data-action="stop" ${!running ? 'disabled' : ''}>Stop</button>
         <button type="button" data-service-id="${id}" data-action="restart" ${disabled ? 'disabled' : ''}>Restart</button>
+        <button type="button" class="copy" data-service-id="${id}" data-service-label="${esc(service.label)}" data-action="copy-logs">Copy logs</button>
       </div>
       <pre>${logs || '[no logs yet]'}</pre>
     </section>`;
@@ -136,10 +186,14 @@ _HTML = r"""
   servicesEl.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-service-id][data-action]');
     if (!button || button.disabled) return;
-    const serviceId = encodeURIComponent(button.dataset.serviceId || '');
-    const verb = encodeURIComponent(button.dataset.action || '');
+    const serviceId = button.dataset.serviceId || '';
+    const verb = button.dataset.action || '';
     if (!serviceId || !verb) return;
-    runAction(`/api/services/${serviceId}/${verb}`);
+    if (verb === 'copy-logs') {
+      copyLogs(serviceId, button.dataset.serviceLabel || serviceId);
+      return;
+    }
+    runAction(`/api/services/${encodeURIComponent(serviceId)}/${encodeURIComponent(verb)}`);
   });
 
   refresh();
