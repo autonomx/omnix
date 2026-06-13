@@ -564,19 +564,23 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
                     },
                 )
         else:
-            publish_narration_event(
-                session_id,
+            narration_event = dict(artifact)
+            narration_event.update(
                 {
                     "type": "narration_artifact",
                     "session_id": session_id,
                     "turn_id": turn_id,
                     "role": "turn_narration",
                     "final": True,
-                    "version": 1,
+                    "version": int(artifact.get("version") or 1),
                     "tick": artifact.get("tick"),
                     "text": _safe_str(artifact.get("narration")),
                     "used_llm": bool(artifact.get("used_llm")),
-                },
+                }
+            )
+            publish_narration_event(
+                session_id,
+                narration_event,
             )
             try:
                 runtime_settings = _safe_dict(

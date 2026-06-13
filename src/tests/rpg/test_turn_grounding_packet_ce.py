@@ -116,6 +116,10 @@ def test_semantic_prompt_supports_non_stateful_visible_response_contract():
     )
     assert "stateful false" in prompt
     assert "visible_response" in prompt
+    assert "direct_response_gate" in prompt
+    assert "safe_to_display_now true only for non-mutating dialogue" in prompt
+    assert "literal_action_requested" in prompt
+    assert "Classify semantic risk by meaning, not keywords" in prompt
     assert "Never reveal private_context" in prompt
 
     normalized = normalize_semantic_action_advisory(
@@ -125,11 +129,22 @@ def test_semantic_prompt_supports_non_stateful_visible_response_contract():
             "interaction_mode": "direct",
             "activity_label": "opinion_on_sword_styles",
             "target_id": "npc:bran",
+            "utterance_mode": "opinion_question",
+            "literal_action_requested": False,
+            "state_mutation_requested": False,
+            "risk_domain": "none",
+            "intent_summary": "Player asks Bran for an opinion about combat styles.",
+            "evidence_spans": ["what do you think about sword combat styles"],
             "stateful": False,
             "needs_runtime_resolution": False,
             "visible_response": {
                 "narration": "Bran considers the question.",
                 "npc": {"speaker": "Bran", "line": "Fancy styles fail when boots hit mud."},
+            },
+            "direct_response_gate": {
+                "safe_to_display_now": True,
+                "reason": "non_mutating_opinion_dialogue",
+                "risk_flags": [],
             },
         },
         {"action_type": "observe"},
@@ -137,6 +152,12 @@ def test_semantic_prompt_supports_non_stateful_visible_response_contract():
     assert normalized["stateful"] is False
     assert normalized["needs_runtime_resolution"] is False
     assert normalized["visible_response"]["npc"]["speaker"] == "Bran"
+    assert normalized["direct_response_gate"]["safe_to_display_now"] is True
+    assert normalized["utterance_mode"] == "opinion_question"
+    assert normalized["literal_action_requested"] is False
+    assert normalized["state_mutation_requested"] is False
+    assert normalized["risk_domain"] == "none"
+    assert normalized["evidence_spans"] == ["what do you think about sword combat styles"]
 
 
 def test_stateful_purchase_intent_remains_runtime_resolved():

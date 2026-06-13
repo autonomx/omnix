@@ -171,6 +171,11 @@ def test_interactive_wrapper_consumes_valid_provider_visible_response(monkeypatc
                                 "line": "Styles matter less than keeping your feet under you when the road turns slick.",
                             },
                         },
+                        "direct_response_gate": {
+                            "safe_to_display_now": True,
+                            "reason": "non_mutating_opinion_dialogue",
+                            "risk_flags": [],
+                        },
                         "reason": "Direct non-stateful NPC opinion question.",
                     }
                 )
@@ -179,6 +184,13 @@ def test_interactive_wrapper_consumes_valid_provider_visible_response(monkeypatc
     monkeypatch.setattr(interactive_runtime.canonical_runtime, "resolve_service_turn", lambda **kwargs: {"matched": False})
     monkeypatch.setattr(interactive_runtime, "build_app_llm_gateway", lambda: FakeGateway())
     monkeypatch.setattr(interactive_runtime.canonical_runtime, "_build_turn_id", lambda runtime_state: "turn:test")
+    monkeypatch.setattr(
+        interactive_runtime,
+        "get_action_advisory",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("interactive first-call should use one semantic LLM call")
+        ),
+    )
 
     def fail_if_called(**kwargs):
         raise AssertionError("canonical runtime should not handle valid first-call NPC dialogue")
@@ -516,6 +528,56 @@ def test_direct_npc_rumor_question_safe_fallback_is_topic_aware(monkeypatch):
     assert "rumor" in line or "heard" in line
     assert "sword" not in line
     assert "mud" not in line
+
+
+def test_direct_npc_wellbeing_question_safe_fallback_is_topic_aware(monkeypatch):
+    player_input = "I ask Bran about how his day is going."
+
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "resolve_service_turn", lambda **kwargs: {"matched": False})
+    monkeypatch.setattr(interactive_runtime, "build_app_llm_gateway", lambda: object())
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "_build_turn_id", lambda runtime_state: "turn:test")
+    monkeypatch.setattr(
+        interactive_runtime,
+        "get_action_advisory",
+        lambda **kwargs: {
+            "action_type": "investigate",
+            "stateful": True,
+            "needs_runtime_resolution": True,
+            "first_call_grounding_diagnostics": _bran_diagnostics(player_input),
+        },
+    )
+    monkeypatch.setattr(
+        interactive_runtime,
+        "get_semantic_action_advisory",
+        lambda **kwargs: {
+            "action_type": "investigate",
+            "semantic_family": "observation",
+            "stateful": True,
+            "needs_runtime_resolution": True,
+            "first_call_grounding_diagnostics": _bran_diagnostics(player_input),
+        },
+    )
+
+    def fail_if_called(**kwargs):
+        raise AssertionError("canonical runtime should not handle grounded direct wellbeing question")
+
+    monkeypatch.setattr(interactive_runtime.canonical_runtime, "apply_turn", fail_if_called)
+
+    result = interactive_runtime.apply_turn(
+        session_id="manual_service_bran_test",
+        player_input=player_input,
+        session_override={"session_id": "manual_service_bran_test", "simulation_state": {}, "runtime_state": {}},
+    )
+
+    line = result["npc"]["line"].lower()
+
+    assert result["consumed"] is True
+    assert result["llm_purpose"] == "first_call_safe_dialogue_fallback"
+    assert result["grounding_validation"]["fallback_topic"] == "wellbeing_inquiry"
+    assert any(term in line for term in ("day", "hearth", "managing", "decent"))
+    assert "sword" not in line
+    assert "combat" not in line
+    assert "violence" not in line
 
 
 def test_direct_npc_discount_request_goes_to_runtime_not_safe_dialogue(monkeypatch):

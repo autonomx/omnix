@@ -100,3 +100,32 @@ def test_rpg_narration_failed_status_preserves_existing_turn_text():
     assert "Narration unavailable" in script
     assert "The authoritative turn is still saved." in script
     assert "job.error || 'The narration stream did not complete.'" not in script
+
+
+def test_rpg_narration_complete_events_render_structured_llm_artifact():
+    script = (STATIC / "rpg" / "rpg.js").read_text(encoding="utf-8")
+
+    assert 'bindNarrationNamedEvent("narration_complete")' in script
+    assert "payload.narration || artifact.narration || artifact.text || ''" in script
+    assert "renderTurnNarrationStructured(" in script
+    assert "getFullNarrationText(artifact)" in script
+
+
+def test_rpg_character_sheet_hydrates_wrapped_session_payload():
+    script = (STATIC / "rpg" / "rpg.js").read_text(encoding="utf-8")
+
+    assert "function extractPlayerPayload(payload)" in script
+    assert "return Object.keys(player).length ? player : null" in script
+    assert "apiGetGame(rpgState.sessionId)" in script
+    assert "updateState({ player: player })" in script
+    assert "Loading character sheet..." in script
+    assert "Start an adventure to see your character stats." in script
+
+
+def test_rpg_transaction_menus_clear_after_successful_service_purchase():
+    script = (STATIC / "rpg" / "rpg.js").read_text(encoding="utf-8")
+
+    assert "function transactionMenusForTurnPayload(payload)" in script
+    assert "transactionKind === 'service_purchase' && applied && !blocked" in script
+    assert "return [];" in script
+    assert "renderTransactionMenus(transactionContainer, transactionMenusForTurnPayload(data), rpgState.sessionId)" in script

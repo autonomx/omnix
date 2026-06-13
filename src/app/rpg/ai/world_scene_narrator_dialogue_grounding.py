@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # ruff: noqa: F401,F403,F405
 from app.rpg.ai.world_scene_narrator_common import *
+from app.rpg.ai.world_scene_narrator_common import _safe_dict, _safe_list, _safe_str, _title_case_token
 
 def _build_ambient_conversation_line(narration_context: Dict[str, Any]) -> str:
     narration_context = _safe_dict(narration_context)

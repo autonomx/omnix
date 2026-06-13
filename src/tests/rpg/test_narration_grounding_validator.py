@@ -49,6 +49,91 @@ def test_grounding_accepts_supported_narration():
     assert result.violations == []
 
 
+def test_grounding_accepts_present_npc_title_alias():
+    payload = {
+        "format_version": "rpg_narration_v2",
+        "narration": "Bran wipes down the bar and answers your question.",
+        "action": "You ask Bran about his day.",
+        "npc": {
+            "speaker": "Bran the Innkeeper",
+            "line": "A steady day, all told.",
+        },
+        "reward": None,
+    }
+
+    result = validate_narration_grounding(payload, _contract())
+
+    assert result.ok is True
+    assert result.violations == []
+
+
+def test_grounding_ignores_combat_words_in_followup_hooks_for_dialogue():
+    payload = {
+        "format_version": "rpg_narration_v2",
+        "narration": "Bran wipes down the bar and answers your question.",
+        "action": "You ask Bran about his day.",
+        "npc": {
+            "speaker": "Bran",
+            "line": "A steady day, mostly travelers and tankards.",
+        },
+        "reward": None,
+        "followup_hooks": [
+            "conversation_seed:Bran/how's your day",
+            "ask: Bran, what do you think about sword combat styles?",
+        ],
+    }
+
+    result = validate_narration_grounding(payload, _contract())
+
+    assert result.ok is True
+    assert result.violations == []
+
+
+def test_grounding_rejects_location_id_as_dialogue_speaker():
+    payload = {
+        "format_version": "rpg_narration_v2",
+        "narration": "The tavern settles around your words.",
+        "action": "You say you have had a rough few days.",
+        "npc": {
+            "speaker": "loc_tavern",
+            "line": "Rough days indeed, friend. But you are still standing.",
+        },
+        "reward": None,
+    }
+
+    result = validate_narration_grounding(payload, _contract())
+
+    assert result.ok is False
+    assert any(v.code == "location_used_as_npc_speaker" for v in result.violations)
+
+
+def test_grounding_rejects_stale_day_answer_when_player_discloses_rough_day():
+    payload = {
+        "format_version": "rpg_narration_v2",
+        "narration": "Bran looks up as you answer his question.",
+        "action": "You tell Bran you have had a rough few days.",
+        "npc": {
+            "speaker": "Bran",
+            "line": (
+                "Another one? Ha! It's been busy, friend. Just the usual mix, "
+                "rowdy adventurers, that bard practicing, and Elara fussing over moon-berries. "
+                "How about yourself? What kind of day have you had?"
+            ),
+        },
+        "reward": None,
+    }
+    contract = {
+        "player_action": "ive had a rough few day ma man",
+        "present_npcs": [{"id": "npc:bran", "name": "Bran"}],
+        "current_location": "location:rusty_flagon_tavern",
+    }
+
+    result = validate_narration_grounding(payload, contract)
+
+    assert result.ok is False
+    assert any(v.code == "stale_or_irrelevant_dialogue" for v in result.violations)
+
+
 def test_grounding_rejects_invented_reward():
     payload = {
         "format_version": "rpg_narration_v2",

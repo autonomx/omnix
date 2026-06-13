@@ -13,6 +13,44 @@ _STATEFUL_ACTION_TYPES = {
 }
 
 _PLAYER_SPEAKER_ALIASES = {"player", "you", "the player", "adventurer", "traveler"}
+_INTERPRETIVE_DIALOGUE_ACTION_TYPES = {
+    "ask",
+    "conversation",
+    "dialogue",
+    "observe",
+    "social_activity",
+    "talk",
+}
+_SAFE_DIRECT_RISK_DOMAINS = {
+    "",
+    "none",
+}
+_RUNTIME_RISK_DOMAINS = {
+    "combat",
+    "commerce",
+    "inventory",
+    "item",
+    "persuasion_outcome",
+    "quest",
+    "relationship_change",
+    "reward",
+    "service",
+    "threat",
+    "travel",
+    "unknown",
+}
+_SAFE_UTTERANCE_MODES = {
+    "",
+    "casual_conversation",
+    "clarification",
+    "emotional_expression",
+    "greeting",
+    "identity_inquiry",
+    "local_knowledge",
+    "lore_question",
+    "opinion_question",
+    "wellbeing_inquiry",
+}
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -118,6 +156,48 @@ def _is_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
     )
 
 
+def _is_interpretive_dialogue_candidate(advisory: Dict[str, Any]) -> bool:
+    advisory = _d(advisory)
+    if not _is_direct_npc_dialogue(advisory):
+        return False
+    if _looks_stateful(advisory):
+        return False
+    action_type = _s(advisory.get("action_type")).strip().lower()
+    semantic_family = _s(advisory.get("semantic_family")).strip().lower()
+    if action_type in _INTERPRETIVE_DIALOGUE_ACTION_TYPES:
+        return True
+    return semantic_family == "social" and action_type in {"", "observe"}
+
+
+def _direct_response_gate_allows(advisory: Dict[str, Any]) -> bool:
+    advisory = _d(advisory)
+    gate = _d(advisory.get("direct_response_gate"))
+    if gate:
+        return _b(gate.get("safe_to_display_now"), False)
+    return not (
+        _b(advisory.get("stateful"), True)
+        or _b(advisory.get("needs_runtime_resolution"), True)
+    )
+
+
+def _semantic_risk_rejection(advisory: Dict[str, Any]) -> str:
+    advisory = _d(advisory)
+    risk_domain = _s(advisory.get("risk_domain")).strip().lower()
+    utterance_mode = _s(advisory.get("utterance_mode")).strip().lower()
+
+    if _b(advisory.get("state_mutation_requested"), False):
+        return "semantic_state_mutation_requested"
+    if risk_domain in _RUNTIME_RISK_DOMAINS:
+        return f"semantic_runtime_risk:{risk_domain}"
+    if risk_domain not in _SAFE_DIRECT_RISK_DOMAINS:
+        return f"semantic_unknown_risk:{risk_domain}"
+    if utterance_mode and utterance_mode not in _SAFE_UTTERANCE_MODES:
+        return f"semantic_unsafe_utterance_mode:{utterance_mode}"
+    if _b(advisory.get("literal_action_requested"), False) and utterance_mode == "action_request":
+        return "semantic_literal_action_request"
+    return ""
+
+
 def _speaker_matches_expected_npc(speaker: str, advisory: Dict[str, Any]) -> bool:
     speaker_norm = _norm(speaker)
     if not speaker_norm or speaker_norm in _PLAYER_SPEAKER_ALIASES:
@@ -199,12 +279,6 @@ def choose_first_call_visible_response(
     for source, advisory in candidates:
         if not advisory:
             continue
-        if _b(advisory.get("stateful"), True):
-            rejection_reasons.append(f"{source}:stateful")
-            continue
-        if _b(advisory.get("needs_runtime_resolution"), True):
-            rejection_reasons.append(f"{source}:needs_runtime_resolution")
-            continue
         if _looks_stateful(advisory):
             rejection_reasons.append(f"{source}:stateful_action_type")
             continue
@@ -212,6 +286,19 @@ def choose_first_call_visible_response(
         text = _visible_response_text(visible_response)
         if not text:
             rejection_reasons.append(f"{source}:missing_visible_response_text")
+            continue
+        if not _direct_response_gate_allows(advisory):
+            rejection_reasons.append(f"{source}:direct_response_gate_blocked")
+            continue
+        semantic_rejection = _semantic_risk_rejection(advisory)
+        if semantic_rejection:
+            rejection_reasons.append(f"{source}:{semantic_rejection}")
+            continue
+        if (
+            (_b(advisory.get("stateful"), True) or _b(advisory.get("needs_runtime_resolution"), True))
+            and not _is_interpretive_dialogue_candidate(advisory)
+        ):
+            rejection_reasons.append(f"{source}:stateful")
             continue
         rejection = _visible_response_rejection(advisory, visible_response)
         if rejection:
@@ -225,6 +312,15 @@ def choose_first_call_visible_response(
             "narration": _s(visible_response.get("narration")).strip() or text,
             "npc": deepcopy(_d(visible_response.get("npc"))),
             "text": text,
+            "direct_response_gate": deepcopy(_d(advisory.get("direct_response_gate"))),
+            "semantic_intent_gate": {
+                "utterance_mode": _s(advisory.get("utterance_mode")).strip(),
+                "literal_action_requested": _b(advisory.get("literal_action_requested"), False),
+                "state_mutation_requested": _b(advisory.get("state_mutation_requested"), False),
+                "risk_domain": _s(advisory.get("risk_domain")).strip(),
+                "intent_summary": _s(advisory.get("intent_summary")).strip(),
+                "evidence_spans": deepcopy(_l(advisory.get("evidence_spans"))),
+            },
             "first_call_grounding_diagnostics": deepcopy(
                 _d(advisory.get("first_call_grounding_diagnostics"))
             ),

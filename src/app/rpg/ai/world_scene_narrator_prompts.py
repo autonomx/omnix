@@ -65,6 +65,56 @@ def _response_length_prompt_rules(response_length: str) -> str:
     )
 
 
+def _current_turn_semantic_visible_response(narration_context: Dict[str, Any]) -> Dict[str, Any]:
+    """Return visible-response guidance bound to the current turn only."""
+    narration_context = _safe_dict(narration_context)
+    turn_contract = _safe_dict(narration_context.get("turn_contract"))
+    resolved = _safe_dict(narration_context.get("resolved_result"))
+    contract_resolved = _safe_dict(
+        turn_contract.get("resolved_result") or turn_contract.get("resolved_action")
+    )
+    action = _safe_dict(turn_contract.get("action") or narration_context.get("action"))
+    action_metadata = _safe_dict(action.get("metadata"))
+    semantic_action = _safe_dict(turn_contract.get("semantic_action"))
+    metadata_semantic_action = _safe_dict(action_metadata.get("semantic_action"))
+    resolved_semantic_action = _safe_dict(
+        resolved.get("semantic_action") or contract_resolved.get("semantic_action")
+    )
+
+    candidates = (
+        ("turn_contract.current_turn_visible_response", turn_contract.get("current_turn_visible_response")),
+        ("turn_contract.semantic_visible_response", turn_contract.get("semantic_visible_response")),
+        ("turn_contract.semantic_action.visible_response", semantic_action.get("visible_response")),
+        ("turn_contract.semantic_action.semantic_visible_response", semantic_action.get("semantic_visible_response")),
+        ("resolved_result.visible_response", resolved.get("visible_response")),
+        ("turn_contract.resolved_result.visible_response", contract_resolved.get("visible_response")),
+        ("resolved_result.semantic_action.visible_response", resolved_semantic_action.get("visible_response")),
+        ("action.metadata.semantic_action.visible_response", metadata_semantic_action.get("visible_response")),
+        ("action.metadata.semantic_action.semantic_visible_response", metadata_semantic_action.get("semantic_visible_response")),
+        ("action.metadata.visible_response_if_no_runtime_needed", action_metadata.get("visible_response_if_no_runtime_needed")),
+    )
+
+    for source, value in candidates:
+        visible = _safe_dict(value)
+        if not visible:
+            continue
+        npc = _safe_dict(visible.get("npc"))
+        narration = _safe_str(visible.get("narration") or visible.get("text")).strip()
+        npc_line = _safe_str(npc.get("line") or npc.get("text")).strip()
+        npc_speaker = _safe_str(npc.get("speaker") or npc.get("name")).strip()
+        if not narration and not npc_line:
+            continue
+        return {
+            "source": source,
+            "narration": narration[:600],
+            "npc": {
+                "speaker": npc_speaker[:120],
+                "line": npc_line[:600],
+            },
+        }
+    return {}
+
+
 def build_scene_prompt(scene, narration_context, tone="dramatic"):
     """Build an LLM prompt to narrate a scene with strict structured output format.
 
@@ -148,6 +198,7 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         narration_context=narration_context,
         current_turn_prompt_contract=current_turn_prompt_contract,
     )
+    current_turn_visible_response = _current_turn_semantic_visible_response(narration_context)
     runtime_guardrails_block = build_runtime_presentation_guardrails_block(narration_context)
 
     grounding_settings = normalize_grounding_settings(
@@ -223,6 +274,9 @@ CURRENT_TURN_PROMPT_CONTRACT_JSON:
 NPC_RESPONSE_ARCHITECTURE_JSON:
 {json.dumps(npc_response_architecture, ensure_ascii=False, indent=2, default=str)[:5000]}
 
+CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON:
+{json.dumps(current_turn_visible_response or {"present": False}, ensure_ascii=False, indent=2, default=str)[:2200]}
+
 {runtime_guardrails_block}
 
 NPC STATE SUMMARY (must influence tone and dialogue):
@@ -258,6 +312,10 @@ TURN CONTRACT RULES:
 - required_focus must be addressed before older context, memories, profile hooks, or recent events.
 - NPC_RESPONSE_ARCHITECTURE_JSON may shape speaker, tone, persona, and continuity only.
 - resolved_result is legacy compatibility; prefer turn_contract when both are present.
+- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON, when present, is current-turn dialogue guidance from the intent/advisory pass. Preserve its speaker, answer intent, and emotional direction unless the authoritative turn_contract forbids NPC dialogue.
+- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON outranks conversation_threads recent_lines, older NPC memories, and prior NPC questions. Use those older records only for continuity after answering this current player input.
+- Do not copy an older NPC question from conversation_threads when the current player input is answering, correcting, or emotionally disclosing to that question.
+- CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON is not permission to invent rewards, combat, travel, purchases, inventory changes, or quest progress.
 - You MUST base the narration primarily on turn_contract.narration_brief.
 - You MUST reflect turn_contract.state_delta when it exists.
 - You MUST NOT invent state changes outside turn_contract.state_delta, resolved_result, or combat facts.

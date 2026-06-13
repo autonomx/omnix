@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # ruff: noqa: F401,F403,F405
 from app.rpg.ai.world_scene_narrator_common import *
+from app.rpg.ai.world_scene_narrator_common import _safe_dict, _safe_list, _safe_str
 from app.rpg.ai.world_scene_narrator_dialogue_grounding import *
 
 
@@ -400,6 +401,92 @@ def _service_claim_needs_grounding(text: str) -> bool:
         "ready to settle",
     )
     return any(term in lower for term in claim_terms)
+
+
+def _service_purchase_is_applied(
+    service_result: Dict[str, Any],
+    narration_context: Dict[str, Any],
+) -> bool:
+    service_result = _safe_dict(service_result)
+    service_application = _safe_dict(_safe_dict(narration_context).get("service_application"))
+    purchase = _safe_dict(service_result.get("purchase"))
+    return (
+        _safe_str(service_result.get("kind")) == "service_purchase"
+        and (
+            _safe_str(service_result.get("status")) == "purchased"
+            or bool(purchase.get("applied"))
+            or bool(service_application.get("applied"))
+        )
+    )
+
+
+def _selected_service_offer(service_result: Dict[str, Any]) -> Dict[str, Any]:
+    service_result = _safe_dict(service_result)
+    selected_offer_id = _safe_str(service_result.get("selected_offer_id"))
+    for offer in _safe_list(service_result.get("offers")):
+        offer = _safe_dict(offer)
+        if _safe_str(offer.get("offer_id")) == selected_offer_id:
+            return offer
+    return {}
+
+
+def _service_extract_price_tokens(text: str) -> set[str]:
+    number_pattern = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    return set(re.findall(rf"\b{number_pattern}\s*(gold|silver|copper)\b", _safe_str(text).lower()))
+
+
+def _successful_service_purchase_text_needs_grounding(
+    text: str,
+    narration_context: Dict[str, Any],
+) -> bool:
+    text = _safe_str(text).strip()
+    if not text:
+        return True
+
+    service_result = _service_result_from_context(narration_context)
+    if not _service_purchase_is_applied(service_result, narration_context):
+        return True
+
+    lower = text.lower()
+    if any(
+        phrase in lower
+        for phrase in (
+            "not enough coin",
+            "insufficient",
+            "cannot complete",
+            "can't complete",
+            "cannot find",
+            "no matching",
+            "unavailable",
+            "the attempt fails",
+            "you fail",
+            "once you confirm",
+            "confirm the purchase",
+            "ready to complete",
+            "ready to settle",
+            "free",
+        )
+    ):
+        return True
+
+    selected = _selected_service_offer(service_result)
+    selected_label = _safe_str(selected.get("label")).lower()
+    for offer in _safe_list(service_result.get("offers")):
+        offer = _safe_dict(offer)
+        if _safe_str(offer.get("offer_id")) == _safe_str(selected.get("offer_id")):
+            continue
+        label = _safe_str(offer.get("label")).lower()
+        if label and label != selected_label and label in lower:
+            return True
+
+    price_tokens = _service_extract_price_tokens(text)
+    if price_tokens:
+        selected_price_text = _service_offer_label_with_price(selected)
+        selected_tokens = _service_extract_price_tokens(selected_price_text)
+        if selected_tokens and not price_tokens.issubset(selected_tokens):
+            return True
+
+    return False
 
 
 def _ground_action_result_text(action_text: str, narration_context: Dict[str, Any]) -> str:

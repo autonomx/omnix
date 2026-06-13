@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
-from app.rpg.ai import action_intelligence, semantic_action_intelligence
 from app.rpg.ai.action_intelligence import get_action_advisory
 from app.rpg.ai.pre_runtime_intent_fast_path import classify_pre_runtime_intent_fast_path
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
@@ -23,7 +20,7 @@ def _diag(advisory: dict) -> dict:
     return dict(advisory.get("first_call_grounding_diagnostics") or {})
 
 
-def test_fast_path_classifies_endurance_style_commands_without_llm() -> None:
+def test_pre_runtime_fast_path_is_disabled_and_commands_use_llm() -> None:
     gateway = CountingGateway()
     commands = [
         "I ask Bran to travel with me as a companion for a longer job.",
@@ -45,28 +42,18 @@ def test_fast_path_classifies_endurance_style_commands_without_llm() -> None:
         for command in commands
     ]
 
-    assert gateway.calls == []
-    assert all(_diag(advisory).get("intent_fast_path_used") is True for advisory in advisories)
-    assert all(_diag(advisory).get("intent_llm_used") is False for advisory in advisories)
-    assert all(_diag(advisory).get("provider_called") is False for advisory in advisories)
-    assert all(_diag(advisory).get("prompt_built") is False for advisory in advisories)
-    assert all(_diag(advisory).get("prompt") == "" for advisory in advisories)
-    assert all(_diag(advisory).get("prompt_preview") == "" for advisory in advisories)
-    assert all(_diag(advisory).get("turn_grounding_packet") == {} for advisory in advisories)
-    assert {advisory["action_type"] for advisory in advisories} >= {
-        "social_activity",
-        "trade",
-        "exploration",
-        "investigate",
-        "attack_melee",
-    }
+    assert len(gateway.calls) == len(commands)
+    assert all(_diag(advisory).get("intent_fast_path_used") is False for advisory in advisories)
+    assert all(_diag(advisory).get("intent_llm_used") is True for advisory in advisories)
+    assert all(_diag(advisory).get("provider_called") is True for advisory in advisories)
+    assert all(_diag(advisory).get("prompt_built") is True for advisory in advisories)
+    assert all(_diag(advisory).get("prompt") for advisory in advisories)
+    assert all(_diag(advisory).get("prompt_preview") for advisory in advisories)
+    assert all(_diag(advisory).get("turn_grounding_packet") for advisory in advisories)
+    assert {advisory["action_type"] for advisory in advisories} == {"investigate"}
 
 
-def test_fast_path_skips_prompt_and_grounding_packet_construction(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_if_prompt_is_built(*args: object, **kwargs: object) -> dict:
-        raise AssertionError("fast path should not build turn grounding packet")
-
-    monkeypatch.setattr(action_intelligence, "build_turn_grounding_packet", fail_if_prompt_is_built)
+def test_disabled_fast_path_builds_prompt_and_grounding_packet() -> None:
     gateway = CountingGateway()
 
     advisory = get_action_advisory(
@@ -78,20 +65,18 @@ def test_fast_path_skips_prompt_and_grounding_packet_construction(monkeypatch: p
     )
 
     diagnostics = _diag(advisory)
-    assert gateway.calls == []
-    assert diagnostics.get("provider_status") == "fast_path"
-    assert diagnostics.get("prompt_built") is False
-    assert diagnostics.get("prompt_available") is False
-    assert diagnostics.get("prompt") == ""
-    assert diagnostics.get("prompt_preview") == ""
-    assert diagnostics.get("turn_grounding_packet") == {}
+    assert len(gateway.calls) == 1
+    assert diagnostics.get("provider_status") == "valid_json"
+    assert diagnostics.get("intent_fast_path_used") is False
+    assert diagnostics.get("intent_llm_used") is True
+    assert diagnostics.get("prompt_built") is True
+    assert diagnostics.get("prompt_available") is True
+    assert diagnostics.get("prompt")
+    assert diagnostics.get("prompt_preview")
+    assert diagnostics.get("turn_grounding_packet")
 
 
-def test_semantic_router_reuses_action_fast_path_without_llm_or_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_if_semantic_prompt_is_built(*args: object, **kwargs: object) -> dict:
-        raise AssertionError("semantic fast path should not build turn grounding packet")
-
-    monkeypatch.setattr(semantic_action_intelligence, "build_turn_grounding_packet", fail_if_semantic_prompt_is_built)
+def test_semantic_router_uses_provider_when_action_fast_path_is_disabled() -> None:
     gateway = CountingGateway()
     action_advisory = get_action_advisory(
         llm_gateway=gateway,
@@ -110,19 +95,18 @@ def test_semantic_router_reuses_action_fast_path_without_llm_or_prompt(monkeypat
     )
 
     diagnostics = _diag(semantic_advisory)
-    assert gateway.calls == []
-    assert semantic_advisory["action_type"] == "exploration"
+    assert len(gateway.calls) == 2
+    assert semantic_advisory["action_type"] == "investigate"
     assert semantic_advisory["semantic_family"] == "exploration"
-    assert diagnostics.get("semantic_fast_path_used") is True
-    assert diagnostics.get("semantic_reused_action_fast_path") is True
-    assert diagnostics.get("semantic_llm_used") is False
-    assert diagnostics.get("provider_called") is False
-    assert diagnostics.get("provider_requested") is False
-    assert diagnostics.get("provider_status") == "semantic_reused_action_fast_path"
-    assert diagnostics.get("semantic_prompt_built") is False
-    assert diagnostics.get("prompt") == ""
-    assert diagnostics.get("prompt_preview") == ""
-    assert diagnostics.get("turn_grounding_packet") == {}
+    assert diagnostics.get("semantic_fast_path_used") is False
+    assert diagnostics.get("semantic_llm_used") is True
+    assert diagnostics.get("provider_called") is True
+    assert diagnostics.get("provider_requested") is True
+    assert diagnostics.get("provider_status") == "valid_json"
+    assert diagnostics.get("semantic_prompt_built") is True
+    assert diagnostics.get("prompt")
+    assert diagnostics.get("prompt_preview")
+    assert diagnostics.get("turn_grounding_packet")
 
 
 def test_ambiguous_input_still_falls_back_to_provider_classifier() -> None:
@@ -143,6 +127,25 @@ def test_ambiguous_input_still_falls_back_to_provider_classifier() -> None:
     assert diagnostics.get("provider_called") is True
     assert diagnostics.get("prompt_built") is True
     assert diagnostics.get("prompt_preview")
+    assert advisory["action_type"] == "investigate"
+
+
+def test_direct_npc_opinion_question_declines_fast_path_for_llm_dialogue() -> None:
+    gateway = CountingGateway()
+    advisory = get_action_advisory(
+        llm_gateway=gateway,
+        player_input="Bran, what do you think about sword combat styles?",
+        simulation_state={},
+        runtime_state={},
+        candidate_action={},
+    )
+
+    diagnostics = _diag(advisory)
+
+    assert len(gateway.calls) == 1
+    assert diagnostics.get("intent_fast_path_used") is False
+    assert diagnostics.get("intent_llm_used") is True
+    assert diagnostics.get("provider_called") is True
     assert advisory["action_type"] == "investigate"
 
 
@@ -169,3 +172,4 @@ def test_semantic_router_still_calls_provider_for_ambiguous_action() -> None:
 def test_fast_path_helper_declines_empty_or_ambiguous_text() -> None:
     assert classify_pre_runtime_intent_fast_path(player_input="", candidate_action={}) == {}
     assert classify_pre_runtime_intent_fast_path(player_input="Maybe that one.", candidate_action={}) == {}
+    assert classify_pre_runtime_intent_fast_path(player_input="I attack the bandit.", candidate_action={}) == {}

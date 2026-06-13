@@ -262,11 +262,92 @@ def test_service_purchase_applied_narration_reports_completed_purchase():
     text = result["narration"].lower()
     narration_json = result["narration_json"]
 
-    assert "result: elara completes the purchase." in text
-    assert "the torch is yours" not in text
-    assert "done. torch is settled" in text
+    assert "elara reaches below the counter" in text
+    assert "you buy a torch from elara" in text
+    assert "the torch is yours" in text
+    assert "done. torch is settled" not in text
     assert "reward:" not in text
     assert narration_json["reward"] == ""
+
+
+def test_service_purchase_applied_narration_grounds_conflicting_offer_claim():
+    from app.rpg.ai.world_scene_narrator import narrate_scene
+
+    class StubGateway:
+        def generate_stream(self, *args, **kwargs):
+            yield {
+                "text": (
+                    '{"format_version":"rpg_narration_v2",'
+                    '"narration":"Bran marks the room ledger.",'
+                    '"action":"You buy a private room from Bran.",'
+                    '"npc":{"speaker":"Bran","line":"Done. Private room is settled."},'
+                    '"reward":"","followup_hooks":[]}'
+                )
+            }
+
+    service_result = {
+        "matched": True,
+        "kind": "service_purchase",
+        "service_kind": "lodging",
+        "provider_id": "npc:Bran",
+        "provider_name": "Bran",
+        "location_id": "loc_tavern",
+        "status": "purchased",
+        "offers": [
+            {
+                "offer_id": "bran_lodging_common_cot",
+                "service_kind": "lodging",
+                "label": "Common room cot",
+                "price": {"gold": 0, "silver": 5, "copper": 0},
+            },
+            {
+                "offer_id": "bran_lodging_private_room",
+                "service_kind": "lodging",
+                "label": "Private room",
+                "price": {"gold": 1, "silver": 0, "copper": 0},
+            },
+        ],
+        "selected_offer_id": "bran_lodging_common_cot",
+        "purchase": {
+            "blocked": False,
+            "blocked_reason": "",
+            "price": {"gold": 0, "silver": 5, "copper": 0},
+            "can_afford": True,
+            "applied": True,
+            "resource_changes": {"currency": {"gold": 0, "silver": -5, "copper": 0}},
+            "effects": {"lodging_reserved": True},
+            "applied_effects": {
+                "currency_changed": True,
+                "items_added": [],
+                "active_service": {"offer_id": "bran_lodging_common_cot"},
+                "rumor_added": {},
+            },
+        },
+        "available_actions": [],
+        "source": "deterministic_service_resolver",
+    }
+
+    result = narrate_scene(
+        {"title": "The Rusty Flagon Tavern", "actors": [{"name": "Bran"}]},
+        {
+            "player_input": "I buy Common room cot from Bran",
+            "turn_contract": {
+                "player_input": "I buy Common room cot from Bran",
+                "service_result": service_result,
+                "resolved_result": {"service_result": service_result},
+                "narration_brief": {"summary": "I buy Common room cot from Bran"},
+            },
+            "resolved_result": {"service_result": service_result},
+            "service_application": {"applied": True},
+        },
+        llm_gateway=StubGateway(),
+        retry_on_invalid=False,
+    )
+
+    text = result["narration"].lower()
+
+    assert "private room is settled" not in text
+    assert "done. common room cot is settled" in text
 
 def test_service_purchase_blocked_narration_reports_insufficient_funds():
     from app.rpg.ai.world_scene_narrator import narrate_scene
@@ -435,9 +516,9 @@ def test_service_purchase_narration_prefers_resolved_applied_result():
     narration_json = result["narration_json"]
 
     assert "once you confirm" not in text
-    assert "result: bran completes the purchase." in text
+    assert "action: you buy common room cot from bran" in text
     assert "done. common room cot is settled." in text
-    assert narration_json["action"] == "Bran completes the purchase."
+    assert narration_json["action"] == "You buy Common room cot from Bran"
     assert narration_json["npc"]["line"] == "Done. Common room cot is settled."
 
 def test_service_purchase_offer_not_found_narration_does_not_invent_item_details():
@@ -623,9 +704,9 @@ def test_service_purchase_narration_uses_direct_service_application_when_contrac
 
     assert "ready to complete" not in text
     assert "once you confirm" not in text
-    assert "result: bran completes the purchase." in text
+    assert "action: you buy common room cot from bran" in text
     assert "done. common room cot is settled." in text
-    assert narration_json["action"] == "Bran completes the purchase."
+    assert narration_json["action"] == "You buy Common room cot from Bran"
     assert narration_json["npc"]["line"] == "Done. Common room cot is settled."
 
 def test_service_purchase_blocked_result_keeps_specific_grounded_reason_after_final_pass():

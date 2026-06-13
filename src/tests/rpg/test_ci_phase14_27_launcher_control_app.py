@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.launcher import service_manager as launcher_service_manager
 from app.launcher.control_app import app
 from app.launcher.service_manager import LauncherServiceManager, ServiceSpec, build_default_service_specs, reset_default_manager_for_tests
 
@@ -21,6 +22,11 @@ def test_default_service_specs_keep_image_disabled_by_default(monkeypatch) -> No
     assert by_id["image"].optional is True
     assert by_id["app"].env["OMNIX_IMAGE_ENABLED"] == "0"
     assert by_id["app"].env["OMNIX_IMAGE_URL"] == ""
+    assert by_id["app"].env["OMNIX_LAUNCHER_KILL_PORT"] == "1"
+    assert by_id["app"].ports == (5000,)
+    assert by_id["tts"].ports == (5101,)
+    assert by_id["stt"].ports == (5201,)
+    assert by_id["image"].ports == (5301,)
 
 
 def test_default_service_specs_image_is_explicit_opt_in(monkeypatch) -> None:
@@ -54,6 +60,41 @@ def test_launcher_dashboard_lists_services_without_starting_processes() -> None:
     services = {item["id"]: item for item in payload["services"]}
     assert services["fake"]["status"] == "stopped"
     assert services["disabled"]["status"] == "disabled"
+
+
+def test_start_enabled_services_clears_conflicting_ports_before_launch(monkeypatch) -> None:
+    cleared_ports: list[int] = []
+
+    class FakeProcess:
+        pid = 12345
+        stdout: list[str] = []
+        returncode = None
+
+        def poll(self) -> None:
+            return None
+
+    def fake_popen(*_args, **_kwargs):
+        return FakeProcess()
+
+    def fake_kill(port: int) -> list[int]:
+        cleared_ports.append(port)
+        return [9000 + port]
+
+    monkeypatch.setattr(launcher_service_manager.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(launcher_service_manager, "_kill_processes_for_port", fake_kill)
+    monkeypatch.setattr(launcher_service_manager, "_wait_for_port_release", lambda _port: True)
+
+    manager = LauncherServiceManager([
+        ServiceSpec(service_id="fake", label="Fake Service", command=["python", "-V"], cwd=Path("."), ports=(5000, 5101)),
+    ])
+
+    result = manager.start_auto_services()
+
+    assert result["started"]["fake"]["ok"] is True
+    assert cleared_ports == [5000, 5101]
+    logs = manager.logs("fake")
+    assert any("stopped conflicting process(es) on port 5000" in line for line in logs)
+    assert any("stopped conflicting process(es) on port 5101" in line for line in logs)
 
 
 def test_launcher_dashboard_html_uses_safe_script_and_event_handlers() -> None:

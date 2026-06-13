@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable
 
 FAST_PATH_SOURCE = "phase14_16_pre_runtime_intent_fast_path_v1"
+PRE_RUNTIME_FAST_PATH_ENABLED = False
 
 
 def _s(value: Any) -> str:
@@ -35,6 +36,31 @@ def _target_from_text(text: str) -> tuple[str, str]:
     return "", ""
 
 
+def _is_direct_npc_dialogue_question(text: str, target_id: str) -> bool:
+    if not target_id.startswith("npc:"):
+        return False
+    return _contains_any(
+        text,
+        (
+            "what do you think",
+            "what do you make of",
+            "what's your opinion",
+            "what is your opinion",
+            "what's your take",
+            "what is your take",
+            "how do you feel",
+            "how are you",
+            "how's your day",
+            "how is your day",
+            "how was your day",
+            "how has your day",
+            "how his day",
+            "how her day",
+            "how their day",
+        ),
+    )
+
+
 def classify_pre_runtime_intent_fast_path(
     *,
     player_input: str,
@@ -47,18 +73,27 @@ def classify_pre_runtime_intent_fast_path(
     can avoid an expensive pre-runtime LLM classifier call.
     """
 
+    if not PRE_RUNTIME_FAST_PATH_ENABLED:
+        return {}
+
     text = _s(player_input).strip().lower()
     if not text:
         return {}
     candidate_action = _d(candidate_action)
     target_id, target_name = _target_from_text(text)
+    if _is_direct_npc_dialogue_question(text, target_id):
+        return {}
 
     action_type = ""
     skill_id = ""
     reason = ""
     tags: list[str] = []
 
-    if _contains_any(text, ("buy", "rent", "pay", "price", "coin", "silver", "afford", "room", "ration", "supplies")):
+    if _contains_any(text, ("private code phrase", "code phrase", "warning phrase", "secret phrase")):
+        action_type = "social_activity"
+        reason = "social_or_memory_keyword"
+        tags = ["social", "memory"]
+    elif _contains_any(text, ("buy", "rent", "pay", "price", "coin", "silver", "afford", "room", "ration", "supplies")):
         action_type = "trade"
         skill_id = "barter"
         reason = "commerce_or_service_keyword"

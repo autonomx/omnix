@@ -155,6 +155,116 @@ def test_worker_processes_one_queued_job():
         assert job["status"] == "completed"
 
 
+def test_worker_publishes_full_turn_artifact_payload():
+    """Completed player-turn events include the full LLM artifact, not just text."""
+    session_id = "test_session"
+    base_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 6,
+            "narration_jobs": [
+                {
+                    "job_id": "narration:turn:6",
+                    "turn_id": "turn:6",
+                    "tick": 6,
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "worker_token": "",
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:6",
+                        "tick": 6,
+                        "job_kind": "player_turn",
+                    },
+                }
+            ],
+            "narration_jobs_by_turn": {
+                "turn:6": {
+                    "job_id": "narration:turn:6",
+                    "turn_id": "turn:6",
+                    "tick": 6,
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "worker_token": "",
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:6",
+                        "tick": 6,
+                        "job_kind": "player_turn",
+                    },
+                }
+            },
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+    artifact = {
+        "turn_id": "turn:6",
+        "tick": 6,
+        "narration": "Bran answers with real LLM narration.",
+        "narration_json": {
+            "narration": "Bran wipes the bar and answers.",
+            "action": "You ask Bran about his day.",
+            "npc": {
+                "speaker": "Bran the Innkeeper",
+                "line": "A steady day, all told.",
+            },
+        },
+        "speaker_presentation": {"role": "Innkeeper"},
+        "used_llm": True,
+        "raw_llm_narrative": "{}",
+        "created_at": "2023-01-01T00:00:01Z",
+    }
+    saved_sessions = []
+    published_events = []
+
+    def mock_load(_session_id):
+        if saved_sessions:
+            return copy.deepcopy(saved_sessions[-1])
+        return copy.deepcopy(base_session)
+
+    def mock_save(session):
+        saved_sessions.append(copy.deepcopy(session))
+        return copy.deepcopy(session)
+
+    def mock_publish(_session_id, event):
+        published_events.append(copy.deepcopy(event))
+        return 1
+
+    with patch("app.rpg.session.runtime_part17.load_runtime_session", side_effect=mock_load), \
+         patch("app.rpg.session.runtime_part17.save_runtime_session", side_effect=mock_save), \
+         patch("app.rpg.session.runtime_part17._generate_turn_narration_artifact") as mock_generate, \
+         patch("app.rpg.session.runtime_part17.publish_narration_event", side_effect=mock_publish):
+        mock_generate.return_value = {
+            "ok": True,
+            "artifact": artifact,
+            "session": base_session,
+        }
+
+        result = process_next_narration_job(session_id)
+
+    assert result["ok"] is True
+    assert result["status"] == "completed"
+    narration_events = [
+        event for event in published_events
+        if event.get("type") == "narration_artifact"
+    ]
+    assert narration_events
+    event = narration_events[-1]
+    assert event["turn_id"] == "turn:6"
+    assert event["narration"] == artifact["narration"]
+    assert event["text"] == artifact["narration"]
+    assert event["narration_json"]["npc"]["line"] == "A steady day, all told."
+    assert event["speaker_presentation"]["role"] == "Innkeeper"
+    assert event["used_llm"] is True
+
+
 def test_failed_narration_requeues_for_retry():
     """Test that first failure re-queues the job for retry."""
     session_id = "test_session"

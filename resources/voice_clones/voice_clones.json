@@ -5,7 +5,7 @@
     "voice_clone_id": "Anaka",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "female"
+    "gender": "neutral"
   },
   "default_ref": {
     "speaker": "default",
@@ -21,7 +21,7 @@
     "voice_clone_id": "Donald Trump",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "male"
+    "gender": "neutral"
   },
   "Her": {
     "speaker": "default",
@@ -29,7 +29,7 @@
     "voice_clone_id": "Her",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "male"
+    "gender": "neutral"
   },
   "Inigo": {
     "speaker": "default",
@@ -37,7 +37,7 @@
     "voice_clone_id": "Inigo",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "male"
+    "gender": "neutral"
   },
   "Jinx": {
     "speaker": "default",
@@ -45,7 +45,7 @@
     "voice_clone_id": "Jinx",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "female"
+    "gender": "neutral"
   },
   "Joe Rogen": {
     "speaker": "default",
@@ -53,7 +53,7 @@
     "voice_clone_id": "Joe Rogen",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "male"
+    "gender": "neutral"
   },
   "Maya": {
     "speaker": "default",
@@ -61,7 +61,7 @@
     "voice_clone_id": "Maya",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "female"
+    "gender": "neutral"
   },
   "Morgan": {
     "speaker": "default",
@@ -69,7 +69,7 @@
     "voice_clone_id": "Morgan",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "male"
+    "gender": "neutral"
   },
   "Nate Fallout": {
     "speaker": "default",
@@ -77,7 +77,7 @@
     "voice_clone_id": "Nate Fallout",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "male"
+    "gender": "neutral"
   },
   "Sofia": {
     "speaker": "default",
@@ -85,7 +85,7 @@
     "voice_clone_id": "Sofia",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "female"
+    "gender": "neutral"
   },
   "Vic Cyberpunk": {
     "speaker": "default",
@@ -93,6 +93,6 @@
     "voice_clone_id": "Vic Cyberpunk",
     "has_audio": true,
     "is_preloaded": true,
-    "gender": "male"
+    "gender": "neutral"
   }
 }

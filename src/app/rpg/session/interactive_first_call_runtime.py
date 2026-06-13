@@ -5,7 +5,7 @@ from copy import deepcopy
 from time import perf_counter
 from typing import Any, Dict, List
 
-from app.rpg.ai.action_intelligence import get_action_advisory
+from app.rpg.ai.action_intelligence import get_action_advisory  # noqa: F401
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
@@ -519,6 +519,25 @@ def _direct_dialogue_fallback_topic(player_input: str) -> str:
     text = _s(player_input).lower()
     if any(term in text for term in ("who are you", "what are you", "your name", "tell me about yourself")):
         return "identity_inquiry"
+    if any(
+        term in text
+        for term in (
+            "how are you",
+            "how's your day",
+            "how is your day",
+            "how was your day",
+            "how has your day",
+            "your day",
+            "his day",
+            "her day",
+            "their day",
+            "how's it going",
+            "how is it going",
+            "how have you been",
+            "how are things",
+        )
+    ):
+        return "wellbeing_inquiry"
     if any(term in text for term in ("this place", "what is this place", "where are we", "where am i")):
         return "local_knowledge"
     topic_terms = (
@@ -552,6 +571,15 @@ def _safe_dialogue_fallback_line(
                 "Travelers bring trouble, rumors, and coin through my door, and I remember what matters.",
             )
         return ("identity_inquiry", f"I'm {speaker}, and I can answer plainly about who I am and what I know.")
+
+    if topic == "wellbeing_inquiry":
+        if speaker_is_bran:
+            return (
+                "wellbeing_inquiry",
+                "Busy enough to keep the hearth warm and quiet enough that I can still hear myself think. "
+                "That counts as a decent day here.",
+            )
+        return ("wellbeing_inquiry", "I am managing well enough for the moment. Thanks for asking.")
 
     if topic == "commerce_inquiry":
         if speaker_is_bran:
@@ -763,20 +791,13 @@ def apply_turn(
     llm_start = perf_counter()
     try:
         gateway = build_app_llm_gateway()
-        action_advisory = get_action_advisory(
-            llm_gateway=gateway,
-            player_input=_s(player_input),
-            simulation_state=simulation_state,
-            runtime_state=runtime_state,
-            candidate_action=candidate_action,
-        )
         if _b(_d(performance_override).get("enable_semantic_action_advisory"), True):
             semantic_advisory = get_semantic_action_advisory(
                 llm_gateway=gateway,
                 player_input=_s(player_input),
                 simulation_state=simulation_state,
                 runtime_state=runtime_state,
-                candidate_action=candidate_action or action_advisory,
+                candidate_action=candidate_action,
             )
     except Exception as exc:
         runtime_state["first_call_grounding_error"] = f"{type(exc).__name__}: {exc}"

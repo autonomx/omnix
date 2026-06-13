@@ -313,7 +313,7 @@
         const speakerMeta = artifact.speaker_presentation || {};
 
         const narration = normalizeDisplayedNarrationText(
-            payload.narration || artifact.narration || '',
+            payload.narration || artifact.narration || artifact.text || '',
             { isFinal: true }
         );
         const action = normalizeDisplayedNarrationText(
@@ -1597,6 +1597,38 @@
         container.innerHTML = html;
     }
 
+    function transactionMenusForTurnPayload(payload) {
+        payload = (payload && typeof payload === 'object') ? payload : {};
+        var result = (payload.resolved_result && typeof payload.resolved_result === 'object')
+            ? payload.resolved_result
+            : ((payload.result && typeof payload.result === 'object') ? payload.result : payload);
+        var actionMetadata = (result.action_metadata && typeof result.action_metadata === 'object')
+            ? result.action_metadata
+            : ((payload.action_metadata && typeof payload.action_metadata === 'object') ? payload.action_metadata : {});
+        var serviceApplication = (result.service_application && typeof result.service_application === 'object')
+            ? result.service_application
+            : {};
+        var serviceResult = (result.service_result && typeof result.service_result === 'object')
+            ? result.service_result
+            : {};
+        var purchase = (serviceResult.purchase && typeof serviceResult.purchase === 'object')
+            ? serviceResult.purchase
+            : {};
+        var transactionKind = String(actionMetadata.transaction_kind || result.action_type || serviceResult.kind || '');
+        var blocked = !!(result.blocked || serviceApplication.blocked || purchase.blocked);
+        var applied = !!(
+            result.purchase_applied ||
+            serviceApplication.applied ||
+            purchase.applied ||
+            result.outcome === 'success'
+        );
+
+        if (transactionKind === 'service_purchase' && applied && !blocked) {
+            return [];
+        }
+        return Array.isArray(payload.transaction_menus) ? payload.transaction_menus : [];
+    }
+
     async function submitTransactionMenuAction(sessionId, action) {
         const response = await fetch('/api/rpg/session/menu_action', {
             method: 'POST',
@@ -2794,8 +2826,9 @@
         localStorage.setItem(STORAGE_KEY, gameId);
         try {
             var game = await apiGetGame(gameId);
+            var player = extractPlayerPayload(game);
             updateState({
-                player: game.player,
+                player: player,
                 npcs: game.npcs,
                 voice_assignments: game.voice_assignments || {},
                 messages: [], // Clear messages for fresh start
@@ -2812,6 +2845,7 @@
             if (feed) feed.innerHTML = '<div class="rpg-msg rpg-msg--system">Game loaded. Continue your adventure!</div>';
             rpgEnsureCharacterCardsPanel();
             rpgLoadCharacterCards();
+            if (player) renderPlayerPanel(player);
             startLivingWorld();
         } catch (e) {
             alert('Failed to load game');
@@ -3208,10 +3242,18 @@
                         artifact: artifact || null,
                     });
                     if (artifact && artifact.narration) {
-                        renderTurnNarration(rpgState.currentTurnId, artifact.narration, {
-                            usedLlm: !!artifact.used_llm,
-                            fallback: false,
-                        });
+                        renderOrUpdateNarrationMessage(
+                            rpgState.currentTurnId,
+                            getFullNarrationText(artifact),
+                            { isFinal: true, version: artifact.version || 1 }
+                        );
+                        renderTurnNarrationStructured(
+                            rpgState.currentTurnId,
+                            artifact,
+                            artifact.version || 1
+                        );
+                        clearNarrationPlaceholder(rpgState.currentTurnId);
+                        resetStreamingNarrationState(rpgState.currentTurnId);
                     }
                 })
                 .catch(() => {});
@@ -3240,6 +3282,7 @@
         }
 
         bindNarrationNamedEvent("narration_job");
+        bindNarrationNamedEvent("narration_complete");
         bindNarrationNamedEvent("narration_artifact");
         bindNarrationNamedEvent("npc_conversation_artifact");
         bindNarrationNamedEvent("ambient_conversation_artifact");
@@ -3699,7 +3742,7 @@
             map:         data.map          || null,
             memory:      data.memory       || [],
             worldEvents: data.world_events || [],
-            player:      data.player       || null,
+            player:      extractPlayerPayload(data) || null,
         };
     }
 
@@ -4097,7 +4140,7 @@
                 // Update transaction menus
                 var transactionContainer = document.getElementById('rpg-transaction-menus');
                 if (transactionContainer) {
-                    renderTransactionMenus(transactionContainer, data.transaction_menus, rpgState.sessionId);
+                    renderTransactionMenus(transactionContainer, transactionMenusForTurnPayload(data), rpgState.sessionId);
                 }
 
                 // Render transaction price info
@@ -4222,7 +4265,7 @@
                 // Update transaction menus
                 var transactionContainer = document.getElementById('rpg-transaction-menus');
                 if (transactionContainer) {
-                    renderTransactionMenus(transactionContainer, data.transaction_menus, rpgState.sessionId);
+                    renderTransactionMenus(transactionContainer, transactionMenusForTurnPayload(data), rpgState.sessionId);
                 }
                 
                 // Render conversation cards from turn response
@@ -5199,7 +5242,7 @@
                 }
 
                 var nextNpcs = game.npcs || game.nearby_npcs || game.known_npcs || [];
-                var nextPlayer = game.player || rpgState.player || null;
+                var nextPlayer = extractPlayerPayload(game) || rpgState.player || null;
                 var visualState = game.visual_state;
 
                 updateState({
@@ -5693,9 +5736,97 @@
 
     // ─── Rendering: Player Stats / Inventory Panel ─────────────────────────────
 
+    var PLAYER_PANEL_EMPTY_HTML = '<p class="rpg-empty-note">Start an adventure to see your character stats.</p>';
+
+    function unwrapGamePayload(payload) {
+        payload = _safeObj(payload);
+        return _safeObj(payload.game || payload);
+    }
+
+    function extractPlayerPayload(payload) {
+        var game = unwrapGamePayload(payload);
+        var session = _safeObj(game.session);
+        var simulationState = _safeObj(game.simulation_state || session.simulation_state);
+        var runtimeState = _safeObj(game.runtime_state || session.runtime_state);
+        var runtimeSimulationState = _safeObj(runtimeState.simulation_state);
+        var player = _safeObj(
+            game.player ||
+            game.player_state ||
+            simulationState.player_state ||
+            runtimeSimulationState.player_state
+        );
+        return Object.keys(player).length ? player : null;
+    }
+
+    function normalizePlayerForPanel(player) {
+        player = _safeObj(player);
+        if (!Object.keys(player).length) return null;
+
+        var resources = _safeObj(player.resources || player.player_resources);
+        var rawInventory = player.inventory;
+        var inventoryObj = _safeObj(rawInventory);
+        var inventoryState = _safeObj(player.inventory_state || inventoryObj);
+        var stats = Object.assign({
+            strength: 0,
+            dexterity: 0,
+            constitution: 0,
+            intelligence: 0,
+            wisdom: 0,
+            charisma: 0,
+        }, _safeObj(player.stats || player.attributes));
+        var currency = _safeObj(player.currency || inventoryState.currency || inventoryObj.currency);
+        var inventoryItems = Array.isArray(player.inventory_items)
+            ? player.inventory_items
+            : (Array.isArray(inventoryState.items)
+                ? inventoryState.items
+                : (Array.isArray(rawInventory) ? rawInventory : []));
+
+        inventoryState = Object.assign({}, inventoryState, {
+            currency: currency,
+            items: inventoryItems,
+        });
+
+        return Object.assign({}, player, {
+            name: player.name || player.player_name || 'Adventurer',
+            level: Number(player.level || 1),
+            xp: Number(player.xp || 0),
+            xp_to_next: Number(player.xp_to_next || 100),
+            hp: Number(player.hp || resources.hp || 0),
+            max_hp: Number(player.max_hp || resources.max_hp || player.hp || resources.hp || 0),
+            stamina: Number(player.stamina || resources.stamina || 0),
+            max_stamina: Number(player.max_stamina || resources.max_stamina || player.stamina || resources.stamina || 0),
+            mana: Number(player.mana || resources.mana || 0),
+            max_mana: Number(player.max_mana || resources.max_mana || player.mana || resources.mana || 0),
+            stats: stats,
+            skills: _safeObj(player.skills),
+            inventory_state: inventoryState,
+            currency: currency,
+            inventory_items: inventoryItems,
+            quests_active: _safeArray(player.quests_active),
+            reputation_factions: _safeObj(player.reputation_factions),
+        });
+    }
+
+    function setPlayerPanelMessage(message) {
+        var panel = el('rpgPlayerPanel');
+        if (!panel) return;
+        panel.innerHTML = '<p class="rpg-empty-note">' + escapeHtml(message) + '</p>';
+    }
+
+    function resetPlayerPanelEmptyState() {
+        var panel = el('rpgPlayerPanel');
+        if (!panel) return;
+        panel.innerHTML = PLAYER_PANEL_EMPTY_HTML;
+    }
+
     function renderPlayerPanel(player) {
         var panel = el('rpgPlayerPanel');
-        if (!panel || !player) return;
+        if (!panel) return;
+        player = normalizePlayerForPanel(player);
+        if (!player) {
+            resetPlayerPanelEmptyState();
+            return;
+        }
 
         var stats = player.stats || {};
         var inventoryState = (player.inventory_state && typeof player.inventory_state === 'object') ? player.inventory_state : {};
@@ -5745,7 +5876,7 @@
 
         // HP / Stamina / Mana bars - Authentic RPG style
         var vitalsHtml = '';
-        if (player.max_hp !== undefined) {
+        if (player.max_hp !== undefined && Number(player.max_hp) > 0) {
             var hpPct = player.max_hp > 0 ? Math.floor(((player.hp || 0) / player.max_hp) * 100) : 0;
             var stPct = player.max_stamina > 0 ? Math.floor(((player.stamina || 0) / player.max_stamina) * 100) : 0;
             var mpPct = player.max_mana > 0 ? Math.floor(((player.mana || 0) / player.max_mana) * 100) : 0;
@@ -5765,7 +5896,7 @@
                         '</div>' +
                         '<div class="rpg-stat-bar rpg-stat-bar--stamina"><div class="rpg-stat-bar-fill" style="width:' + stPct + '%"></div></div>' +
                     '</div>' +
-                    (player.max_mana !== undefined ? 
+                    (player.max_mana !== undefined && Number(player.max_mana) > 0 ?
                         '<div>' +
                             '<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">' +
                                 '<span class="rpg-stat-label">🔮 Mana</span>' +
@@ -5910,20 +6041,23 @@
         if (!overlay) return;
         if (rpgState.player) {
             renderPlayerPanel(rpgState.player);
-        } else if (rpgState.sessionId) {
-            fetch('/api/rpg/session/get', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_id: rpgState.sessionId }),
-            })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (data.player) {
-                        updateState({ player: data.player });
-                        renderPlayerPanel(data.player);
+        } else if (!rpgState.sessionId) {
+            resetPlayerPanelEmptyState();
+        } else {
+            setPlayerPanelMessage('Loading character sheet...');
+            apiGetGame(rpgState.sessionId)
+                .then(function (game) {
+                    var player = extractPlayerPayload(game);
+                    if (player) {
+                        updateState({ player: player });
+                        renderPlayerPanel(player);
+                    } else {
+                        setPlayerPanelMessage('Character data is not available for this adventure yet.');
                     }
                 })
-                .catch(function () {});
+                .catch(function () {
+                    setPlayerPanelMessage('Unable to load character data.');
+                });
         }
         overlay.style.display = 'flex';
     }
@@ -5959,11 +6093,13 @@
             // Load game state if session exists
             if (rpgState.sessionId) {
                 apiGetGame(rpgState.sessionId).then(function(game) {
+                    var player = extractPlayerPayload(game);
                     updateState({
-                        player: game.player,
+                        player: player,
                         npcs: game.npcs,
                         voice_assignments: game.voice_assignments || {},
                     });
+                    if (player) renderPlayerPanel(player);
                     updateRpgServiceActionsFromPayload(game || {});
                 }).catch(function() {});
             }
@@ -6207,8 +6343,7 @@
         var memoryPanel = el('rpgMemoryPanelWrapper');
         if (memoryPanel) memoryPanel.style.display = 'none';
 
-        var playerPanel = el('rpgPlayerPanel');
-        if (playerPanel) playerPanel.innerHTML = '';
+        resetPlayerPanelEmptyState();
 
         closePlayerPanel();
 
@@ -6216,20 +6351,28 @@
         setLoading(true);
         apiCreateGame({ preset: true })
             .then(game => {
-                updateState({ sessionId: game.session_id });
-                localStorage.setItem(STORAGE_KEY, game.session_id);
+                var createdGame = unwrapGamePayload(game);
+                var player = extractPlayerPayload(createdGame);
+                var sessionId = createdGame.session_id || game.session_id;
+                if (!sessionId) {
+                    throw new Error(createdGame.error || game.error || 'Adventure start did not return a session id');
+                }
+                updateState({ sessionId: sessionId, player: player });
+                localStorage.setItem(STORAGE_KEY, sessionId);
+                if (player) renderPlayerPanel(player);
                 
                 var feed = el('rpgNarrativeFeed');
                 if (feed) feed.innerHTML = '';
                 
-                if (game.opening && game.opening.trim()) {
-                    applyUpdate(transformResponse({ narration: game.opening }));
-                    speakNarration(game.opening);
+                if (createdGame.opening && createdGame.opening.trim()) {
+                    applyUpdate(transformResponse({ narration: createdGame.opening }));
+                    speakNarration(createdGame.opening);
                 }
                 
                 setLoading(false);
                 persistSnapshot();
                 startLivingWorld();
+                refreshVisualUiFromSession(true);
             })
             .catch(err => {
                 appendMessage({ type: 'system', content: '\u274C Error: ' + err.message });
@@ -6282,8 +6425,7 @@
         var memoryPanel = el('rpgMemoryPanelWrapper');
         if (memoryPanel) memoryPanel.style.display = 'none';
 
-        var playerPanel = el('rpgPlayerPanel');
-        if (playerPanel) playerPanel.innerHTML = '';
+        resetPlayerPanelEmptyState();
 
         closePlayerPanel();
 

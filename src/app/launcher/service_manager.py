@@ -3,13 +3,12 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
-import sys
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
 DEFAULT_LOG_LIMIT = 1200
@@ -38,6 +37,7 @@ class ServiceSpec:
     command: list[str]
     cwd: Path
     env: dict[str, str] = field(default_factory=dict)
+    ports: tuple[int, ...] = ()
     optional: bool = False
     enabled: bool = True
     auto_start: bool = True
@@ -121,6 +121,7 @@ class LauncherServiceManager:
             env = os.environ.copy()
             env.update(service.spec.env)
             service.spec.cwd.mkdir(parents=True, exist_ok=True)
+            self._clear_conflicting_ports(service)
             self._append(service, "[launcher] starting: " + " ".join(service.spec.command))
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
             process = subprocess.Popen(
@@ -190,6 +191,18 @@ class LauncherServiceManager:
             stamp = time.strftime("%H:%M:%S")
             service.logs.append(f"[{stamp}] {line.rstrip()}")
 
+    def _clear_conflicting_ports(self, service: ManagedProcess) -> None:
+        for port in service.spec.ports:
+            killed = _kill_processes_for_port(port)
+            if killed:
+                self._append(service, f"[launcher] stopped conflicting process(es) on port {port}: {', '.join(str(pid) for pid in killed)}")
+                if not _wait_for_port_release(port):
+                    owners = _find_port_owner_pids(port)
+                    if owners:
+                        self._append(service, f"[launcher] warning: port {port} is still owned by: {', '.join(str(pid) for pid in owners)}")
+                    else:
+                        self._append(service, f"[launcher] warning: port {port} did not become bindable after cleanup")
+
     def _pump_logs(self, service: ManagedProcess) -> None:
         process = service.process
         if process is None or process.stdout is None:
@@ -206,6 +219,77 @@ class LauncherServiceManager:
                     self._append(service, f"[launcher] exited with code {process.returncode}")
 
 
+def _is_port_available(port: int, host: str = "127.0.0.1") -> bool:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host, int(port)))
+        except OSError:
+            return False
+    return True
+
+
+def _wait_for_port_release(port: int, *, timeout_s: float = 8.0, interval_s: float = 0.25) -> bool:
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    while True:
+        if _is_port_available(port):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(max(0.05, float(interval_s)))
+
+
+def _find_port_owner_pids(port: int) -> list[int]:
+    if os.name != "nt":
+        return []
+    script = (
+        f"Get-NetTCPConnection -LocalPort {int(port)} -ErrorAction SilentlyContinue | "
+        "Select-Object -ExpandProperty OwningProcess -Unique"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return []
+
+    pids: list[int] = []
+    for line in (result.stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            pid = int(line)
+        except ValueError:
+            continue
+        if pid > 0 and pid != os.getpid() and pid not in pids:
+            pids.append(pid)
+    return pids
+
+
+def _kill_processes_for_port(port: int) -> list[int]:
+    killed: list[int] = []
+    for pid in _find_port_owner_pids(port):
+        try:
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", f"Stop-Process -Id {pid} -Force"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            continue
+        killed.append(pid)
+    return killed
+
+
 def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     root = root or _repo_root()
     app_python = _python_env("RPG_FLUX_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe")
@@ -218,6 +302,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         "OMNIX_STT_URL": os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
         "OMNIX_IMAGE_ENABLED": os.environ.get("OMNIX_IMAGE_ENABLED", "0"),
         "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
+        "OMNIX_LAUNCHER_KILL_PORT": "1",
     }
     tts_model_dir = os.environ.get("OMNIX_TTS_MODEL_DIR", str(root / "resources" / "models" / "tts" / "Qwen3-TTS-12Hz-0.6B-Base"))
     return [
@@ -227,6 +312,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             command=[stt_python, str(root / "src" / "parakeet_stt_server.py")],
             cwd=root,
             env=dict(common),
+            ports=(5201,),
             description="Speech-to-text websocket service on 127.0.0.1:5201.",
         ),
         ServiceSpec(
@@ -235,6 +321,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             command=[tts_python, str(root / "src" / "tts_server.py")],
             cwd=root,
             env={**common, "OMNIX_TTS_MODEL_DIR": tts_model_dir, "OMNIX_QWEN3_TTS_MODEL_DIR": tts_model_dir},
+            ports=(5101,),
             description="Text-to-speech service on 127.0.0.1:5101.",
         ),
         ServiceSpec(
@@ -243,6 +330,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             command=[app_python, str(root / "src" / "launch.py")],
             cwd=root,
             env=dict(common),
+            ports=(5000,),
             description="Main FastAPI/UI app.",
         ),
         ServiceSpec(
@@ -251,6 +339,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", "127.0.0.1", "--port", "5301"],
             cwd=root,
             env={**common, "OMNIX_IMAGE_ENABLED": "1", "OMNIX_IMAGE_SERVICE_MODE": "1", "OMNIX_IMAGE_PRELOAD": "1", "OMNIX_IMAGE_WARMUP": "1", "OMNIX_IMAGE_URL": ""},
+            ports=(5301,),
             optional=True,
             enabled=image_enabled,
             auto_start=image_enabled,

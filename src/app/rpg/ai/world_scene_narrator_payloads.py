@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # ruff: noqa: F401,F403,F405
 from app.rpg.ai.world_scene_narrator_common import *
+from app.rpg.ai.world_scene_narrator_common import _safe_dict, _safe_list, _safe_str
 from app.rpg.ai.world_scene_narrator_dialogue_grounding import *
 from app.rpg.ai.world_scene_narrator_service_grounding import *
 
@@ -649,13 +650,24 @@ def _sanitize_narration_payload(
     narration_clean = _strip_meta_narration(narration_clean)
 
     service_result = _service_result_from_context(narration_context)
+    service_action_override = ""
+    if service_result.get("matched") and not _service_purchase_is_applied(service_result, narration_context):
+        service_action_override = _service_grounded_action_result(narration_context)
     grounded_narration = _service_grounded_narration_text(narration_context)
-    if service_result.get("matched") and grounded_narration:
+    if service_result.get("matched") and grounded_narration and (
+        not _service_purchase_is_applied(service_result, narration_context)
+        or _successful_service_purchase_text_needs_grounding(narration_clean, narration_context)
+    ):
         narration_clean = grounded_narration
 
     if service_result.get("matched") and _service_narration_needs_grounding(narration_clean):
-        grounded_narration = _service_grounded_narration_text(narration_context)
-        if grounded_narration:
+        if (
+            grounded_narration
+            and (
+                not _service_purchase_is_applied(service_result, narration_context)
+                or _successful_service_purchase_text_needs_grounding(narration_clean, narration_context)
+            )
+        ):
             narration_clean = grounded_narration
 
     if not narration_clean:
@@ -681,7 +693,9 @@ def _sanitize_narration_payload(
             normalized["action"],
             narration_context,
         )
-        if authoritative_result_action:
+        if service_action_override:
+            normalized["action"] = service_action_override
+        elif authoritative_result_action:
             normalized["action"] = authoritative_result_action
     normalized["action"] = _final_grounded_service_action_text(
         _safe_str(normalized.get("action")),
@@ -749,13 +763,18 @@ def _sanitize_narration_payload(
                 "offers_available",
                 "no_registered_offers",
                 "blocked",
-                "purchased",
                 "purchase_ready",
                 "purchase_offer_not_found",
             }
-            or service_purchase_applied
             or service_purchase_offer_not_found
-            or _service_claim_needs_grounding(npc["line"])
+            or (
+                service_purchase_applied
+                and _successful_service_purchase_text_needs_grounding(npc["line"], narration_context)
+            )
+            or (
+                not service_purchase_applied
+                and _service_claim_needs_grounding(npc["line"])
+            )
         )
     ):
         grounded_line = _service_grounded_npc_line(narration_context)

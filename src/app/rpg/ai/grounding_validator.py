@@ -422,11 +422,122 @@ def _speaker_allowed(speaker: str, allowed: Set[str]) -> bool:
     speaker = _safe_str(speaker).strip()
     if not speaker:
         return True
-    allowed_lower = {value.lower() for value in allowed}
-    if speaker.lower() in allowed_lower:
+    speaker_aliases = _speaker_aliases(speaker)
+    allowed_aliases = {
+        alias
+        for value in allowed
+        for alias in _speaker_aliases(value)
+    }
+    if speaker_aliases & allowed_aliases:
         return True
-    slug = speaker.lower().replace(" ", "_")
-    return any(value.lower().endswith(slug) for value in allowed)
+    return any(
+        _speaker_alias_contains(allowed_alias, speaker_alias)
+        or _speaker_alias_contains(speaker_alias, allowed_alias)
+        for speaker_alias in speaker_aliases
+        for allowed_alias in allowed_aliases
+    )
+
+
+def _speaker_aliases(value: str) -> Set[str]:
+    raw = _safe_str(value).strip().lower()
+    if not raw:
+        return set()
+
+    aliases = {_normalize_speaker_alias(raw)}
+    if ":" in raw:
+        aliases.add(_normalize_speaker_alias(raw.rsplit(":", 1)[-1]))
+    if "_" in raw:
+        aliases.add(_normalize_speaker_alias(raw.replace("_", " ")))
+
+    return {alias for alias in aliases if alias}
+
+
+def _normalize_speaker_alias(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", value.lower())).strip()
+
+
+def _speaker_alias_contains(container: str, candidate: str) -> bool:
+    container = _normalize_speaker_alias(container)
+    candidate = _normalize_speaker_alias(candidate)
+    if not container or not candidate:
+        return False
+    if container == candidate:
+        return True
+    container_tokens = container.split()
+    candidate_tokens = candidate.split()
+    if len(candidate_tokens) == 1:
+        token = candidate_tokens[0]
+        return len(token) >= 3 and token in container_tokens
+    width = len(candidate_tokens)
+    return any(
+        container_tokens[index:index + width] == candidate_tokens
+        for index in range(0, len(container_tokens) - width + 1)
+    )
+
+
+def _looks_like_location_speaker(value: str) -> bool:
+    raw = _safe_str(value).strip().lower()
+    normalized = _normalize_speaker_alias(raw)
+    return bool(
+        raw.startswith(("loc_", "location:"))
+        or normalized.startswith("loc ")
+        or normalized.startswith("location ")
+    )
+
+
+def _player_action_is_personal_day_disclosure(value: str) -> bool:
+    text = _safe_str(value).strip().lower()
+    if not text:
+        return False
+    has_personal_anchor = bool(
+        re.search(r"\b(?:i|ive|i've|i had|i have|my|me)\b", text)
+    )
+    has_day_term = bool(re.search(r"\b(?:day|days|week|weeks|time)\b", text))
+    has_burden_term = any(
+        term in text
+        for term in (
+            "rough",
+            "tough",
+            "hard",
+            "bad",
+            "long",
+            "heavy",
+            "awful",
+            "terrible",
+            "few day",
+            "few rough",
+        )
+    )
+    return has_personal_anchor and has_day_term and has_burden_term
+
+
+def _npc_line_repeats_prior_day_prompt(value: str) -> bool:
+    text = _safe_str(value).strip().lower()
+    if not text:
+        return False
+    stale_prompt_terms = (
+        "how about yourself",
+        "what kind of day have you",
+        "what kind of day did you",
+        "how was your day",
+        "how has your day",
+        "how's your day",
+        "hows your day",
+    )
+    stale_answer_terms = (
+        "it's been busy",
+        "its been busy",
+        "it has been busy",
+        "usual mix",
+        "rowdy adventurers",
+        "bard practicing",
+        "elara fussing",
+        "moon-berries",
+        "moon berries",
+    )
+    return any(term in text for term in stale_prompt_terms) or sum(
+        1 for term in stale_answer_terms if term in text
+    ) >= 2
 
 
 def _allowed_locations(
@@ -469,13 +580,12 @@ def validate_narration_grounding(
     state = _safe_dict(state_snapshot)
 
     violations: List[GroundingViolation] = []
-    full_text = _flatten_text(
+    resolved_claim_text = _flatten_text(
         {
             "narration": payload.get("narration"),
             "action": payload.get("action"),
             "npc": payload.get("npc"),
             "reward": payload.get("reward"),
-            "followup_hooks": payload.get("followup_hooks"),
         }
     )
 
@@ -490,11 +600,11 @@ def validate_narration_grounding(
                 )
             )
 
-    reward_pattern = _contains_pattern(full_text, _REWARD_PATTERNS)
+    reward_pattern = _contains_pattern(resolved_claim_text, _REWARD_PATTERNS)
     if (
         reward_pattern
-        and not _reward_pattern_is_only_price_quote(full_text, reward_pattern)
-        and not _debt_reference_is_not_reward_grant(full_text, reward_pattern, contract)
+        and not _reward_pattern_is_only_price_quote(resolved_claim_text, reward_pattern)
+        and not _debt_reference_is_not_reward_grant(resolved_claim_text, reward_pattern, contract)
         and not _currency_or_inventory_delta_exists(contract)
     ):
         violations.append(
@@ -506,7 +616,7 @@ def validate_narration_grounding(
             )
         )
 
-    combat_pattern = _contains_pattern(full_text, _COMBAT_PATTERNS)
+    combat_pattern = _contains_pattern(resolved_claim_text, _COMBAT_PATTERNS)
     if combat_pattern and not _combat_delta_exists(contract):
         violations.append(
             GroundingViolation(
@@ -517,7 +627,7 @@ def validate_narration_grounding(
             )
         )
 
-    objective_pattern = _contains_pattern(full_text, _OBJECTIVE_COMPLETION_PATTERNS)
+    objective_pattern = _contains_pattern(resolved_claim_text, _OBJECTIVE_COMPLETION_PATTERNS)
     if objective_pattern and not _quest_completion_exists(contract):
         violations.append(
             GroundingViolation(
@@ -531,6 +641,15 @@ def validate_narration_grounding(
     npc = _safe_dict(payload.get("npc"))
     speaker = _safe_str(npc.get("speaker") or npc.get("name") or npc.get("id")).strip()
     if speaker:
+        if _looks_like_location_speaker(speaker):
+            violations.append(
+                GroundingViolation(
+                    code="location_used_as_npc_speaker",
+                    field="npc.speaker",
+                    message="Dialogue speaker looks like a location id, not a character.",
+                    evidence=speaker,
+                )
+            )
         allowed = _allowed_speakers(contract, state)
         if allowed and not _speaker_allowed(speaker, allowed):
             violations.append(
@@ -542,10 +661,26 @@ def validate_narration_grounding(
                 )
             )
 
-    move_pattern = _contains_pattern(full_text, _LOCATION_MOVE_PATTERNS)
+    npc_line = _safe_str(npc.get("line")).strip()
+    player_action_text = _extract_player_action_text(contract)
+    if (
+        npc_line
+        and _player_action_is_personal_day_disclosure(player_action_text)
+        and _npc_line_repeats_prior_day_prompt(npc_line)
+    ):
+        violations.append(
+            GroundingViolation(
+                code="stale_or_irrelevant_dialogue",
+                field="npc.line",
+                message="NPC dialogue repeats the previous day-inquiry answer instead of responding to the player's disclosure.",
+                evidence=npc_line[:240],
+            )
+        )
+
+    move_pattern = _contains_pattern(resolved_claim_text, _LOCATION_MOVE_PATTERNS)
     if move_pattern:
         allowed_locations = _allowed_locations(contract, state)
-        lower_text = full_text.lower()
+        lower_text = resolved_claim_text.lower()
         if allowed_locations and not any(_safe_str(loc).lower() in lower_text for loc in allowed_locations):
             violations.append(
                 GroundingViolation(
@@ -570,23 +705,21 @@ def validate_narration_grounding(
                 )
                 break
 
-    player_action_text = _extract_player_action_text(contract)
-
     player_made_debt_claim = bool(
         _contains_pattern(player_action_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
     )
 
     text_mentions_payment_or_debt = bool(
-        _contains_pattern(full_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
-        or _contains_pattern(full_text, _REWARD_PATTERNS)
+        _contains_pattern(resolved_claim_text, _UNSUPPORTED_DEBT_CLAIM_PATTERNS)
+        or _contains_pattern(resolved_claim_text, _REWARD_PATTERNS)
     )
 
     if player_made_debt_claim and not _payment_or_debt_authorized(contract):
-        clear_refusal = _contains_pattern(full_text, _CLEAR_DEBT_REFUSAL_PATTERNS)
-        ambiguous_debt_response = _contains_pattern(full_text, _AMBIGUOUS_DEBT_RESPONSE_PATTERNS)
-        debt_confirmation = _contains_pattern(full_text, _DEBT_CONFIRMATION_PATTERNS)
+        clear_refusal = _contains_pattern(resolved_claim_text, _CLEAR_DEBT_REFUSAL_PATTERNS)
+        ambiguous_debt_response = _contains_pattern(resolved_claim_text, _AMBIGUOUS_DEBT_RESPONSE_PATTERNS)
+        debt_confirmation = _contains_pattern(resolved_claim_text, _DEBT_CONFIRMATION_PATTERNS)
         explicit_grant = _contains_pattern(
-            full_text,
+            resolved_claim_text,
             [
                 rf"\b(?:hands?|handed|gives?|gave|pays?|paid)\s+(?:you\s+)?{_MONEY_PHRASE_PATTERN}\b",
                 rf"\byou\s+(?:gain|receive|get|are\s+given)\s+{_MONEY_PHRASE_PATTERN}\b",

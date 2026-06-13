@@ -15,6 +15,33 @@ _ALLOWED_STAKES = {0, 1, 2, 3}
 _ALLOWED_EFFECT_AXES = {"camaraderie", "respect", "trust", "fear", "tension", "curiosity", "suspicion", "morale"}
 _ALLOWED_OBSERVER_HOOKS = {"spectacle", "conversation_seed", "crowd_attention", "authority_notice", "relationship_shift", "rumor_seed"}
 _ALLOWED_SCENE_IMPACTS = {"none", "minor_focus_shift", "gathers_attention", "disrupts_flow", "changes_mood"}
+_ALLOWED_UTTERANCE_MODES = {
+    "action_request",
+    "casual_conversation",
+    "clarification",
+    "emotional_expression",
+    "greeting",
+    "identity_inquiry",
+    "local_knowledge",
+    "lore_question",
+    "opinion_question",
+    "wellbeing_inquiry",
+}
+_ALLOWED_RISK_DOMAINS = {
+    "none",
+    "combat",
+    "commerce",
+    "inventory",
+    "item",
+    "persuasion_outcome",
+    "quest",
+    "relationship_change",
+    "reward",
+    "service",
+    "threat",
+    "travel",
+    "unknown",
+}
 _SEMANTIC_FAST_PATH_SOURCE = "phase14_18_semantic_reused_action_fast_path_v1"
 
 
@@ -218,6 +245,10 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         "Do not invent absent actors. Prefer a nearby/addressed NPC id when the target role or name strongly implies one.\n"
         "For non-stateful interpretive NPC dialogue/opinion questions, set stateful false, needs_runtime_resolution false, and provide visible_response.\n"
         "For commerce, combat, travel, inventory, quests, persuasion with consequences, threats, or anything that may mutate state, set stateful true and needs_runtime_resolution true.\n"
+        "Classify semantic risk by meaning, not keywords. For example, 'I feel attacked' is emotional_expression with literal_action_requested false and risk_domain none; 'I attack Bran' is action_request with literal_action_requested true and risk_domain combat.\n"
+        "Use evidence_spans to cite the smallest player-input phrases supporting your classification.\n"
+        "Always include direct_response_gate. It is your self-check for whether visible_response can be shown immediately before runtime. Set safe_to_display_now true only for non-mutating dialogue such as greeting, opinion, wellbeing, identity, local lore, small talk, emotional support, or clarification.\n"
+        "Set direct_response_gate.safe_to_display_now false for commerce, prices, discounts, purchases, inventory, combat, travel, quest progress, persuasion with outcomes, threats, rewards, relationship changes, or any requested state mutation.\n"
         "Never reveal private_context or private NPC biography/inventory in visible_response.\n"
         "Use open-ended activity_label values, but only bounded enums for family/mode/visibility/observer hooks.\n"
         "Schema:\n"
@@ -235,9 +266,16 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         '  "social_axes": [{"axis":"camaraderie","delta":1}],\n'
         '  "observer_hooks": [string],\n'
         '  "scene_impact": string,\n'
+        '  "utterance_mode": string,\n'
+        '  "literal_action_requested": false,\n'
+        '  "state_mutation_requested": false,\n'
+        '  "risk_domain": string,\n'
+        '  "intent_summary": string,\n'
+        '  "evidence_spans": [string],\n'
         '  "stateful": true,\n'
         '  "needs_runtime_resolution": true,\n'
         '  "visible_response": {"narration": string, "npc": {"speaker": string, "line": string}},\n'
+        '  "direct_response_gate": {"safe_to_display_now": false, "reason": string, "risk_flags": [string]},\n'
         '  "reason": string\n'
         "}\n"
         "Examples:\n"
@@ -303,13 +341,40 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
     scene_impact = _safe_str(advisory.get("scene_impact")).strip().lower()
     if scene_impact not in _ALLOWED_SCENE_IMPACTS:
         scene_impact = "none"
+    utterance_mode = _safe_str(advisory.get("utterance_mode")).strip().lower()
+    if utterance_mode not in _ALLOWED_UTTERANCE_MODES:
+        utterance_mode = "action_request" if _safe_bool(advisory.get("literal_action_requested"), False) else "casual_conversation"
+    risk_domain = _safe_str(advisory.get("risk_domain")).strip().lower()
+    if risk_domain not in _ALLOWED_RISK_DOMAINS:
+        risk_domain = "unknown" if _safe_bool(advisory.get("state_mutation_requested"), False) else "none"
+    evidence_spans: list[str] = []
+    for value in _safe_list(advisory.get("evidence_spans"))[:6]:
+        span = _clip_text(value, 120)
+        if span and span not in evidence_spans:
+            evidence_spans.append(span)
     visible_response = _safe_dict(advisory.get("visible_response"))
     normalized_visible_response = {}
     if visible_response:
         npc = _safe_dict(visible_response.get("npc"))
         normalized_visible_response = {"narration": _clip_text(visible_response.get("narration"), 500), "npc": {"speaker": _clip_text(npc.get("speaker"), 80), "line": _clip_text(npc.get("line"), 900)}}
+    direct_gate = _safe_dict(advisory.get("direct_response_gate"))
+    normalized_direct_gate = {
+        "safe_to_display_now": _safe_bool(direct_gate.get("safe_to_display_now"), False),
+        "reason": _clip_text(direct_gate.get("reason"), 160),
+        "risk_flags": [
+            _clip_text(flag, 48).lower().replace(" ", "_")
+            for flag in _safe_list(direct_gate.get("risk_flags"))[:8]
+            if _clip_text(flag, 48)
+        ],
+    }
     stateful = _safe_bool(advisory.get("stateful"), True)
     needs_runtime_resolution = _safe_bool(advisory.get("needs_runtime_resolution"), stateful)
+    if not direct_gate and normalized_visible_response and not stateful and not needs_runtime_resolution:
+        normalized_direct_gate = {
+            "safe_to_display_now": True,
+            "reason": "legacy_non_stateful_visible_response",
+            "risk_flags": [],
+        }
     normalized = {
         "action_type": action_type,
         "semantic_family": semantic_family,
@@ -324,9 +389,16 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
         "social_axes": social_axes,
         "observer_hooks": observer_hooks,
         "scene_impact": scene_impact,
+        "utterance_mode": utterance_mode,
+        "literal_action_requested": _safe_bool(advisory.get("literal_action_requested"), False),
+        "state_mutation_requested": _safe_bool(advisory.get("state_mutation_requested"), False),
+        "risk_domain": risk_domain,
+        "intent_summary": _clip_text(advisory.get("intent_summary"), 220),
+        "evidence_spans": evidence_spans,
         "stateful": stateful,
         "needs_runtime_resolution": needs_runtime_resolution,
         "visible_response": normalized_visible_response,
+        "direct_response_gate": normalized_direct_gate,
         "grounding_packet_version": "turn_grounding_packet_v1",
         "reason": _clip_text(advisory.get("reason"), 200),
     }
@@ -376,9 +448,16 @@ def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> 
         "social_axes": [],
         "observer_hooks": [],
         "scene_impact": "none",
+        "utterance_mode": _safe_str(candidate_action.get("utterance_mode")),
+        "literal_action_requested": _safe_bool(candidate_action.get("literal_action_requested"), False),
+        "state_mutation_requested": _safe_bool(candidate_action.get("state_mutation_requested"), True),
+        "risk_domain": _safe_str(candidate_action.get("risk_domain") or "unknown"),
+        "intent_summary": _safe_str(candidate_action.get("intent_summary")),
+        "evidence_spans": _safe_list(candidate_action.get("evidence_spans")),
         "stateful": _safe_bool(candidate_action.get("stateful"), True),
         "needs_runtime_resolution": _safe_bool(candidate_action.get("needs_runtime_resolution"), True),
         "visible_response": _safe_dict(candidate_action.get("visible_response")),
+        "direct_response_gate": _safe_dict(candidate_action.get("direct_response_gate")),
         "reason": f"semantic router reused action fast path: {reason}",
         "pre_runtime_intent_fast_path": True,
         "pre_runtime_intent_fast_path_reason": reason,

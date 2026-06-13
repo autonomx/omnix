@@ -152,6 +152,8 @@ def _apply_ambient_narration_and_delivery(
         if update["delivery"] == "interrupt":
             session = record_interrupt(session, update)
             runtime_state = _safe_dict(session.get("runtime_state"))
+            runtime_state.setdefault("llm_records", [])
+            runtime_state.setdefault("llm_records_index", {})
 
         capture_record = {
             "type": "ambient_narration",
