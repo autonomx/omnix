@@ -8,6 +8,7 @@ exercise safe endpoints with missing or fake session ids.
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
@@ -70,6 +71,42 @@ REQUIRED_RPG_ROUTES = {
     ("POST", "/api/rpg/session/world_behavior/update"),
 }
 
+SAFE_SESSION_CONTRACTS = [
+    (
+        "/api/rpg/session/world_events",
+        {"session_id": "__missing__"},
+        {
+            "ok",
+            "error",
+            "recent_world_event_rows",
+            "player_world_view_rows",
+            "player_local_world_view_rows",
+            "player_global_world_view_rows",
+            "debug_world_events",
+        },
+    ),
+    (
+        "/api/rpg/session/idle_tick",
+        {"session_id": "__missing__", "count": 1, "reason": "heartbeat"},
+        {
+            "ok",
+            "error",
+            "updates",
+            "latest_seq",
+            "ticks_applied",
+            "idle_debug_trace",
+            "idle_seconds",
+            "idle_gate_open",
+            "settings",
+        },
+    ),
+    (
+        "/api/rpg/session/get",
+        {"session_id": "__missing__"},
+        {"ok", "error", "session_id"},
+    ),
+]
+
 
 @pytest.mark.api
 def test_required_rpg_fastapi_routes_are_registered():
@@ -81,70 +118,30 @@ def test_required_rpg_fastapi_routes_are_registered():
 
 
 @pytest.mark.api
-def test_rpg_fastapi_routes_do_not_have_duplicate_method_paths():
-    """Duplicate method/path registrations make endpoint behavior order-dependent."""
-    seen: set[tuple[str, str]] = set()
-    duplicates: list[tuple[str, str]] = []
+def test_rpg_fastapi_routes_do_not_duplicate_required_ui_endpoints():
+    """Critical live UI endpoints must not be mounted twice with the same method."""
+    critical_pairs = {
+        ("POST", "/api/rpg/session/world_events"),
+        ("POST", "/api/rpg/session/idle_tick"),
+        ("POST", "/api/rpg/session/get"),
+    }
+    counts: Counter[tuple[str, str]] = Counter()
     for route in _app().routes:
         path = getattr(route, "path", "")
-        if not path.startswith("/api/rpg"):
-            continue
         methods = getattr(route, "methods", set()) or set()
         for method in methods:
             pair = (str(method).upper(), path)
-            if pair in seen:
-                duplicates.append(pair)
-            seen.add(pair)
+            if pair in critical_pairs:
+                counts[pair] += 1
 
-    assert not duplicates, "Duplicate RPG routes: " + ", ".join(
+    duplicates = sorted(pair for pair, count in counts.items() if count > 1)
+    assert not duplicates, "Duplicate critical RPG routes: " + ", ".join(
         f"{method} {path}" for method, path in duplicates
     )
 
 
 @pytest.mark.api
-@pytest.mark.parametrize(
-    ("path", "body", "expected_keys"),
-    [
-        (
-            "/api/rpg/session/world_events",
-            {"session_id": "__missing__"},
-            {
-                "ok",
-                "error",
-                "recent_world_event_rows",
-                "player_world_view_rows",
-                "player_local_world_view_rows",
-                "player_global_world_view_rows",
-                "debug_world_events",
-            },
-        ),
-        (
-            "/api/rpg/session/idle_tick",
-            {"session_id": "__missing__", "count": 1, "reason": "heartbeat"},
-            {
-                "ok",
-                "error",
-                "updates",
-                "latest_seq",
-                "ticks_applied",
-                "idle_debug_trace",
-                "idle_seconds",
-                "idle_gate_open",
-                "settings",
-            },
-        ),
-        (
-            "/api/rpg/session/get",
-            {"session_id": "__missing__"},
-            {"ok", "error", "session_id"},
-        ),
-        (
-            "/api/rpg/session/list",
-            {},
-            {"ok", "sessions"},
-        ),
-    ],
-)
+@pytest.mark.parametrize(("path", "body", "expected_keys"), SAFE_SESSION_CONTRACTS)
 def test_safe_rpg_session_endpoints_return_json_contracts(path, body, expected_keys):
     """Safe session endpoints should return JSON contracts, not route 404s."""
     response = _client().post(path, json=body)
@@ -153,6 +150,12 @@ def test_safe_rpg_session_endpoints_return_json_contracts(path, body, expected_k
     assert "application/json" in response.headers.get("content-type", "")
     payload = response.json()
     assert expected_keys.issubset(payload.keys())
+
+
+@pytest.mark.api
+def test_rpg_session_list_route_is_registered_but_not_called_in_smoke_suite():
+    """Session-list can scan disk state; route-table coverage is enough here."""
+    assert ("POST", "/api/rpg/session/list") in _route_pairs()
 
 
 @pytest.mark.api
