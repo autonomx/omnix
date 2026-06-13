@@ -10,6 +10,17 @@ from .runtime_part27 import *  # noqa: F401,F403
 from .runtime_part27 import _apply_turn_authoritative as _base_apply_turn_authoritative
 
 _PHASE8_NARRATION_FALLBACK_SOURCE = "deterministic_phase8_queued_narration_visible_fallback_gate"
+_PHASE8_EMPTY_VISIBLE_TEXT = {
+    "",
+    "[]",
+    "{}",
+    "[ ]",
+    "{ }",
+    "null",
+    "none",
+    "false",
+    "true",
+}
 
 
 def _phase8_safe_dict(value: Any) -> Dict[str, Any]:
@@ -20,12 +31,32 @@ def _phase8_safe_list(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _phase8_clean_visible_text(value: str) -> str:
+    text = value.strip()
+    if text.casefold() in _PHASE8_EMPTY_VISIBLE_TEXT:
+        return ""
+    return text
+
+
 def _phase8_safe_str(value: Any) -> str:
+    """Return only user-visible scalar text.
+
+    This fallback path is rendered directly in the RPG transcript when queued
+    narration is still pending. Do not stringify containers here: an empty list
+    in a payload field becomes the literal text ``[]`` in the UI, and populated
+    dict/list payloads tend to be machine contracts rather than prose.
+    Structured dict/list fields are handled by dedicated helpers instead.
+    """
+
     if value is None:
         return ""
     if isinstance(value, str):
-        return value
-    return str(value)
+        return _phase8_clean_visible_text(value)
+    if isinstance(value, (dict, list, tuple, set)):
+        return ""
+    if isinstance(value, bool):
+        return ""
+    return _phase8_clean_visible_text(str(value))
 
 
 def _phase8_first_text(values: Iterable[Any]) -> str:
@@ -164,6 +195,7 @@ def _phase8_visible_fallback_text(authoritative_result: Dict[str, Any]) -> str:
         authoritative_result.get("player_input"),
         _phase8_safe_dict(authoritative_result.get("result")).get("player_input"),
         _phase8_safe_dict(authoritative_result.get("authoritative")).get("player_input"),
+        _phase8_safe_dict(authoritative_result.get("payload")).get("player_input"),
     ))
     if player_input:
         return f"You continue: {player_input}"
