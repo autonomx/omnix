@@ -45,6 +45,7 @@ _PART_MODULE_NAMES = [
     'runtime_part33',
     'runtime_part34',
     'runtime_part35',
+    'runtime_part36',
 ]
 _PART_MODULES = [
     _import_module(f"{__package__}.{name}") for name in _PART_MODULE_NAMES
@@ -135,7 +136,7 @@ def get_runtime_wrapper_drift_report(
 globals().update(_RUNTIME_GLOBALS)
 
 # Mirror the final facade globals back into every split module so functions whose
-# global namespace lives in runtime_partXX can resolve helpers defined by other
+global namespace lives in runtime_partXX can resolve helpers defined by other
 # parts.  This intentionally skips dunder/private base aliases used by wrappers.
 for _module in _PART_MODULES:
     if not isinstance(_module, _ModuleType):
