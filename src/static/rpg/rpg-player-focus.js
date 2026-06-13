@@ -10,7 +10,7 @@
   var TOGGLE_ID = 'rpgPlayerFocusToggle';
   var DEV_TOGGLE_ID = 'rpgDeveloperPanelsToggle';
   var START_MENU_ID = 'rpgStartMenuOverlay';
-  var WATCHDOG_MS = 18000;
+  var WATCHDOG_MS = 6000;
   var lastActiveAt = 0;
   var watchdogTimer = null;
 
@@ -162,7 +162,7 @@
     }
     note.classList.toggle('is-stalled', !!stalled);
     note.textContent = stalled
-      ? 'Still waiting for the GM/NPC response. Your command was sent, but no response content has arrived yet.'
+      ? 'Still waiting for the GM/NPC response. The command was accepted, but the live narration stream has not returned response content yet.'
       : 'Command sent. Waiting for the GM/NPC response…';
     feed.scrollTop = feed.scrollHeight;
   }
@@ -304,7 +304,7 @@
         }
       }
 
-      var isTurnRequest = /\/api\/rpg\/(games\/[^/]+\/turn|session\/turn|turn_stream|stream_turn)/.test(url);
+      var isTurnRequest = /\/api\/rpg\/(games\/[^/]+\/turn|session\/turn(?:\/stream)?|turn_stream|stream_turn)(?:$|[?#])/.test(url);
       if (isTurnRequest) markTurnActive();
       return originalFetch.apply(this, arguments).then(function (response) {
         if (isTurnRequest && !response.ok) {
