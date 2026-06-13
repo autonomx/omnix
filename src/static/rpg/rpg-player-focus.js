@@ -3,9 +3,13 @@
 
   var STORAGE_KEY = 'omnix:rpg:player_focus_mode';
   var DEV_STORAGE_KEY = 'omnix:rpg:developer_panels_open';
+  var RPG_SESSION_KEY = 'omnix_rpg_session_id';
+  var RPG_STATE_KEY = 'omnix_rpg_state';
+  var RPG_START_ACTION_KEY = 'omnix:rpg:start_action';
   var STATUS_ID = 'rpgTurnStatusChip';
   var TOGGLE_ID = 'rpgPlayerFocusToggle';
   var DEV_TOGGLE_ID = 'rpgDeveloperPanelsToggle';
+  var START_MENU_ID = 'rpgStartMenuOverlay';
   var WATCHDOG_MS = 18000;
   var lastActiveAt = 0;
   var watchdogTimer = null;
@@ -27,9 +31,26 @@
     }
   }
 
+  function safeRemove(key) {
+    try { localStorage.removeItem(key); } catch (_) {}
+  }
+
   function isRpgVisible() {
     var view = $('rpgView');
     return !!view && view.style.display !== 'none';
+  }
+
+  function hasSavedRpgSession() {
+    var sessionId = safeGet(RPG_SESSION_KEY, '');
+    if (sessionId && sessionId !== 'session:unknown') return true;
+    return !!safeGet(RPG_STATE_KEY, '');
+  }
+
+  function clearSavedRpgSession() {
+    safeRemove(RPG_SESSION_KEY);
+    safeRemove(RPG_STATE_KEY);
+    safeRemove('omnix_rpg_last_activity');
+    safeRemove('omnix_rpg_last_creator_launch');
   }
 
   function ensureStatusChip(toolbar) {
@@ -201,12 +222,104 @@
     };
   }
 
+  function clickWhenAvailable(id, attempts) {
+    attempts = attempts == null ? 20 : attempts;
+    var btn = $(id);
+    if (btn) {
+      btn.click();
+      return true;
+    }
+    if (attempts > 0) {
+      window.setTimeout(function () { clickWhenAvailable(id, attempts - 1); }, 150);
+    }
+    return false;
+  }
+
+  function removeStartMenu() {
+    var overlay = $(START_MENU_ID);
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }
+
+  function chooseFreshStart(action) {
+    clearSavedRpgSession();
+    safeSet(RPG_START_ACTION_KEY, action || 'setup');
+    window.location.reload();
+  }
+
+  function runDeferredStartAction() {
+    var action = safeGet(RPG_START_ACTION_KEY, '');
+    if (!action) return false;
+    safeRemove(RPG_START_ACTION_KEY);
+    clearSavedRpgSession();
+    if (action === 'quick') {
+      clickWhenAvailable('rpgQuickAdventureBtn');
+      return true;
+    }
+    clickWhenAvailable('rpgSetupBtn');
+    return true;
+  }
+
+  function showStartMenu(force) {
+    if ($(START_MENU_ID)) return;
+    var rpgView = $('rpgView');
+    if (!rpgView) return;
+    var hasSave = hasSavedRpgSession();
+    if (!force && !hasSave) return;
+
+    var overlay = document.createElement('div');
+    overlay.id = START_MENU_ID;
+    overlay.className = 'rpg-start-menu-backdrop';
+    overlay.innerHTML = '' +
+      '<section class="rpg-start-menu" role="dialog" aria-modal="true" aria-labelledby="rpgStartMenuTitle">' +
+        '<h2 id="rpgStartMenuTitle">RPG Adventure</h2>' +
+        '<p>Choose how to begin. Continuing keeps the previous saved session; starting a new adventure clears the saved RPG session first so it cannot silently resume.</p>' +
+        '<div class="rpg-start-menu-actions">' +
+          (hasSave ? '<button type="button" class="rpg-start-menu-btn" data-rpg-start-action="continue"><strong>Continue Previous Adventure</strong><span>Resume the saved RPG session.</span></button>' : '') +
+          '<button type="button" class="rpg-start-menu-btn rpg-start-menu-btn--danger" data-rpg-start-action="quick"><strong>New Quick Adventure</strong><span>Clear the old session and immediately start a default adventure.</span></button>' +
+          '<button type="button" class="rpg-start-menu-btn" data-rpg-start-action="setup"><strong>New Custom Adventure</strong><span>Clear the old session and open Adventure Setup.</span></button>' +
+        '</div>' +
+        (hasSave ? '<div class="rpg-start-menu-save-note">A saved RPG session was found. It will only resume if you choose Continue.</div>' : '') +
+      '</section>';
+
+    overlay.addEventListener('click', function (event) {
+      var button = event.target && event.target.closest ? event.target.closest('[data-rpg-start-action]') : null;
+      if (!button) return;
+      var action = button.getAttribute('data-rpg-start-action');
+      if (action === 'continue') {
+        removeStartMenu();
+        return;
+      }
+      chooseFreshStart(action);
+    });
+
+    document.body.appendChild(overlay);
+    var first = overlay.querySelector('[data-rpg-start-action]');
+    if (first && first.focus) first.focus();
+  }
+
+  function installStartMenuHooks() {
+    var toolbar = $('rpgToolbar');
+    if (toolbar && !$('rpgStartMenuBtn')) {
+      addButton(toolbar, 'rpgStartMenuBtn', '🎲 Game Menu', 'Open RPG start menu', function () {
+        showStartMenu(true);
+      });
+    }
+
+    if (runDeferredStartAction()) return;
+
+    var shouldShow = hasSavedRpgSession();
+    if (shouldShow) {
+      window.setTimeout(function () { showStartMenu(false); }, 250);
+    }
+  }
+
   function init() {
     ensureToolbarControls();
     setFocusMode(safeGet(STORAGE_KEY, '1') !== '0');
     setDeveloperPanels(safeGet(DEV_STORAGE_KEY, '0') === '1');
     observeNarrativeFeed();
     patchFetchForTurnVisibility();
+    installStartMenuHooks();
   }
 
   if (document.readyState === 'loading') {
@@ -219,6 +332,8 @@
     init: init,
     setFocusMode: setFocusMode,
     setDeveloperPanels: setDeveloperPanels,
+    showStartMenu: showStartMenu,
+    clearSavedRpgSession: clearSavedRpgSession,
     markTurnActive: markTurnActive,
     markTurnDone: markTurnDone
   };
