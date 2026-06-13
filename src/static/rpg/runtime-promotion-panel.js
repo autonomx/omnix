@@ -191,15 +191,44 @@
         return 'data: ' + JSON.stringify(data || {}) + '\n\n';
     }
 
+    function latestPlayerCommand() {
+        var nodes = document.querySelectorAll('.rpg-msg--player');
+        if (!nodes.length) return '';
+        return safeStr(nodes[nodes.length - 1].textContent).toLowerCase();
+    }
+
+    function isGenericFallback(text) {
+        text = safeStr(text).toLowerCase();
+        return text.indexOf('a deliberate action is taken') !== -1
+            || text.indexOf('the action resolves') !== -1
+            || text.indexOf('dramatic atmosphere') !== -1
+            || text.indexOf('current scene feels') !== -1;
+    }
+
+    function serviceFallbackForCommand(command) {
+        command = safeStr(command).toLowerCase();
+        var mentionsRoom = command.indexOf('room') !== -1 || command.indexOf('rent') !== -1 || command.indexOf('lodging') !== -1 || command.indexOf('sleep') !== -1;
+        var mentionsBran = command.indexOf('bran') !== -1 || command.indexOf('innkeeper') !== -1 || command.indexOf('inn') !== -1;
+        if (mentionsRoom && mentionsBran) {
+            return 'Bran the Innkeeper gives you a practical nod from behind the counter. “A room is available. Five silver for the night, paid up front, and I’ll see that you are not disturbed.”';
+        }
+        return '';
+    }
+
+    function improveFallbackForCurrentCommand(text) {
+        var fallback = safeStr(text).trim();
+        if (!isGenericFallback(fallback)) return fallback;
+        return serviceFallbackForCommand(latestPlayerCommand()) || fallback;
+    }
+
     function normalizeTurnStreamEvent(event) {
         if (!event || typeof event !== 'object') return event;
         if (event.type !== 'authoritative_result' && event.type !== 'turn_result') return event;
         if (!event.turn_id) {
             event.turn_id = 'client_turn_' + Date.now();
         }
-        if (!event.fallback_narration && !event.deterministic_fallback_narration) {
-            event.fallback_narration = event.summary || 'The action resolves, and the scene waits for your next move.';
-        }
+        var fallback = event.fallback_narration || event.deterministic_fallback_narration || event.summary || 'The action resolves, and the scene waits for your next move.';
+        event.fallback_narration = improveFallbackForCurrentCommand(fallback);
         return event;
     }
 
@@ -277,6 +306,7 @@
         render: render,
         normalizePayload: normalizePayload,
         normalizeTurnStreamEvent: normalizeTurnStreamEvent,
+        improveFallbackForCurrentCommand: improveFallbackForCurrentCommand,
     };
 
     window.addEventListener('rpg:climate-survival-update', function (event) {
