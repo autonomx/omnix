@@ -26,6 +26,22 @@ from .runtime_part28 import _phase8_patch_visible_fallback
 _PHASE8_PART29_SOURCE = "deterministic_phase8_authoritative_turn_fallback_recursion_guard"
 
 
+def _phase8_attach_player_input(payload: Any, player_input: str) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    player_input = _safe_str(player_input).strip()
+    if not player_input:
+        return payload
+    payload.setdefault("player_input", player_input)
+    for key in ("result", "authoritative", "payload"):
+        nested = _safe_dict(payload.get(key))
+        if nested:
+            patched = dict(nested)
+            patched.setdefault("player_input", player_input)
+            payload[key] = patched
+    return payload
+
+
 def _apply_turn_authoritative(
     session_id: str,
     player_input: str,
@@ -52,7 +68,7 @@ def _apply_turn_authoritative(
             action,
             performance_override=performance_override,
         )
-        return _fallback_patch(base_payload)
+        return _fallback_patch(_phase8_attach_player_input(base_payload, player_input))
 
     session = _copy_dict(session)
     simulation_state = _ensure_simulation_state(_safe_dict(session.get("simulation_state")))
@@ -67,7 +83,7 @@ def _apply_turn_authoritative(
     )
     if travel_payload:
         travel_payload.setdefault("recursion_guard_source", _PHASE8_PART29_SOURCE)
-        return _fallback_patch(travel_payload)
+        return _fallback_patch(_phase8_attach_player_input(travel_payload, player_input))
 
     base_payload = _base_authoritative(
         session_id,
@@ -76,6 +92,7 @@ def _apply_turn_authoritative(
         performance_override=performance_override,
     )
     if isinstance(base_payload, dict):
+        base_payload = _phase8_attach_player_input(base_payload, player_input)
         base_payload.setdefault("player_hud", _phase8_player_visible_hud_payload(simulation_state, runtime_state))
         base_payload.setdefault(
             "objective_journal_panel",
