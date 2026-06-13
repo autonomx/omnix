@@ -35,3 +35,11 @@ def test_launcher_policy_requires_event_bound_dashboard_controls() -> None:
 
     assert policy["dashboard_controls_event_bound"] is True
     assert policy["dashboard_inline_global_handlers_allowed"] is False
+
+
+def test_launcher_policy_exposes_copy_logs_contract() -> None:
+    policy = build_launcher_control_policy({})
+
+    assert policy["dashboard_copy_logs_supported"] is True
+    assert policy["dashboard_copy_logs_uses_existing_log_endpoint"] is True
+    assert policy["dashboard_copy_logs_browser_clipboard_only"] is True
