@@ -35,6 +35,42 @@
     try { localStorage.removeItem(key); } catch (_) {}
   }
 
+  function safeJsonParse(value) {
+    try { return JSON.parse(value); } catch (_) { return null; }
+  }
+
+  function ensureCombatControlHelper() {
+    if (typeof window.rpgUpdateCombatControls === 'function') return;
+    window.rpgUpdateCombatControls = function rpgUpdateCombatControls(panel, combatState) {
+      if (!panel) return;
+      combatState = (combatState && typeof combatState === 'object') ? combatState : {};
+      var active = combatState.active === true;
+      var currentActorId = String(combatState.current_actor_id || '').toLowerCase();
+      var isPlayerTurn = active && (
+        currentActorId === 'player' ||
+        currentActorId === 'hero' ||
+        currentActorId === 'pc' ||
+        currentActorId.indexOf('player') === 0
+      );
+
+      panel.querySelectorAll('[data-combat-action]').forEach(function (button) {
+        var action = button.getAttribute('data-combat-action') || '';
+        var isManualResolve = action === 'resolve_current';
+        var disabled = !active || (!isPlayerTurn && !isManualResolve);
+        button.disabled = disabled;
+        button.classList.toggle('is-disabled', disabled);
+        button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        if (!active) {
+          button.title = 'Combat is not active.';
+        } else if (!isPlayerTurn && !isManualResolve) {
+          button.title = 'Waiting for the current combat actor.';
+        } else {
+          button.title = '';
+        }
+      });
+    };
+  }
+
   function isRpgVisible() {
     var view = $('rpgView');
     return !!view && view.style.display !== 'none';
@@ -178,6 +214,25 @@
     return !!(node.querySelector && node.querySelector('.rpg-msg, .rpg-turn-narration, .rpg-narration-final'));
   }
 
+  function isGenericAmbientFiller(text) {
+    text = String(text || '').toLowerCase();
+    return text.indexOf('murmurs a quick thought under their breath') !== -1;
+  }
+
+  function cleanAmbientNode(node) {
+    if (!node || node.nodeType !== 1) return;
+    var cards = [];
+    if (node.classList && node.classList.contains('rpg-ambient')) cards.push(node);
+    if (node.querySelectorAll) {
+      node.querySelectorAll('.rpg-ambient').forEach(function (card) { cards.push(card); });
+    }
+    cards.forEach(function (card) {
+      if (isGenericAmbientFiller(card.textContent || '')) {
+        card.remove();
+      }
+    });
+  }
+
   function observeNarrativeFeed() {
     var feed = $('rpgNarrativeFeed');
     if (!feed || feed.dataset.playerFocusObserver === '1') return;
@@ -186,6 +241,7 @@
       for (var i = 0; i < records.length; i += 1) {
         var added = records[i].addedNodes || [];
         for (var j = 0; j < added.length; j += 1) {
+          cleanAmbientNode(added[j]);
           if (hasMeaningfulRpgContent(added[j])) {
             markTurnDone();
             return;
@@ -194,6 +250,23 @@
       }
     });
     observer.observe(feed, { childList: true, subtree: true });
+    cleanAmbientNode(feed);
+  }
+
+  function previewResumeResponse(sessionId) {
+    return new Response(JSON.stringify({
+      ok: false,
+      error: 'preview_session_resume_skipped',
+      session_id: sessionId || '',
+      updates: [],
+      latest_seq: 0,
+      ticks_applied: 0,
+      excess_summarized: 0,
+      world_advance_recap: {}
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 
   function patchFetchForTurnVisibility() {
@@ -204,6 +277,16 @@
     window.fetch = function (input, init) {
       var url = '';
       try { url = String((input && input.url) || input || ''); } catch (_) { url = ''; }
+
+      var isResumeRequest = /\/api\/rpg\/session\/resume(?:$|[?#])/.test(url);
+      if (isResumeRequest && init && init.body) {
+        var body = safeJsonParse(init.body);
+        var sid = String((body && body.session_id) || '');
+        if (sid.indexOf('preview_') === 0) {
+          return Promise.resolve(previewResumeResponse(sid));
+        }
+      }
+
       var isTurnRequest = /\/api\/rpg\/(games\/[^/]+\/turn|session\/turn|turn_stream|stream_turn)/.test(url);
       if (isTurnRequest) markTurnActive();
       return originalFetch.apply(this, arguments).then(function (response) {
@@ -314,6 +397,7 @@
   }
 
   function init() {
+    ensureCombatControlHelper();
     ensureToolbarControls();
     setFocusMode(safeGet(STORAGE_KEY, '1') !== '0');
     setDeveloperPanels(safeGet(DEV_STORAGE_KEY, '0') === '1');
@@ -321,6 +405,9 @@
     patchFetchForTurnVisibility();
     installStartMenuHooks();
   }
+
+  ensureCombatControlHelper();
+  patchFetchForTurnVisibility();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -335,6 +422,7 @@
     showStartMenu: showStartMenu,
     clearSavedRpgSession: clearSavedRpgSession,
     markTurnActive: markTurnActive,
-    markTurnDone: markTurnDone
+    markTurnDone: markTurnDone,
+    ensureCombatControlHelper: ensureCombatControlHelper
   };
 }());
