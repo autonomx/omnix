@@ -93,3 +93,13 @@ def test_player_focus_does_not_clear_pending_state_on_player_message():
     assert "rpg-msg--player" in script
     assert "if (isPlayerMessageNode(node)) return false" in script
     assert "Still waiting for the GM/NPC response" in script
+
+
+def test_player_focus_short_circuits_preview_turn_streams():
+    script = (STATIC / "rpg" / "rpg-player-focus.js").read_text(encoding="utf-8")
+
+    assert "previewTurnStreamResponse" in script
+    assert "preview_fast_response" in script
+    assert "preview_session_fast_path" in script
+    assert "/api\\/rpg\\/session\\/turn\\/stream" in script
+    assert "A room is available. Five silver for the night" in script
