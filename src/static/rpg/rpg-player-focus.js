@@ -14,30 +14,17 @@
   var lastActiveAt = 0;
   var watchdogTimer = null;
 
-  function $(id) {
-    return document.getElementById(id);
-  }
+  function $(id) { return document.getElementById(id); }
 
-  function safeSet(key, value) {
-    try { localStorage.setItem(key, value); } catch (_) {}
-  }
-
+  function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (_) {} }
   function safeGet(key, fallback) {
     try {
       var value = localStorage.getItem(key);
       return value == null ? fallback : value;
-    } catch (_) {
-      return fallback;
-    }
+    } catch (_) { return fallback; }
   }
-
-  function safeRemove(key) {
-    try { localStorage.removeItem(key); } catch (_) {}
-  }
-
-  function safeJsonParse(value) {
-    try { return JSON.parse(value); } catch (_) { return null; }
-  }
+  function safeRemove(key) { try { localStorage.removeItem(key); } catch (_) {} }
+  function safeJsonParse(value) { try { return JSON.parse(value); } catch (_) { return null; } }
 
   function ensureCombatControlHelper() {
     if (typeof window.rpgUpdateCombatControls === 'function') return;
@@ -60,13 +47,9 @@
         button.disabled = disabled;
         button.classList.toggle('is-disabled', disabled);
         button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
-        if (!active) {
-          button.title = 'Combat is not active.';
-        } else if (!isPlayerTurn && !isManualResolve) {
-          button.title = 'Waiting for the current combat actor.';
-        } else {
-          button.title = '';
-        }
+        if (!active) button.title = 'Combat is not active.';
+        else if (!isPlayerTurn && !isManualResolve) button.title = 'Waiting for the current combat actor.';
+        else button.title = '';
       });
     };
   }
@@ -76,8 +59,19 @@
     return !!view && view.style.display !== 'none';
   }
 
+  function isPreviewSessionId(value) {
+    return String(value || '').trim().indexOf('preview_') === 0;
+  }
+
+  function currentSavedSessionId() {
+    var sid = safeGet(RPG_SESSION_KEY, '');
+    if (sid) return sid;
+    var state = safeJsonParse(safeGet(RPG_STATE_KEY, '') || '{}') || {};
+    return String(state.sessionId || state.session_id || '');
+  }
+
   function hasSavedRpgSession() {
-    var sessionId = safeGet(RPG_SESSION_KEY, '');
+    var sessionId = currentSavedSessionId();
     if (sessionId && sessionId !== 'session:unknown') return true;
     return !!safeGet(RPG_STATE_KEY, '');
   }
@@ -141,11 +135,9 @@
     addButton(toolbar, TOGGLE_ID, '🧭 Player View', 'Toggle simplified RPG player view', function () {
       setFocusMode(!document.body.classList.contains('rpg-player-focus'));
     });
-
     addButton(toolbar, DEV_TOGGLE_ID, 'Show Panels', 'Temporarily show hidden RPG panels', function () {
       setDeveloperPanels(!document.body.classList.contains('rpg-dev-panels-open'));
     });
-
     ensureStatusChip(toolbar);
   }
 
@@ -208,9 +200,7 @@
       node.classList.contains('rpg-msg') ||
       node.classList.contains('rpg-turn-narration') ||
       node.classList.contains('rpg-narration-final')
-    )) {
-      return true;
-    }
+    )) return true;
     return !!(node.querySelector && node.querySelector('.rpg-msg, .rpg-turn-narration, .rpg-narration-final'));
   }
 
@@ -223,13 +213,9 @@
     if (!node || node.nodeType !== 1) return;
     var cards = [];
     if (node.classList && node.classList.contains('rpg-ambient')) cards.push(node);
-    if (node.querySelectorAll) {
-      node.querySelectorAll('.rpg-ambient').forEach(function (card) { cards.push(card); });
-    }
+    if (node.querySelectorAll) node.querySelectorAll('.rpg-ambient').forEach(function (card) { cards.push(card); });
     cards.forEach(function (card) {
-      if (isGenericAmbientFiller(card.textContent || '')) {
-        card.remove();
-      }
+      if (isGenericAmbientFiller(card.textContent || '')) card.remove();
     });
   }
 
@@ -263,10 +249,15 @@
       ticks_applied: 0,
       excess_summarized: 0,
       world_advance_recap: {}
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  function bodyLooksLikePreviewSession(body) {
+    var parsed = null;
+    if (typeof body === 'string') parsed = safeJsonParse(body);
+    else if (body && typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) parsed = Object.fromEntries(body.entries());
+    var sid = String((parsed && (parsed.session_id || parsed.sessionId)) || '');
+    return isPreviewSessionId(sid) ? sid : '';
   }
 
   function patchFetchForTurnVisibility() {
@@ -274,16 +265,22 @@
     window.__rpgPlayerFocusFetchPatched = true;
     var originalFetch = window.fetch;
     if (typeof originalFetch !== 'function') return;
+
     window.fetch = function (input, init) {
       var url = '';
-      try { url = String((input && input.url) || input || ''); } catch (_) { url = ''; }
+      var body = init && init.body;
+      try {
+        url = String((input && input.url) || input || '');
+        if (!body && input && input.body) body = input.body;
+      } catch (_) { url = ''; }
 
       var isResumeRequest = /\/api\/rpg\/session\/resume(?:$|[?#])/.test(url);
-      if (isResumeRequest && init && init.body) {
-        var body = safeJsonParse(init.body);
-        var sid = String((body && body.session_id) || '');
-        if (sid.indexOf('preview_') === 0) {
-          return Promise.resolve(previewResumeResponse(sid));
+      if (isResumeRequest) {
+        var previewSid = bodyLooksLikePreviewSession(body);
+        if (!previewSid && isPreviewSessionId(currentSavedSessionId())) previewSid = currentSavedSessionId();
+        if (previewSid) {
+          console.warn('[RPG] skipped backend resume for preview session', previewSid);
+          return Promise.resolve(previewResumeResponse(previewSid));
         }
       }
 
@@ -308,13 +305,8 @@
   function clickWhenAvailable(id, attempts) {
     attempts = attempts == null ? 20 : attempts;
     var btn = $(id);
-    if (btn) {
-      btn.click();
-      return true;
-    }
-    if (attempts > 0) {
-      window.setTimeout(function () { clickWhenAvailable(id, attempts - 1); }, 150);
-    }
+    if (btn) { btn.click(); return true; }
+    if (attempts > 0) window.setTimeout(function () { clickWhenAvailable(id, attempts - 1); }, 150);
     return false;
   }
 
@@ -334,10 +326,7 @@
     if (!action) return false;
     safeRemove(RPG_START_ACTION_KEY);
     clearSavedRpgSession();
-    if (action === 'quick') {
-      clickWhenAvailable('rpgQuickAdventureBtn');
-      return true;
-    }
+    if (action === 'quick') { clickWhenAvailable('rpgQuickAdventureBtn'); return true; }
     clickWhenAvailable('rpgSetupBtn');
     return true;
   }
@@ -368,10 +357,7 @@
       var button = event.target && event.target.closest ? event.target.closest('[data-rpg-start-action]') : null;
       if (!button) return;
       var action = button.getAttribute('data-rpg-start-action');
-      if (action === 'continue') {
-        removeStartMenu();
-        return;
-      }
+      if (action === 'continue') { removeStartMenu(); return; }
       chooseFreshStart(action);
     });
 
@@ -383,17 +369,10 @@
   function installStartMenuHooks() {
     var toolbar = $('rpgToolbar');
     if (toolbar && !$('rpgStartMenuBtn')) {
-      addButton(toolbar, 'rpgStartMenuBtn', '🎲 Game Menu', 'Open RPG start menu', function () {
-        showStartMenu(true);
-      });
+      addButton(toolbar, 'rpgStartMenuBtn', '🎲 Game Menu', 'Open RPG start menu', function () { showStartMenu(true); });
     }
-
     if (runDeferredStartAction()) return;
-
-    var shouldShow = hasSavedRpgSession();
-    if (shouldShow) {
-      window.setTimeout(function () { showStartMenu(false); }, 250);
-    }
+    if (hasSavedRpgSession()) window.setTimeout(function () { showStartMenu(false); }, 250);
   }
 
   function init() {
@@ -409,11 +388,8 @@
   ensureCombatControlHelper();
   patchFetchForTurnVisibility();
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 
   window.RpgPlayerFocus = {
     init: init,
