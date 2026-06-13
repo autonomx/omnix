@@ -13,6 +13,8 @@
   var perfSeq = 0;
   var perfById = {};
   var recentPerfSummaries = [];
+  var activeTurnPerfSpan = null;
+  var pendingVisibleAt = 0;
 
   function log(label, data) {
     try { console.log('[RPG][SubmitWatchdog] ' + label, data || {}); } catch (_) {}
@@ -46,6 +48,30 @@
     try { console.info('[RPG][Perf] ' + label, payload || {}); } catch (_) {}
   }
 
+  function postPerfLog(label, payload) {
+    try {
+      var body = JSON.stringify({
+        tag: 'rpg_perf_' + String(label || 'event'),
+        payload: payload || {},
+        timestamp: new Date().toISOString()
+      });
+      if (navigator && typeof navigator.sendBeacon === 'function') {
+        var blob = new Blob([body], { type: 'application/json' });
+        if (navigator.sendBeacon('/api/rpg/log', blob)) return;
+      }
+      fetch('/api/rpg/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body,
+        keepalive: true
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
+  function spanRelativeMs(span, at) {
+    return span && at ? roundMs(at - span.startedAt) : null;
+  }
+
   function startPerfSpan(url, init) {
     var startedAt = perfNow();
     var id = 'rpgperf_' + (++perfSeq).toString(36) + '_' + Date.now().toString(36);
@@ -69,7 +95,10 @@
       doneAt: 0,
       artifactAt: 0,
       errorAt: 0,
-      responseHeadersAt: 0
+      responseHeadersAt: 0,
+      loadingShownAt: pendingVisibleAt || 0,
+      loadingHiddenAt: 0,
+      loadingBarMs: null
     };
     perfById[id] = span;
     perfConsole('fetch_start', {
@@ -78,6 +107,7 @@
       method: (init && init.method) || 'GET',
       session_id: sessionId(),
       active_command_age_ms: activeAt ? roundMs(Date.now() - activeAt) : 0,
+      loading_bar_already_visible_ms: pendingVisibleAt ? roundMs(perfNow() - pendingVisibleAt) : 0,
       input_preview: inputPreview
     });
     return span;
@@ -113,13 +143,18 @@
       artifact_ms: span.artifactAt ? roundMs(span.artifactAt - span.startedAt) : null,
       done_ms: span.doneAt ? roundMs(span.doneAt - span.startedAt) : null,
       error_ms: span.errorAt ? roundMs(span.errorAt - span.startedAt) : null,
+      loading_bar_shown_ms: spanRelativeMs(span, span.loadingShownAt),
+      loading_bar_hidden_ms: spanRelativeMs(span, span.loadingHiddenAt),
+      loading_bar_visible_ms: span.loadingBarMs,
       event_counts: span.counters,
       input_preview: span.inputPreview
     };
+    span.summary = summary;
     recentPerfSummaries.push(summary);
     if (recentPerfSummaries.length > 20) recentPerfSummaries.shift();
     try { window.__rpgTurnPerfSummaries = recentPerfSummaries.slice(); } catch (_) {}
     perfConsole('summary', summary);
+    postPerfLog('summary', summary);
     try { console.table([summary]); } catch (_) {}
   }
 
@@ -261,6 +296,20 @@
   }
 
   function setPending(stalled) {
+    var now = perfNow();
+    if (!pendingVisibleAt) {
+      pendingVisibleAt = now;
+      if (activeTurnPerfSpan && !activeTurnPerfSpan.loadingShownAt) activeTurnPerfSpan.loadingShownAt = now;
+      var shownPayload = {
+        session_id: sessionId(),
+        command: lastCommand,
+        stalled: !!stalled,
+        span_id: activeTurnPerfSpan && activeTurnPerfSpan.id || '',
+        active_command_age_ms: activeAt ? roundMs(Date.now() - activeAt) : 0
+      };
+      perfConsole('loading_bar_shown', shownPayload);
+      postPerfLog('loading_bar_shown', shownPayload);
+    }
     var chip = $('rpgTurnStatusChip');
     if (chip) {
       chip.classList.add('is-active');
@@ -283,6 +332,35 @@
   }
 
   function clearPending() {
+    var span = activeTurnPerfSpan;
+    var visibleAt = pendingVisibleAt;
+    if (visibleAt) {
+      var hiddenAt = perfNow();
+      var visibleMs = roundMs(hiddenAt - visibleAt);
+      if (span) {
+        span.loadingShownAt = span.loadingShownAt || visibleAt;
+        span.loadingHiddenAt = hiddenAt;
+        span.loadingBarMs = visibleMs;
+        if (span.summary) {
+          span.summary.loading_bar_shown_ms = spanRelativeMs(span, span.loadingShownAt);
+          span.summary.loading_bar_hidden_ms = spanRelativeMs(span, hiddenAt);
+          span.summary.loading_bar_visible_ms = visibleMs;
+        }
+      }
+      var hiddenPayload = {
+        session_id: sessionId(),
+        command: lastCommand,
+        span_id: span && span.id || '',
+        loading_bar_visible_ms: visibleMs,
+        loading_bar_shown_ms: spanRelativeMs(span, span && span.loadingShownAt || visibleAt),
+        loading_bar_hidden_ms: spanRelativeMs(span, hiddenAt),
+        active_command_age_ms: activeAt ? roundMs(Date.now() - activeAt) : 0
+      };
+      perfConsole('loading_bar_hidden', hiddenPayload);
+      postPerfLog('loading_bar_hidden', hiddenPayload);
+      if (span && span.summary) postPerfLog('summary_update', span.summary);
+    }
+    pendingVisibleAt = 0;
     activeAt = 0;
     window.clearTimeout(timer);
     var chip = $('rpgTurnStatusChip');
@@ -380,6 +458,8 @@
   function arm(command) {
     lastCommand = normalizeCommand(command);
     activeAt = Date.now();
+    activeTurnPerfSpan = null;
+    pendingVisibleAt = 0;
     setPending(false);
     window.clearTimeout(timer);
     timer = window.setTimeout(function () {
@@ -442,6 +522,10 @@
       var span = null;
       if (isTurnStream || isNarrationStatus || isActiveRpgFetch) {
         span = startPerfSpan(url, init || {});
+        if (isTurnStream) {
+          activeTurnPerfSpan = span;
+          if (pendingVisibleAt && !span.loadingShownAt) span.loadingShownAt = pendingVisibleAt;
+        }
       }
       if (isTurnStream) {
         lastFetchAt = Date.now();
@@ -479,7 +563,7 @@
     patchFetch();
     log('init', { session_id: sessionId() });
     perfConsole('init', {
-      note: 'Turn metrics enabled. Inspect window.__rpgTurnPerfSummaries for recent summaries.'
+      note: 'Turn metrics enabled. Inspect window.__rpgTurnPerfSummaries for recent summaries. Backend logs receive rpg_perf_summary and loading_bar events.'
     });
   }
 
