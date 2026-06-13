@@ -72,11 +72,42 @@ def test_launcher_dashboard_html_uses_safe_script_and_event_handlers() -> None:
     assert "data-action=\"start\"" in text
 
 
+def test_launcher_dashboard_html_exposes_copy_logs_buttons() -> None:
+    client = TestClient(app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    text = response.text
+    assert "Copy logs" in text
+    assert "data-action=\"copy-logs\"" in text
+    assert "copyLogs(serviceId" in text
+    assert "navigator.clipboard.writeText" in text
+    assert "document.execCommand('copy')" in text
+    assert "logs?limit=500" in text
+    assert "# Omnix launcher logs:" in text
+
+
 def test_launcher_dashboard_favicon_is_no_content() -> None:
     client = TestClient(app)
     response = client.get("/favicon.ico")
 
     assert response.status_code == 204
+
+
+def test_launcher_dashboard_logs_endpoint_returns_text_for_known_service() -> None:
+    manager = LauncherServiceManager([
+        ServiceSpec(service_id="fake", label="Fake Service", command=["python", "-V"], cwd=Path("."), description="fake"),
+    ])
+    reset_default_manager_for_tests(manager)
+    try:
+        manager._services["fake"].logs.extend(["line one", "line two"])
+        client = TestClient(app)
+        response = client.get("/api/services/fake/logs?limit=10")
+    finally:
+        reset_default_manager_for_tests(None)
+
+    assert response.status_code == 200
+    assert response.text == "line one\nline two"
 
 
 def test_launcher_dashboard_rejects_unknown_service() -> None:
