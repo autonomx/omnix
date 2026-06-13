@@ -39,6 +39,55 @@ def _norm(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _extract_final_question(action_text: Any) -> str:
+    """Return the latest/current question embedded in the player's turn.
+
+    A player often acknowledges the previous NPC line and then asks a new
+    question in the same utterance, e.g. "definitely better than nothing, any
+    troubles lately?".  The narrator must answer that final question, not the
+    older topic that appears in recent conversation context.
+    """
+
+    text = " ".join(_safe_str(action_text).split()).strip()
+    if not text:
+        return ""
+
+    # Prefer the final explicit question mark span.
+    if "?" in text:
+        before = text.rsplit("?", 1)[0]
+        start = max(before.rfind("."), before.rfind("!"), before.rfind(";"), before.rfind("\n"))
+        question = before[start + 1 :].strip(" ,:;-'\"")
+        if question:
+            return _short(question + "?", 300)
+
+    # Also catch question fragments when speech input omitted punctuation.
+    lowered = text.lower()
+    starters = (
+        "any ",
+        "what ",
+        "where ",
+        "when ",
+        "why ",
+        "how ",
+        "who ",
+        "is there ",
+        "are there ",
+        "do you ",
+        "did you ",
+        "have you ",
+        "can you ",
+        "could you ",
+    )
+    best = -1
+    for starter in starters:
+        idx = lowered.rfind(starter)
+        if idx > best:
+            best = idx
+    if best >= 0:
+        return _short(text[best:].strip(" ,:;-'\"") + "?", 300)
+    return ""
+
+
 _DOCUMENT_EVIDENCE_TERMS = (
     "sealed order",
     "sealed orders",
@@ -184,6 +233,7 @@ def _required_focus_for_action(
 
     document_evidence = is_document_evidence_without_explicit_service(action_text)
     service_matched = bool(_safe_dict(service_result).get("matched"))
+    final_question = _extract_final_question(action_text)
 
     if document_evidence:
         add("answer_current_evidence_document_or_route_context_first")
@@ -194,6 +244,9 @@ def _required_focus_for_action(
         add("acknowledge_the_service_or_economy_request_first")
         add("mention_item_quantity_price_or_refusal_only_if_present_in_contract")
 
+    if final_question:
+        add("answer_the_final_question_in_player_action_first")
+        add("do_not_answer_an_older_question_from_conversation_history")
     if any(term in action_n for term in ("ask", "question", "tell", "report", "warn", "explain")):
         add("answer_current_question")
     if any(term in action_n for term in ("look", "inspect", "search", "scout", "examine", "listen", "study", "review", "decode", "trace")):
@@ -262,6 +315,7 @@ def build_runtime_current_turn_prompt_contract(
     narration_context = _safe_dict(narration_context)
     turn_contract = _turn_contract_from_context(narration_context)
     action_text = _player_action_from_context(narration_context)
+    current_question = _extract_final_question(action_text)
     service_result = _compact_service_result(
         _service_result_from_context(narration_context),
         action_text=action_text,
@@ -277,6 +331,13 @@ def build_runtime_current_turn_prompt_contract(
         "format_version": "runtime_current_turn_prompt_contract_v1",
         "source": "runtime_presentation_pipeline",
         "player_action": action_text,
+        "current_question": current_question,
+        "required_response": {
+            "must_answer_current_question": bool(current_question),
+            "question_text": current_question,
+            "answer_priority": "answer_this_before_recent_lines_or_profile_memory" if current_question else "current_action_first",
+            "do_not_answer_older_question_from_history": bool(current_question),
+        },
         "scene": {
             "title": _safe_str(scene.get("title")),
             "location": _safe_str(scene.get("location_name") or scene.get("location_id")),
@@ -295,6 +356,7 @@ def build_runtime_current_turn_prompt_contract(
             "do_not_repeat_old_investigation_threads_as_the_current_answer",
             "do_not_treat_profile_memory_as_new_current_turn_outcome",
             "do_not_offer_drinks_rooms_or_prices_unless_current_action_explicitly_buys_or_rents",
+            "do_not_repeat_the_previous_npc_answer_when_the_current_player_action_asks_a_new_question",
         ],
         "service_resolver_veto": {
             "service_false_positive_vetoed": bool(document_service_veto and _safe_dict(service_result).get("status") == "service_false_positive_vetoed"),
