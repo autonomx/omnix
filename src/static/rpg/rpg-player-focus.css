@@ -151,3 +151,87 @@ body.rpg-player-focus.rpg-dev-panels-open .rpg-msg-actions {
   background: rgba(127, 29, 29, 0.35);
   color: #fecaca;
 }
+
+.rpg-start-menu-backdrop {
+  align-items: center;
+  background: radial-gradient(circle at 50% 20%, rgba(92, 64, 51, 0.76), rgba(10, 7, 5, 0.9));
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 1500;
+}
+
+.rpg-start-menu {
+  background: linear-gradient(180deg, rgba(61, 41, 20, 0.98), rgba(26, 15, 5, 0.98));
+  border: 2px solid var(--rpg-gold, #d4af37);
+  border-radius: 18px;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: var(--rpg-parchment-light, #fff8e1);
+  max-width: 680px;
+  padding: 28px;
+  width: min(680px, 100%);
+}
+
+.rpg-start-menu h2 {
+  color: var(--rpg-gold-bright, #ffd700);
+  font-family: var(--rpg-font-fantasy, Georgia, serif);
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  letter-spacing: 0.08em;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+}
+
+.rpg-start-menu p {
+  line-height: 1.55;
+  margin: 0 0 18px;
+  opacity: 0.86;
+}
+
+.rpg-start-menu-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.rpg-start-menu-btn {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 14px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.rpg-start-menu-btn strong {
+  color: var(--rpg-gold-bright, #ffd700);
+  font-size: 1rem;
+}
+
+.rpg-start-menu-btn span {
+  font-size: 0.88rem;
+  opacity: 0.78;
+}
+
+.rpg-start-menu-btn:hover,
+.rpg-start-menu-btn:focus-visible {
+  background: rgba(212, 175, 55, 0.16);
+  outline: none;
+}
+
+.rpg-start-menu-btn--danger {
+  border-color: rgba(248, 113, 113, 0.48);
+}
+
+.rpg-start-menu-save-note {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.82rem;
+  margin-top: 18px;
+  opacity: 0.72;
+  padding-top: 14px;
+}
