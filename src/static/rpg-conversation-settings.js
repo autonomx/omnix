@@ -176,6 +176,11 @@
     }
   }
 
+  function ensureTurnSubmitWatchdogScript() {
+    if (document.getElementById("rpg-turn-submit-watchdog-script")) return;
+    appendDeferredScript("rpg-turn-submit-watchdog-script", "/static/rpg/rpg-turn-submit-watchdog.js");
+  }
+
   function ensureCommandBridgeScript() {
     if (window.RpgCommandBridge || document.getElementById("rpg-command-bridge-script")) return;
     appendDeferredScript("rpg-command-bridge-script", "/static/rpg/rpg-command-bridge.js");
@@ -259,6 +264,7 @@
     saveSettings,
     attachToPayload,
     ensurePlayerFocusAssets,
+    ensureTurnSubmitWatchdogScript,
     ensureCommandBridgeScript,
     ensureLivePayloadBridgeScript,
     ensurePanelLayoutRegistryScript,
@@ -276,6 +282,7 @@
 
   function initConversationSettings() {
     ensurePlayerFocusAssets();
+    ensureTurnSubmitWatchdogScript();
     ensureCommandBridgeScript();
     ensureLivePayloadBridgeScript();
     ensurePanelLayoutRegistryScript();
