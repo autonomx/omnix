@@ -40,3 +40,21 @@ def test_player_focus_css_hides_developer_chrome_by_default():
     assert "body.rpg-player-focus .rpg-conversation-settings-panel" in css
     assert "body.rpg-player-focus.rpg-dev-panels-open" in css
     assert ".rpg-turn-status-chip" in css
+
+
+def test_rpg_start_menu_clears_saved_session_before_new_adventure():
+    script = (STATIC / "rpg" / "rpg-player-focus.js").read_text(encoding="utf-8")
+    css = (STATIC / "rpg" / "rpg-player-focus.css").read_text(encoding="utf-8")
+
+    assert "RPG Adventure" in script
+    assert "Continue Previous Adventure" in script
+    assert "New Quick Adventure" in script
+    assert "New Custom Adventure" in script
+    assert "clearSavedRpgSession" in script
+    assert "omnix_rpg_session_id" in script
+    assert "omnix_rpg_state" in script
+    assert "omnix:rpg:start_action" in script
+    assert "rpgQuickAdventureBtn" in script
+    assert "rpgSetupBtn" in script
+    assert ".rpg-start-menu-backdrop" in css
+    assert ".rpg-start-menu-btn--danger" in css
