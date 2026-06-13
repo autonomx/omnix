@@ -17,7 +17,24 @@ async def get_rpg_session_world_events(request: Request):
 
     session = load_runtime_session(session_id)
     if session is None:
-        return JSONResponse({"ok": False, "error": "session_not_found"}, status_code=404)
+        # This endpoint is polled by the live UI while sessions are still being
+        # created/loaded. Treat a missing session as an empty polling result so
+        # the browser console does not report route-looking 404 noise.
+        return {
+            "ok": False,
+            "error": "session_not_found",
+            "recent_world_event_rows": [],
+            "player_world_view_rows": [],
+            "player_local_world_view_rows": [],
+            "player_global_world_view_rows": [],
+            "debug_world_events": {
+                "recent_world_event_rows_count": 0,
+                "player_world_view_rows_count": 0,
+                "player_local_world_view_rows_count": 0,
+                "player_global_world_view_rows_count": 0,
+                "recent_world_event_row_ids": [],
+            },
+        }
 
     simulation_state = _safe_dict(session.get("simulation_state"))
     runtime_state = _safe_dict(session.get("runtime_state"))
