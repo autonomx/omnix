@@ -58,3 +58,29 @@ def test_rpg_start_menu_clears_saved_session_before_new_adventure():
     assert "rpgSetupBtn" in script
     assert ".rpg-start-menu-backdrop" in css
     assert ".rpg-start-menu-btn--danger" in css
+
+
+def test_player_focus_provides_legacy_combat_controls_helper():
+    script = (STATIC / "rpg" / "rpg-player-focus.js").read_text(encoding="utf-8")
+
+    assert "ensureCombatControlHelper" in script
+    assert "window.rpgUpdateCombatControls" in script
+    assert "data-combat-action" in script
+    assert "resolve_current" in script
+
+
+def test_player_focus_skips_preview_session_resume_requests():
+    script = (STATIC / "rpg" / "rpg-player-focus.js").read_text(encoding="utf-8")
+
+    assert "/api\\/rpg\\/session\\/resume" in script
+    assert "preview_session_resume_skipped" in script
+    assert "sid.indexOf('preview_') === 0" in script
+    assert "previewResumeResponse" in script
+
+
+def test_player_focus_filters_generic_ambient_filler():
+    script = (STATIC / "rpg" / "rpg-player-focus.js").read_text(encoding="utf-8")
+
+    assert "murmurs a quick thought under their breath" in script
+    assert "cleanAmbientNode" in script
+    assert "isGenericAmbientFiller" in script
