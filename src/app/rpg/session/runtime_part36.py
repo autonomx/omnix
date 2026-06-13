@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
 # Generated split module for app.rpg.session.runtime.
 # Phase 8.36: semantic visible responses are prompt/turn scoped.  The previous
@@ -15,6 +15,7 @@ from . import runtime_part35 as _part35
 
 _PHASE8_PART36_SOURCE = "phase8_current_turn_bound_semantic_visible_response"
 _PHASE8_PART36_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD = _part04._compile_semantic_action_record
+_PHASE8_PART36_ORIGINAL_PERSIST_SEMANTIC_ARTIFACT = _part35._phase8_part35_persist_semantic_artifact
 
 
 def _phase8_part36_norm(value: Any) -> str:
@@ -55,11 +56,10 @@ def _phase8_part36_shallow_sources(payload: Dict[str, Any]) -> Iterable[Dict[str
     )
     seen: set[int] = set()
     for root in roots:
-        for source in (root,):
-            sid = id(source)
-            if sid not in seen:
-                seen.add(sid)
-                yield source
+        sid = id(root)
+        if sid not in seen:
+            seen.add(sid)
+            yield root
         for key in semantic_keys:
             value = root.get(key)
             if isinstance(value, dict):
@@ -76,7 +76,7 @@ def _phase8_part36_shallow_sources(payload: Dict[str, Any]) -> Iterable[Dict[str
                             yield item
 
         # Runtime state may contain the current semantic action record alongside
-        # older records.  Do not recurse blindly; the caller will filter these by
+        # older records.  Do not recurse blindly; the caller filters these by
         # exact turn identity before accepting a visible response.
         runtime_state = _safe_dict(root.get("runtime_state"))
         for key in ("semantic_action_records", "llm_records", "narration_artifacts"):
@@ -168,8 +168,6 @@ def _phase8_part36_identity_matches(current: Dict[str, Any], source: Dict[str, A
     if source_input and current_input and source_input != current_input:
         return False
 
-    # Sources with no identity are allowed only when they are shallow/current
-    # payload dictionaries, not historical artifacts discovered by recursion.
     return True
 
 
@@ -236,7 +234,7 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str,
         payload["tick"] = _phase8_part36_int(binding.get("tick"))
     fields = dict(fields)
     fields["turn_binding"] = binding
-    _part35._phase8_part35_persist_semantic_artifact(session_id, payload, fields)
+    _PHASE8_PART36_ORIGINAL_PERSIST_SEMANTIC_ARTIFACT(session_id, payload, fields)
 
 
 # Patch split modules whose functions resolve these helpers from module globals.
