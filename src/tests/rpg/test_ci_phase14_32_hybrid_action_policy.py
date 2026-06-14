@@ -4,7 +4,10 @@ from app.rpg.ai.semantic_action_intelligence import (
     build_semantic_action_prompt,
     normalize_semantic_action_advisory,
 )
-from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
+from app.rpg.session.first_call_dialogue import (
+    build_non_stateful_dialogue_result,
+    choose_first_call_visible_response,
+)
 
 
 def _diagnostics(player_input: str = "I hug Bran") -> dict:
@@ -163,3 +166,71 @@ def test_mixed_unsupported_consequential_action_fails_without_mutation() -> None
     assert result["result"]["outcome"] == "unsupported_consequential_action_failed"
     assert result["result"]["route_components"][1]["supported"] is False
     assert "fails" in result["final_narration"].lower()
+
+
+def test_structured_self_audit_blocks_misclassified_dialogue_without_keyword_gate() -> None:
+    semantic_advisory = {
+        "semantic_route": "dialogue",
+        "action_type": "social_activity",
+        "semantic_family": "social",
+        "interaction_mode": "direct",
+        "target_id": "npc:bran",
+        "target_name": "Bran",
+        "utterance_mode": "casual_conversation",
+        "literal_action_requested": False,
+        "state_mutation_requested": False,
+        "risk_domain": "none",
+        "stateful": False,
+        "needs_runtime_resolution": False,
+        "visible_response": {
+            "narration": "Bran considers the request.",
+            "npc": {"speaker": "Bran", "line": "Fine, a little cheaper this once."},
+        },
+        "direct_response_gate": {"safe_to_display_now": True, "reason": "llm_claimed_dialogue", "risk_flags": []},
+        "classification_review": {
+            "hidden_state_change_risk": "high",
+            "hard_state_domains": ["commerce"],
+            "mutation_claims": [],
+        },
+        "first_call_grounding_diagnostics": _diagnostics("Bran, give me a discount"),
+    }
+
+    selected = choose_first_call_visible_response(semantic_advisory=semantic_advisory)
+
+    assert selected["consumable"] is False
+    assert any(
+        reason.endswith("semantic_self_audit_hard_state_domain:commerce")
+        for reason in selected["rejection_reasons"]
+    )
+
+
+def test_structured_mutation_claim_blocks_direct_visible_response_without_raw_text_matching() -> None:
+    semantic_advisory = {
+        "semantic_route": "flavor_action",
+        "action_type": "social_affection",
+        "semantic_family": "social",
+        "interaction_mode": "direct",
+        "target_id": "npc:bran",
+        "target_name": "Bran",
+        "utterance_mode": "emotional_expression",
+        "literal_action_requested": True,
+        "state_mutation_requested": False,
+        "risk_domain": "none",
+        "stateful": False,
+        "needs_runtime_resolution": False,
+        "visible_response": {
+            "narration": "Bran hugs you back.",
+            "npc": {"speaker": "Bran", "line": "All right, friend."},
+            "state_delta": {"relationship_delta": 1},
+        },
+        "direct_response_gate": {"safe_to_display_now": True, "reason": "flavor", "risk_flags": []},
+        "first_call_grounding_diagnostics": _diagnostics("I hug Bran"),
+    }
+
+    selected = choose_first_call_visible_response(semantic_advisory=semantic_advisory)
+
+    assert selected["consumable"] is False
+    assert any(
+        reason.endswith("structured_state_mutation_claim:visible_response.state_delta")
+        for reason in selected["rejection_reasons"]
+    )
