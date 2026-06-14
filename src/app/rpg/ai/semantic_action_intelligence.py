@@ -238,7 +238,8 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
     instructions = (
         "You are the RPG first-call semantic intent router.\n"
         "Return JSON only.\n"
-        "Use the turn_grounding_packet before classifying intent. It includes current scene, active modes, recent turns, rich NPC biography/personality/speech examples, relationship, inventory, capabilities, and knowledge boundaries.\n"
+        "Use the turn_grounding_packet before classifying intent. It includes current scene, active modes, recent turns, relevant_memory, rich NPC biography/personality/speech examples, relationship, inventory, capabilities, and knowledge boundaries.\n"
+        "Use relevant_memory only for continuity and dialogue context; current runtime state remains authoritative and private memory must not be revealed directly.\n"
         "World/runtime state is authoritative and overrides older profile memory.\n"
         "Convert freeform player intent into a bounded semantic action object.\n"
         "Do not decide success, failure, damage, XP, prices, stock, inventory mutation, quest completion, travel success, rewards, or final state.\n"

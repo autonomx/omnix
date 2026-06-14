@@ -5,6 +5,11 @@ from __future__ import annotations
 from app.rpg.ai.world_scene_narrator_common import *
 from app.rpg.ai.world_scene_narrator_payloads import *
 from app.rpg.ai.world_scene_narrator_structured import *
+from app.rpg.session.memory_prompt import (
+    build_relevant_memory_context_from_runtime,
+    build_relevant_memory_prompt_block,
+)
+
 
 @dataclass
 class NPCReaction:
@@ -214,11 +219,26 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         scene=scene,
         narration_context=narration_context,
     )
+    current_turn_visible_response = _current_turn_semantic_visible_response(narration_context)
+    compact_turn = _safe_dict(current_turn_prompt_contract.get("turn_contract"))
+    compact_interpreted = _safe_dict(compact_turn.get("interpreted_action"))
+    visible_npc = _safe_dict(current_turn_visible_response.get("npc"))
+    relevant_memory_context = build_relevant_memory_context_from_runtime(
+        runtime_state,
+        player_input=narration_context.get("player_input")
+        or narration_context.get("player_action")
+        or current_turn_prompt_contract.get("player_action"),
+        actor_ids=[
+            compact_interpreted.get("target_id"),
+            visible_npc.get("speaker"),
+        ],
+        location_id=grounded.get("location_id") or scene.get("location_id"),
+    )
     npc_response_architecture = build_runtime_npc_response_architecture(
         narration_context=narration_context,
         current_turn_prompt_contract=current_turn_prompt_contract,
     )
-    current_turn_visible_response = _current_turn_semantic_visible_response(narration_context)
+    relevant_memory_block = build_relevant_memory_prompt_block(relevant_memory_context)
     runtime_guardrails_block = build_runtime_presentation_guardrails_block(narration_context)
     npc_behavior_context = _safe_dict(
         narration_context.get("npc_behavior_context")
@@ -326,6 +346,8 @@ NPC behavior context:
 Ongoing conversation threads:
 {conversation_threads_block}
 
+{relevant_memory_block}
+
 YOUR ONLY TASK: Generate narration for a player's action in an RPG.
 
 OUTPUT ONLY VALID JSON.
@@ -348,6 +370,9 @@ TURN CONTRACT RULES:
 - CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON outranks conversation_threads recent_lines, older NPC memories, and prior NPC questions. Use those older records only for continuity after answering this current player input.
 - Do not copy an older NPC question from conversation_threads when the current player input is answering, correcting, or emotionally disclosing to that question.
 - CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON is not permission to invent rewards, combat, travel, purchases, inventory changes, or quest progress.
+- Relevant Memory is continuity context only. It may shape tone, recall, and wording after the current turn is satisfied.
+- Relevant Memory never authorizes new rewards, combat, travel, purchases, inventory changes, quest progress, secret disclosure, or relationship changes.
+- Private Relevant Memory may shape NPC tone only; do not reveal private memory directly unless current runtime state or turn_contract exposes it.
 - You MUST base the narration primarily on turn_contract.narration_brief.
 - You MUST reflect turn_contract.state_delta when it exists.
 - You MUST NOT invent state changes outside turn_contract.state_delta, resolved_result, or combat facts.

@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any, Callable, Dict, List
 
+from app.rpg.session.memory_prompt import build_relevant_memory_context_from_runtime
+
 
 def _d(v: Any) -> Dict[str, Any]:
     return dict(v) if isinstance(v, dict) else {}
@@ -206,6 +208,12 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
             break
     inv = _d(player.get("inventory_state"))
     combat = _d(rt.get("combat_state") or sim.get("combat_state"))
+    relevant_memory = build_relevant_memory_context_from_runtime(
+        rt,
+        player_input=player_input,
+        actor_ids=addressed,
+        location_id=scene.get("location_id") or player.get("location_id"),
+    )
     return {
         "format_version": "turn_grounding_packet_v1",
         "source": "deterministic_runtime_context",
@@ -219,6 +227,7 @@ def build_turn_grounding_packet(*, player_input: str, simulation_state: Dict[str
         },
         "authoritative_state": {"player": {"location_id": _s(player.get("location_id")), "stats": _d(player.get("stats")), "skills": _d(player.get("skills")), "currency": _d(inv.get("currency")), "inventory_items": _l(inv.get("items"))[:20]}, "combat": combat, "active_interactions": _l(sim.get("active_interactions"))[:8], "quests": _d(sim.get("quest_state") or rt.get("quest_state"))},
         "npc_context": {"addressed_npcs": addressed_profiles, "nearby_npcs": nearby},
+        "relevant_memory": relevant_memory,
         "private_context": {"note": "Private biography/inventory fields are for adjudication only. Do not reveal them unless runtime exposes them.", "addressed_npc_private_fields_present": [{"id": _s(p.get("id")), "has_private_biography": bool(_s(_d(p.get("biography")).get("private"))), "has_private_inventory": bool(_l(_d(p.get("inventory")).get("private")))} for p in addressed_profiles]},
         "rules": {"runtime_state_overrides_memory": True, "first_llm_may_classify_intent": True, "first_llm_may_answer_non_stateful_interpretive_dialogue": True, "first_llm_must_not_resolve_stateful_outcomes": True, "stateful_actions_require_deterministic_runtime": True, "do_not_reveal_private_context": True},
     }
