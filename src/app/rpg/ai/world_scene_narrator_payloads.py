@@ -1,11 +1,14 @@
 """Split helpers for RPG world scene narration."""
 from __future__ import annotations
 
+from app.rpg.ai.memory_narration_grounding import sanitize_memory_narration_payload
+
 # ruff: noqa: F401,F403,F405
 from app.rpg.ai.world_scene_narrator_common import *
 from app.rpg.ai.world_scene_narrator_common import _safe_dict, _safe_list, _safe_str
 from app.rpg.ai.world_scene_narrator_dialogue_grounding import *
 from app.rpg.ai.world_scene_narrator_service_grounding import *
+
 
 def _extract_text_lines(text: str) -> List[str]:
     lines = []
@@ -828,6 +831,14 @@ def _sanitize_narration_payload(
         normalized["action"] = "Ambient conversation continues nearby."
         if not _safe_str(normalized.get("narration")) or "success" in _safe_str(normalized.get("narration")).lower():
             normalized["narration"] = "Nearby voices continue in the living world around you."
+
+    normalized = sanitize_memory_narration_payload(
+        normalized,
+        {
+            **_safe_dict(narration_context),
+            "scene": _safe_dict(scene),
+        },
+    )
 
     return normalized
 

@@ -1,6 +1,8 @@
 """Split helpers for RPG world scene narration."""
 from __future__ import annotations
 
+from app.rpg.ai.memory_narration_grounding import memory_narration_prompt_block
+
 # ruff: noqa: F401,F403,F405
 from app.rpg.ai.world_scene_narrator_common import *
 from app.rpg.ai.world_scene_narrator_payloads import *
@@ -239,6 +241,13 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         current_turn_prompt_contract=current_turn_prompt_contract,
     )
     relevant_memory_block = build_relevant_memory_prompt_block(relevant_memory_context)
+    memory_grounding_block = memory_narration_prompt_block(
+        {
+            **_safe_dict(narration_context),
+            "scene": scene,
+            "relevant_memory": relevant_memory_context,
+        }
+    )
     runtime_guardrails_block = build_runtime_presentation_guardrails_block(narration_context)
     npc_behavior_context = _safe_dict(
         narration_context.get("npc_behavior_context")
@@ -347,6 +356,8 @@ Ongoing conversation threads:
 {conversation_threads_block}
 
 {relevant_memory_block}
+
+{memory_grounding_block}
 
 YOUR ONLY TASK: Generate narration for a player's action in an RPG.
 
