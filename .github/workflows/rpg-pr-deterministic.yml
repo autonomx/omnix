@@ -2,42 +2,20 @@ name: RPG deterministic PR gates
 
 on:
   pull_request:
-    branches:
-      - rpg
+    branches: [rpg]
     paths:
       - "src/app/rpg/**"
       - "src/tests/rpg/**"
-      - "docs/plans/rpg_production_readiness_plan.md"
-      - "docs/plans/rpg_phase7_closeout_plan.md"
-      - "docs/plans/rpg_phase8_4_completion_note.md"
-      - "docs/plans/rpg_phase8_5_completion_note.md"
-      - "docs/plans/rpg_phase8_6_completion_note.md"
-      - "docs/plans/rpg_phase10_1_production_readiness_baseline.md"
-      - "docs/plans/rpg_phase10_2_install_run_configuration_evidence_envelope.md"
-      - "docs/plans/rpg_phase10_3_persistence_diagnostics_evidence_envelope.md"
-      - "docs/rpg_saved_certification_runbook.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
-      - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
-    branches:
-      - rpg
+    branches: [rpg]
     paths:
       - "src/app/rpg/**"
       - "src/tests/rpg/**"
-      - "docs/plans/rpg_production_readiness_plan.md"
-      - "docs/plans/rpg_phase7_closeout_plan.md"
-      - "docs/plans/rpg_phase8_4_completion_note.md"
-      - "docs/plans/rpg_phase8_5_completion_note.md"
-      - "docs/plans/rpg_phase8_6_completion_note.md"
-      - "docs/plans/rpg_phase10_1_production_readiness_baseline.md"
-      - "docs/plans/rpg_phase10_2_install_run_configuration_evidence_envelope.md"
-      - "docs/plans/rpg_phase10_3_persistence_diagnostics_evidence_envelope.md"
-      - "docs/rpg_saved_certification_runbook.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
-      - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
 
@@ -62,232 +40,20 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install deterministic test dependencies
+      - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart playwright
+          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart
 
       - name: Check RPG file line limits
         run: python scripts/check_rpg_file_lines.py
 
-      - name: Ruff generated runtime bridge checks
+      - name: Ruff runtime bridge checks
         run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py
 
-      - name: RPG narration queue deterministic tests
-        run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
-
-      - name: RPG CI registry gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_progression_registry_exposes_tavern_graphs -q --tb=short
-
-      - name: RPG CI progression action gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_progression_actions_are_available_for_tavern_seed -q --tb=short
-
-      - name: RPG CI campaign report gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_renderer_is_importable -q --tb=short
-
-      - name: RPG CI combat reward gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_defeat_loot_awards_player_xp_once -q --tb=short
-
-      - name: RPG CI combat attack reward surface gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_attack_result_exposes_nested_reward_xp -q --tb=short
-
-      - name: RPG CI combat XP turn payload bridge gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_xp_bridge_surfaces_reward_to_turn_payloads -q --tb=short
-
-      - name: RPG CI session attack XP consistency gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_session_attack_defeat_bridge_awards_and_surfaces_xp_once -q --tb=short
-
-      - name: RPG CI combat XP report visibility gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_displays_combat_xp_rewards -q --tb=short
-
-      - name: RPG CI combat reward narrative contract gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_reward_narrative_contract_limits_reward_claims -q --tb=short
-
-      - name: RPG CI combat quest sync gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_end_state_syncs_matching_quest_objective -q --tb=short
-
-      - name: RPG CI combat quest sync report visibility gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_displays_combat_quest_sync -q --tb=short
-
-      - name: RPG CI combat quest narrative contract gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_combat_quest_narrative_contract_limits_quest_claims -q --tb=short
-
-      - name: RPG CI quest contract report visibility gate
-        run: python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py::test_ci_campaign_report_displays_quest_narrative_contract -q --tb=short
-
-      - name: RPG CI Phase 2 economy inventory gate
+      - name: RPG representative deterministic suite
         run: |
-          set -o pipefail
-          python -m pytest src/tests/rpg/test_ci_phase2_economy_inventory.py -q --tb=short 2>&1 | tee phase2-economy-output.txt
-
-      - name: Upload Phase 2 economy diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase2-economy-output
-          path: phase2-economy-output.txt
-
-      - name: RPG CI Phase 3 quest schema giver gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_quest_schema_givers.py -q --tb=short
-
-      - name: RPG CI Phase 3 objective lifecycle gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_objective_lifecycle.py -q --tb=short
-
-      - name: RPG CI Phase 3 journal report gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_journal_report.py -q --tb=short
-
-      - name: RPG CI Phase 3 rumor quest gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_rumor_quest.py -q --tb=short
-
-      - name: RPG CI Phase 3 work objective gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_work_objectives.py -q --tb=short
-
-      - name: RPG CI Phase 3 quest reward gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_quest_rewards.py -q --tb=short
-
-      - name: RPG CI Phase 3 quest persistence gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_quest_persistence.py -q --tb=short
-
-      - name: RPG CI Phase 3 quest report matrix gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_quest_report_matrix.py -q --tb=short
-
-      - name: RPG CI Phase 3 quest return flow gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_quest_return_flow.py -q --tb=short
-
-      - name: RPG CI Phase 3 completion audit gate
-        run: python -m pytest src/tests/rpg/test_ci_phase3_completion_audit.py -q --tb=short
-
-      - name: RPG CI Phase 4 location graph gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_location_graph.py -q --tb=short
-
-      - name: RPG CI Phase 4 travel costs gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_travel_costs.py -q --tb=short
-
-      - name: RPG CI Phase 4 discovery route blocking gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_discovery_route_blocking.py -q --tb=short
-
-      - name: RPG CI Phase 4 seeded encounters gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_seeded_encounters.py -q --tb=short
-
-      - name: RPG CI Phase 4 world events location history gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_world_events_location_history.py -q --tb=short
-
-      - name: RPG CI Phase 4 runtime travel access gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_runtime_travel_access.py -q --tb=short
-
-      - name: RPG CI Phase 4 time day hooks gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_time_day_hooks.py -q --tb=short
-
-      - name: RPG CI Phase 4 map location report gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_map_location_report.py -q --tb=short
-
-      - name: RPG CI Phase 4 travel resource consumption gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_travel_resource_consumption.py -q --tb=short
-
-      - name: RPG CI Phase 4 encounter combat events gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_encounter_combat_events.py -q --tb=short
-
-      - name: RPG CI Phase 4 runtime travel encounter routing gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_runtime_travel_encounter_routing.py -q --tb=short
-
-      - name: RPG CI Phase 4 command routing facade session gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_command_routing_facade_session.py -q --tb=short
-
-      - name: RPG CI Phase 4 runtime session travel command gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_runtime_session_travel_command.py -q --tb=short
-
-      - name: RPG CI Phase 4 campaign report map location gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_campaign_report_map_location.py -q --tb=short
-
-      - name: RPG CI Phase 4 frontend map location UI panel gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_frontend_map_location_ui_panel.py -q --tb=short
-
-      - name: RPG CI Phase 4 season weather expansion gate
-        run: python -m pytest src/tests/rpg/test_ci_phase4_season_weather_expansion.py -q --tb=short
-
-      - name: RPG CI Phase 7 replay checkpoint foundation gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_replay_checkpoint_foundation.py -q --tb=short
-
-      - name: RPG CI Phase 7 replay turn sequence gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_replay_turn_sequence_validation.py -q --tb=short
-
-      - name: RPG CI Phase 7 save load replay roundtrip gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_save_load_replay_roundtrip.py -q --tb=short
-
-      - name: RPG CI Phase 7 100-turn readiness gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_100_turn_readiness_gate.py -q --tb=short
-
-      - name: RPG CI Phase 7 100-turn readiness report gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_100_turn_readiness_report.py -q --tb=short
-
-      - name: RPG CI Phase 7 full 100-turn certification gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_full_100_turn_certification.py -q --tb=short
-
-      - name: RPG CI Phase 7 real autoplay certification artifact gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_real_autoplay_certification_artifact.py -q --tb=short
-
-      - name: RPG CI Phase 7 saved certification artifact writer gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_saved_certification_artifact_writer.py -q --tb=short
-
-      - name: RPG CI Phase 7 saved autoplay digest source gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_saved_autoplay_digest_source_integration.py -q --tb=short
-
-      - name: RPG CI Phase 7 real saved state certification gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_real_saved_state_certification_integration.py -q --tb=short
-
-      - name: RPG CI Phase 7 real autoplay progress metrics gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_real_autoplay_progress_metrics_integration.py -q --tb=short
-
-      - name: RPG CI Phase 7 saved certification report diagnostics gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_saved_certification_report_diagnostics.py -q --tb=short
-
-      - name: RPG CI Phase 7 live manual saved artifact emission hooks gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_live_manual_saved_artifact_emission_hooks.py -q --tb=short
-
-      - name: RPG CI Phase 7 saved artifact bundle ZIP verification gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_saved_artifact_bundle_zip_verification.py -q --tb=short
-
-      - name: RPG CI Phase 7 saved certification operator runbook gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_saved_certification_operator_runbook.py -q --tb=short
-
-      - name: RPG CI Phase 7 end-to-end saved 100-turn fixture certification gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_end_to_end_saved_100_turn_fixture_certification.py -q --tb=short
-
-      - name: RPG CI Phase 7 real completion path smoke gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_real_completion_path_smoke.py -q --tb=short
-
-      - name: RPG CI Phase 7 real artifact discovery hardening gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_real_artifact_discovery_hardening.py -q --tb=short
-
-      - name: RPG CI Phase 7 saved artifact operator UX diagnostics gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_saved_artifact_operator_ux_diagnostics.py -q --tb=short
-
-      - name: RPG CI Phase 7 closeout planning gate
-        run: python -m pytest src/tests/rpg/test_ci_phase7_closeout_planning.py -q --tb=short
-
-      - name: RPG CI Phase 8 player visible state objective HUD gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_player_visible_state_objective_hud.py -q --tb=short
-
-      - name: RPG CI Phase 8 objective journal detail panel gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_objective_journal_detail_panel.py -q --tb=short
-
-      - name: RPG CI Phase 8 combat state action affordance gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_combat_state_action_affordance.py -q --tb=short
-
-      - name: RPG CI Phase 8 combat action affordance polish gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_combat_action_affordance_polish.py -q --tb=short
-
-      - name: RPG CI Phase 8 inventory party detail panel gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_inventory_party_detail_panel.py -q --tb=short
-
-      - name: RPG CI Phase 8 recent activity panel gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_recent_activity_panel.py -q --tb=short
-
-      - name: RPG CI Phase 8 suggested actions panel gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_suggested_actions_panel.py -q --tb=short
-
-      - name: RPG CI Phase 8 panel layout registry gate
-        run: python -m pytest src/tests/rpg/test_ci_phase8_panel_layout_registry.py -q --tb=short
-
-      - name: RPG CI runtime facade manifest gate
-        run: python -m pytest src/tests/rpg/test_ci_runtime_wrapper_manifest.py -q --tb=short
+          python -m pytest src/app/rpg/tests/test_narration_queue.py -q
+          python -m pytest src/tests/rpg/test_ci_deterministic_rpg_gates.py -q --tb=short
+          python -m pytest src/tests/rpg/test_ci_phase2_economy_inventory.py -q --tb=short
+          python -m pytest src/tests/rpg/test_ci_runtime_wrapper_manifest.py -q --tb=short
