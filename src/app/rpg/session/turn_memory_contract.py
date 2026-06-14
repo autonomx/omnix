@@ -9,7 +9,6 @@ from app.rpg.session.turn_memory_common import (
     RECENT_TURN_LIMIT,
     bounded,
     d,
-    extract_player_memory_facts,
     l,
     memory_state,
     s,
@@ -19,6 +18,7 @@ from app.rpg.session.turn_memory_entries import (
     build_turn_memory_entry,
     is_dialogue_memory,
 )
+from app.rpg.session.turn_memory_facts import extract_player_memory_facts
 from app.rpg.session.turn_memory_retrieval import retrieve_relevant_memories
 
 
