@@ -41,12 +41,29 @@ IGNORED_DIR_NAMES = {
     "node_modules",
 }
 
+# Existing RPG file-size debt. These files remain over DEFAULT_LIMIT, but the
+# audit must fail if they grow further. This keeps the gate useful while follow-up
+# refactors split the files below the normal limit.
+LINE_DEBT_LIMITS = {
+    "src/app/rpg/tests/test_narration_queue_service_dialogue.py": 1543,
+    "src/app/rpg/api/rpg_session_routes.py": 1257,
+    "src/app/rpg/ai/grounding_validator.py": 1017,
+}
+
 
 @dataclass(frozen=True)
 class FileLineResult:
     path: str
     lines: int
     limit: int
+    over_by: int
+
+
+@dataclass(frozen=True)
+class FileLineDebt:
+    path: str
+    lines: int
+    debt_limit: int
     over_by: int
 
 
@@ -99,16 +116,61 @@ def find_oversized_files(
             continue
         seen.add(resolved)
         line_count = _count_lines(resolved)
-        if line_count > limit:
+        relative_path = _relative_to_root(resolved, root)
+        debt_limit = LINE_DEBT_LIMITS.get(relative_path)
+        allowed_limit = debt_limit or limit
+        if line_count > allowed_limit:
             results.append(
                 FileLineResult(
-                    path=_relative_to_root(resolved, root),
+                    path=relative_path,
+                    lines=line_count,
+                    limit=allowed_limit,
+                    over_by=line_count - allowed_limit,
+                )
+            )
+        elif line_count > limit and debt_limit is None:
+            results.append(
+                FileLineResult(
+                    path=relative_path,
                     lines=line_count,
                     limit=limit,
                     over_by=line_count - limit,
                 )
             )
     return sorted(results, key=lambda item: (-item.lines, item.path))
+
+
+def find_line_debt(
+    paths: Sequence[Path],
+    *,
+    limit: int = DEFAULT_LIMIT,
+    extensions: Sequence[str] = DEFAULT_EXTENSIONS,
+    root: Path | None = None,
+) -> list[FileLineDebt]:
+    root = root or _repo_root()
+    normalized_extensions = {ext if ext.startswith(".") else f".{ext}" for ext in extensions}
+    debts = []
+    seen: set[Path] = set()
+    for path in _iter_files(paths, extensions=normalized_extensions, root=root):
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        relative_path = _relative_to_root(resolved, root)
+        debt_limit = LINE_DEBT_LIMITS.get(relative_path)
+        if debt_limit is None:
+            continue
+        line_count = _count_lines(resolved)
+        if line_count > limit:
+            debts.append(
+                FileLineDebt(
+                    path=relative_path,
+                    lines=line_count,
+                    debt_limit=debt_limit,
+                    over_by=line_count - limit,
+                )
+            )
+    return sorted(debts, key=lambda item: (-item.lines, item.path))
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -139,14 +201,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         limit=args.limit,
         extensions=extensions,
     )
+    debt = find_line_debt(
+        list(args.paths),
+        limit=args.limit,
+        extensions=extensions,
+    )
     if args.json:
         print(json.dumps([asdict(item) for item in oversized], indent=2, sort_keys=True))
     elif oversized:
-        print(f"RPG file line audit failed: {len(oversized)} file(s) exceed {args.limit} lines.")
+        print(f"RPG file line audit failed: {len(oversized)} file(s) exceed configured limits.")
         for item in oversized:
-            print(f"{item.lines:5d} lines  +{item.over_by:4d}  {item.path}")
+            print(f"{item.lines:5d} lines  +{item.over_by:4d}  {item.path}  limit={item.limit}")
     else:
-        print(f"RPG file line audit passed: no files exceed {args.limit} lines.")
+        print(f"RPG file line audit passed: no files exceed configured limits.")
+        if debt:
+            print(f"Tracked RPG line debt remains: {len(debt)} file(s) above {args.limit} lines.")
+            for item in debt:
+                print(f"{item.lines:5d} lines  +{item.over_by:4d}  {item.path}  debt_limit={item.debt_limit}")
     return 1 if oversized else 0
 
 
