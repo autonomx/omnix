@@ -16,12 +16,20 @@ def memory_facts(text: str) -> list[dict[str, str]]:
     match = _ALIAS_RE.search(s(text))
     if not match:
         return []
-    value = re.split(r"\s+(?:and|but|because|when|while)\s+", match.group("value"))[0]
+    value = re.split(
+        r"\s+(?:and|but|because|when|while)\s+",
+        match.group("value"),
+    )[0]
     value = value.strip().strip(".?!,;:\"'")[:48]
     key = "trail_name" if "trail" in match.group("key").lower() else "name"
     if not value:
         return []
-    return [{"type": "identity_alias", "subject": "player", "key": key, "value": value}]
+    return [{
+        "type": "identity_alias",
+        "subject": "player",
+        "key": key,
+        "value": value,
+    }]
 
 
 def memory_npc(result: Mapping[str, Any] | None) -> dict[str, str]:
@@ -38,7 +46,11 @@ def memory_npc(result: Mapping[str, Any] | None) -> dict[str, str]:
     return {"id": "", "speaker": "", "line": ""}
 
 
-def memory_dialogue(turn: Mapping[str, Any], facts: list[dict[str, str]], npc: Mapping[str, str]) -> dict[str, Any]:
+def memory_dialogue(
+    turn: Mapping[str, Any],
+    facts: list[dict[str, str]],
+    npc: Mapping[str, str],
+) -> dict[str, Any]:
     return {
         "id": f"memory-dialogue:{turn['turn_id']}:0",
         "turn_id": str(turn["turn_id"]),
