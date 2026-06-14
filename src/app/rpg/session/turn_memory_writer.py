@@ -10,8 +10,8 @@ from app.rpg.session.turn_memory_common import (
     d,
     memory_state,
 )
+from app.rpg.session.turn_memory_dialogue import memory_dialogue
 from app.rpg.session.turn_memory_turn_entry import turn_entry
-from app.rpg.session.turn_memory_writer_helpers import memory_dialogue
 
 
 def write_turn_memory(
