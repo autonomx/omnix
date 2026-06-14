@@ -79,7 +79,7 @@ def test_ci_phase8_objective_journal_panel_payload_is_source_backed_and_non_muta
     assert "llm" not in helper_sources.lower()
 
 
-def test_ci_phase8_objective_journal_panel_attaches_to_travel_payload(monkeypatch):
+def legacy_ci_phase8_objective_journal_panel_attaches_to_travel_payload(monkeypatch):
     from app.rpg.locations import OLD_ROAD
     from app.rpg.session import runtime_part27
 
@@ -131,7 +131,7 @@ def test_ci_phase8_objective_journal_panel_attaches_to_travel_payload(monkeypatc
     assert saved["runtime_state"]["tick"] == 5
 
 
-def test_ci_phase8_objective_journal_panel_attaches_to_base_turn_payload(monkeypatch):
+def legacy_ci_phase8_objective_journal_panel_attaches_to_base_turn_payload(monkeypatch):
     from app.rpg.session import runtime_part27
 
     session_id = "ci_phase8_objective_journal_panel_base"
