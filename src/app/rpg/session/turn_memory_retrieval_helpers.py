@@ -6,17 +6,8 @@ from typing import Any, Mapping
 from app.rpg.session.turn_memory_common import l, s
 
 _STOP_WORDS = {
-    "the",
-    "and",
-    "you",
-    "your",
-    "what",
-    "about",
-    "tell",
-    "me",
-    "did",
-    "can",
-    "are",
+    "the", "and", "you", "your", "what", "about",
+    "tell", "me", "did", "can", "are",
 }
 
 
@@ -35,7 +26,7 @@ def memory_visible(entry: Mapping[str, Any], actor_id: str) -> bool:
     return actor_id in listeners
 
 
-def _haystack(entry: Mapping[str, Any]) -> str:
+def memory_haystack(entry: Mapping[str, Any]) -> str:
     facts = " ".join(
         s(fact.get("value"))
         for fact in l(entry.get("facts"))
@@ -46,22 +37,3 @@ def _haystack(entry: Mapping[str, Any]) -> str:
         s(entry.get("npc_line")),
         facts,
     ]).lower()
-
-
-def memory_score(
-    entry: Mapping[str, Any],
-    *,
-    tokens: set[str],
-    recall: bool,
-    actor_id: str,
-    location_id: str,
-) -> float:
-    score = float(entry.get("salience") or 0.0)
-    score += sum(1 for token in tokens if token in _haystack(entry)) * 0.4
-    if recall and l(entry.get("facts")):
-        score += 2.0
-    if actor_id and actor_id in {s(value) for value in l(entry.get("listener_ids"))}:
-        score += 1.5
-    if location_id and location_id == s(entry.get("location_id")):
-        score += 0.5
-    return score
