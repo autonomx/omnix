@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 Currency = Dict[str, int]
 
@@ -99,30 +99,65 @@ def format_currency(value: Any) -> str:
     return ", ".join(parts) if parts else "0 copper"
 
 
+def _candidate_currency(value: Any) -> Optional[Currency]:
+    if not isinstance(value, dict):
+        return None
+    return normalize_currency(value)
+
+
+def _currency_has_value(value: Any) -> bool:
+    return currency_to_copper(value) > 0
+
+
 def get_player_currency(simulation_state: Dict[str, Any]) -> Currency:
     state = _safe_dict(simulation_state)
 
     player_state = _safe_dict(state.get("player_state"))
     inventory_state = _safe_dict(player_state.get("inventory_state"))
-    if inventory_state.get("currency") is not None:
-        return normalize_currency(inventory_state.get("currency"))
-
-    inventory_state = _safe_dict(state.get("inventory_state"))
-    if inventory_state.get("currency") is not None:
-        return normalize_currency(inventory_state.get("currency"))
-
+    player_inventory = _safe_dict(player_state.get("inventory"))
+    root_inventory_state = _safe_dict(state.get("inventory_state"))
+    player_state_resources = _safe_dict(player_state.get("resources"))
     player_resources = _safe_dict(state.get("player_resources"))
-    if player_resources.get("currency") is not None:
-        return normalize_currency(player_resources.get("currency"))
-
     resources = _safe_dict(state.get("resources"))
-    if resources.get("currency") is not None:
-        return normalize_currency(resources.get("currency"))
 
-    # Backward compatibility for older sessions that only stored gold.
-    for source in (player_resources, resources, player_state, state):
-        if source.get("gold") is not None:
-            return normalize_currency({"gold": source.get("gold"), "silver": 0, "copper": 0})
+    candidates = []
+    for raw_currency in (
+        player_state.get("currency"),
+        inventory_state.get("currency"),
+        player_inventory.get("currency"),
+        root_inventory_state.get("currency"),
+        player_state_resources.get("currency"),
+        player_resources.get("currency"),
+        resources.get("currency"),
+        state.get("currency"),
+    ):
+        candidate = _candidate_currency(raw_currency)
+        if candidate is None:
+            continue
+        candidates.append(candidate)
+        if _currency_has_value(candidate):
+            return candidate
+
+    # Backward compatibility for older sessions that stored loose coin fields.
+    for source in (
+        player_state,
+        player_state_resources,
+        player_resources,
+        resources,
+        state,
+    ):
+        if any(source.get(key) is not None for key in ("gold", "silver", "copper")):
+            candidate = normalize_currency({
+                "gold": source.get("gold"),
+                "silver": source.get("silver"),
+                "copper": source.get("copper"),
+            })
+            candidates.append(candidate)
+            if _currency_has_value(candidate):
+                return candidate
+
+    if candidates:
+        return candidates[0]
 
     return normalize_currency({})
 
@@ -139,7 +174,15 @@ def set_player_currency(simulation_state: Dict[str, Any], currency: Any) -> Dict
         inventory_state = {}
         player_state["inventory_state"] = inventory_state
 
-    inventory_state["currency"] = normalize_currency(currency)
+    normalized = normalize_currency(currency)
+    inventory_state["currency"] = dict(normalized)
+    player_state["currency"] = dict(normalized)
+
+    player_inventory = _safe_dict(player_state.get("inventory"))
+    if player_inventory:
+        player_inventory["currency"] = dict(normalized)
+        player_state["inventory"] = player_inventory
+
     return state
 
 

@@ -4,6 +4,7 @@ from app.rpg.economy.currency import (
     currency_delta,
     currency_to_copper,
     format_currency,
+    get_player_currency,
     normalize_currency,
     subtract_currency,
     subtract_currency_cost,
@@ -71,6 +72,19 @@ def test_currency_compatibility_helpers_preserve_old_behavior():
         assert "insufficient currency" in str(exc)
     else:
         raise AssertionError("Expected insufficient currency error")
+
+
+def test_player_currency_falls_back_to_visible_wallet_when_inventory_wallet_empty():
+    state = {
+        "player_state": {
+            "currency": {"gold": 50, "silver": 0, "copper": 0},
+            "inventory_state": {
+                "currency": {"gold": 0, "silver": 0, "copper": 0},
+            },
+        },
+    }
+
+    assert get_player_currency(state) == {"gold": 50, "silver": 0, "copper": 0}
 
 
 def test_service_registry_has_lodging_meal_info_and_goods():
@@ -223,6 +237,32 @@ def test_service_turn_returns_available_actions_for_lodging():
     assert result["service_kind"] == "lodging"
     assert any(offer["offer_id"] == "bran_lodging_common_cot" for offer in result["offers"])
     assert any(action["action_id"] == "service:purchase:bran_lodging_common_cot" for action in result["available_actions"])
+
+
+def test_service_turn_uses_visible_player_currency_for_lodging_purchase():
+    result = resolve_service_turn(
+        player_input="I buy Private room from Bran",
+        action={},
+        resolved_action={},
+        simulation_state={
+            "player_state": {
+                "currency": {"gold": 50, "silver": 0, "copper": 0},
+                "inventory_state": {
+                    "currency": {"gold": 0, "silver": 0, "copper": 0},
+                },
+            },
+        },
+        runtime_state={},
+    )
+
+    assert result["matched"] is True
+    assert result["kind"] == "service_purchase"
+    assert result["service_kind"] == "lodging"
+    assert result["selected_offer_id"] == "bran_lodging_private_room"
+    assert result["player_currency"] == {"gold": 50, "silver": 0, "copper": 0}
+    assert result["status"] == "purchase_ready"
+    assert result["purchase"]["can_afford"] is True
+    assert result["purchase"]["blocked"] is False
 
 
 def test_service_turn_detects_purchase_without_mutating_state():

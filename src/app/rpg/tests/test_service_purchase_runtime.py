@@ -23,6 +23,41 @@ def _state(currency=None):
     }
 
 
+def test_apply_service_purchase_spends_visible_player_currency_and_syncs_wallets():
+    simulation_state = _state({"gold": 0, "silver": 0, "copper": 0})
+    simulation_state["player_state"]["currency"] = {
+        "gold": 50,
+        "silver": 0,
+        "copper": 0,
+    }
+    service_result = resolve_service_turn(
+        player_input="I buy Private room from Bran",
+        action={},
+        resolved_action={},
+        simulation_state=simulation_state,
+        runtime_state={},
+    )
+
+    applied = apply_service_purchase_result(simulation_state, service_result, tick=12)
+
+    assert service_result["status"] == "purchase_ready"
+    assert applied["applied"] is True
+    assert applied["blocked"] is False
+    assert applied["currency_before"] == {"gold": 50, "silver": 0, "copper": 0}
+    assert applied["currency_after"] == {"gold": 49, "silver": 0, "copper": 0}
+    assert applied["simulation_state"]["player_state"]["currency"] == {
+        "gold": 49,
+        "silver": 0,
+        "copper": 0,
+    }
+    assert applied["simulation_state"]["player_state"]["inventory_state"]["currency"] == {
+        "gold": 49,
+        "silver": 0,
+        "copper": 0,
+    }
+    assert applied["simulation_state"]["active_services"][0]["offer_id"] == "bran_lodging_private_room"
+
+
 def test_apply_service_purchase_deducts_currency_for_lodging_and_adds_active_service():
     simulation_state = _state({"gold": 0, "silver": 5, "copper": 0})
     service_result = resolve_service_turn(
