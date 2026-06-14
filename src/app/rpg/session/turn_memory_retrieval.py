@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from app.rpg.session.turn_memory_collect import collect_scored
 from app.rpg.session.turn_memory_common import (
     DIALOGUE_MEMORY_LIMIT,
     RETRIEVAL_LIMIT,
@@ -11,8 +12,7 @@ from app.rpg.session.turn_memory_common import (
     s,
 )
 from app.rpg.session.turn_memory_order import memory_order
-from app.rpg.session.turn_memory_rank import memory_score
-from app.rpg.session.turn_memory_retrieval_helpers import memory_tokens, memory_visible
+from app.rpg.session.turn_memory_retrieval_helpers import memory_tokens
 
 _RECALL_TERMS = ("remember", "name", "called", "trail name")
 
@@ -26,19 +26,13 @@ def retrieve_relevant_memories(
     limit: int = RETRIEVAL_LIMIT,
 ) -> list[dict[str, Any]]:
     recall = any(term in s(player_input).lower() for term in _RECALL_TERMS)
-    tokens = memory_tokens(player_input)
-    scored: list[tuple[float, dict[str, Any]]] = []
     memories = bounded(l(d(memory).get("dialogue_memories")), DIALOGUE_MEMORY_LIMIT)
-    for entry in memories:
-        if memory_visible(entry, addressed_actor_id):
-            score = memory_score(
-                entry,
-                tokens=tokens,
-                recall=recall,
-                actor_id=addressed_actor_id,
-                location_id=location_id,
-            )
-            if score > 0:
-                scored.append((score, entry))
+    scored = collect_scored(
+        memories,
+        tokens=memory_tokens(player_input),
+        recall=recall,
+        actor_id=addressed_actor_id,
+        location_id=location_id,
+    )
     scored.sort(key=memory_order)
     return [dict(entry, retrieval_score=round(score, 3)) for score, entry in scored[:limit]]
