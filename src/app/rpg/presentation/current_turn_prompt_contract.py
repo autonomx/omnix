@@ -88,6 +88,30 @@ def _extract_final_question(action_text: Any) -> str:
     return ""
 
 
+_FOLLOWUP_STARTERS = (
+    "why",
+    "but why",
+    "and why",
+    "do you know why",
+    "but do you know why",
+    "how so",
+    "what do you mean",
+    "what happened",
+    "tell me more",
+    "about that",
+    "what about that",
+    "can you explain",
+    "could you explain",
+)
+
+
+def _is_short_followup_question(question_text: Any) -> bool:
+    question_n = _norm(question_text)
+    if not question_n or len(question_n.split()) > 12:
+        return False
+    return any(question_n == starter or question_n.startswith(starter + " ") for starter in _FOLLOWUP_STARTERS)
+
+
 _DOCUMENT_EVIDENCE_TERMS = (
     "sealed order",
     "sealed orders",
@@ -269,11 +293,65 @@ def _compact_turn_contract(turn_contract: Dict[str, Any]) -> Dict[str, Any]:
             "intent": _safe_str(interpreted.get("intent")),
             "target_id": _safe_str(interpreted.get("target_id")),
             "target_name": _safe_str(interpreted.get("target_name")),
+            "followup_reference": _compact_followup_reference(_safe_dict(interpreted.get("followup_reference"))),
         },
         "state_delta": _safe_dict(turn_contract.get("state_delta")),
         "combat_result": _safe_dict(turn_contract.get("combat_result")),
         "reward": turn_contract.get("reward"),
     }
+
+
+def _compact_followup_reference(reference: Dict[str, Any]) -> Dict[str, Any]:
+    reference = _safe_dict(reference)
+    if not reference:
+        return {}
+    return {
+        "target_id": _safe_str(reference.get("target_id")),
+        "target_name": _safe_str(reference.get("target_name")),
+        "topic": _short(reference.get("topic") or reference.get("previous_player_input"), 300),
+        "source": _safe_str(reference.get("source")),
+    }
+
+
+def _followup_reference_from_context(
+    narration_context: Dict[str, Any],
+    *,
+    current_question: str,
+    turn_contract: Dict[str, Any],
+) -> Dict[str, Any]:
+    interpreted = _safe_dict(turn_contract.get("interpreted_action"))
+    direct = _compact_followup_reference(_safe_dict(interpreted.get("followup_reference")))
+    if direct:
+        return direct
+    if not _is_short_followup_question(current_question):
+        return {}
+
+    runtime_state = _safe_dict(narration_context.get("runtime_state"))
+    candidates: List[Dict[str, Any]] = []
+    for key in ("last_player_action", "last_player_action_context"):
+        row = _safe_dict(runtime_state.get(key))
+        if row:
+            candidates.append(row)
+    last_turn = _safe_dict(runtime_state.get("last_turn_result"))
+    if last_turn:
+        candidates.append(last_turn)
+        for key in ("semantic_action", "action", "resolved_result"):
+            row = _safe_dict(last_turn.get(key))
+            if row:
+                candidates.append(row)
+
+    for row in candidates:
+        target_id = _safe_str(row.get("target_id") or row.get("npc_id")).strip()
+        target_name = _safe_str(row.get("target_name") or row.get("npc_name")).strip()
+        topic = _short(row.get("text") or row.get("player_input") or row.get("summary") or row.get("message"), 300)
+        if target_id or target_name or topic:
+            return {
+                "target_id": target_id,
+                "target_name": target_name,
+                "topic": topic,
+                "source": "runtime_recent_dialogue_followup",
+            }
+    return {}
 
 
 def _compact_loaded_npc_profiles(narration_context: Dict[str, Any], limit: int = 6) -> Dict[str, Any]:
@@ -320,11 +398,21 @@ def build_runtime_current_turn_prompt_contract(
         _service_result_from_context(narration_context),
         action_text=action_text,
     )
+    followup_reference = _followup_reference_from_context(
+        narration_context,
+        current_question=current_question,
+        turn_contract=turn_contract,
+    )
     required_focus = _required_focus_for_action(
         action_text=action_text,
         turn_contract=turn_contract,
         service_result=service_result,
     )
+    if followup_reference and "resolve_short_followup_against_immediately_previous_topic" not in required_focus:
+        required_focus.append("resolve_short_followup_against_immediately_previous_topic")
+    if followup_reference and _norm(current_question).startswith(("why", "but why", "do you know why", "but do you know why")):
+        if "answer_causal_why_or_state_unknown_cause_with_grounded_lead" not in required_focus:
+            required_focus.append("answer_causal_why_or_state_unknown_cause_with_grounded_lead")
     document_service_veto = is_document_evidence_without_explicit_service(action_text)
 
     return {
@@ -337,6 +425,8 @@ def build_runtime_current_turn_prompt_contract(
             "question_text": current_question,
             "answer_priority": "answer_this_before_recent_lines_or_profile_memory" if current_question else "current_action_first",
             "do_not_answer_older_question_from_history": bool(current_question),
+            "followup_reference": followup_reference,
+            "must_resolve_short_followup": bool(followup_reference),
         },
         "scene": {
             "title": _safe_str(scene.get("title")),

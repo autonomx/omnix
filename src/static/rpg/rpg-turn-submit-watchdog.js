@@ -15,6 +15,8 @@
   var recentPerfSummaries = [];
   var activeTurnPerfSpan = null;
   var pendingVisibleAt = 0;
+  var lastPerfLogPostByLabel = {};
+  var PERF_LOG_POST_MIN_MS = 1500;
 
   function log(label, data) {
     try { console.log('[RPG][SubmitWatchdog] ' + label, data || {}); } catch (_) {}
@@ -50,8 +52,15 @@
 
   function postPerfLog(label, payload) {
     try {
+      var key = String(label || 'event');
+      var now = Date.now();
+      var important = /summary|error|failed|timeout/i.test(key);
+      if (!important && lastPerfLogPostByLabel[key] && (now - lastPerfLogPostByLabel[key]) < PERF_LOG_POST_MIN_MS) {
+        return;
+      }
+      lastPerfLogPostByLabel[key] = now;
       var body = JSON.stringify({
-        tag: 'rpg_perf_' + String(label || 'event'),
+        tag: 'rpg_perf_' + key,
         payload: payload || {},
         timestamp: new Date().toISOString()
       });

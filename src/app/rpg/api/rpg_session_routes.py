@@ -304,6 +304,46 @@ def _start_live_first_draft_thread(
     return event_q
 
 
+def _drop_queued_background_narration_jobs(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    jobs = _safe_list(runtime_state.get("narration_jobs"))
+    if not jobs:
+        return runtime_state
+
+    kept = []
+    removed = 0
+    for raw_job in jobs:
+        job = _safe_dict(raw_job)
+        job_kind = _safe_str(job.get("job_kind")).strip() or "player_turn"
+        status = _safe_str(job.get("status")).strip().lower()
+        if job_kind != "player_turn" and status in {"queued", "pending", "retrying"}:
+            removed += 1
+            continue
+        kept.append(job)
+
+    if not removed:
+        return runtime_state
+
+    runtime_state["narration_jobs"] = kept
+    allowed_turn_ids = {
+        _safe_str(_safe_dict(job).get("turn_id")).strip()
+        for job in kept
+        if isinstance(job, dict)
+    }
+    by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
+    runtime_state["narration_jobs_by_turn"] = {
+        turn_id: job
+        for turn_id, job in by_turn.items()
+        if _safe_str(turn_id).strip() in allowed_turn_ids
+    }
+    _logger.info(
+        "[RPG NARRATION QUEUE] dropped_queued_background_jobs removed=%d kept=%d",
+        removed,
+        len(kept),
+    )
+    return runtime_state
+
+
 def _enqueue_and_signal_narration_job(
     session_id: str,
     runtime_state: Dict[str, Any],
@@ -320,6 +360,7 @@ def _enqueue_and_signal_narration_job(
     if tick and not int(narration_request.get("tick", 0) or 0):
         narration_request["tick"] = tick
 
+    runtime_state = _drop_queued_background_narration_jobs(runtime_state)
     runtime_state, narration_job, is_new = _enqueue_narration_request(
         runtime_state,
         turn_id,
@@ -485,11 +526,11 @@ async def execute_rpg_session_turn_stream(request: Request):
                 ),
             )
 
+            _mark_player_turn_active(session_id, turn_request_id, player_input)
+            active_marker_set = True
             yield _sse({"type": "accepted"})
             yield _sse({"type": "processing", "stage": "authoritative_turn"})
 
-            _mark_player_turn_active(session_id, turn_request_id, player_input)
-            active_marker_set = True
             t_authoritative_start = time.monotonic()
             _logger.info(
                 "[RPG TURN STREAM] authoritative_start session=%s req=%s dt=%.3fs deferred_narration=%s advisory_enabled=%s semantic_advisory_enabled=%s",
@@ -539,19 +580,12 @@ async def execute_rpg_session_turn_stream(request: Request):
                 yield _sse({"type": "error", "error": err})
                 return
 
-            session = load_runtime_session(session_id)
-            if session is None:
-                marker_status = "failed"
-                yield _sse({"type": "error", "error": "session_not_found_after_authoritative"})
-                return
-            runtime_state = _copy_dict(session.get("runtime_state"))
             turn_id = _safe_str(authoritative.get("turn_id") or narration_request.get("turn_id")).strip()
             tick = int(authoritative.get("tick") or narration_request.get("tick") or 0)
             if turn_id and not _safe_str(narration_request.get("turn_id")).strip():
                 narration_request["turn_id"] = turn_id
             if tick and not int(narration_request.get("tick", 0) or 0):
                 narration_request["tick"] = tick
-            runtime_state["session_id"] = session_id
             narration_request["session_id"] = session_id
 
             perf = _safe_dict(narration_request.get("performance"))
@@ -712,6 +746,13 @@ async def execute_rpg_session_turn_stream(request: Request):
                 )
 
             # Fallback path: queue narration in the background worker.
+            session = load_runtime_session(session_id)
+            if session is None:
+                marker_status = "failed"
+                yield _sse({"type": "error", "error": "session_not_found_after_authoritative"})
+                return
+            runtime_state = _copy_dict(session.get("runtime_state"))
+            runtime_state["session_id"] = session_id
             runtime_state = _finish_player_turn_marker_in_state(
                 runtime_state,
                 turn_request_id,

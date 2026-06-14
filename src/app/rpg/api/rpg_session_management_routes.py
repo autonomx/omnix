@@ -1,6 +1,7 @@
 """Management endpoints for RPG sessions."""
 from __future__ import annotations
 
+import datetime
 import threading
 
 from fastapi import APIRouter, Request
@@ -58,6 +59,74 @@ def _player_turn_request_active(runtime_state: dict) -> bool:
     return not bool(_safe_str(marker.get("completed_at")).strip())
 
 
+def _parse_iso_datetime(value: str) -> datetime.datetime | None:
+    value = _safe_str(value).strip()
+    if not value:
+        return None
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed
+    except Exception:
+        return None
+
+
+def _seconds_since_iso(value: str) -> float:
+    parsed = _parse_iso_datetime(value)
+    if parsed is None:
+        return 0.0
+    return max(0.0, (datetime.datetime.now(datetime.timezone.utc) - parsed).total_seconds())
+
+
+def _player_turn_background_quiet_active(runtime_state: dict, *, max_processing_age_s: float = 45.0) -> bool:
+    """Return true while background/idle work should yield to a player turn."""
+    runtime_state = _safe_dict(runtime_state)
+    if _player_turn_request_active(runtime_state):
+        return True
+
+    artifacts = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+    jobs_by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
+    jobs = list(jobs_by_turn.values()) if jobs_by_turn else _safe_list(runtime_state.get("narration_jobs"))
+    for raw_job in jobs:
+        job = _safe_dict(raw_job)
+        if (_safe_str(job.get("job_kind")).strip() or "player_turn") != "player_turn":
+            continue
+        status = _safe_str(job.get("status")).strip().lower()
+        if status not in {"queued", "processing", "retrying"}:
+            continue
+        turn_id = _safe_str(job.get("turn_id")).strip()
+        if turn_id and _safe_dict(artifacts.get(turn_id)):
+            continue
+        if status in {"processing", "retrying"}:
+            age_s = _seconds_since_iso(job.get("started_at") or job.get("updated_at") or job.get("created_at"))
+            if age_s and age_s > max_processing_age_s:
+                continue
+        return True
+    return False
+
+
+def _quiet_idle_tick_payload(session: dict, reason: str = "player_turn_quiet") -> dict:
+    runtime_state = _safe_dict(_safe_dict(session).get("runtime_state"))
+    return {
+        "ok": True,
+        "updates": [],
+        "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),
+        "ticks_applied": 0,
+        "idle_debug_trace": {
+            "idle_suppressed": True,
+            "reason": _safe_str(reason or "player_turn_quiet"),
+        },
+        "idle_seconds": 0,
+        "idle_gate_open": False,
+        "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
+        "semantic_capture_background": False,
+        "player_turn_quiet": True,
+    }
+
+
 def _mark_semantic_capture_worker(session_id: str, status: str, reason: str = "") -> None:
     try:
         session = load_runtime_session(session_id)
@@ -93,8 +162,8 @@ def _run_semantic_capture_background(session_id: str, reason: str = "idle_tick")
     if session is None:
         return False
     runtime_state = _safe_dict(session.get("runtime_state"))
-    if _player_turn_request_active(runtime_state):
-        print("[RPG][idle_tick] semantic capture skipped: active player turn")
+    if _player_turn_background_quiet_active(runtime_state):
+        print("[RPG][idle_tick] semantic capture skipped: player turn quiet")
         return False
     if _semantic_capture_already_active(runtime_state):
         return False
@@ -271,6 +340,9 @@ async def idle_tick_rpg_session(request: Request):
         # created/loaded. Treat a missing session as an empty heartbeat result
         # so the browser console does not report route-looking 404 noise.
         return _empty_idle_tick_payload("session_not_found")
+
+    if _player_turn_background_quiet_active(_safe_dict(session.get("runtime_state"))):
+        return _quiet_idle_tick_payload(session)
 
     # Semantic capture may call the LLM, so schedule it after accepting the
     # heartbeat instead of blocking this HTTP request.

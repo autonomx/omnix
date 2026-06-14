@@ -22,6 +22,14 @@ const xttsRefreshLogsBtn = document.getElementById('xttsRefreshLogs');
 
 let xttsStatusInterval = null;
 
+function isRpgPlayerTurnQuiet() {
+    try {
+        return !!window.__omnixRpgPlayerTurnQuiet;
+    } catch (e) {
+        return false;
+    }
+}
+
 function setupXTTSControl() {
     if (!xttsStatusContainer) return;
     
@@ -52,6 +60,7 @@ function setupXTTSControl() {
 }
 
 async function checkXTTSStatus() {
+    if (isRpgPlayerTurnQuiet()) return;
     const maxRetries = 3;
     const retryDelay = 1500;
     
@@ -244,6 +253,7 @@ function setupSTTControl() {
 }
 
 async function checkSTTStatus() {
+    if (isRpgPlayerTurnQuiet()) return;
     // First try direct health check for faster response
     try {
         const healthResponse = await fetch('http://localhost:5201/health', { timeout: 3000 });

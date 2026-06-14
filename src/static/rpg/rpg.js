@@ -40,6 +40,8 @@
     const DICE_ANIM_FRAMES  = 12;    // number of random-number frames before final
     const DICE_ANIM_INTERVAL = 50;   // ms between animation frames
     const TYPING_IDLE_MS = 1500;
+    const PLAYER_TURN_QUIET_MS = 45000;
+    const RPG_DEBUG_MIN_INTERVAL_MS = 1500;
     // Defer init slightly past chat.js (which defers 500 ms) so that the chat
     // module's event listeners are already attached before we add ours in
     // capture phase.  650 ms > 500 ms + parse time.
@@ -105,6 +107,8 @@
         heartbeatTimer: null,
         pollTimer: null,
         ambientFeedBuffer: [],
+        playerTurnQuietUntil: 0,
+        playerTurnQuietReason: '',
         // Settings and world events (Living World v2)
         settings: {},
         worldEventsView: {
@@ -121,6 +125,7 @@
     };
 
     let typingIdleTimer = null;
+    let rpgDebugLastSentByTag = {};
 
     // ─── Console Debug Logger ──────────────────────────────────────────────────
 
@@ -131,6 +136,13 @@
     function rpgDebug(tag, payload) {
         if (!rpgDebugEnabled()) return;
         try {
+            var now = Date.now();
+            var key = String(tag || 'frontend_log');
+            var isImportant = /error|failed|exception|timeout/i.test(key);
+            if (!isImportant && rpgDebugLastSentByTag[key] && (now - rpgDebugLastSentByTag[key]) < RPG_DEBUG_MIN_INTERVAL_MS) {
+                return;
+            }
+            rpgDebugLastSentByTag[key] = now;
             // Send log to backend instead of console
             fetch('/api/rpg/log', {
                 method: 'POST',
@@ -995,6 +1007,47 @@
     function updateState(patch) {
         stateVersion++;
         rpgState = Object.assign({}, rpgState, patch, { _v: stateVersion });
+    }
+
+    function setGlobalRpgPlayerTurnQuiet(active) {
+        try {
+            window.__omnixRpgPlayerTurnQuiet = !!active;
+        } catch (_err) {}
+    }
+
+    function isPlayerTurnQuietActive() {
+        var quietUntil = Number(rpgState.playerTurnQuietUntil || 0);
+        return !!(rpgState.isGeneratingNarration || (quietUntil && quietUntil > Date.now()));
+    }
+
+    function enterPlayerTurnQuiet(reason, durationMs) {
+        var until = Date.now() + Math.max(1000, Number(durationMs || PLAYER_TURN_QUIET_MS));
+        updateState({
+            playerTurnQuietUntil: until,
+            playerTurnQuietReason: String(reason || 'player_turn'),
+        });
+        setGlobalRpgPlayerTurnQuiet(true);
+        stopAmbientHeartbeat();
+        stopAmbientPolling();
+        disconnectSessionStream();
+    }
+
+    function releasePlayerTurnQuiet(reason) {
+        updateState({
+            playerTurnQuietUntil: 0,
+            playerTurnQuietReason: String(reason || ''),
+        });
+        setGlobalRpgPlayerTurnQuiet(false);
+    }
+
+    function resumeLivingWorldAfterQuiet() {
+        if (!rpgState.sessionId || rpgState.sessionId === "session:unknown") return;
+        if (isPlayerTurnQuietActive()) return;
+        setTimeout(function () {
+            if (!isPlayerTurnQuietActive()) {
+                startLivingWorld();
+            }
+        }, 0);
     }
 
     // ─── Dice Queue ────────────────────────────────────────────────────────────
@@ -3105,6 +3158,8 @@
             // Speak narration
             speakNarration(narrationText);
             updateState({ isGeneratingNarration: false });
+            releasePlayerTurnQuiet('turn_narration_rendered');
+            resumeLivingWorldAfterQuiet();
             return;
         }
     }
@@ -3157,6 +3212,8 @@
                   clearNarrationPlaceholder(turnId);
                   resetStreamingNarrationState(turnId);
                   updateState({ isGeneratingNarration: false });
+                  releasePlayerTurnQuiet('narration_artifact_polled');
+                  resumeLivingWorldAfterQuiet();
                  return;
              }
             
@@ -3216,6 +3273,8 @@
                     }
                 }
                 updateState({ isGeneratingNarration: false });
+                releasePlayerTurnQuiet('narration_job_terminal');
+                resumeLivingWorldAfterQuiet();
                 return;
             }
 
@@ -3434,6 +3493,8 @@
                 }
             }
             updateState({ isGeneratingNarration: false });
+            releasePlayerTurnQuiet('narration_artifact_event');
+            resumeLivingWorldAfterQuiet();
             return;
         }
 
@@ -3882,6 +3943,7 @@
         turnPerf.mark('ui_submit_start', {
             loading_before_submit: !!rpgState.isLoading,
         });
+        enterPlayerTurnQuiet('turn_submit', PLAYER_TURN_QUIET_MS);
         markRealPlayerActivity('send_turn');
 
         appendMessage({ type: 'player', content: input });
@@ -4091,6 +4153,7 @@
                     error: msg,
                     turn_id: data && data.turn_id,
                 });
+                releasePlayerTurnQuiet('turn_error');
                 setLoading(false);
                 return;
             }
@@ -4103,6 +4166,7 @@
             if (data.type === 'needs_setup') {
                 openAdventureBuilder();
                 turnPerf.mark('needs_setup_opened');
+                releasePlayerTurnQuiet('needs_setup');
                 setLoading(false);
                 return;
             }
@@ -4128,10 +4192,12 @@
                     turnPerf.mark('missing_turn_id_rendered', {
                         response_type: data && data.type,
                     });
+                    releasePlayerTurnQuiet('missing_turn_id');
                     setLoading(false);
                     return;
                 }
                 updateState({ currentTurnId: turnId, isGeneratingNarration: true });
+                enterPlayerTurnQuiet('narration_pending', PLAYER_TURN_QUIET_MS);
                 turnPerf.mark('authoritative_render_start', {
                     turn_id: turnId,
                     narration_status: data.narration_status,
@@ -4142,6 +4208,8 @@
                     if (rpgState.isGeneratingNarration && rpgState.currentTurnId === turnId) {
                         console.warn("Narration watchdog releasing stuck state");
                         updateState({ isGeneratingNarration: false });
+                        releasePlayerTurnQuiet('narration_watchdog');
+                        resumeLivingWorldAfterQuiet();
                     }
                 }, 15000); // 15s safety
 
@@ -4231,6 +4299,9 @@
 
                     clearNarrationPlaceholder(turnId);
                     resetStreamingNarrationState(turnId);
+                    updateState({ isGeneratingNarration: false });
+                    releasePlayerTurnQuiet('live_narration_rendered');
+                    resumeLivingWorldAfterQuiet();
                     turnPerf.mark('live_narration_rendered', {
                         turn_id: turnId,
                         narration_len: String(liveNarration || liveAuthoritativeAction || '').length,
@@ -4321,6 +4392,9 @@
             });
         } finally {
             setLoading(false);
+            if (!rpgState.isGeneratingNarration) {
+                releasePlayerTurnQuiet('turn_submit_complete');
+            }
             turnPerf.finish('ui_complete_loading_off', {
                 response_type: finalTurnPayload && finalTurnPayload.type,
                 turn_id: finalTurnPayload && finalTurnPayload.turn_id,
@@ -6609,6 +6683,7 @@
         rpgState.heartbeatTimer = setInterval(function () {
             if (!rpgState.sessionId) { stopAmbientHeartbeat(); return; }
             if (document.hidden) return; // Don't tick when tab is hidden
+            if (isPlayerTurnQuietActive()) return;
             if (rpgState.currentTurnId && rpgState.isGeneratingNarration) return; // Don't tick while player-turn narration is pending
             // Do NOT update last_activity here — only real player actions should
 
@@ -6670,6 +6745,7 @@
 
     function pollAmbientUpdates() {
         if (!rpgState.sessionId) return;
+        if (isPlayerTurnQuietActive()) return;
         fetch('/api/rpg/session/poll', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -7054,6 +7130,7 @@
 
     function fetchWorldEvents() {
         if (!rpgState.sessionId || rpgState.sessionId === "session:unknown") return;
+        if (isPlayerTurnQuietActive()) return;
         fetch('/api/rpg/session/world_events', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -7232,6 +7309,10 @@
 
     function startLivingWorld() {
         if (!rpgState.sessionId || rpgState.sessionId === "session:unknown") return;
+        if (isPlayerTurnQuietActive()) {
+            ensureNarrationSubscription(rpgState.sessionId);
+            return;
+        }
         console.log("🌍 STARTING LIVING WORLD for session:", rpgState.sessionId);
         
         // Ensure narration SSE subscription is active

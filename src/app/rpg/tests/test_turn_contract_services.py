@@ -17,6 +17,10 @@ def _state_with_currency(currency=None):
                 "id": "npc:Elara",
                 "name": "Elara",
             },
+            {
+                "id": "npc:mira",
+                "name": "Mira",
+            },
         ],
     }
 
@@ -186,3 +190,32 @@ def test_non_service_turn_has_empty_service_result():
 
     assert contract["service_result"]["matched"] is False
     assert contract["presentation"]["available_actions"] == []
+
+
+def test_short_dialogue_followup_carries_last_target_and_topic():
+    state = _state_with_currency()
+    contract = build_turn_contract(
+        player_input="but do you know why?",
+        action={"action_type": "social"},
+        resolved_action={"outcome": "success"},
+        simulation_state_before=state,
+        simulation_state_after=state,
+        runtime_state={
+            "last_player_action": {
+                "text": "i ask bran, do you know whats going on with Elara and Mira? there seems to be some tension",
+                "action_type": "social",
+                "target_id": "npc:Bran",
+            },
+        },
+    )
+
+    interpreted = contract["interpreted_action"]
+    brief = contract["narration_brief"]["summary"]
+
+    assert interpreted["intent"] == "ask"
+    assert interpreted["target_id"] == "npc:Bran"
+    assert interpreted["target_name"] == "Bran"
+    assert interpreted["followup_reference"]["topic"].startswith("i ask bran")
+    assert "someone nearby" not in brief
+    assert "immediately previous topic" in brief
+    assert "cause or reason" in brief

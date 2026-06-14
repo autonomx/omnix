@@ -1,6 +1,8 @@
 """World-event and world-behavior endpoints for RPG sessions."""
 from __future__ import annotations
 
+import datetime
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -14,6 +16,54 @@ def _player_turn_request_active(runtime_state: dict) -> bool:
     if status not in {"starting", "applying", "streaming"}:
         return False
     return not bool(_safe_str(marker.get("completed_at")).strip())
+
+
+def _parse_iso_datetime(value: str) -> datetime.datetime | None:
+    value = _safe_str(value).strip()
+    if not value:
+        return None
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed
+    except Exception:
+        return None
+
+
+def _seconds_since_iso(value: str) -> float:
+    parsed = _parse_iso_datetime(value)
+    if parsed is None:
+        return 0.0
+    return max(0.0, (datetime.datetime.now(datetime.timezone.utc) - parsed).total_seconds())
+
+
+def _player_turn_background_quiet_active(runtime_state: dict, *, max_processing_age_s: float = 45.0) -> bool:
+    runtime_state = _safe_dict(runtime_state)
+    if _player_turn_request_active(runtime_state):
+        return True
+
+    artifacts = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+    jobs_by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
+    jobs = list(jobs_by_turn.values()) if jobs_by_turn else _safe_list(runtime_state.get("narration_jobs"))
+    for raw_job in jobs:
+        job = _safe_dict(raw_job)
+        if (_safe_str(job.get("job_kind")).strip() or "player_turn") != "player_turn":
+            continue
+        status = _safe_str(job.get("status")).strip().lower()
+        if status not in {"queued", "processing", "retrying"}:
+            continue
+        turn_id = _safe_str(job.get("turn_id")).strip()
+        if turn_id and _safe_dict(artifacts.get(turn_id)):
+            continue
+        if status in {"processing", "retrying"}:
+            age_s = _seconds_since_iso(job.get("started_at") or job.get("updated_at") or job.get("created_at"))
+            if age_s and age_s > max_processing_age_s:
+                continue
+        return True
+    return False
 
 
 async def get_rpg_session_world_events(request: Request):
@@ -48,7 +98,7 @@ async def get_rpg_session_world_events(request: Request):
     runtime_state = _safe_dict(session.get("runtime_state"))
     recent_rows = _safe_list(runtime_state.get("recent_world_event_rows"))[-48:]
 
-    if _player_turn_request_active(runtime_state):
+    if _player_turn_background_quiet_active(runtime_state):
         return {
             "ok": True,
             "recent_world_event_rows": recent_rows,

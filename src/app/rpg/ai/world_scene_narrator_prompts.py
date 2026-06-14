@@ -115,6 +115,25 @@ def _current_turn_semantic_visible_response(narration_context: Dict[str, Any]) -
     return {}
 
 
+def _compact_prompt_json(value: Any, max_chars: int, fallback: Any = None) -> str:
+    if fallback is None:
+        fallback = {}
+    try:
+        text = json.dumps(value if value is not None else fallback, ensure_ascii=False, separators=(",", ":"), default=str)
+    except Exception:
+        text = _safe_str(value)
+    if len(text) > max_chars:
+        return text[:max_chars].rstrip() + "...[truncated]"
+    return text
+
+
+def _compact_prompt_text(value: Any, max_chars: int) -> str:
+    text = " ".join(_safe_str(value).split())
+    if len(text) > max_chars:
+        return text[:max_chars].rstrip() + "...[truncated]"
+    return text
+
+
 def build_scene_prompt(scene, narration_context, tone="dramatic"):
     """Build an LLM prompt to narrate a scene with strict structured output format.
 
@@ -146,6 +165,7 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
             actors.append(_safe_str(a.get("name") or a.get("id") or "Unknown"))
         else:
             actors.append(_safe_str(a))
+    actors = [a for a in actors if _safe_str(a).strip()][:10]
 
     # ✅ Hard fallback: Actors present is never empty
     if not actors:
@@ -172,16 +192,16 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     conversation_threads_block = ""
     if conversation_threads:
         lines = ["ONGOING CONVERSATION THREADS:"]
-        for thread in conversation_threads[:4]:
+        for thread in conversation_threads[:2]:
             thread = _safe_dict(thread)
             topic = _safe_dict(thread.get("topic"))
             lines.append(
-                f"- {_safe_str(thread.get('thread_id'))} | participants={', '.join(_safe_str(p) for p in _safe_list(thread.get('participants'))[:6])} | topic={_safe_str(topic.get('summary'))[:240]}"
+                f"- {_safe_str(thread.get('thread_id'))} | participants={', '.join(_safe_str(p) for p in _safe_list(thread.get('participants'))[:4])} | topic={_compact_prompt_text(topic.get('summary'), 160)}"
             )
-            for line in _safe_list(thread.get("recent_lines"))[-4:]:
+            for line in _safe_list(thread.get("recent_lines"))[-2:]:
                 line = _safe_dict(line)
                 lines.append(
-                    f"  {_safe_str(line.get('speaker_name') or line.get('speaker_id'))}: {_safe_str(line.get('text'))[:220]}"
+                    f"  {_safe_str(line.get('speaker_name') or line.get('speaker_id'))}: {_compact_prompt_text(line.get('text'), 160)}"
                 )
         conversation_threads_block = "\n".join(lines)
     else:
@@ -200,6 +220,24 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     )
     current_turn_visible_response = _current_turn_semantic_visible_response(narration_context)
     runtime_guardrails_block = build_runtime_presentation_guardrails_block(narration_context)
+    npc_behavior_context = _safe_dict(
+        narration_context.get("npc_behavior_context")
+        or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")
+    )
+    npc_state_summary = {
+        "mood": npc_behavior_context.get("mood"),
+        "relationship": npc_behavior_context.get("relationship_to_player"),
+        "trust": npc_behavior_context.get("trust"),
+        "fear": npc_behavior_context.get("fear"),
+        "recent_memories": _safe_list(npc_behavior_context.get("recent_memories"))[:4],
+    }
+    safe_context_block = _compact_prompt_json(safe_context, 1400)
+    turn_contract_block = _compact_prompt_json(_safe_dict(narration_context.get("turn_contract")), 5200)
+    current_turn_contract_block = _compact_prompt_json(current_turn_prompt_contract, 3600)
+    npc_response_architecture_block = _compact_prompt_json(npc_response_architecture, 3200)
+    current_turn_visible_response_block = _compact_prompt_json(current_turn_visible_response or {"present": False}, 1200)
+    npc_state_summary_block = _compact_prompt_json(npc_state_summary, 1200)
+    npc_behavior_context_block = _compact_prompt_json(npc_behavior_context, 1800)
 
     grounding_settings = normalize_grounding_settings(
         _safe_dict(_safe_dict(narration_context.get("runtime_settings")).get("grounding"))
@@ -257,7 +295,7 @@ Use exactly this object shape:
     prompt = f"""You are a deterministic RPG narration engine.
 
 CONTEXT:
-{safe_context}
+{safe_context_block}
 
 Recent authoritative facts:
 {recent_facts_block}
@@ -266,30 +304,24 @@ Authoritative combat facts:
 {combat_facts_block}
 
 Turn contract PRIMARY TRUTH:
-{json.dumps(_safe_dict(narration_context.get("turn_contract")), ensure_ascii=False, indent=2)[:6000]}
+{turn_contract_block}
 
 CURRENT_TURN_PROMPT_CONTRACT_JSON:
-{format_runtime_prompt_contract_block(current_turn_prompt_contract)}
+{current_turn_contract_block}
 
 NPC_RESPONSE_ARCHITECTURE_JSON:
-{json.dumps(npc_response_architecture, ensure_ascii=False, indent=2, default=str)[:5000]}
+{npc_response_architecture_block}
 
 CURRENT_TURN_SEMANTIC_VISIBLE_RESPONSE_JSON:
-{json.dumps(current_turn_visible_response or {"present": False}, ensure_ascii=False, indent=2, default=str)[:2200]}
+{current_turn_visible_response_block}
 
 {runtime_guardrails_block}
 
 NPC STATE SUMMARY (must influence tone and dialogue):
-{json.dumps({
-    "mood": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("mood"),
-    "relationship": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("relationship_to_player"),
-    "trust": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("trust"),
-    "fear": _safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("fear"),
-    "recent_memories": _safe_list(_safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")).get("recent_memories"))
-}, ensure_ascii=False)}
+{npc_state_summary_block}
 
 NPC behavior context:
-{json.dumps(_safe_dict(narration_context.get("npc_behavior_context") or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")), ensure_ascii=False, indent=2)[:3000]}
+{npc_behavior_context_block}
 
 Ongoing conversation threads:
 {conversation_threads_block}
@@ -390,9 +422,6 @@ Summary: {summary}
 Actors present:
 {actor_list}
 Stakes: {stakes}
-
-CONTEXT:
-{safe_context}
 """
     logger.debug("[RPG PROMPT] Final prompt length: %d", len(prompt))
     return prompt

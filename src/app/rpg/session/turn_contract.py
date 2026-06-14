@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from typing import Any, Dict, List
 
 from app.rpg.economy.service_resolver import resolve_service_turn
@@ -100,18 +101,33 @@ def _merge_effect_result(existing: Dict[str, Any], survival_effect: Dict[str, An
 
 def _find_actor(simulation_state: Dict[str, Any], target_id: str) -> Dict[str, Any]:
     target_id = safe_str(target_id)
+    target_l = target_id.lower()
+    if not target_id:
+        return {}
+    fallback: Dict[str, Any] = {}
     for key in ("actor_states", "npc_states", "npcs", "actors"):
         for row in safe_list(simulation_state.get(key)):
             row = safe_dict(row)
             if safe_str(row.get("id")) == target_id:
                 return row
+            if not fallback:
+                row_id_l = safe_str(row.get("id")).lower()
+                row_name_l = safe_str(row.get("name") or row.get("display_name")).lower()
+                if target_l and target_l in {row_id_l, row_name_l}:
+                    fallback = row
+    if fallback:
+        return fallback
     return {}
 
 
 def _guess_target_id(simulation_state: Dict[str, Any], text: str, action: Dict[str, Any]) -> str:
     explicit = safe_str(action.get("target_id") or action.get("target"))
-    if explicit and explicit not in {"room", "inn", "service", "player"} and not explicit.startswith("npc:") and not explicit.startswith("npc_") and not explicit.startswith("np:"):
-        return explicit
+    if explicit and explicit not in {"room", "inn", "service", "player"}:
+        if explicit.startswith(("npc:", "npc_", "np:")):
+            if _find_actor(simulation_state, explicit):
+                return explicit
+        else:
+            return explicit
     text_l = text.lower()
     for key in ("actor_states", "npc_states", "npcs", "actors"):
         for row in safe_list(simulation_state.get(key)):
@@ -125,13 +141,123 @@ def _guess_target_id(simulation_state: Dict[str, Any], text: str, action: Dict[s
     return ""
 
 
+_FOLLOWUP_STARTERS = (
+    "why",
+    "but why",
+    "and why",
+    "do you know why",
+    "but do you know why",
+    "how so",
+    "what do you mean",
+    "what happened",
+    "tell me more",
+    "about that",
+    "what about that",
+    "can you explain",
+    "could you explain",
+)
+
+
+def _normalized_words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9']+", safe_str(text).lower())
+
+
+def _is_short_dialogue_followup(text: str) -> bool:
+    cleaned = " ".join(_normalized_words(text))
+    if not cleaned:
+        return False
+    if len(cleaned.split()) > 12:
+        return False
+    return any(cleaned == starter or cleaned.startswith(starter + " ") for starter in _FOLLOWUP_STARTERS)
+
+
+def _short_text(text: Any, limit: int = 240) -> str:
+    value = " ".join(safe_str(text).split()).strip()
+    if len(value) > limit:
+        return value[:limit].rstrip() + "..."
+    return value
+
+
+def _candidate_followup_sources(runtime_state: Dict[str, Any]) -> list[Dict[str, Any]]:
+    runtime_state = safe_dict(runtime_state)
+    sources: list[Dict[str, Any]] = []
+
+    for key in ("last_player_action", "last_player_action_context"):
+        row = safe_dict(runtime_state.get(key))
+        if row:
+            sources.append(row)
+
+    last_turn = safe_dict(runtime_state.get("last_turn_result"))
+    if last_turn:
+        sources.append(last_turn)
+        for key in ("semantic_action", "action", "resolved_result"):
+            row = safe_dict(last_turn.get(key))
+            if row:
+                sources.append(row)
+
+    for turn in reversed(safe_list(runtime_state.get("turn_history"))[-4:]):
+        turn = safe_dict(turn)
+        if turn:
+            sources.append(turn)
+            for key in ("semantic_action", "action", "resolved_result"):
+                row = safe_dict(turn.get(key))
+                if row:
+                    sources.append(row)
+
+    return sources
+
+
+def _resolve_followup_reference(
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    text: str,
+) -> Dict[str, Any]:
+    if not _is_short_dialogue_followup(text):
+        return {}
+
+    for row in _candidate_followup_sources(runtime_state):
+        target_id = safe_str(row.get("target_id") or row.get("npc_id")).strip()
+        target_name = safe_str(row.get("target_name") or row.get("npc_name")).strip()
+        previous_text = _short_text(
+            row.get("text")
+            or row.get("player_input")
+            or row.get("summary")
+            or row.get("message")
+        )
+        if not target_id and target_name:
+            target_id = _guess_target_id(simulation_state, target_name, {"target_id": target_name})
+        if not target_id:
+            continue
+        actor = _find_actor(simulation_state, target_id)
+        if not actor:
+            actor = _find_actor(simulation_state, target_name)
+        if not actor:
+            continue
+        actor_id = safe_str(actor.get("id") or target_id)
+        actor_name = safe_str(actor.get("name") or actor.get("display_name") or target_name or actor_id)
+        return {
+            "target_id": actor_id,
+            "target_name": actor_name,
+            "previous_player_input": previous_text,
+            "topic": previous_text,
+            "source": "recent_dialogue_followup",
+        }
+    return {}
+
+
 def interpret_turn_action(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], player_input: str, action: Dict[str, Any]) -> Dict[str, Any]:
     text = safe_str(player_input)
     text_l = text.lower()
     action = safe_dict(action)
     action_type = safe_str(action.get("action_type") or "unknown")
     target_id = _guess_target_id(simulation_state, text, action)
-    if target_id == "player" or target_id.startswith("npc:") or target_id.startswith("npc_") or target_id.startswith("np:"):
+    followup_reference: Dict[str, Any] = {}
+    if not target_id:
+        followup_reference = _resolve_followup_reference(simulation_state, runtime_state, text)
+        target_id = safe_str(followup_reference.get("target_id"))
+    if target_id == "player":
+        target_id = ""
+    elif target_id.startswith(("npc:", "npc_", "np:")) and not _find_actor(simulation_state, target_id):
         target_id = ""
     target = _find_actor(simulation_state, target_id)
     target_name = safe_str(target.get("name") or target.get("display_name") or target_id)
@@ -151,7 +277,7 @@ def interpret_turn_action(simulation_state: Dict[str, Any], runtime_state: Dict[
         intent = "ask"
     elif any(w in text_l for w in performance_words):
         intent = "perform"
-    return {"intent": intent, "raw_input": text, "action_type": action_type, "verb": action_type, "target_id": target_id, "target_name": target_name, "style": action.get("style") or "", "force": "high" if any(w in text_l for w in ("throw", "slam", "kick")) else "moderate", "confidence": action.get("confidence", 0.75), "source": "turn_contract_v1"}
+    return {"intent": intent, "raw_input": text, "action_type": action_type, "verb": action_type, "target_id": target_id, "target_name": target_name, "followup_reference": followup_reference, "style": action.get("style") or "", "force": "high" if any(w in text_l for w in ("throw", "slam", "kick")) else "moderate", "confidence": action.get("confidence", 0.75), "source": "turn_contract_v1"}
 
 
 def derive_state_delta(simulation_state: Dict[str, Any], interpreted_action: Dict[str, Any], resolved_action: Dict[str, Any]) -> Dict[str, Any]:
@@ -240,7 +366,12 @@ def build_narration_brief(interpreted_action: Dict[str, Any], resolved_action: D
             summary = f"The player is making a deterministic service inquiry with {provider_name}: {raw_input}. Service kind: {service_kind or 'unknown'}. Service status: {status or 'unknown'}. No registered offer is available; narration must not invent one."
         tone = "practical"
     elif intent == "ask":
-        summary = f"The player asks {target_name or 'someone nearby'}: {raw_input}. The NPC should answer naturally, using their current mood, memories, and the scene context."
+        followup_reference = safe_dict(interpreted_action.get("followup_reference"))
+        if followup_reference:
+            topic = safe_str(followup_reference.get("topic") or followup_reference.get("previous_player_input"))
+            summary = f"The player asks {target_name or 'someone nearby'}: {raw_input}. This is a direct follow-up to the immediately previous topic: {topic}. The NPC should answer the follow-up naturally, giving the cause or reason if asked why, using their current mood, memories, and scene context."
+        else:
+            summary = f"The player asks {target_name or 'someone nearby'}: {raw_input}. The NPC should answer naturally, using their current mood, memories, and the scene context."
         tone = "conversational"
     elif intent == "perform":
         summary = f"The player performs or behaves expressively: {raw_input}. Narrate the room's reaction with personality and scene awareness."
