@@ -11,12 +11,17 @@ def recent_memory(session):
     memory = _dict(runtime.get("recent_memory"))
     turns = _list(memory.get("turns"))[-12:]
     dialogue = _list(memory.get("dialogue"))[-20:]
-    return {"version": VERSION, "turns": turns, "dialogue": dialogue}
+    return {
+        "version": VERSION,
+        "turns": turns,
+        "dialogue": dialogue,
+    }
 
 def add_recent_memory(session, **values):
     updated = _dict(session)
     memory = recent_memory(updated)
-    entry = {"player_input": values.get("player_input", "")[:500]}
+    entry = {}
+    entry["player_input"] = values.get("player_input", "")[:500]
     entry["npc_id"] = values.get("npc_id", "")
     entry["npc_line"] = values.get("npc_line", "")[:500]
     memory["turns"] = [*memory["turns"], entry][-12:]
