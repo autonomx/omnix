@@ -534,6 +534,9 @@ def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, 
 
     if not _safe_str(npc.get("line")):
         tone = _safe_str(npc_behavior.get("reaction_tone") or "wary")
+        action_kind = _safe_str(
+            interpreted.get("intent") or interpreted.get("action_type")
+        ).strip().lower()
 
         if tone == "hostile":
             npc["line"] = "You have made your point. Now get out before this gets worse."
@@ -541,8 +544,10 @@ def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, 
             npc["line"] = "Stay back. I do not want any more trouble."
         elif tone == "friendly":
             npc["line"] = "All right, I am listening. What do you need?"
+        elif action_kind in {"ask", "dialogue", "social", "social_activity", "conversation"}:
+            npc["line"] = ""
         else:
-            npc["line"] = "Careful now. I am not sure what to make of you."
+            npc["line"] = "I hear you. Give me a moment to answer that plainly."
 
     # anti-repeat logic
     recent_lines = []

@@ -8,6 +8,7 @@ set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
 set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
 set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
+if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5000/"
 
 REM Image generation is disabled by default to avoid loading FLUX/diffusers or
 REM consuming GPU/VRAM during normal app startup. To re-enable later, run:
@@ -35,6 +36,7 @@ echo ========================================
 echo.
 echo This starts one launcher dashboard instead of opening separate service terminals.
 echo Dashboard: %OMNIX_LAUNCHER_URL%
+echo Private app button: %OMNIX_APP_OPEN_URL%
 echo.
 echo [IMAGE] Enabled: %OMNIX_IMAGE_ENABLED%
 echo [IMAGE] Start service: %OMNIX_START_IMAGE_SERVICE%
@@ -88,6 +90,7 @@ set "OMNIX_STT_URL=%OMNIX_STT_URL%"
 set "OMNIX_IMAGE_ENABLED=%OMNIX_IMAGE_ENABLED%"
 set "OMNIX_START_IMAGE_SERVICE=%OMNIX_START_IMAGE_SERVICE%"
 set "OMNIX_IMAGE_URL=%OMNIX_IMAGE_URL%"
+set "OMNIX_APP_OPEN_URL=%OMNIX_APP_OPEN_URL%"
 set "OMNIX_TTS_MODEL_DIR=%OMNIX_TTS_MODEL_DIR%"
 set "OMNIX_QWEN3_TTS_MODEL_DIR=%OMNIX_QWEN3_TTS_MODEL_DIR_ENV%"
 

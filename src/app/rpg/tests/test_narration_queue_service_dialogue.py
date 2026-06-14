@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.rpg.api import rpg_session_management_routes
 from app.rpg.api.rpg_session_routes import rpg_session_bp
 from app.rpg.session.runtime import (
     _apply_idle_tick_to_session,
@@ -14,6 +15,8 @@ from app.rpg.session.runtime import (
     _generate_turn_narration_artifact,
     process_next_narration_job,
 )
+from app.rpg.session.runtime_part37 import _phase8_part37_completed_llm_fields
+from app.rpg.session.runtime_part38 import _phase8_part38_patch_semantic_visible
 
 
 def _make_test_app() -> FastAPI:
@@ -289,8 +292,8 @@ def test_ambient_conversation_job_is_marked_stale_when_far_behind():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-          patch('app.rpg.session.runtime.save_runtime_session') as mock_save:
+    with patch('app.rpg.session.runtime_part17.load_runtime_session', return_value=mock_session), \
+          patch('app.rpg.session.runtime_part17.save_runtime_session') as mock_save:
 
         result = process_next_narration_job(session_id)
 
@@ -372,6 +375,43 @@ def test_idle_tick_is_suppressed_while_player_turn_narration_pending():
     assert result["session"]["simulation_state"]["tick"] == 5
     assert result["session"]["runtime_state"]["tick"] == 5
 
+def test_idle_tick_is_suppressed_while_player_turn_is_applying():
+    session_id = "test_session"
+
+    mock_session = {
+        "session_id": session_id,
+        "simulation_state": {
+            "tick": 5,
+        },
+        "runtime_state": {
+            "tick": 5,
+            "idle_streak": 0,
+            "ambient_seq": 10,
+            "last_real_player_activity_at": "2023-01-01T00:00:00Z",
+            "runtime_settings": {},
+            "active_player_turn_request": {
+                "request_id": "req-active",
+                "status": "applying",
+                "started_at": "2023-01-01T00:00:01Z",
+                "player_input_len": 24,
+            },
+            "narration_jobs": [],
+            "narration_jobs_by_turn": {},
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    result = _apply_idle_tick_to_session(mock_session, reason="test")
+
+    assert result["ok"] is True
+    assert result["updates"] == []
+    assert result["idle_debug_trace"]["idle_suppressed"] is True
+    assert result["idle_debug_trace"]["reason"] == "blocking_player_turn_narration"
+    assert result["idle_gate_open"] is False
+    assert result["session"]["simulation_state"]["tick"] == 5
+    assert result["session"]["runtime_state"]["tick"] == 5
+
 def test_processing_player_turn_job_does_not_block_idle_tick():
     """Test that a processing player-turn narration job does not block idle ticks."""
     session_id = "test_session"
@@ -437,6 +477,63 @@ def test_processing_player_turn_job_does_not_block_idle_tick():
     assert result["session"]["simulation_state"]["tick"] > 5
     assert result["session"]["runtime_state"]["tick"] > 5
 
+def test_semantic_capture_background_skips_while_player_turn_is_active(monkeypatch):
+    mock_session = {
+        "session_id": "test_session",
+        "runtime_state": {
+            "active_player_turn_request": {
+                "request_id": "req-active",
+                "status": "applying",
+                "started_at": "2023-01-01T00:00:01Z",
+            },
+        },
+    }
+    saved_sessions = []
+
+    monkeypatch.setattr(
+        rpg_session_management_routes,
+        "load_runtime_session",
+        lambda _session_id: mock_session,
+    )
+    monkeypatch.setattr(
+        rpg_session_management_routes,
+        "save_runtime_session",
+        lambda session: saved_sessions.append(session) or session,
+    )
+
+    assert rpg_session_management_routes._run_semantic_capture_background(
+        "test_session",
+        reason="pre_idle_tick",
+    ) is False
+    assert saved_sessions == []
+
+def test_world_events_route_returns_cached_rows_during_active_player_turn(client):
+    mock_session = {
+        "session_id": "test_session",
+        "simulation_state": {"tick": 5},
+        "runtime_state": {
+            "active_player_turn_request": {
+                "request_id": "req-active",
+                "status": "applying",
+                "started_at": "2023-01-01T00:00:01Z",
+            },
+            "recent_world_event_rows": [
+                {"event_id": "event:1", "text": "A cached event."},
+            ],
+        },
+    }
+
+    with patch("app.rpg.api.rpg_world_routes.load_runtime_session", return_value=mock_session):
+        response = client.post("/api/rpg/session/world_events", json={"session_id": "test_session"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["active_player_turn"] is True
+    assert payload["recent_world_event_rows"] == [{"event_id": "event:1", "text": "A cached event."}]
+    assert payload["player_world_view_rows"] == []
+    assert payload["debug_world_events"]["deferred_due_to_active_player_turn"] is True
+
 def test_enqueue_narration_request_is_single_flight_per_turn_id():
     runtime_state = {
         "narration_jobs": [],
@@ -491,7 +588,7 @@ def test_enqueue_narration_request_does_not_queue_when_artifact_exists():
         "session_id": "test_session",
     }
 
-    runtime_state, job, _ = _enqueue_narration_request(
+    runtime_state, job, is_new = _enqueue_narration_request(
         runtime_state,
         "turn:7",
         7,
@@ -500,8 +597,63 @@ def test_enqueue_narration_request_does_not_queue_when_artifact_exists():
         100,
     )
 
-    assert job == {}
+    assert is_new is False
+    assert job["status"] == "completed"
+    assert job["deduped_by_existing_artifact"] is True
     assert runtime_state["narration_jobs"] == []
+
+def test_enqueue_narration_request_queues_when_existing_artifact_is_echo_fallback():
+    runtime_state = {
+        "narration_jobs": [],
+        "narration_jobs_by_turn": {},
+        "narration_artifacts": [
+            {
+                "turn_id": "turn:7",
+                "narration": "You continue: i ask bran how his day is going",
+                "final_narration": "You continue: i ask bran how his day is going",
+                "used_llm": True,
+                "llm_called": True,
+                "source": "phase8_turn_bound_llm_visible_response",
+                "fallback_narration_source": "phase8_turn_bound_llm_visible_response",
+                "narration_json": {},
+                "npc": {},
+            }
+        ],
+        "narration_artifacts_by_turn": {
+            "turn:7": {
+                "turn_id": "turn:7",
+                "narration": "You continue: i ask bran how his day is going",
+                "final_narration": "You continue: i ask bran how his day is going",
+                "used_llm": True,
+                "llm_called": True,
+                "source": "phase8_turn_bound_llm_visible_response",
+                "fallback_narration_source": "phase8_turn_bound_llm_visible_response",
+                "narration_json": {},
+                "npc": {},
+            }
+        },
+    }
+
+    request = {
+        "turn_id": "turn:7",
+        "tick": 7,
+        "session_id": "test_session",
+    }
+
+    runtime_state, job, is_new = _enqueue_narration_request(
+        runtime_state,
+        "turn:7",
+        7,
+        request,
+        "player_turn",
+        100,
+    )
+
+    assert is_new is True
+    assert job["status"] == "queued"
+    assert "turn:7" not in runtime_state["narration_artifacts_by_turn"]
+    assert runtime_state["narration_artifacts"] == []
+    assert runtime_state["narration_jobs_by_turn"]["turn:7"]["job_id"] == "narration:turn:7"
 
 def test_process_next_narration_job_skips_superseded_queue_entry():
     session_id = "test_session"
@@ -552,7 +704,7 @@ def test_process_next_narration_job_skips_superseded_queue_entry():
         },
     }
 
-    with patch("app.rpg.session.runtime.load_runtime_session", return_value=mock_session):
+    with patch("app.rpg.session.runtime_part17.load_runtime_session", return_value=mock_session):
         result = process_next_narration_job(session_id)
 
     assert result["ok"] is True
@@ -613,8 +765,8 @@ def test_process_next_narration_job_dedupes_when_artifact_already_exists():
         },
     }
 
-    with patch("app.rpg.session.runtime.load_runtime_session", return_value=mock_session), \
-         patch("app.rpg.session.runtime.save_runtime_session") as mock_save:
+    with patch("app.rpg.session.runtime_part17.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.session.runtime_part17.save_runtime_session") as mock_save:
         result = process_next_narration_job(session_id)
 
     assert result["ok"] is True
@@ -626,6 +778,140 @@ def test_process_next_narration_job_dedupes_when_artifact_already_exists():
     runtime_state = saved_session["runtime_state"]
     job = runtime_state["narration_jobs_by_turn"]["turn:10"]
     assert job["status"] == "completed"
+
+def test_late_turn_artifact_replaces_echo_fallback_artifact():
+    from app.rpg.session import runtime_part32
+
+    session_id = "test_session"
+    mock_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 10,
+            "narration_artifacts": [
+                {
+                    "turn_id": "turn:10",
+                    "narration": "You continue: i ask bran how his day is going",
+                    "final_narration": "You continue: i ask bran how his day is going",
+                    "used_llm": True,
+                    "llm_called": True,
+                    "source": "phase8_turn_bound_llm_visible_response",
+                    "fallback_narration_source": "phase8_turn_bound_llm_visible_response",
+                    "narration_json": {},
+                    "npc": {},
+                }
+            ],
+            "narration_artifacts_by_turn": {
+                "turn:10": {
+                    "turn_id": "turn:10",
+                    "narration": "You continue: i ask bran how his day is going",
+                    "final_narration": "You continue: i ask bran how his day is going",
+                    "used_llm": True,
+                    "llm_called": True,
+                    "source": "phase8_turn_bound_llm_visible_response",
+                    "fallback_narration_source": "phase8_turn_bound_llm_visible_response",
+                    "narration_json": {},
+                    "npc": {},
+                }
+            },
+        },
+    }
+    replacement = {
+        "turn_id": "turn:10",
+        "tick": 10,
+        "narration": 'Bran: "Busy enough, friend. How is yours?"',
+        "narration_json": {
+            "format_version": "rpg_narration_v2",
+            "npc": {
+                "speaker": "Bran",
+                "line": "Busy enough, friend. How is yours?",
+            },
+        },
+        "used_llm": True,
+        "raw_llm_narrative": '{"narration":"Bran answers."}',
+    }
+
+    with patch("app.rpg.session.runtime_part32.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.session.runtime_part32.save_runtime_session") as mock_save:
+        result = runtime_part32._phase8_part32_store_late_turn_artifact(
+            session_id,
+            replacement,
+        )
+
+    assert result["ok"] is True
+    assert result.get("deduped") is not True
+    saved_session = mock_save.call_args.args[0]
+    stored = saved_session["runtime_state"]["narration_artifacts_by_turn"]["turn:10"]
+    assert stored["narration"] == 'Bran: "Busy enough, friend. How is yours?"'
+
+def test_narration_status_ignores_echo_fallback_artifact_and_resignals(client):
+    mock_session = {
+        "session_id": "test_session",
+        "runtime_state": {
+            "narration_jobs": [
+                {
+                    "job_id": "narration:turn:10",
+                    "turn_id": "turn:10",
+                    "tick": 10,
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:10",
+                        "tick": 10,
+                    },
+                }
+            ],
+            "narration_jobs_by_turn": {
+                "turn:10": {
+                    "job_id": "narration:turn:10",
+                    "turn_id": "turn:10",
+                    "tick": 10,
+                    "status": "queued",
+                    "job_kind": "player_turn",
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "started_at": None,
+                    "completed_at": None,
+                    "error": "",
+                    "narration_request": {
+                        "turn_id": "turn:10",
+                        "tick": 10,
+                    },
+                }
+            },
+            "narration_artifacts_by_turn": {
+                "turn:10": {
+                    "turn_id": "turn:10",
+                    "narration": "You continue: i ask bran how his day is going",
+                    "final_narration": "You continue: i ask bran how his day is going",
+                    "used_llm": True,
+                    "llm_called": True,
+                    "source": "phase8_turn_bound_llm_visible_response",
+                    "fallback_narration_source": "phase8_turn_bound_llm_visible_response",
+                    "narration_json": {},
+                    "npc": {},
+                }
+            },
+        },
+    }
+
+    with patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_worker, \
+         patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
+        response = client.post(
+            "/api/rpg/session/narration_status",
+            json={"session_id": "test_session", "turn_id": "turn:10"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["artifact"] == {}
+    assert payload["job"]["status"] == "queued"
+    assert mock_worker.call_count == 1
+    assert mock_signal.call_count == 1
 
 def test_turn_stream_emits_live_first_draft_artifact(client):
     session_id = "test_session"
@@ -686,6 +972,7 @@ def test_turn_stream_emits_live_first_draft_artifact(client):
 
     with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result), \
          patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.api.rpg_session_routes.save_runtime_session", return_value=mock_session), \
          patch("app.rpg.api.rpg_session_routes._generate_turn_narration_artifact", side_effect=_fake_generate), \
          patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_worker, \
          patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
@@ -763,6 +1050,7 @@ def test_turn_stream_uses_result_envelope_when_authoritative_envelope_missing(cl
 
     with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result), \
          patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=authoritative_result["session"]), \
+         patch("app.rpg.api.rpg_session_routes.save_runtime_session", return_value=authoritative_result["session"]), \
          patch("app.rpg.api.rpg_session_routes._generate_turn_narration_artifact", side_effect=_fake_generate):
         response = client.post("/api/rpg/session/turn/stream", json={
             "session_id": session_id,
@@ -776,6 +1064,135 @@ def test_turn_stream_uses_result_envelope_when_authoritative_envelope_missing(cl
     assert '"tick": 9' in body
     assert seen_request["turn_id"] == "turn:9"
     assert seen_request["scene"]["title"] == "The Rusty Flagon Tavern"
+
+def test_semantic_dialogue_promotion_ignores_root_echo_fallback():
+    payload = {
+        "turn_id": "turn:2",
+        "tick": 2,
+        "player_input": "i ask bran how his day is going",
+        "player_input_hash": "8cb43bba7e774d55",
+        "used_llm": True,
+        "llm_called": True,
+        "deterministic_fallback_narration": "You continue: i ask bran how his day is going",
+        "semantic_action": {
+            "turn_id": "turn:2",
+            "tick": 2,
+            "player_input_hash": "8cb43bba7e774d55",
+            "semantic_family": "social",
+            "action_type": "dialogue",
+            "interaction_mode": "direct",
+            "stateful": False,
+            "needs_runtime_resolution": False,
+            "direct_response_gate": {
+                "safe_to_display_now": True,
+                "risk_flags": ["social"],
+            },
+            "target_name": "Bran",
+            "visible_response": {
+                "narration": "Bran looks up from wiping down the bar.",
+                "npc": {
+                    "speaker": "Bran",
+                    "line": "Busy enough, friend. How is yours?",
+                },
+            },
+        },
+    }
+
+    assert _phase8_part37_completed_llm_fields(payload) == {}
+
+    patched = _phase8_part38_patch_semantic_visible(payload)
+
+    assert patched["narration_status"] == "completed"
+    assert patched["narration"] == (
+        'Bran looks up from wiping down the bar.\n\n'
+        'Bran: "Busy enough, friend. How is yours?"'
+    )
+    assert patched["deterministic_fallback_narration"] == patched["narration"]
+    assert patched["fallback_narration_source"] == "phase8_fast_semantic_direct_dialogue_response"
+
+def test_turn_stream_emits_completed_semantic_dialogue_as_visible_fallback(client):
+    session_id = "test_session"
+
+    semantic_reply = 'Bran wipes down the bar and gives you a tired grin.\n\nBran: "Busy enough, friend. How is yours?"'
+    deterministic_echo = "You continue: i ask bran how his day is going."
+    authoritative_result = {
+        "ok": True,
+        "session": {
+            "session_id": session_id,
+            "runtime_state": {"tick": 3},
+        },
+        "authoritative": {
+            "turn_id": "turn:3",
+            "tick": 3,
+            "resolved_result": {"ok": True},
+            "combat_result": {},
+            "xp_result": {},
+            "skill_xp_result": {},
+            "level_up": [],
+            "skill_level_ups": [],
+            "summary": semantic_reply,
+            "presentation": {},
+            "response_length": "short",
+            "narration": semantic_reply,
+            "final_narration": semantic_reply,
+            "deterministic_fallback_narration": deterministic_echo,
+            "narration_status": "completed",
+            "used_llm": True,
+            "llm_called": True,
+            "llm_purpose": "semantic_direct_dialogue_visible_response",
+            "fallback_narration_source": "phase8_fast_semantic_direct_dialogue_response",
+            "npc": {"speaker": "Bran", "line": "Busy enough, friend. How is yours?"},
+            "narration_json": {
+                "format_version": "semantic_visible_response_v1",
+                "narration": "Bran wipes down the bar and gives you a tired grin.",
+                "npc": {"speaker": "Bran", "line": "Busy enough, friend. How is yours?"},
+            },
+        },
+        "narration_request": {
+            "turn_id": "turn:3",
+            "tick": 3,
+            "scene": {"title": "The Rusty Flagon Tavern"},
+            "narration_context": {"player_input": "i ask bran how his day is going"},
+            "performance": {"enable_live_narration_llm": True},
+        },
+    }
+
+    mock_session = {
+        "session_id": session_id,
+        "runtime_state": {
+            "tick": 3,
+            "narration_jobs": [],
+            "narration_jobs_by_turn": {},
+            "narration_artifacts": [],
+            "narration_artifacts_by_turn": {},
+        },
+    }
+
+    with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result), \
+         patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.api.rpg_session_routes.save_runtime_session"), \
+         patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running"), \
+         patch("app.rpg.api.rpg_session_routes.signal_narration_work"):
+        response = client.post("/api/rpg/session/turn/stream", json={
+            "session_id": session_id,
+            "input": "i ask bran how his day is going",
+        })
+
+    assert response.status_code == 200
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    authoritative_event = next(
+        event for event in events if event.get("type") == "authoritative_result"
+    )
+    assert authoritative_event["narration_status"] == "completed"
+    assert authoritative_event["narration"] == semantic_reply
+    assert authoritative_event["fallback_narration"] == semantic_reply
+    assert authoritative_event["deterministic_fallback_narration"] == deterministic_echo
+    assert authoritative_event["used_llm"] is True
+    assert authoritative_event["npc"]["speaker"] == "Bran"
 
 def test_turn_stream_defaults_to_queued_narration_when_live_draft_not_explicit(client):
     session_id = "test_session"
@@ -817,10 +1234,18 @@ def test_turn_stream_defaults_to_queued_narration_when_live_draft_not_explicit(c
             "narration_artifacts_by_turn": {},
         },
     }
+    session_store = {"session": mock_session}
 
-    with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result), \
-         patch("app.rpg.api.rpg_session_routes.load_runtime_session", return_value=mock_session), \
-         patch("app.rpg.api.rpg_session_routes.save_runtime_session") as mock_save, \
+    def fake_load(_session_id):
+        return session_store["session"]
+
+    def fake_save(session):
+        session_store["session"] = session
+        return session
+
+    with patch("app.rpg.api.rpg_session_routes._apply_turn_authoritative", return_value=authoritative_result) as mock_apply, \
+         patch("app.rpg.api.rpg_session_routes.load_runtime_session", side_effect=fake_load), \
+         patch("app.rpg.api.rpg_session_routes.save_runtime_session", side_effect=fake_save) as mock_save, \
          patch("app.rpg.api.rpg_session_routes._start_live_first_draft_thread") as mock_live_thread, \
          patch("app.rpg.api.rpg_session_routes.ensure_narration_worker_running") as mock_worker, \
          patch("app.rpg.api.rpg_session_routes.signal_narration_work") as mock_signal:
@@ -838,14 +1263,22 @@ def test_turn_stream_defaults_to_queued_narration_when_live_draft_not_explicit(c
     assert '"live_draft_streaming": false' in body
     assert '"type": "token"' not in body
     assert mock_live_thread.call_count == 0
-    assert mock_save.call_count == 1
+    assert mock_save.call_count == 2
     assert mock_worker.call_count == 1
     assert mock_signal.call_count == 1
+    perf_override = mock_apply.call_args.kwargs["performance_override"]
+    assert perf_override["enable_action_advisory"] is False
+    assert perf_override["enable_semantic_action_advisory"] is False
+    assert perf_override["enable_live_narration_llm"] is False
+    assert "narration_mode" not in perf_override
     saved_session = mock_save.call_args.args[0]
     saved_runtime_state = saved_session["runtime_state"]
     saved_job = saved_runtime_state["narration_jobs_by_turn"]["turn:6"]
     assert saved_runtime_state["session_id"] == session_id
+    assert "active_player_turn_request" not in saved_runtime_state
+    assert saved_runtime_state["last_player_turn_request"]["status"] == "queued"
     assert saved_job["narration_request"]["session_id"] == session_id
+    assert saved_job["narration_request"]["performance"]["enable_live_narration_llm"] is True
 
 def test_turn_stream_times_out_live_first_draft_and_falls_back_to_queue(client):
     session_id = "test_session"
@@ -910,7 +1343,7 @@ def test_turn_stream_times_out_live_first_draft_and_falls_back_to_queue(client):
     assert '"narration_status": "queued"' in body
     assert '"live_draft_streaming": false' in body
     assert mock_live_thread.call_count == 1
-    assert mock_save.call_count == 1
+    assert mock_save.call_count == 2
     assert mock_worker.call_count == 1
     assert mock_signal.call_count == 1
 
@@ -966,9 +1399,9 @@ def test_process_next_narration_job_skips_when_authoritative_job_already_process
         },
     }
 
-    with patch("app.rpg.session.runtime.load_runtime_session", return_value=mock_session), \
-         patch("app.rpg.session.runtime.save_runtime_session") as mock_save, \
-         patch("app.rpg.session.runtime._generate_turn_narration_artifact") as mock_generate:
+    with patch("app.rpg.session.runtime_part17.load_runtime_session", return_value=mock_session), \
+         patch("app.rpg.session.runtime_part17.save_runtime_session") as mock_save, \
+         patch("app.rpg.session.runtime_part17._generate_turn_narration_artifact") as mock_generate:
         result = process_next_narration_job(session_id)
 
     assert result["ok"] is True
@@ -1008,7 +1441,7 @@ def test_generate_turn_narration_artifact_streams_chunks_and_persists_full_text(
         "used_llm": True,
     }
 
-    with patch("app.rpg.session.runtime.narrate_scene", side_effect=lambda *args, **kwargs: (
+    with patch("app.rpg.session.runtime_part17.narrate_scene", side_effect=lambda *args, **kwargs: (
         kwargs["on_chunk"]("Bran "),
         kwargs["on_chunk"]("names "),
         kwargs["on_chunk"]("the price."),
@@ -1049,7 +1482,7 @@ def test_generate_turn_narration_artifact_uses_streamed_text_when_result_text_mi
         },
     }
 
-    with patch("app.rpg.session.runtime.narrate_scene", side_effect=lambda *args, **kwargs: (
+    with patch("app.rpg.session.runtime_part17.narrate_scene", side_effect=lambda *args, **kwargs: (
         kwargs["on_chunk"]("Five "),
         kwargs["on_chunk"]("silver."),
         {"narration": "", "raw_llm_narrative": "", "used_llm": True}

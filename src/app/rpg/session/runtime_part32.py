@@ -103,7 +103,7 @@ def _phase8_part32_store_late_turn_artifact(
 
     runtime_state = _copy_dict(session.get("runtime_state"))
     existing = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
-    if existing:
+    if existing and _narration_artifact_completes_turn(existing):
         return {"ok": True, "session": session, "artifact": existing, "deduped": True}
 
     artifact = dict(artifact)

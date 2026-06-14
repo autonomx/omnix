@@ -166,6 +166,7 @@
   function eventVisibleTextLength(evt) {
     evt = evt && typeof evt === 'object' ? evt : {};
     var artifact = evt.narration_artifact && typeof evt.narration_artifact === 'object' ? evt.narration_artifact : evt;
+    if (isWaitingForNarrationArtifact(evt)) return 0;
     return String(
       evt.narration ||
       evt.fallback_narration ||
@@ -177,6 +178,12 @@
       artifact.raw_text ||
       ''
     ).length;
+  }
+
+  function isWaitingForNarrationArtifact(evt) {
+    evt = evt && typeof evt === 'object' ? evt : {};
+    var status = String(evt.narration_status || evt.status || '').trim().toLowerCase();
+    return status === 'queued' || status === 'processing' || status === 'pending' || status === 'streaming';
   }
 
   function trackSseEvent(span, evt) {
@@ -388,6 +395,7 @@
 
   function usefulText(event) {
     if (!event || typeof event !== 'object') return '';
+    if (isWaitingForNarrationArtifact(event)) return '';
     var artifact = event.narration_artifact && typeof event.narration_artifact === 'object' ? event.narration_artifact : {};
     return String(
       event.narration ||

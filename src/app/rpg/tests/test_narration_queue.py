@@ -42,9 +42,9 @@ def test_authoritative_turn_queues_narration_instead_of_generating_inline():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session'), \
-         patch('app.rpg.session.runtime._apply_turn_authoritative') as mock_auth:
+    with patch('app.rpg.session.runtime_part19.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part19.save_runtime_session'), \
+         patch('app.rpg.session.runtime_part19._apply_turn_authoritative') as mock_auth:
 
         mock_auth.return_value = {
             "ok": True,
@@ -125,9 +125,9 @@ def test_worker_processes_one_queued_job():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
-         patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate:
+    with patch('app.rpg.session.runtime_part17.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part17.save_runtime_session') as mock_save, \
+         patch('app.rpg.session.runtime_part17._generate_turn_narration_artifact') as mock_generate:
 
         mock_generate.return_value = {
             "ok": True,
@@ -313,9 +313,9 @@ def test_failed_narration_requeues_for_retry():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
-         patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate:
+    with patch('app.rpg.session.runtime_part17.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part17.save_runtime_session') as mock_save, \
+         patch('app.rpg.session.runtime_part17._generate_turn_narration_artifact') as mock_generate:
 
         mock_generate.return_value = {
             "ok": False,
@@ -396,10 +396,10 @@ def test_failed_narration_marks_job_failed_after_max_retries():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
-         patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate, \
-         patch('app.rpg.session.runtime.publish_narration_event'):
+    with patch('app.rpg.session.runtime_part17.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part17.save_runtime_session') as mock_save, \
+         patch('app.rpg.session.runtime_part17._generate_turn_narration_artifact') as mock_generate, \
+         patch('app.rpg.session.runtime_part17.publish_narration_event'):
 
         mock_generate.return_value = {
             "ok": False,
@@ -474,8 +474,8 @@ def test_stale_narration_job_is_marked_stale():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session') as mock_save:
+    with patch('app.rpg.session.runtime_part17.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part17.save_runtime_session') as mock_save:
 
         result = process_next_narration_job(session_id)
 
@@ -505,9 +505,9 @@ def test_compatibility_wrapper_returns_immediate_result():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session'), \
-         patch('app.rpg.session.runtime._apply_turn_authoritative') as mock_auth:
+    with patch('app.rpg.session.runtime_part19.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part19.save_runtime_session'), \
+         patch('app.rpg.session.runtime_part19._apply_turn_authoritative') as mock_auth:
 
         mock_auth.return_value = {
             "ok": True,
@@ -566,10 +566,10 @@ def test_enqueue_idempotent():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session'), \
-         patch('app.rpg.session.runtime.ensure_narration_worker_running'), \
-         patch('app.rpg.session.runtime.signal_narration_work') as mock_signal:
+    with patch('app.rpg.session.runtime_part03.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part03.save_runtime_session'), \
+         patch('app.rpg.session.runtime_part03.ensure_narration_worker_running'), \
+         patch('app.rpg.session.runtime_part03.signal_narration_work') as mock_signal:
 
         narration_request = {"turn_id": turn_id, "tick": 1}
 
@@ -643,10 +643,10 @@ def test_worker_token_claim_prevents_duplicates():
         saved_sessions.append(copy.deepcopy(session))
         return session
 
-    with patch('app.rpg.session.runtime.load_runtime_session', side_effect=mock_load), \
-         patch('app.rpg.session.runtime.save_runtime_session', side_effect=mock_save), \
-         patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate, \
-         patch('app.rpg.session.runtime.publish_narration_event'):
+    with patch('app.rpg.session.runtime_part17.load_runtime_session', side_effect=mock_load), \
+         patch('app.rpg.session.runtime_part17.save_runtime_session', side_effect=mock_save), \
+         patch('app.rpg.session.runtime_part17._generate_turn_narration_artifact') as mock_generate, \
+         patch('app.rpg.session.runtime_part17.publish_narration_event'):
 
         mock_generate.return_value = {
             "ok": True,
@@ -686,10 +686,10 @@ def test_enqueue_signals_worker_manager():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime.save_runtime_session'), \
-         patch('app.rpg.session.runtime.ensure_narration_worker_running'), \
-         patch('app.rpg.session.runtime.signal_narration_work'):
+    with patch('app.rpg.session.runtime_part03.load_runtime_session', return_value=mock_session), \
+         patch('app.rpg.session.runtime_part03.save_runtime_session'), \
+         patch('app.rpg.session.runtime_part03.ensure_narration_worker_running'), \
+         patch('app.rpg.session.runtime_part03.signal_narration_work'):
 
         narration_request = {"turn_id": turn_id, "tick": 1}
         _enqueue_narration_request_compat(session_id, narration_request)
@@ -859,9 +859,9 @@ def test_player_turn_job_is_not_marked_stale_when_runtime_tick_advances():
         },
     }
 
-    with patch('app.rpg.session.runtime.load_runtime_session', return_value=mock_session), \
-          patch('app.rpg.session.runtime.save_runtime_session') as mock_save, \
-          patch('app.rpg.session.runtime._generate_turn_narration_artifact') as mock_generate:
+    with patch('app.rpg.session.runtime_part17.load_runtime_session', return_value=mock_session), \
+          patch('app.rpg.session.runtime_part17.save_runtime_session') as mock_save, \
+          patch('app.rpg.session.runtime_part17._generate_turn_narration_artifact') as mock_generate:
 
         mock_generate.return_value = {
             "ok": True,

@@ -351,7 +351,7 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str,
         return
     runtime_state = _copy_dict(session.get("runtime_state"))
     existing = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
-    if existing:
+    if existing and _narration_artifact_completes_turn(existing):
         return
     tick = _phase8_part35_payload_tick(payload)
     artifact = {
@@ -382,6 +382,26 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str,
         save_runtime_session(session)
     except Exception:
         return
+
+
+def _phase8_part35_drop_incomplete_artifact_for_turn(
+    runtime_state: Dict[str, Any],
+    turn_id: str,
+) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    turn_id = _safe_str(turn_id).strip()
+    if not turn_id:
+        return runtime_state
+
+    by_turn = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
+    by_turn.pop(turn_id, None)
+    runtime_state["narration_artifacts_by_turn"] = by_turn
+    runtime_state["narration_artifacts"] = [
+        artifact
+        for artifact in _safe_list(runtime_state.get("narration_artifacts"))
+        if _safe_str(_safe_dict(artifact).get("turn_id")).strip() != turn_id
+    ]
+    return runtime_state
 
 
 
@@ -430,6 +450,19 @@ def _enqueue_narration_request(
         _safe_dict(_safe_dict(runtime_state).get("narration_artifacts_by_turn")).get(_safe_str(turn_id).strip())
     )
     if existing_artifact:
+        if not _narration_artifact_completes_turn(existing_artifact):
+            runtime_state = _phase8_part35_drop_incomplete_artifact_for_turn(
+                runtime_state,
+                turn_id,
+            )
+            return _PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST(
+                runtime_state,
+                turn_id,
+                tick,
+                narration_request,
+                job_kind,
+                priority,
+            )
         return _copy_dict(runtime_state), {
             "job_id": f"narration:{_safe_str(turn_id).strip()}",
             "turn_id": _safe_str(turn_id).strip(),

@@ -3,11 +3,31 @@ from __future__ import annotations
 import json
 import logging
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Dict, Iterator, List, Optional
 
 from app.providers.base import ChatMessage, ChatResponse
 
 logger = logging.getLogger(__name__)
+_RPG_LLM_TIMING_CONTEXT: ContextVar[Dict[str, Any]] = ContextVar(
+    "RPG_LLM_TIMING_CONTEXT",
+    default={},
+)
+
+
+@contextmanager
+def rpg_llm_timing_context(**context: Any) -> Iterator[None]:
+    token = _RPG_LLM_TIMING_CONTEXT.set(dict(context))
+    try:
+        yield
+    finally:
+        _RPG_LLM_TIMING_CONTEXT.reset(token)
+
+
+def _current_llm_timing_context() -> Dict[str, Any]:
+    value = _RPG_LLM_TIMING_CONTEXT.get()
+    return value if isinstance(value, dict) else {}
 
 
 class AppLLMGateway:
@@ -79,10 +99,18 @@ class AppLLMGateway:
         # pass it to express intent; actual timeout enforcement will be added
         # when the provider abstraction gains native support.
         t0 = time.monotonic()
+        timing = _current_llm_timing_context()
+        request_started_at = timing.get("request_started_at")
+        request_to_generate_start_s = None
+        if isinstance(request_started_at, (int, float)):
+            request_to_generate_start_s = max(0.0, t0 - float(request_started_at))
         logger.info(
-            "[RPG GATEWAY] generate_start prompt_len=%d timeout_s=%s",
+            "[RPG GATEWAY] generate_start prompt_len=%d timeout_s=%s request_to_generate_start_s=%s request_id=%s stage=%s",
             len(prompt),
             timeout_s,
+            f"{request_to_generate_start_s:.3f}" if request_to_generate_start_s is not None else "",
+            timing.get("request_id", ""),
+            timing.get("stage", ""),
         )
         messages = self._build_messages(prompt, context=context)
         logger.debug("[RPG GATEWAY] Built messages for chat_completion", extra={"message_count": len(messages)})
@@ -121,10 +149,18 @@ class AppLLMGateway:
         t0 = time.monotonic()
         chunk_count = 0
         first_chunk_at = None
+        timing = _current_llm_timing_context()
+        request_started_at = timing.get("request_started_at")
+        request_to_stream_start_s = None
+        if isinstance(request_started_at, (int, float)):
+            request_to_stream_start_s = max(0.0, t0 - float(request_started_at))
         logger.info(
-            "[RPG GATEWAY] stream_start prompt_len=%d timeout_s=%s",
+            "[RPG GATEWAY] stream_start prompt_len=%d timeout_s=%s request_to_stream_start_s=%s request_id=%s stage=%s",
             len(prompt),
             timeout_s,
+            f"{request_to_stream_start_s:.3f}" if request_to_stream_start_s is not None else "",
+            timing.get("request_id", ""),
+            timing.get("stage", ""),
         )
         messages = self._build_messages(prompt, context=context)
         logger.debug("[RPG GATEWAY] Built messages for streaming chat_completion", extra={"message_count": len(messages)})

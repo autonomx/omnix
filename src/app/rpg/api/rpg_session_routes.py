@@ -53,6 +53,7 @@ from app.rpg.session.ambient_builder import (
     get_pending_ambient_updates,
 )
 from app.rpg.session.durable_store import CorruptSessionPayloadError
+from app.rpg.llm_app_gateway import rpg_llm_timing_context
 from app.rpg.session.narration_worker import (
     ensure_narration_worker_running,
     signal_narration_work,
@@ -64,6 +65,7 @@ from app.rpg.session.runtime import (
     _copy_dict,
     _enqueue_narration_request,
     _generate_turn_narration_artifact,
+    _narration_artifact_completes_turn,
     _normalize_runtime_settings,
     apply_resume_catchup,
     apply_turn,
@@ -85,6 +87,11 @@ rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
 _LIVE_FIRST_DRAFT_TIMEOUT_S = 12.0
 _LIVE_FIRST_DRAFT_MAX_TIMEOUT_S = 60.0
+_STREAM_AUTHORITATIVE_PERFORMANCE = {
+    "enable_action_advisory": False,
+    "enable_semantic_action_advisory": False,
+    "enable_live_narration_llm": False,
+}
 
 
 def _sse(data: dict) -> str:
@@ -150,6 +157,100 @@ def _live_first_draft_timeout_s(perf: Dict[str, Any]) -> float:
     if timeout_s <= 0:
         timeout_s = _LIVE_FIRST_DRAFT_TIMEOUT_S
     return min(timeout_s, _LIVE_FIRST_DRAFT_MAX_TIMEOUT_S)
+
+
+def _stream_authoritative_performance_override(
+    request_performance: Dict[str, Any],
+) -> Dict[str, Any]:
+    requested = _safe_dict(request_performance)
+    perf = dict(requested)
+    perf.update(_STREAM_AUTHORITATIVE_PERFORMANCE)
+    if requested.get("enable_stream_semantic_action_advisory") is True:
+        perf["enable_semantic_action_advisory"] = True
+    perf["stream_authoritative_deferred"] = True
+    return perf
+
+
+def _stream_background_narration_performance(
+    request_performance: Dict[str, Any],
+    authoritative_performance: Dict[str, Any],
+) -> Dict[str, Any]:
+    perf = dict(_safe_dict(authoritative_performance))
+    requested = _safe_dict(request_performance)
+    perf.update(requested)
+    perf["enable_live_narration_llm"] = requested.get("enable_live_narration_llm", True) is not False
+    perf["stream_authoritative_deferred"] = True
+    return perf
+
+
+def _mark_player_turn_active(session_id: str, request_id: str, player_input: str) -> None:
+    session_id = _safe_str(session_id).strip()
+    if not session_id:
+        return
+    try:
+        session = load_runtime_session(session_id)
+        if session is None:
+            return
+        runtime_state = _copy_dict(session.get("runtime_state"))
+        runtime_state["active_player_turn_request"] = {
+            "request_id": _safe_str(request_id),
+            "status": "applying",
+            "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "player_input_len": len(_safe_str(player_input)),
+        }
+        session["runtime_state"] = runtime_state
+        save_runtime_session(session)
+    except Exception:
+        _logger.exception(
+            "[RPG TURN STREAM] active_marker_set_failed session=%s req=%s",
+            session_id,
+            request_id,
+        )
+
+
+def _finish_player_turn_marker_in_state(
+    runtime_state: Dict[str, Any],
+    request_id: str,
+    *,
+    status: str,
+) -> Dict[str, Any]:
+    runtime_state = _copy_dict(runtime_state)
+    marker = _safe_dict(runtime_state.get("active_player_turn_request"))
+    if _safe_str(marker.get("request_id")) != _safe_str(request_id):
+        return runtime_state
+    marker = dict(marker)
+    marker["status"] = _safe_str(status or "completed")
+    marker["completed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    runtime_state["last_player_turn_request"] = marker
+    runtime_state.pop("active_player_turn_request", None)
+    return runtime_state
+
+
+def _clear_player_turn_active(session_id: str, request_id: str, *, status: str) -> None:
+    session_id = _safe_str(session_id).strip()
+    if not session_id:
+        return
+    try:
+        session = load_runtime_session(session_id)
+        if session is None:
+            return
+        runtime_state = _copy_dict(session.get("runtime_state"))
+        marker = _safe_dict(runtime_state.get("active_player_turn_request"))
+        if _safe_str(marker.get("request_id")) != _safe_str(request_id):
+            return
+        marker = dict(marker)
+        marker["status"] = _safe_str(status or "completed")
+        marker["completed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        runtime_state["last_player_turn_request"] = marker
+        runtime_state.pop("active_player_turn_request", None)
+        session["runtime_state"] = runtime_state
+        save_runtime_session(session)
+    except Exception:
+        _logger.exception(
+            "[RPG TURN STREAM] active_marker_clear_failed session=%s req=%s",
+            session_id,
+            request_id,
+        )
 
 
 def _start_live_first_draft_thread(
@@ -366,46 +467,81 @@ async def execute_rpg_session_turn_stream(request: Request):
         return StreamingResponse(error_gen(), status_code=404, media_type="text/event-stream", headers=sse_headers)
 
     def generate():
+        turn_request_id = ""
+        active_marker_set = False
+        marker_status = "completed"
         try:
             turn_request_id = uuid.uuid4().hex[:12]
             t0 = time.monotonic()
+            authoritative_perf = _stream_authoritative_performance_override(request_performance)
             _logger.info(
-                "[RPG TURN STREAM] request_start session=%s req=%s input_len=%d",
+                "[RPG TURN STREAM] request_start session=%s req=%s input_len=%d foreground_llm=%s",
                 session_id,
                 turn_request_id,
                 len(player_input),
+                bool(
+                    authoritative_perf.get("enable_action_advisory")
+                    or authoritative_perf.get("enable_semantic_action_advisory")
+                ),
             )
 
             yield _sse({"type": "accepted"})
             yield _sse({"type": "processing", "stage": "authoritative_turn"})
 
-            authoritative_result = _apply_turn_authoritative(
+            _mark_player_turn_active(session_id, turn_request_id, player_input)
+            active_marker_set = True
+            t_authoritative_start = time.monotonic()
+            _logger.info(
+                "[RPG TURN STREAM] authoritative_start session=%s req=%s dt=%.3fs deferred_narration=%s advisory_enabled=%s semantic_advisory_enabled=%s",
                 session_id,
-                player_input,
-                action=action,
-                performance_override=request_performance or None,
+                turn_request_id,
+                t_authoritative_start - t0,
+                True,
+                bool(authoritative_perf.get("enable_action_advisory")),
+                bool(authoritative_perf.get("enable_semantic_action_advisory")),
             )
+            with rpg_llm_timing_context(
+                request_id=turn_request_id,
+                request_started_at=t0,
+                stage="turn_stream_authoritative",
+            ):
+                authoritative_result = _apply_turn_authoritative(
+                    session_id,
+                    player_input,
+                    action=action,
+                    performance_override=authoritative_perf,
+                )
             authoritative = _stream_authoritative_payload(authoritative_result)
             narration_request = _stream_narration_request(authoritative_result)
+            narration_perf = _stream_background_narration_performance(
+                request_performance,
+                _safe_dict(narration_request.get("performance")),
+            )
+            narration_request["performance"] = narration_perf
 
             t_authoritative_done = time.monotonic()
             _logger.info(
-                "[RPG TURN STREAM] authoritative_done session=%s req=%s dt=%.3fs ok=%s turn_id=%s tick=%s",
+                "[RPG TURN STREAM] authoritative_done session=%s req=%s dt=%.3fs authoritative_dt=%.3fs ok=%s turn_id=%s tick=%s foreground_narration_suppressed=%s foreground_semantic_advisory=%s",
                 session_id,
                 turn_request_id,
                 t_authoritative_done - t0,
+                t_authoritative_done - t_authoritative_start,
                 authoritative_result.get("ok"),
                 authoritative.get("turn_id"),
                 authoritative.get("tick"),
+                True,
+                bool(authoritative_perf.get("enable_semantic_action_advisory")),
             )
 
             if not authoritative_result.get("ok"):
                 err = _safe_str(authoritative_result.get("error") or "turn_failed")
+                marker_status = "failed"
                 yield _sse({"type": "error", "error": err})
                 return
 
             session = load_runtime_session(session_id)
             if session is None:
+                marker_status = "failed"
                 yield _sse({"type": "error", "error": "session_not_found_after_authoritative"})
                 return
             runtime_state = _copy_dict(session.get("runtime_state"))
@@ -422,7 +558,32 @@ async def execute_rpg_session_turn_stream(request: Request):
             live_first_draft_stream = _live_first_draft_enabled(perf)
 
             authoritative_turn_id = turn_id
-            narration_status = "streaming" if live_first_draft_stream else "queued"
+            authoritative_narration = _safe_str(
+                authoritative.get("narration")
+                or authoritative.get("final_narration")
+                or authoritative.get("raw_payload_narration")
+            ).strip()
+            deterministic_fallback_narration = _safe_str(
+                authoritative.get("deterministic_fallback_narration")
+            ).strip()
+            visible_fallback_narration = (
+                authoritative_narration
+                or deterministic_fallback_narration
+            )
+            authoritative_narration_completed = bool(
+                authoritative_narration
+                and _safe_str(authoritative.get("narration_status")).strip().lower() == "completed"
+            )
+            narration_status = (
+                "completed"
+                if authoritative_narration_completed
+                else ("streaming" if live_first_draft_stream else "queued")
+            )
+            display_fallback_narration = (
+                visible_fallback_narration
+                if narration_status == "completed"
+                else ""
+            )
 
             yield _sse({
                 "type": "authoritative_result",
@@ -437,13 +598,31 @@ async def execute_rpg_session_turn_stream(request: Request):
                 "summary": authoritative.get("summary"),
                 "presentation": authoritative.get("presentation"),
                 "response_length": authoritative.get("response_length"),
-                "fallback_narration": authoritative.get("deterministic_fallback_narration"),
+                "narration": authoritative_narration,
+                "final_narration": authoritative_narration,
+                "narration_json": authoritative.get("narration_json"),
+                "npc": authoritative.get("npc"),
+                "used_llm": authoritative.get("used_llm"),
+                "llm_called": authoritative.get("llm_called"),
+                "llm_purpose": authoritative.get("llm_purpose"),
+                "fallback_narration": display_fallback_narration,
+                "deterministic_fallback_narration": deterministic_fallback_narration,
+                "fallback_narration_source": authoritative.get("fallback_narration_source"),
                 "narration_status": narration_status,
                 "narration_job": {},
                 "live_draft_streaming": live_first_draft_stream,
             })
+            _logger.info(
+                "[RPG TURN STREAM] authoritative_result_sent session=%s req=%s dt=%.3fs turn_id=%s queued_live_narration=%s",
+                session_id,
+                turn_request_id,
+                time.monotonic() - t0,
+                authoritative_turn_id,
+                bool(narration_perf.get("enable_live_narration_llm")),
+            )
 
             if live_first_draft_stream:
+                marker_status = "streaming"
                 yield _sse({
                     "type": "processing",
                     "stage": "live_first_draft",
@@ -505,6 +684,9 @@ async def execute_rpg_session_turn_stream(request: Request):
                 if live_result.get("ok"):
                     artifact = _safe_dict(live_result.get("artifact"))
                     if artifact:
+                        marker_status = "completed"
+                        _clear_player_turn_active(session_id, turn_request_id, status=marker_status)
+                        active_marker_set = False
                         yield _sse({
                             "type": "narration_artifact",
                             **artifact,
@@ -530,12 +712,29 @@ async def execute_rpg_session_turn_stream(request: Request):
                 )
 
             # Fallback path: queue narration in the background worker.
+            runtime_state = _finish_player_turn_marker_in_state(
+                runtime_state,
+                turn_request_id,
+                status="queued",
+            )
             runtime_state, narration_job, is_new = _enqueue_and_signal_narration_job(
                 session_id,
                 runtime_state,
                 turn_id,
                 tick,
                 narration_request,
+            )
+            marker_status = "queued"
+            active_marker_set = False
+            _logger.info(
+                "[RPG TURN STREAM] narration_job_queued session=%s req=%s dt=%.3fs turn_id=%s status=%s is_new=%s live_llm=%s",
+                session_id,
+                turn_request_id,
+                time.monotonic() - t0,
+                authoritative_turn_id,
+                _safe_str((narration_job or {}).get("status") or "queued"),
+                is_new,
+                bool(narration_perf.get("enable_live_narration_llm")),
             )
 
             yield _sse({
@@ -553,12 +752,16 @@ async def execute_rpg_session_turn_stream(request: Request):
                 "live_draft_streaming": False,
             })
         except Exception as exc:
+            marker_status = "failed"
             _logger.exception("turn/stream failed")
             yield _sse({
                 "type": "error",
                 "error": str(exc) or "turn_stream_failed",
             })
             return
+        finally:
+            if active_marker_set and turn_request_id:
+                _clear_player_turn_active(session_id, turn_request_id, status=marker_status)
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers=sse_headers)
 
@@ -601,7 +804,8 @@ async def get_rpg_session_narration_status(request: Request):
 
     runtime_state = _safe_dict(session.get("runtime_state"))
     job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
-    artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+    raw_artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+    artifact = raw_artifact if _narration_artifact_completes_turn(raw_artifact) else {}
     job_status = _safe_str(job.get("status")).strip().lower()
 
     started = _safe_str(job.get("started_at"))
@@ -717,7 +921,8 @@ async def get_rpg_session_narration_status(request: Request):
     session = load_runtime_session(session_id)
     runtime_state = _safe_dict((session or {}).get("runtime_state"))
     job = _safe_dict(_safe_dict(runtime_state.get("narration_jobs_by_turn")).get(turn_id))
-    artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+    raw_artifact = _safe_dict(_safe_dict(runtime_state.get("narration_artifacts_by_turn")).get(turn_id))
+    artifact = raw_artifact if _narration_artifact_completes_turn(raw_artifact) else {}
 
     return JSONResponse({
         "ok": True,

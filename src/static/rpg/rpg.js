@@ -248,6 +248,20 @@
         );
     }
 
+    function hasRenderableNarrationArtifact(artifact) {
+        artifact = artifact || {};
+        const payload = getNarrationJson(artifact);
+        const npc = payload.npc || artifact.authoritative_npc || {};
+        return !!(
+            getFullNarrationText(artifact) ||
+            payload.narration ||
+            payload.action ||
+            payload.reward ||
+            npc.speaker ||
+            npc.line
+        );
+    }
+
     function normalizeDisplayedNarrationText(text, opts) {
         opts = opts || {};
         const isFinal = !!opts.isFinal;
@@ -266,6 +280,16 @@
         }
 
         return value;
+    }
+
+    function isWaitingForNarrationArtifactStatus(status) {
+        const value = coerceText(status).toLowerCase();
+        return (
+            value === 'queued' ||
+            value === 'processing' ||
+            value === 'pending' ||
+            value === 'streaming'
+        );
     }
 
     function buildSystemNoteHtml(label, text, variant) {
@@ -598,7 +622,7 @@
             return;
         }
 
-        const root = document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
+        const root = findTurnNarrationNode(turnId) || document.querySelector('[data-turn-id="' + CSS.escape(String(turnId)) + '"]');
         if (!root) {
             renderTurnNarration(
                 turnId,
@@ -615,6 +639,9 @@
 
         body.innerHTML = html;
         body.classList.add('rpg-turn-narration-body');
+        root.dataset.narrationState = 'final';
+        root.dataset.narrationVersion = String(Number(version || 0));
+        root.dataset.narrationArtifactRendered = 'true';
     }
 
     function _conversationKey(conversationId, tick, speaker, target) {
@@ -3055,7 +3082,7 @@
                 return;
             }
 
-            if (node.dataset.narrationState === 'final') {
+            if (node.dataset.narrationState === 'final' && node.dataset.narrationArtifactRendered === 'true') {
                 return; // duplicate/later repeat
             }
 
@@ -3072,6 +3099,7 @@
 
             node.dataset.narrationState = 'final';
             node.dataset.narrationVersion = String(incomingVersion);
+            node.dataset.narrationArtifactRendered = 'false';
             feed.scrollTop = feed.scrollHeight;
 
             // Speak narration
@@ -3113,7 +3141,7 @@
                 artifact: artifact,
             });
 
-            if (turnId && !artifact.narration) {
+            if (turnId && !hasRenderableNarrationArtifact(artifact)) {
                 updateTurnNarrationPlaceholder(
                     turnId,
                     _safeStr(job.status || "queued"),
@@ -3122,10 +3150,12 @@
                 );
             }
 
-              if (artifact.narration) {
+              if (hasRenderableNarrationArtifact(artifact)) {
                   console.log("[Narration] Artifact found, rendering", { turnId, attempt });
                   renderOrUpdateNarrationMessage(turnId, getFullNarrationText(artifact), { isFinal: true, version: artifact.version || 1 });
                   renderTurnNarrationStructured(turnId, artifact, artifact.version || 1);
+                  clearNarrationPlaceholder(turnId);
+                  resetStreamingNarrationState(turnId);
                   updateState({ isGeneratingNarration: false });
                  return;
              }
@@ -3386,8 +3416,8 @@
             var turnId = evt.turn_id;
             if (!turnId) return;
 
-            const existing = (rpgState.messages || []).find(m => m && m.turnId === turnId);
-            if (existing && existing.isFinal) return;
+            const existingNode = findTurnNarrationNode(turnId);
+            if (existingNode && existingNode.dataset.narrationArtifactRendered === 'true') return;
 
             renderOrUpdateNarrationMessage(
                 turnId,
@@ -3715,7 +3745,12 @@
             }
         });
 
-        if (data.narration) {
+        var waitingForDeferredNarration = (
+            isWaitingForNarrationArtifactStatus(data.narration_status || data.status) &&
+            !data.narration_artifact
+        );
+
+        if (data.narration && !waitingForDeferredNarration) {
             messages.push({ type: 'narration', content: getNarrationMarkdown(data) });
         }
         if (Array.isArray(data.ambient_updates) && data.ambient_updates.length) {
@@ -4202,7 +4237,10 @@
                     });
                 } else {
                     // Show narration pending with badge
-                    const fallbackContent = coerceText(data.fallback_narration || data.deterministic_fallback_narration);
+                    const shouldWaitForNarrationArtifact = isWaitingForNarrationArtifactStatus(data.narration_status || data.status);
+                    const fallbackContent = shouldWaitForNarrationArtifact
+                        ? ''
+                        : coerceText(data.fallback_narration || data.deterministic_fallback_narration);
                     if (fallbackContent) {
                         appendMessage({
                             type: 'narration',

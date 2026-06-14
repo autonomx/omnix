@@ -227,6 +227,11 @@
         if (!event.turn_id) {
             event.turn_id = 'client_turn_' + Date.now();
         }
+        var status = safeStr(event.narration_status || event.status).trim().toLowerCase();
+        if (status === 'queued' || status === 'processing' || status === 'pending' || status === 'streaming') {
+            event.fallback_narration = '';
+            return event;
+        }
         var fallback = event.fallback_narration || event.deterministic_fallback_narration || event.summary || 'The action resolves, and the scene waits for your next move.';
         event.fallback_narration = improveFallbackForCurrentCommand(fallback);
         return event;

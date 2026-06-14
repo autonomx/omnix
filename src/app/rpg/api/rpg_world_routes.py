@@ -8,6 +8,14 @@ from app.rpg.api.rpg_session_payloads import _safe_dict, _safe_list, _safe_str
 from app.rpg.session.runtime import load_runtime_session, save_runtime_session
 
 
+def _player_turn_request_active(runtime_state: dict) -> bool:
+    marker = _safe_dict(_safe_dict(runtime_state).get("active_player_turn_request"))
+    status = _safe_str(marker.get("status")).strip().lower()
+    if status not in {"starting", "applying", "streaming"}:
+        return False
+    return not bool(_safe_str(marker.get("completed_at")).strip())
+
+
 async def get_rpg_session_world_events(request: Request):
     """Return cached recent world event rows from runtime state."""
     data = await request.json()
@@ -39,6 +47,24 @@ async def get_rpg_session_world_events(request: Request):
     simulation_state = _safe_dict(session.get("simulation_state"))
     runtime_state = _safe_dict(session.get("runtime_state"))
     recent_rows = _safe_list(runtime_state.get("recent_world_event_rows"))[-48:]
+
+    if _player_turn_request_active(runtime_state):
+        return {
+            "ok": True,
+            "recent_world_event_rows": recent_rows,
+            "player_world_view_rows": [],
+            "player_local_world_view_rows": [],
+            "player_global_world_view_rows": [],
+            "active_player_turn": True,
+            "debug_world_events": {
+                "recent_world_event_rows_count": len(recent_rows),
+                "player_world_view_rows_count": 0,
+                "player_local_world_view_rows_count": 0,
+                "player_global_world_view_rows_count": 0,
+                "recent_world_event_row_ids": [_safe_str(r.get("event_id")) for r in recent_rows],
+                "deferred_due_to_active_player_turn": True,
+            },
+        }
 
     from app.rpg.analytics.world_events import (
         build_player_global_world_view_rows,

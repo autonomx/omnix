@@ -50,6 +50,14 @@ def _semantic_capture_already_active(runtime_state: dict) -> bool:
     return _safe_str(capture.get("status")).strip().lower() == "running"
 
 
+def _player_turn_request_active(runtime_state: dict) -> bool:
+    marker = _safe_dict(_safe_dict(runtime_state).get("active_player_turn_request"))
+    status = _safe_str(marker.get("status")).strip().lower()
+    if status not in {"starting", "applying", "streaming"}:
+        return False
+    return not bool(_safe_str(marker.get("completed_at")).strip())
+
+
 def _mark_semantic_capture_worker(session_id: str, status: str, reason: str = "") -> None:
     try:
         session = load_runtime_session(session_id)
@@ -85,6 +93,9 @@ def _run_semantic_capture_background(session_id: str, reason: str = "idle_tick")
     if session is None:
         return False
     runtime_state = _safe_dict(session.get("runtime_state"))
+    if _player_turn_request_active(runtime_state):
+        print("[RPG][idle_tick] semantic capture skipped: active player turn")
+        return False
     if _semantic_capture_already_active(runtime_state):
         return False
 
@@ -293,7 +304,10 @@ async def idle_tick_rpg_session(request: Request):
             rt = _safe_dict(session.get("runtime_state"))
             print("POST-IDLE SIM TICK =", sim.get("tick"), sim.get("current_tick"))
             print("POST-IDLE RUNTIME TICK =", rt.get("tick"))
-            if not _safe_list(rt.get("recorded_semantic_llm_proposals")):
+            if (
+                not _player_turn_request_active(rt)
+                and not _safe_list(rt.get("recorded_semantic_llm_proposals"))
+            ):
                 _run_semantic_capture_background(session_id, reason="post_idle_tick")
 
         return {

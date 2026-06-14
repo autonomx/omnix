@@ -36,8 +36,15 @@ def _phase8_part34_has_structured_llm_payload(source: Dict[str, Any]) -> bool:
     source = _safe_dict(source)
     fallback_source = _safe_str(source.get("fallback_narration_source")).strip()
     if fallback_source in _PHASE8_PART37_LLM_SOURCES:
-        return True
+        return not _narration_artifact_is_echo_fallback(source)
     if source.get("used_llm") is True or source.get("llm_called") is True:
+        return _narration_artifact_has_structured_llm_content(source)
+
+    semantic_visible = _safe_dict(
+        source.get("semantic_visible_response")
+        or source.get("visible_response")
+    )
+    if semantic_visible and _safe_str(source.get("semantic_family")).strip():
         return True
 
     raw = source.get("raw_llm_narrative")
@@ -81,6 +88,11 @@ def _phase8_part37_completed_llm_fields(payload: Dict[str, Any]) -> Dict[str, An
             or source.get("deterministic_fallback_narration")
         )
         if not text:
+            continue
+        candidate = dict(source)
+        candidate["final_narration"] = text
+        candidate["narration"] = text
+        if _narration_artifact_is_echo_fallback(candidate):
             continue
         return {
             "narration": text,
@@ -137,8 +149,7 @@ def _phase8_part37_persist_llm_artifact(session_id: str, payload: Dict[str, Any]
     runtime_state = _copy_dict(session.get("runtime_state"))
     by_turn = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
     existing = _safe_dict(by_turn.get(turn_id))
-    existing_source = _safe_str(existing.get("fallback_narration_source") or existing.get("source")).strip()
-    if existing and existing.get("used_llm") is True and existing_source not in {"deterministic", "deterministic_fallback"}:
+    if existing and _narration_artifact_completes_turn(existing):
         return
 
     artifact = {

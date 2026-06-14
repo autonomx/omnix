@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import html
+import os
+import shutil
+import subprocess
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
@@ -9,6 +14,117 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Res
 from app.launcher.service_manager import LAUNCHER_MANAGER_VERSION, get_default_manager
 
 app = FastAPI(title="Omnix Launcher Control", version=LAUNCHER_MANAGER_VERSION)
+
+_DEFAULT_APP_OPEN_URL = "http://localhost:5000/"
+
+
+def _app_open_url() -> str:
+    url = (
+        os.environ.get("OMNIX_APP_OPEN_URL")
+        or os.environ.get("OMNIX_APP_PRIVATE_URL")
+        or _DEFAULT_APP_OPEN_URL
+    ).strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"invalid OMNIX_APP_OPEN_URL: {url!r}")
+    return url
+
+
+def _candidate_browser_paths() -> list[str]:
+    candidates: list[str] = []
+    configured = os.environ.get("OMNIX_PRIVATE_BROWSER") or os.environ.get("OMNIX_BROWSER_EXE")
+    if configured:
+        candidates.append(configured)
+
+    for executable in (
+        "chrome",
+        "chrome.exe",
+        "msedge",
+        "msedge.exe",
+        "brave",
+        "brave.exe",
+        "firefox",
+        "firefox.exe",
+    ):
+        found = shutil.which(executable)
+        if found:
+            candidates.append(found)
+
+    if os.name == "nt":
+        roots = [
+            os.environ.get("LOCALAPPDATA", ""),
+            os.environ.get("PROGRAMFILES", ""),
+            os.environ.get("PROGRAMFILES(X86)", ""),
+        ]
+        relative_paths = [
+            ("Google", "Chrome", "Application", "chrome.exe"),
+            ("Microsoft", "Edge", "Application", "msedge.exe"),
+            ("BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            ("Mozilla Firefox", "firefox.exe"),
+        ]
+        for root in roots:
+            if not root:
+                continue
+            for parts in relative_paths:
+                path = Path(root).joinpath(*parts)
+                if path.exists():
+                    candidates.append(str(path))
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate).casefold()
+        if key and key not in seen:
+            unique.append(str(candidate))
+            seen.add(key)
+    return unique
+
+
+def _private_browser_command(browser_path: str, url: str) -> list[str]:
+    name = Path(browser_path).name.casefold()
+    if "firefox" in name:
+        return [browser_path, "-private-window", url]
+    if "msedge" in name:
+        return [browser_path, "--new-window", "--inprivate", url]
+    return [browser_path, "--new-window", "--incognito", url]
+
+
+def _open_app_private_browser() -> dict[str, Any]:
+    url = _app_open_url()
+    errors: list[str] = []
+    for browser_path in _candidate_browser_paths():
+        command = _private_browser_command(browser_path, url)
+        try:
+            creationflags = 0
+            if os.name == "nt":
+                creationflags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+                    subprocess,
+                    "CREATE_NEW_PROCESS_GROUP",
+                    0,
+                )
+            subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+                creationflags=creationflags,
+            )
+            return {
+                "ok": True,
+                "url": url,
+                "browser": browser_path,
+                "private_mode": True,
+            }
+        except Exception as exc:
+            errors.append(f"{browser_path}: {type(exc).__name__}: {exc}")
+
+    return {
+        "ok": False,
+        "url": url,
+        "error": "No supported browser executable was found. Set OMNIX_PRIVATE_BROWSER to chrome.exe, msedge.exe, brave.exe, or firefox.exe.",
+        "details": errors,
+    }
 
 _HTML = r"""
 <!doctype html>
@@ -60,6 +176,7 @@ _HTML = r"""
   <textarea id="copy-source" class="copy-source" aria-hidden="true" tabindex="-1"></textarea>
   <div class="toolbar">
     <button id="start-auto" type="button">Start enabled services</button>
+    <button id="open-app-private" type="button">Open app privately</button>
     <button id="stop-all" class="stop" type="button">Stop all</button>
   </div>
   <div id="services" class="grid"></div>
@@ -152,6 +269,20 @@ _HTML = r"""
     }
   }
 
+  async function openAppPrivate() {
+    if (busy) return;
+    busy = true;
+    showError('');
+    try {
+      const result = await api('/api/open-app-private', { method: 'POST' });
+      showNotice(`Opened ${result.url || 'app'} in a private browser window`);
+    } catch (error) {
+      showError(error && error.message ? error.message : String(error));
+    } finally {
+      busy = false;
+    }
+  }
+
   function render(service) {
     const running = service.status === 'running';
     const disabled = service.status === 'disabled' || !service.enabled;
@@ -182,6 +313,7 @@ _HTML = r"""
   }
 
   byId('start-auto').addEventListener('click', () => runAction('/api/services/start-auto'));
+  byId('open-app-private').addEventListener('click', openAppPrivate);
   byId('stop-all').addEventListener('click', () => runAction('/api/services/stop-all'));
   servicesEl.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-service-id][data-action]');
@@ -229,6 +361,14 @@ def start_auto_services() -> dict[str, Any]:
 @app.post("/api/services/stop-all")
 def stop_all_services() -> dict[str, Any]:
     return get_default_manager().stop_all()
+
+
+@app.post("/api/open-app-private")
+def open_app_private() -> dict[str, Any]:
+    result = _open_app_private_browser()
+    if not result.get("ok"):
+        raise HTTPException(status_code=500, detail=result)
+    return result
 
 
 @app.get("/api/services/{service_id}")

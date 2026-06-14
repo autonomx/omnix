@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.launcher import control_app as launcher_control_app
 from app.launcher import service_manager as launcher_service_manager
 from app.launcher.control_app import app
 from app.launcher.service_manager import LauncherServiceManager, ServiceSpec, build_default_service_specs, reset_default_manager_for_tests
@@ -107,8 +108,10 @@ def test_launcher_dashboard_html_uses_safe_script_and_event_handlers() -> None:
     assert "join('\n')" not in text
     assert "onclick=" not in text
     assert "id=\"start-auto\"" in text
+    assert "id=\"open-app-private\"" in text
     assert "id=\"stop-all\"" in text
     assert "addEventListener('click'" in text
+    assert "addEventListener('click', openAppPrivate)" in text
     assert "data-service-id=" in text
     assert "data-action=\"start\"" in text
 
@@ -163,12 +166,44 @@ def test_launcher_dashboard_rejects_unknown_service() -> None:
     assert response.status_code == 404
 
 
+def test_launcher_dashboard_private_app_button_opens_private_browser(monkeypatch) -> None:
+    launched: list[list[str]] = []
+
+    monkeypatch.setenv("OMNIX_APP_OPEN_URL", "http://localhost:500/")
+    monkeypatch.delenv("OMNIX_PRIVATE_BROWSER", raising=False)
+    monkeypatch.delenv("OMNIX_BROWSER_EXE", raising=False)
+    monkeypatch.setattr(
+        launcher_control_app.shutil,
+        "which",
+        lambda name: "C:/Browser/msedge.exe" if name in {"msedge", "msedge.exe"} else None,
+    )
+    monkeypatch.setattr(launcher_control_app.Path, "exists", lambda _self: False)
+
+    def fake_popen(command, **_kwargs):
+        launched.append(command)
+
+        class FakeProcess:
+            pid = 12345
+
+        return FakeProcess()
+
+    monkeypatch.setattr(launcher_control_app.subprocess, "Popen", fake_popen)
+
+    client = TestClient(app)
+    response = client.post("/api/open-app-private")
+
+    assert response.status_code == 200
+    assert response.json()["url"] == "http://localhost:500/"
+    assert launched == [["C:/Browser/msedge.exe", "--new-window", "--inprivate", "http://localhost:500/"]]
+
+
 def test_start_all_routes_through_launcher_dashboard() -> None:
     text = Path("start_all.bat").read_text(encoding="utf-8")
 
     assert "app.launcher.control_app:app" in text
     assert "--port 5055" in text
     assert "Launcher Control" in text
+    assert "OMNIX_APP_OPEN_URL" in text
     assert 'start "Parakeet STT"' not in text
     assert 'start "Omnix TTS"' not in text
     assert 'start "Omnix FastAPI"' not in text
