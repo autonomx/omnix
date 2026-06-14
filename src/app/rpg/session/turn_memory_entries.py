@@ -6,7 +6,6 @@ from typing import Any, Mapping
 from app.rpg.session.turn_memory_common import (
     action_type,
     d,
-    extract_player_memory_facts,
     first,
     i,
     l,
@@ -16,6 +15,7 @@ from app.rpg.session.turn_memory_common import (
     simulation_state,
     summary,
 )
+from app.rpg.session.turn_memory_facts import extract_player_memory_facts
 
 
 def _topic_tags(player_input: str, resolved_action_type: str, facts: list[dict[str, str]]) -> list[str]:
