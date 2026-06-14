@@ -97,14 +97,6 @@ def _install_optional_fast_runtime_hooks() -> None:
         # Agency-option attachment must never block normal session imports.
         return
 
-    try:
-        from .turn_memory_runtime_hook import install_turn_memory_runtime_hook
-
-        install_turn_memory_runtime_hook()
-    except Exception:
-        # Turn-memory attachment must never block normal session imports.
-        return
-
 
 _install_optional_fast_runtime_hooks()
 
