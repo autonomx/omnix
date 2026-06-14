@@ -27,8 +27,10 @@ describe('OmnixApp', () => {
     expect(screen.getByRole('button', { name: 'STT' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Image Generation' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Providers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Models' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Jobs / Runs' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assets' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reports' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Diagnostics' })).toBeInTheDocument();
   });

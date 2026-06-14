@@ -10,8 +10,10 @@ const modules = [
   'STT',
   'Image Generation',
   'Providers',
+  'Models',
   'Jobs / Runs',
   'Assets',
+  'Reports',
   'Settings',
   'Diagnostics',
 ];
@@ -31,6 +33,6 @@ test('module navigation keeps features in the shared shell', async ({ page }) =>
   await page.getByRole('button', { name: 'Podcast' }).click();
 
   await expect(page).toHaveURL(/\/podcast$/);
-  await expect(page.getByRole('heading', { name: 'Podcast' })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Podcast', level: 2 })).toBeVisible();
   await expect(page.getByText('Uses the shared app shell.')).toBeVisible();
 });

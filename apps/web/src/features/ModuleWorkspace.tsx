@@ -10,8 +10,10 @@ const moduleCapabilities: Record<string, string[]> = {
   stt: ['Audio ingestion', 'Transcription jobs', 'Transcript assets', 'Alignment'],
   'image-generation': ['Prompting', 'Image jobs', 'Asset gallery', 'Provider diagnostics'],
   providers: ['Provider registry', 'Model discovery', 'Health checks', 'Capabilities'],
+  models: ['Installed models', 'Remote models', 'Capability mapping', 'Resource hints'],
   jobs: ['Run queue', 'Progress events', 'Logs', 'History'],
   assets: ['Audio', 'Images', 'Transcripts', 'Reports', 'Checkpoints'],
+  reports: ['Run reports', 'RPG autoplay evidence', 'Diagnostics exports', 'Generated documents'],
   settings: ['Global settings', 'Provider settings', 'Model settings', 'Local services'],
   diagnostics: ['Health checks', 'Event stream', 'Logs', 'Troubleshooting'],
 };

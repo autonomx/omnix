@@ -6,13 +6,24 @@ The roadmap is intentionally ordered to avoid the biggest risk: creating third i
 
 This roadmap is also ordered to avoid a second risk: building backend contracts before the type-generation path exists. A minimal FastAPI gateway and OpenAPI type generation must land early enough that later backend consolidation phases can publish typed contracts as they are built.
 
+## Implementation Status
+
+Last updated: 2026-06-14
+
+| Phase | Status | Evidence |
+| --- | --- | --- |
+| Phase 0 - Architecture Design Hardening | Implemented | `docs/WEB_APP_INFRASTRUCTURE.md` now records as-built drift, target stack decisions, the FastAPI gateway/worker split, single-user-for-now owner seams, resource-aware jobs, and data preservation requirements. |
+| Phase 1 - Tiny Frontend Alignment Patch | Implemented | `apps/web/src/app/modules.ts` now includes all 15 canonical modules in order, including `models` and `reports`; app shell, registry, and Playwright entrypoint tests cover the new modules. |
+| Phase 2 - Event Client Hardening | Implemented | `apps/web/src/events/eventClient.ts` now owns one multiplexed SSE connection, named-event subscriptions, connection status, reconnect backoff, listener rebinding, clean close behavior, pending reconnect cancellation, and an `eventSourceFactory` seam with focused Vitest coverage. |
+| Phase 3 - Backend Reality Inventory and Feasibility Notes | Next | Inventory existing jobs, providers, assets, prompts, replay, and persistence before any consolidation implementation. |
+
 ## Current Branch Baseline
 
 The `rpg` branch already contains an early `apps/web` React/Vite scaffold and a legacy Python/Flask-oriented application. The current architecture standard is documented in `docs/WEB_APP_INFRASTRUCTURE.md`, but the branch still has known drift:
 
-- The module registry currently omits `models` and `reports` even though the architecture names them as platform modules.
+- The module registry now includes the canonical 15 modules, but the module workspaces are still placeholders.
 - Routing is still hand-rolled in the web shell rather than using the chosen router.
-- The event client is basic and needs reconnection, status, and auth-aware transport seams.
+- The event client now owns reconnect, status, listener rebinding, and a test/future auth-aware transport seam.
 - The browser UI still has legacy Flask/static entrypoints.
 - The backend is not greenfield: job queues, provider registries, asset handling, prompt builders, and RPG replay/persistence already exist in different forms.
 - Heavy model work must remain outside the gateway process because local GPU/VRAM residency is the core runtime constraint.
@@ -769,10 +780,10 @@ Rollback:
 
 Use this order for the next work items:
 
-1. Harden `docs/WEB_APP_INFRASTRUCTURE.md` with the complete design.
-2. Add `models` and `reports` to `modules.ts`.
-3. Upgrade the shared event client and tests.
-4. Add backend inventory and feasibility docs for jobs/providers/assets/prompts/replay/data.
+1. Done 2026-06-14: Harden `docs/WEB_APP_INFRASTRUCTURE.md` with the complete design.
+2. Done 2026-06-14: Add `models` and `reports` to `modules.ts`.
+3. Done 2026-06-14: Upgrade the shared event client and tests.
+4. Next: Add backend inventory and feasibility docs for jobs/providers/assets/prompts/replay/data.
 5. Stand up the thin FastAPI gateway foundation and `/openapi.json`.
 6. Define the worker health contract and mock-worker mode.
 7. Add minimal OpenAPI type generation.

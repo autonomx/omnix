@@ -8,8 +8,10 @@ export type OmnixModuleId =
   | 'stt'
   | 'image-generation'
   | 'providers'
+  | 'models'
   | 'jobs'
   | 'assets'
+  | 'reports'
   | 'settings'
   | 'diagnostics';
 
@@ -76,6 +78,12 @@ export const omnixModules: OmnixModuleDefinition[] = [
     route: '/providers',
   },
   {
+    id: 'models',
+    label: 'Models',
+    summary: 'Installed and remote models, capability mapping, defaults, and resource hints.',
+    route: '/models',
+  },
+  {
     id: 'jobs',
     label: 'Jobs / Runs',
     summary: 'Shared long-running job queue, run history, progress, and logs.',
@@ -86,6 +94,12 @@ export const omnixModules: OmnixModuleDefinition[] = [
     label: 'Assets',
     summary: 'Generated audio, images, transcripts, reports, checkpoints, and exports.',
     route: '/assets',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    summary: 'Run reports, RPG autoplay evidence, diagnostics exports, and generated documents.',
+    route: '/reports',
   },
   {
     id: 'settings',

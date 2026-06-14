@@ -4,6 +4,20 @@ Omnix is a modular local-first AI workstation. It must behave like one coherent 
 
 This is a documentation-only architecture decision. It defines the target platform standard and migration rules; it does not imply that the infrastructure has already been implemented.
 
+## Current Implementation Reality
+
+As of 2026-06-14, Omnix has an early `apps/web` React/Vite shell and a legacy Python/Flask-oriented browser path. The shared shell is the target browser UI, but the legacy UI remains available until feature parity and data compatibility are proven.
+
+Known implementation drift:
+
+- The web shell is still using temporary hand-rolled history navigation.
+- TanStack Router is the selected router, but it has not been wired yet.
+- Mantine is the selected design-system base, but the current shell still uses local CSS.
+- OpenAPI type generation is selected, but generated frontend API types are not wired yet.
+- A thin FastAPI gateway is the target API surface, but legacy backend entrypoints still exist.
+- Job queues, provider registries, asset stores, prompt builders, replay, diagnostics, and worker health behavior already exist in multiple backend locations and must be consolidated before feature modules depend on them.
+- Model inference must remain in worker processes outside the gateway so local GPU/VRAM residency can be managed deliberately.
+
 ## Scope
 
 The shared infrastructure applies to the entire Omnix application, including:
@@ -37,18 +51,41 @@ Target standard:
 
 ```text
 Frontend runtime: React + TypeScript + Vite
+Routing:          TanStack Router
 Server state:     TanStack Query
 Local UI state:   Zustand
 Forms:            React Hook Form
-Validation:       Zod
-API typing:       OpenAPI-generated TypeScript types where practical
-Styling:          Shared Omnix design system
+API typing:       openapi-typescript generated from FastAPI /openapi.json
+Validation:       Zod at runtime trust boundaries only
+Design system:    Mantine + Omnix theme tokens
 Testing:          Vitest + Playwright
-Realtime:         Shared SSE/WebSocket event client
-Backend:          FastAPI + Pydantic
+Realtime:         Shared SSE-first event client; WebSocket only when needed
+Backend:          FastAPI gateway / orchestrator
+Workers:          Separate model/inference services behind the gateway
 ```
 
 The existing legacy UI may remain temporarily during migration. New browser-facing work should be designed for the shared web app, not for legacy standalone entrypoints.
+
+## Deployment, Identity, and Process Boundary
+
+Omnix is single-user for now. Platform contracts must still reserve an owner boundary for sessions, jobs, assets, saves, settings, and reports so future multi-user or profile-aware work does not require data-shape churn.
+
+The FastAPI gateway is one browser-facing API surface, not one monolithic process. The gateway owns HTTP contracts, OpenAPI schema exposure, compatibility handoff, worker discovery, worker health aggregation, diagnostics, and orchestration. Model-heavy LLM, TTS, STT, image, and voice-cloning work must run in separate worker services and be called only through the gateway.
+
+Gateway-to-worker rules:
+
+- Worker URLs come from configuration or environment variables, not feature modules.
+- The browser never calls model workers directly.
+- Worker health uses a shared envelope with `ok`, `status`, `details`, and `error`.
+- Unreachable workers degrade gateway runtime status and diagnostics instead of crashing startup.
+- Large generated audio/image/report artifacts should be returned by asset reference where practical.
+- Base64 media payloads are transitional only.
+
+## Data Preservation Requirement
+
+Existing on-disk user data must remain readable or migrate safely before legacy paths are retired. This includes RPG saves and checkpoints, settings files, generated reports, voice samples, voice profiles, audio outputs, image assets, transcripts, local artifacts, and replay/capture records.
+
+Any schema or storage migration must define compatibility read-through or a dry-run migration path, rollback behavior, missing-file diagnostics, and tests around representative existing data.
 
 ## Non-Negotiable Rules
 
@@ -213,7 +250,7 @@ Use Server-Sent Events first for one-way backend-to-frontend updates:
 
 Use WebSockets only where bidirectional realtime behavior is necessary, such as live voice conversation.
 
-Feature modules must not create incompatible custom realtime transports.
+Feature modules must not create incompatible custom realtime transports. The shared event client must own connection status, reconnect behavior, listener rebinding, clean close semantics, and a transport factory seam for tests and future auth-aware transports.
 
 ## Shared Systems
 
@@ -256,6 +293,8 @@ batch diagnostics
 ```
 
 Jobs should expose status, progress, logs, errors, output assets, and cancellation where practical.
+
+Jobs must be resource-aware from the first shared contract. The initial scheduler uses a safe single local GPU lock by default, records a resource class for every job, allows network/cloud jobs to bypass the local GPU lock, and bounds CPU concurrency. Future VRAM-aware co-residency is an explicit later upgrade, not an implied behavior.
 
 ### Asset and Artifact System
 

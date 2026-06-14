@@ -87,6 +87,10 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+node_modules/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/tsconfig.tsbuildinfo
 
 # Jupyter
 .ipynb_checkpoints/

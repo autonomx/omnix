@@ -15,5 +15,7 @@
     "web:typecheck": "npm --workspace @omnix/web run typecheck"
   },
   "dependencies": {},
-  "devDependencies": {}
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
 }
