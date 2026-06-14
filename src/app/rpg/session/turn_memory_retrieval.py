@@ -7,10 +7,10 @@ from app.rpg.session.turn_memory_common import (
     RETRIEVAL_LIMIT,
     bounded,
     d,
-    i,
     l,
     s,
 )
+from app.rpg.session.turn_memory_order import memory_order
 from app.rpg.session.turn_memory_rank import memory_score
 from app.rpg.session.turn_memory_retrieval_helpers import memory_tokens, memory_visible
 
@@ -30,16 +30,15 @@ def retrieve_relevant_memories(
     scored: list[tuple[float, dict[str, Any]]] = []
     memories = bounded(l(d(memory).get("dialogue_memories")), DIALOGUE_MEMORY_LIMIT)
     for entry in memories:
-        if not memory_visible(entry, addressed_actor_id):
-            continue
-        score = memory_score(
-            entry,
-            tokens=tokens,
-            recall=recall,
-            actor_id=addressed_actor_id,
-            location_id=location_id,
-        )
-        if score > 0:
-            scored.append((score, entry))
-    scored.sort(key=lambda item: (-item[0], -i(item[1].get("tick")), s(item[1].get("id"))))
+        if memory_visible(entry, addressed_actor_id):
+            score = memory_score(
+                entry,
+                tokens=tokens,
+                recall=recall,
+                actor_id=addressed_actor_id,
+                location_id=location_id,
+            )
+            if score > 0:
+                scored.append((score, entry))
+    scored.sort(key=memory_order)
     return [dict(entry, retrieval_score=round(score, 3)) for score, entry in scored[:limit]]
