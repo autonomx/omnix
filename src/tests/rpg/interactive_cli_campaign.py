@@ -27,8 +27,6 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from app.rpg.survival_report_artifacts import write_survival_report_artifacts  # noqa: E402
-from app.rpg.session.deferred_narration_guard import deferred_runtime_narration_context  # noqa: E402
 from rpg.interactive_cli_commerce_followup import (  # noqa: E402
     apply_commerce_followup_repair,
     extract_service_offer_context,
@@ -38,7 +36,20 @@ from rpg.interactive_cli_intent_fallback import (  # noqa: E402
     narration_source_for_turn,
 )
 from rpg.interactive_cli_quest_followup import apply_quest_followup_repair  # noqa: E402
-from rpg.interactive_cli_survival_repair import apply_survival_visible_response_repair  # noqa: E402
+from rpg.interactive_cli_survival_repair import (  # noqa: E402
+    apply_survival_visible_response_repair,
+)
+
+from app.rpg.session.deferred_narration_guard import (  # noqa: E402
+    deferred_runtime_narration_context,
+)
+from app.rpg.session.memory_debug_report import (  # noqa: E402
+    build_memory_debug_report_payload,
+    render_memory_debug_report_html,
+)
+from app.rpg.survival_report_artifacts import (  # noqa: E402
+    write_survival_report_artifacts,
+)
 from tests.rpg.manual.live_survival_seed import seed_live_survival_session  # noqa: E402
 from tests.rpg.manual.perf_trace import (  # noqa: E402
     clear_manual_harness_trace,
@@ -55,7 +66,10 @@ from tests.rpg.manual.session_helpers import (  # noqa: E402
     _ensure_manual_session,
     _reset_manual_session_artifacts,
 )
-from tests.rpg.manual.turn_execution import _extract_narration, _run_one_manual_turn  # noqa: E402
+from tests.rpg.manual.turn_execution import (  # noqa: E402
+    _extract_narration,
+    _run_one_manual_turn,
+)
 
 INTERACTIVE_CLI_CAMPAIGN_VERSION = "interactive_cli_campaign_v4"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results"
@@ -230,6 +244,7 @@ def _turn_report_row(turn_summary: Mapping[str, Any]) -> Dict[str, Any]:
         "interactive_cli_quest_followup": _safe_dict(turn_summary.get("interactive_cli_quest_followup")),
         "interactive_cli_survival_repair": _safe_dict(turn_summary.get("interactive_cli_survival_repair")),
         "interactive_cli_performance": _safe_dict(turn_summary.get("interactive_cli_performance")),
+        "memory_debug_report": build_memory_debug_report_payload(turn_summary),
         "narration_source": _safe_str(turn_summary.get("narration_source")),
     }
 
@@ -312,6 +327,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
         perf = _safe_dict(turn.get("interactive_cli_performance"))
         harness = _safe_dict(perf.get("manual_harness_trace_summary"))
         narration_source = _safe_str(turn.get("narration_source") or narration_source_for_turn(turn))
+        memory_debug_html = render_memory_debug_report_html(build_memory_debug_report_payload(turn))
         commerce_html = "<p><strong>Commerce follow-up:</strong> answered from authoritative service offers.</p>" if commerce.get("applied") else ""
         quest_html = ""
         if quest.get("applied"):
@@ -361,6 +377,7 @@ def render_interactive_campaign_html(summary: Mapping[str, Any], turns: Sequence
             commerce_html,
             quest_html,
             perf_html,
+            memory_debug_html,
             diagnostics_html,
             "<details><summary>Warnings</summary><ul>",
             warning_html,
