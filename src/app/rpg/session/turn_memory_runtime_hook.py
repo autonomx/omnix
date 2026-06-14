@@ -4,11 +4,9 @@ import sys
 from types import ModuleType
 
 from app.rpg.session.turn_memory_runtime_attach import attach_turn_memory_to_runtime_result
+from app.rpg.session.turn_memory_runtime_force import force_install_turn_memory_runtime_hook_for_tests
 from app.rpg.session.turn_memory_runtime_import_hook import install_post_import_finder, preserve_player_agency_hook
-from app.rpg.session.turn_memory_runtime_patch import (
-    force_install_turn_memory_runtime_hook_for_tests,
-    patch_interactive_module,
-)
+from app.rpg.session.turn_memory_runtime_patch import patch_interactive_module
 
 _INTERACTIVE_MODULE = "app.rpg.session.interactive_first_call_runtime"
 
