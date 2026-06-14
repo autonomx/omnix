@@ -3,7 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Mapping
 
-from app.rpg.session.turn_memory_limits import DIALOGUE_MEMORY_LIMIT, FORMAT_VERSION, RECENT_TURN_LIMIT
+FORMAT_VERSION = "rpg_turn_memory_contract_v1"
+RECENT_TURN_LIMIT = 12
+DIALOGUE_MEMORY_LIMIT = 20
+RETRIEVAL_LIMIT = 5
 
 
 def d(value: Any) -> dict[str, Any]:
@@ -19,10 +22,8 @@ def s(value: Any) -> str:
 
 
 def i(value: Any, default: int = 0) -> int:
-    if isinstance(value, bool):
-        return default
     try:
-        return int(value)
+        return default if isinstance(value, bool) else int(value)
     except (TypeError, ValueError):
         return default
 
@@ -37,6 +38,8 @@ def bounded(values: list[Any], limit: int) -> list[dict[str, Any]]:
 
 def memory_state(session: Mapping[str, Any] | None) -> dict[str, Any]:
     memory = d(d(d(session).get("runtime_state")).get("turn_memory"))
-    return {"format_version": FORMAT_VERSION,
+    return {
+        "format_version": FORMAT_VERSION,
         "recent_turns": bounded(l(memory.get("recent_turns")), RECENT_TURN_LIMIT),
-        "dialogue_memories": bounded(l(memory.get("dialogue_memories")), DIALOGUE_MEMORY_LIMIT)}
+        "dialogue_memories": bounded(l(memory.get("dialogue_memories")), DIALOGUE_MEMORY_LIMIT),
+    }
