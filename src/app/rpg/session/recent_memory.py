@@ -22,5 +22,4 @@ def recent_memory(session: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 from app.rpg.session.recent_memory_write import add_recent_memory
-
 __all__ = ["add_recent_memory", "recent_memory"]
