@@ -16,11 +16,7 @@ def _list(value: Any) -> list[Any]:
 def recent_memory(session: Mapping[str, Any] | None) -> dict[str, Any]:
     runtime = _dict(_dict(session).get("runtime_state"))
     memory = _dict(runtime.get("recent_memory"))
-    return {
-        "version": VERSION,
-        "turns": _list(memory.get("turns"))[-12:],
-        "dialogue": _list(memory.get("dialogue"))[-20:],
-    }
+    return {"version": VERSION, "turns": _list(memory.get("turns"))[-12:], "dialogue": _list(memory.get("dialogue"))[-20:]}
 
 
 from app.rpg.session.recent_memory_write import add_recent_memory
