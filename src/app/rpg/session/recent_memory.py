@@ -19,7 +19,3 @@ def recent_memory(session: Mapping[str, Any] | None) -> dict[str, Any]:
     turns = _list(memory.get("turns"))[-12:]
     dialogue = _list(memory.get("dialogue"))[-20:]
     return {"version": VERSION, "turns": turns, "dialogue": dialogue}
-
-
-from app.rpg.session.recent_memory_write import add_recent_memory
-__all__ = ["add_recent_memory", "recent_memory"]
