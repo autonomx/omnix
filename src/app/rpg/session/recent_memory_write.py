@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any, Mapping
-
 from app.rpg.session.recent_memory import _dict, recent_memory
 
 
