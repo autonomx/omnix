@@ -1,12 +1,19 @@
 {
-  "name": "omnix-frontend",
+  "name": "omnix",
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/web"
+  ],
   "scripts": {
+    "web:dev": "npm --workspace @omnix/web run dev",
+    "web:build": "npm --workspace @omnix/web run build",
+    "web:preview": "npm --workspace @omnix/web run preview",
+    "web:test": "npm --workspace @omnix/web run test",
+    "web:test:e2e": "npm --workspace @omnix/web run test:e2e",
+    "web:typecheck": "npm --workspace @omnix/web run typecheck"
   },
-  "dependencies": {
-  },
-  "devDependencies": {
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }
