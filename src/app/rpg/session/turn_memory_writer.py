@@ -13,7 +13,11 @@ from app.rpg.session.turn_memory_common import (
     memory_state,
     s,
 )
-from app.rpg.session.turn_memory_writer_helpers import memory_facts, memory_npc
+from app.rpg.session.turn_memory_writer_helpers import (
+    memory_dialogue,
+    memory_facts,
+    memory_npc,
+)
 
 
 def _turn_entry(
@@ -42,22 +46,6 @@ def _turn_entry(
     }, facts, npc
 
 
-def _dialogue(turn: Mapping[str, Any], facts: list[dict[str, str]], npc: Mapping[str, str]) -> dict[str, Any]:
-    return {
-        "id": f"memory-dialogue:{turn['turn_id']}:0",
-        "turn_id": str(turn["turn_id"]),
-        "tick": i(turn.get("tick")),
-        "speaker_id": "player",
-        "listener_ids": [npc["id"]] if npc.get("id") else [],
-        "location_id": str(turn.get("location_id") or ""),
-        "player_text": str(turn.get("player_input") or ""),
-        "npc_line": npc.get("line", ""),
-        "facts": facts,
-        "visibility": "private" if npc.get("id") else "session",
-        "salience": 0.9 if facts else 0.6,
-    }
-
-
 def write_turn_memory(
     session: Mapping[str, Any] | None,
     result: Mapping[str, Any] | None,
@@ -69,7 +57,7 @@ def write_turn_memory(
     memory = memory_state(updated)
     turn, facts, npc = _turn_entry(result, updated, player_input)
     memory["recent_turns"] = bounded([*memory["recent_turns"], turn], RECENT_TURN_LIMIT)
-    dialogue = _dialogue(turn, facts, npc) if npc["id"] or facts else None
+    dialogue = memory_dialogue(turn, facts, npc) if npc["id"] or facts else None
     if dialogue:
         memory["dialogue_memories"] = bounded(
             [*memory["dialogue_memories"], dialogue],
