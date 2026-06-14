@@ -4,10 +4,8 @@ from typing import Any, Mapping
 
 from app.rpg.session.turn_memory_common import d, s
 from app.rpg.session.turn_memory_context import attach_turn_memory_context_with_session
-from app.rpg.session.turn_memory_runtime_persistence import (
-    save_persisted_session,
-    select_memory_session,
-)
+from app.rpg.session.turn_memory_runtime_persistence import select_memory_session
+from app.rpg.session.turn_memory_runtime_session_store import save_persisted_session
 from app.rpg.session.turn_memory_runtime_status import attach_hook_status
 
 
