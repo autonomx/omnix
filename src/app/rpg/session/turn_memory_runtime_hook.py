@@ -13,30 +13,11 @@ from app.rpg.session.turn_memory_runtime_persistence import (
     save_persisted_session,
     select_memory_session,
 )
+from app.rpg.session.turn_memory_runtime_status import attach_hook_status
 
 _INTERACTIVE_MODULE = "app.rpg.session.interactive_first_call_runtime"
 _PATCH_ATTR = "_phase1433_turn_memory_runtime_hook_installed"
 _ORIGINAL_APPLY_TURN_ATTR = "_phase1433_original_interactive_apply_turn"
-HOOK_FORMAT_VERSION = "phase14_33_turn_memory_runtime_hook_v1"
-
-
-def _attach_hook_status(result: dict[str, Any], *, attached: bool, persisted: bool = False, error: str = "") -> dict[str, Any]:
-    hook_status: dict[str, Any] = {
-        "format_version": HOOK_FORMAT_VERSION,
-        "attached": attached,
-        "deterministic": True,
-        "presentation_only": True,
-    }
-    if attached:
-        hook_status.update({"persisted": persisted, "state_path": "runtime_state.turn_memory"})
-    if error:
-        hook_status["error"] = error
-    result["turn_memory_runtime_hook"] = hook_status
-    nested = d(result.get("result"))
-    if nested:
-        nested["turn_memory_runtime_hook"] = dict(hook_status)
-        result["result"] = nested
-    return result
 
 
 def attach_turn_memory_to_runtime_result(result: dict[str, Any], *, call_context: Mapping[str, Any]) -> dict[str, Any]:
@@ -56,9 +37,9 @@ def attach_turn_memory_to_runtime_result(result: dict[str, Any], *, call_context
             updated_session,
             session_id=s(context.get("session_id")),
         ) if can_persist else False
-        return _attach_hook_status(updated_result, attached=True, persisted=persisted)
+        return attach_hook_status(updated_result, attached=True, persisted=persisted)
     except Exception as exc:
-        return _attach_hook_status(result, attached=False, error=f"{type(exc).__name__}: {exc}")
+        return attach_hook_status(result, attached=False, error=f"{type(exc).__name__}: {exc}")
 
 
 def patch_interactive_module(module: ModuleType) -> bool:
