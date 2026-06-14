@@ -8,8 +8,8 @@ from app.rpg.session.turn_memory_common import (
     RECENT_TURN_LIMIT,
     bounded,
     d,
-    memory_state,
 )
+from app.rpg.session.turn_memory_defaults import memory_state
 from app.rpg.session.turn_memory_dialogue import memory_dialogue
 from app.rpg.session.turn_memory_turn_entry import turn_entry
 
