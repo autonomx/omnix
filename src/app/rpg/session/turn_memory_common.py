@@ -35,15 +35,3 @@ def first(*values: Any) -> str:
 def bounded(values: list[Any], limit: int) -> list[dict[str, Any]]:
     entries = [deepcopy(value) for value in values if isinstance(value, Mapping)]
     return entries[-max(1, int(limit)) :]
-
-
-def memory_state(session: Mapping[str, Any] | None) -> dict[str, Any]:
-    memory = d(d(d(session).get("runtime_state")).get("turn_memory"))
-    return {
-        "format_version": FORMAT_VERSION,
-        "recent_turns": bounded(l(memory.get("recent_turns")), RECENT_TURN_LIMIT),
-        "dialogue_memories": bounded(
-            l(memory.get("dialogue_memories")),
-            DIALOGUE_MEMORY_LIMIT,
-        ),
-    }
