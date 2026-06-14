@@ -31,21 +31,15 @@ def i(value: Any, default: int = 0) -> int:
 
 
 def first(*values: Any) -> str:
-    for value in values:
-        text = s(value).strip()
-        if text:
-            return text
-    return ""
+    return next((text for value in values if (text := s(value).strip())), "")
 
 
 def bounded(values: list[Any], limit: int) -> list[dict[str, Any]]:
-    cleaned = [deepcopy(value) for value in values if isinstance(value, Mapping)]
-    return cleaned[-max(1, int(limit)) :]
+    return [deepcopy(value) for value in values if isinstance(value, Mapping)][-max(1, int(limit)) :]
 
 
 def memory_state(session: Mapping[str, Any] | None) -> dict[str, Any]:
-    runtime_state = d(d(session).get("runtime_state"))
-    memory = d(runtime_state.get("turn_memory"))
+    memory = d(d(d(session).get("runtime_state")).get("turn_memory"))
     return {
         "format_version": FORMAT_VERSION,
         "recent_turns": bounded(l(memory.get("recent_turns")), RECENT_TURN_LIMIT),
