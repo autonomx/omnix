@@ -52,6 +52,47 @@ _SAFE_UTTERANCE_MODES = {
     "opinion_question",
     "wellbeing_inquiry",
 }
+_HARD_STATE_DOMAINS = {
+    "combat",
+    "commerce",
+    "currency",
+    "gold",
+    "inventory",
+    "item",
+    "location",
+    "persuasion_outcome",
+    "quest",
+    "relationship_change",
+    "reputation",
+    "reward",
+    "service",
+    "travel",
+    "world_state",
+}
+_MUTATION_STRUCTURAL_KEYS = {
+    "currency_delta",
+    "gold_delta",
+    "money_delta",
+    "inventory_delta",
+    "item_delta",
+    "quest_delta",
+    "quest_state_delta",
+    "relationship_delta",
+    "reputation_delta",
+    "location_delta",
+    "travel_delta",
+    "combat_delta",
+    "damage_delta",
+    "xp_delta",
+    "level_delta",
+    "reward_delta",
+    "state_delta",
+    "state_mutation",
+    "state_mutation_claim",
+    "state_mutation_claims",
+    "applied_mutation",
+    "applied_mutations",
+}
 
 
 def _d(value: Any) -> Dict[str, Any]:
@@ -229,6 +270,91 @@ def _semantic_risk_rejection(advisory: Dict[str, Any]) -> str:
     return ""
 
 
+def _normalized_domains(values: Any) -> List[str]:
+    domains: List[str] = []
+    raw_values = values if isinstance(values, list) else [values]
+    for value in raw_values:
+        domain = _s(value).strip().lower().replace(" ", "_")
+        if domain and domain != "none" and domain not in domains:
+            domains.append(domain)
+    return domains
+
+
+def _classification_review(advisory: Dict[str, Any]) -> Dict[str, Any]:
+    advisory = _d(advisory)
+    review = _d(advisory.get("classification_review") or advisory.get("semantic_self_audit"))
+    gate = _d(advisory.get("direct_response_gate"))
+    return {
+        **review,
+        "hidden_state_change_risk": review.get(
+            "hidden_state_change_risk",
+            advisory.get("hidden_state_change_risk", gate.get("hidden_state_change_risk")),
+        ),
+        "hard_state_domains": review.get(
+            "hard_state_domains",
+            advisory.get("hard_state_domains", gate.get("hard_state_domains")),
+        ),
+        "mutation_claims": review.get(
+            "mutation_claims",
+            advisory.get("mutation_claims", gate.get("mutation_claims")),
+        ),
+    }
+
+
+def _walk_structural_mutation_claims(value: Any, prefix: str = "") -> List[str]:
+    claims: List[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_norm = _s(key).strip().lower()
+            path = f"{prefix}.{key_norm}" if prefix else key_norm
+            if key_norm in _MUTATION_STRUCTURAL_KEYS:
+                if nested not in (None, "", [], {}, 0, False):
+                    claims.append(path)
+            claims.extend(_walk_structural_mutation_claims(nested, path))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value[:12]):
+            claims.extend(_walk_structural_mutation_claims(nested, f"{prefix}[{index}]"))
+    return claims
+
+
+def _state_invariant_violation(advisory: Dict[str, Any], visible_response: Dict[str, Any]) -> str:
+    """Reject unsafe direct display using structured state claims, not raw text keywords."""
+
+    advisory = _d(advisory)
+    visible_response = _d(visible_response)
+    if _b(advisory.get("authoritative_state_mutation_allowed"), False):
+        return "direct_response_attempted_authoritative_mutation"
+    if _b(visible_response.get("authoritative_state_mutation_allowed"), False):
+        return "visible_response_attempted_authoritative_mutation"
+    if _b(advisory.get("state_mutation_applied"), False):
+        return "direct_response_claimed_state_mutation_applied"
+    if _b(visible_response.get("state_mutation_applied"), False):
+        return "visible_response_claimed_state_mutation_applied"
+
+    review = _classification_review(advisory)
+    hard_domains = [
+        domain
+        for domain in _normalized_domains(review.get("hard_state_domains"))
+        if domain in _HARD_STATE_DOMAINS or domain == "unknown"
+    ]
+    if hard_domains:
+        return f"semantic_self_audit_hard_state_domain:{hard_domains[0]}"
+
+    hidden_risk = _s(review.get("hidden_state_change_risk")).strip().lower()
+    if hidden_risk in {"true", "yes", "medium", "high", "hard", "possible"}:
+        return "semantic_self_audit_hidden_state_change_risk"
+
+    mutation_claims = _l(review.get("mutation_claims"))
+    if mutation_claims:
+        return "semantic_self_audit_mutation_claims"
+
+    structural_claims = _walk_structural_mutation_claims(advisory) + _walk_structural_mutation_claims(visible_response)
+    if structural_claims:
+        return f"structured_state_mutation_claim:{structural_claims[0]}"
+
+    return ""
+
+
 def _speaker_matches_expected_npc(speaker: str, advisory: Dict[str, Any]) -> bool:
     speaker_norm = _norm(speaker)
     if not speaker_norm or speaker_norm in _PLAYER_SPEAKER_ALIASES:
@@ -293,6 +419,7 @@ def choose_first_call_visible_response(
     - stateful or needs_runtime_resolution=true LLM output is never consumed;
     - semantic_route=flavor_action may be consumed without matching a flavor verb enum;
     - semantic_route=unsupported_consequential_action is gracefully failed without state mutation;
+    - structured hard-state self-audit/mutation claims block direct display without keyword gates;
     - direct NPC dialogue requires matching npc.speaker and non-empty npc.line;
     - player/restatement-only narration is not consumed as an NPC answer.
     """
@@ -321,7 +448,7 @@ def choose_first_call_visible_response(
                 "semantic_route": _s(advisory.get("semantic_route")),
                 "advisory": deepcopy(advisory),
                 "first_call_grounding_diagnostics": deepcopy(_d(advisory.get("first_call_grounding_diagnostics"))),
-                "format_version": "first_call_visible_response_v1",
+                "format_version": "first_call_visible_response_v2_state_invariant_guard",
             }
         if _looks_stateful(advisory):
             rejection_reasons.append(f"{source}:stateful_action_type")
@@ -338,6 +465,10 @@ def choose_first_call_visible_response(
         if semantic_rejection:
             rejection_reasons.append(f"{source}:{semantic_rejection}")
             continue
+        state_invariant_rejection = _state_invariant_violation(advisory, visible_response)
+        if state_invariant_rejection:
+            rejection_reasons.append(f"{source}:{state_invariant_rejection}")
+            continue
         if (
             (_b(advisory.get("stateful"), True) or _b(advisory.get("needs_runtime_resolution"), True))
             and not _is_interpretive_dialogue_candidate(advisory)
@@ -348,6 +479,7 @@ def choose_first_call_visible_response(
         if rejection:
             rejection_reasons.append(f"{source}:{rejection}")
             continue
+        classification_review = _classification_review(advisory)
         return {
             "consumable": True,
             "reason": "non_stateful_flavor_action" if _is_hybrid_flavor_action(advisory) else "non_stateful_interpretive_dialogue",
@@ -365,12 +497,19 @@ def choose_first_call_visible_response(
                 "risk_domain": _s(advisory.get("risk_domain")).strip(),
                 "intent_summary": _s(advisory.get("intent_summary")).strip(),
                 "evidence_spans": deepcopy(_l(advisory.get("evidence_spans"))),
+                "classification_review": deepcopy(classification_review),
+                "hard_state_domains": deepcopy(_normalized_domains(classification_review.get("hard_state_domains"))),
+                "state_invariant_guard": {
+                    "checked": True,
+                    "source": "structured_semantic_fields",
+                    "raw_text_keyword_gate": False,
+                },
             },
             "first_call_grounding_diagnostics": deepcopy(
                 _d(advisory.get("first_call_grounding_diagnostics"))
             ),
             "advisory": deepcopy(advisory),
-            "format_version": "first_call_visible_response_v1",
+            "format_version": "first_call_visible_response_v2_state_invariant_guard",
         }
 
     return {
