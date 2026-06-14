@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from app.rpg.session.turn_memory_common import d, first, i, s
-from app.rpg.session.turn_memory_writer_helpers import memory_facts, memory_npc
+from app.rpg.session.turn_memory_facts import memory_facts
+from app.rpg.session.turn_memory_writer_helpers import memory_npc
 
 
 def turn_entry(
