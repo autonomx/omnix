@@ -132,7 +132,7 @@ def test_ci_phase8_objective_journal_panel_attaches_to_travel_payload(monkeypatc
 
 
 def test_ci_phase8_objective_journal_panel_attaches_to_base_turn_payload(monkeypatch):
-    from app.rpg.session import runtime_part27
+    from app.rpg.session import runtime, runtime_part27
 
     session_id = "ci_phase8_objective_journal_panel_base"
 
@@ -153,7 +153,11 @@ def test_ci_phase8_objective_journal_panel_attaches_to_base_turn_payload(monkeyp
 
     monkeypatch.setattr(runtime_part27, "_base_apply_turn_authoritative", base_turn)
 
-    payload = runtime_part27._apply_turn_authoritative(session_id, "ask Bran about work")
+    payload = runtime._apply_turn_authoritative(
+        session_id,
+        "ask Bran about work",
+        _base_authoritative=runtime_part27._apply_turn_authoritative,
+    )
 
     assert payload["player_hud"]["source"] == "deterministic_phase8_player_visible_state_objective_hud_gate"
     assert payload["objective_journal_panel"]["source"] == SOURCE
