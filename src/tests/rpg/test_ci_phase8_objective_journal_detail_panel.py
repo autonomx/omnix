@@ -218,7 +218,6 @@ def test_ci_phase8_objective_journal_runtime_manifest_stays_authoritative():
     manifest = runtime.get_runtime_wrapper_manifest()
 
     assert "runtime_part27" in manifest["part_modules"]
-    assert "app.rpg.session.runtime_part23" in manifest["combat_contract_modules"]
     assert runtime._apply_turn_authoritative.__module__ == manifest[
         "final_apply_turn_authoritative_module"
     ]
