@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from functools import wraps
 from types import ModuleType
 from typing import Any
@@ -24,10 +23,7 @@ def patch_interactive_module(module: ModuleType) -> bool:
     def _wrapped_apply_turn(*args: Any, **kwargs: Any) -> Any:
         result = original(*args, **kwargs)
         if isinstance(result, dict):
-            return attach_turn_memory_to_runtime_result(
-                result,
-                call_context=extract_call_context(args, kwargs),
-            )
+            return attach_turn_memory_to_runtime_result(result, call_context=extract_call_context(args, kwargs))
         return result
 
     _wrapped_apply_turn.__module__ = getattr(original, "__module__", _INTERACTIVE_MODULE)
@@ -37,18 +33,3 @@ def patch_interactive_module(module: ModuleType) -> bool:
     setattr(module, "apply_turn", _wrapped_apply_turn)
     setattr(module, _PATCH_ATTR, True)
     return True
-
-
-def force_install_turn_memory_runtime_hook_for_tests(module: ModuleType | None = None) -> bool:
-    if module is None:
-        module = sys.modules.get(_INTERACTIVE_MODULE)
-    if isinstance(module, ModuleType):
-        original = getattr(module, _ORIGINAL_APPLY_TURN_ATTR, None)
-        if callable(original):
-            setattr(module, "apply_turn", original)
-        if hasattr(module, _PATCH_ATTR):
-            setattr(module, _PATCH_ATTR, False)
-        return patch_interactive_module(module)
-    from app.rpg.session.turn_memory_runtime_hook import install_turn_memory_runtime_hook
-
-    return install_turn_memory_runtime_hook()
