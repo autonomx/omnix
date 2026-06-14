@@ -4,6 +4,8 @@ This roadmap turns the Omnix-wide web app architecture into an implementation se
 
 The roadmap is intentionally ordered to avoid the biggest risk: creating third implementations of systems that already exist in more than one form. Shared systems such as jobs, providers, assets, prompts, replay, diagnostics, and worker health should be consolidated from existing code before new feature modules depend on them.
 
+This roadmap is also ordered to avoid a second risk: building backend contracts before the type-generation path exists. A minimal FastAPI gateway and OpenAPI type generation must land early enough that later backend consolidation phases can publish typed contracts as they are built.
+
 ## Current Branch Baseline
 
 The `rpg` branch already contains an early `apps/web` React/Vite scaffold and a legacy Python/Flask-oriented application. The current architecture standard is documented in `docs/WEB_APP_INFRASTRUCTURE.md`, but the branch still has known drift:
@@ -11,8 +13,10 @@ The `rpg` branch already contains an early `apps/web` React/Vite scaffold and a 
 - The module registry currently omits `models` and `reports` even though the architecture names them as platform modules.
 - Routing is still hand-rolled in the web shell rather than using the chosen router.
 - The event client is basic and needs reconnection, status, and auth-aware transport seams.
+- The browser UI still has legacy Flask/static entrypoints.
 - The backend is not greenfield: job queues, provider registries, asset handling, prompt builders, and RPG replay/persistence already exist in different forms.
 - Heavy model work must remain outside the gateway process because local GPU/VRAM residency is the core runtime constraint.
+- Existing on-disk user data, including RPG saves/checkpoints, settings, generated reports, voice assets, image assets, and local artifacts, must remain readable or migrate safely.
 
 ## Target Architecture Summary
 
@@ -62,9 +66,11 @@ Testing:          Vitest + Playwright + backend deterministic/replay gates
 2. **No third implementation.** When duplicate systems already exist, consolidate them; do not add another parallel queue, registry, asset store, or prompt system.
 3. **Small auditable slices.** Each phase should land in narrow changes with clear acceptance criteria.
 4. **Gateway, not monolith.** FastAPI exposes one API surface, but model inference stays in worker processes.
-5. **Resource-aware jobs from the start.** GPU/VRAM scheduling must be part of the job interface, not bolted on later.
-6. **Preserve RPG determinism.** Existing RPG replay, state hashing, checkpoints, and session behavior are treated as reference implementations and must not be broken by extraction.
-7. **Feature modules consume platform services.** No module may create its own app shell, provider selection, job queue, artifact store, prompt convention, or diagnostics channel.
+5. **Typed contracts early.** The FastAPI gateway and OpenAPI type generator must exist before large backend contracts are consumed by the web app.
+6. **Resource-aware jobs from the start.** GPU/VRAM scheduling must be part of the job interface, not bolted on later.
+7. **Preserve existing data.** Existing saves, settings, voice assets, reports, generated files, and checkpoints must migrate or remain readable through compatibility shims.
+8. **Preserve RPG determinism.** Existing RPG replay, state hashing, checkpoints, and session behavior are treated as reference implementations and must not be broken by extraction.
+9. **Feature modules consume platform services.** No module may create its own app shell, provider selection, job queue, artifact store, prompt convention, or diagnostics channel.
 
 ## Phase 0 — Architecture Design Hardening
 
@@ -84,7 +90,8 @@ Tasks:
   - resource-aware job/run semantics;
   - shared prompt/template system;
   - RPG replay/persistence as reference implementation;
-  - consolidation-first backend strategy.
+  - consolidation-first backend strategy;
+  - data/back-compat requirements for existing local files.
 - Keep `docs/WEB_APP_REDESIGN_ROADMAP.md` updated as implementation progresses.
 - Decide whether Omnix is permanently single-user or only single-user for now.
 - If not permanently single-user, reserve an owner boundary for sessions, jobs, assets, saves, settings, and reports.
@@ -94,6 +101,7 @@ Acceptance criteria:
 - The infrastructure doc clearly distinguishes as-built reality from target architecture.
 - The doc states that one API surface does not mean one process.
 - The doc names the chosen router, design-system base, API type generator, and job-system expectations.
+- The doc states the data preservation requirement before any schema migration begins.
 - Known branch drift is listed explicitly.
 
 ## Phase 1 — Tiny Frontend Alignment Patch
@@ -144,9 +152,9 @@ Acceptance criteria:
 - Reconnect timers cannot leak after all subscribers unsubscribe.
 - The design avoids query-string tokens for future auth.
 
-## Phase 3 — Backend Reality Inventory
+## Phase 3 — Backend Reality Inventory and Feasibility Notes
 
-Purpose: create an accurate map of the systems that must be consolidated.
+Purpose: create an accurate map of the systems that must be consolidated before changing them.
 
 Tasks:
 
@@ -163,7 +171,9 @@ Tasks:
   - RPG visual asset store;
   - report artifacts;
   - audio artifacts;
-  - session/checkpoint storage.
+  - voice clone/profile files;
+  - session/checkpoint storage;
+  - settings files.
 - Inventory prompt/template builders:
   - RPG prompting;
   - dialogue prompts;
@@ -176,16 +186,50 @@ Tasks:
   - state hashing;
   - replay validation;
   - checkpoints;
-  - durable session stores.
-- Write a short consolidation note for each category under `docs/`.
+  - durable session stores;
+  - existing migrators such as save or persistence migration managers.
+- Write a consolidation feasibility note for each category under `docs/`.
+- For each duplicate system, identify:
+  - likely reference implementation;
+  - incompatible assumptions;
+  - data migration requirements;
+  - tests needed before consolidation;
+  - rollback path.
 
 Acceptance criteria:
 
 - Every existing implementation is listed with path, owner module, current behavior, and likely consolidation target.
+- Each category has a feasibility note, not just an inventory list.
 - The roadmap can identify which system becomes the reference implementation for jobs, providers, assets, prompts, and replay.
+- Any blocking incompatibility between existing queues, registries, or stores is surfaced before implementation begins.
 - No implementation changes are required in this phase beyond docs.
 
-## Phase 4 — Gateway and Worker Contract
+## Phase 4 — FastAPI Gateway Cutover Foundation
+
+Purpose: make the gateway real before later phases depend on `/api/*` and `/openapi.json`.
+
+Tasks:
+
+- Stand up a thin FastAPI gateway application if the current active browser/API path is still Flask-oriented.
+- Keep the existing Flask UI available during migration.
+- Add initial gateway routes for:
+  - health;
+  - runtime status;
+  - worker health aggregation placeholder;
+  - OpenAPI schema exposure;
+  - compatibility handoff to existing backend/domain services.
+- Keep domain logic in existing service modules; do not rewrite RPG or provider internals in this phase.
+- Add startup docs that explain the temporary coexistence of legacy Flask UI and the new gateway.
+
+Acceptance criteria:
+
+- A FastAPI gateway can start independently of the legacy UI path.
+- `/openapi.json` is available from the gateway.
+- Gateway health can be tested without real model workers.
+- Existing legacy UI workflows are not removed or broken.
+- This phase does not migrate feature UI or consolidate backend systems.
+
+## Phase 5 — Gateway and Worker Contract
 
 Purpose: formalize how the web/API gateway talks to model workers.
 
@@ -223,9 +267,29 @@ Acceptance criteria:
 - Worker failures produce diagnostics rather than process crashes.
 - Feature modules never call workers directly.
 
-## Phase 5 — Resource-Aware Job Schema
+## Phase 6 — Minimal API Contract and Type Generation
 
-Purpose: design the job model before consolidating queues.
+Purpose: move OpenAPI type generation early so later backend phases do not hand-write frontend contracts.
+
+Tasks:
+
+- Add `openapi-typescript` to the web toolchain.
+- Generate TypeScript API types from the current gateway `/openapi.json`.
+- Add a minimal generated-types output path and import convention.
+- Document that Zod remains for forms, uploads, URL/search params, and SSE payloads only.
+- Add a lightweight script to regenerate types locally.
+- Defer strict CI drift enforcement until contracts stabilize later in the roadmap.
+
+Acceptance criteria:
+
+- Frontend code can import generated API types from the gateway schema.
+- New `/api/*` contracts added in later phases can generate types immediately.
+- No duplicate hand-maintained interfaces are introduced for new gateway response/request models.
+- CI drift checking is explicitly deferred, not forgotten.
+
+## Phase 7 — Resource-Aware Job Schema and Scheduler Design
+
+Purpose: design the job model and scheduler before consolidating queues.
 
 Tasks:
 
@@ -261,6 +325,11 @@ network
   - cloud/network jobs are not serialized behind local GPU work;
   - CPU jobs can run concurrently within configured limits;
   - model load/evict transitions are visible job stages.
+- Define the first scheduler behavior explicitly:
+  - single local GPU lock as the safe default;
+  - resource class recorded for every job;
+  - network jobs bypass the GPU lock;
+  - future VRAM-aware co-residency left as an explicit later upgrade.
 - Define stage semantics:
   - stages have independent status and progress;
   - completed stages can checkpoint outputs;
@@ -271,35 +340,44 @@ Acceptance criteria:
 
 - The job interface includes resource class from day one.
 - Multi-stage jobs can represent podcast, voice cloning, RPG autoplay, image generation, and STT alignment.
+- The initial scheduler design can enforce a safe single-GPU-job default.
+- Full VRAM-aware co-residency is not implied unless implemented and tested.
 - Job cancellation semantics are documented honestly.
 - The schema is compatible with a future broker even if the first executor is local.
 
-## Phase 6 — Shared Job/Run System Consolidation
+## Phase 8 — Shared Job/Run System Consolidation
 
 Purpose: converge duplicate queues into one job system.
 
 Tasks:
 
-- Choose the claim/lease model as the reference queue pattern.
+- Choose the claim/lease model as the reference queue pattern if Phase 3 feasibility confirms it.
 - Add a SQLite-backed job table or adapter.
 - Add an in-process asyncio worker executor for local-first single-user mode.
+- Implement the safe default scheduler:
+  - one local GPU job at a time;
+  - network jobs are not blocked by local GPU jobs;
+  - CPU jobs are bounded by configured concurrency.
 - Wrap existing TTS queue behavior behind the shared job interface.
 - Wrap existing image queue behavior behind the shared job interface.
 - Preserve image claim/lease safety properties.
 - Preserve TTS chunk ordering/reassembly behavior as stage/checkpoint behavior.
 - Add job events to the shared event stream.
 - Add job diagnostics and logs.
+- Add compatibility handling for existing queued/generated artifacts where applicable.
 
 Acceptance criteria:
 
 - New modules can enqueue jobs through one interface.
-- TTS and image workflows no longer require separate public queue APIs.
+- TTS and image workflows no longer require separate public queue APIs for new work.
 - Jobs survive browser reloads.
 - Restart durability is either implemented or explicitly marked as not yet supported.
-- GPU resource exclusivity is enforced for local workers.
+- Safe single-GPU-job exclusivity is enforced for local workers.
+- Network/cloud jobs are not serialized behind local GPU work.
 - Job progress emits named SSE events.
+- Existing TTS/image outputs are not orphaned by the queue transition.
 
-## Phase 7 — Provider and Model Registry Consolidation
+## Phase 9 — Provider and Model Registry Consolidation
 
 Purpose: expose one provider/model facade across all modules.
 
@@ -333,9 +411,9 @@ Acceptance criteria:
 - Existing LLM and audio provider behavior remains compatible.
 - No new feature module instantiates providers directly.
 
-## Phase 8 — Shared Asset and Artifact Library
+## Phase 10 — Shared Asset and Artifact Library with Data Migration
 
-Purpose: make generated files a platform concept.
+Purpose: make generated files a platform concept without orphaning existing local data.
 
 Tasks:
 
@@ -351,7 +429,13 @@ Tasks:
   - parent/derived assets;
   - created timestamp.
 - Generalize RPG visual asset storage into a platform asset service.
-- Add artifact types:
+- Define how existing files are handled:
+  - compatibility read-through for existing stores;
+  - one-time migration where safe;
+  - dry-run migration mode;
+  - rollback strategy;
+  - missing-file diagnostics.
+- Cover existing categories:
   - audio;
   - voice sample;
   - voice profile;
@@ -362,7 +446,8 @@ Tasks:
   - report;
   - RPG checkpoint;
   - run log;
-  - export.
+  - export;
+  - settings-backed artifacts.
 - Update jobs to return output asset references.
 - Add asset lifecycle decisions:
   - retention;
@@ -373,12 +458,14 @@ Tasks:
 
 Acceptance criteria:
 
-- Image, audio, transcript, report, and checkpoint outputs can be represented by one asset model.
+- Image, audio, transcript, report, checkpoint, and voice-profile outputs can be represented by one asset model.
+- Existing generated files and saves are either migrated or readable through compatibility paths.
+- No data loss occurs for existing saves, voice assets, settings, reports, or generated media.
 - Feature modules do not create module-local asset stores for new work.
 - Jobs publish output assets instead of large inline payloads where practical.
 - Assets are inspectable from the Assets module.
 
-## Phase 9 — Prompt and Template System
+## Phase 11 — Prompt and Template System
 
 Purpose: prevent each AI module from inventing its own prompt conventions.
 
@@ -406,7 +493,7 @@ Acceptance criteria:
 - Provider payload construction is centralized where practical.
 - RPG prompt behavior remains deterministic and compatible.
 
-## Phase 10 — Replay and Persistence Platformization
+## Phase 12 — Replay and Persistence Platformization
 
 Purpose: generalize RPG's deterministic patterns without breaking RPG.
 
@@ -425,35 +512,36 @@ Tasks:
 - Add shared interfaces that RPG can implement first.
 - Add parity tests around RPG before any extraction.
 - Gradually move only generic pieces after tests prove compatibility.
+- Integrate with existing migration managers where save/session schemas change.
 
 Acceptance criteria:
 
 - RPG replay behavior is unchanged.
 - Replay parity tests pass before and after any shared extraction.
+- Existing RPG saves/checkpoints remain readable or migrate safely.
 - Shared replay primitives can be reused by long-running non-RPG workflows.
 - RPG-specific simulation state, validators, and semantics remain inside RPG.
 
-## Phase 11 — API Contract and Type Generation
+## Phase 13 — API Contract Hardening and Typegen Drift Checks
 
-Purpose: make frontend/backend contracts typed and generated.
+Purpose: make generated contracts enforceable after the core gateway APIs exist.
 
 Tasks:
 
-- Ensure FastAPI gateway exposes a stable `/openapi.json`.
-- Add `openapi-typescript` to the web toolchain.
-- Generate TypeScript API types from the gateway schema.
-- Replace hand-mirrored response interfaces with generated types.
-- Keep Zod for forms, uploads, URL/search params, and SSE payloads.
+- Expand generated API types to cover jobs, providers, assets, prompts, replay, settings, reports, and diagnostics.
+- Replace any transitional hand-mirrored response interfaces with generated types.
 - Add CI checks to ensure generated types are current.
+- Add contract tests for representative gateway endpoints.
+- Keep Zod for forms, uploads, URL/search params, and SSE payloads only.
 
 Acceptance criteria:
 
 - API response/request types are generated from backend OpenAPI.
 - No duplicate hand-maintained interfaces mirror server models.
-- Frontend build fails when generated types drift.
+- Frontend build or CI fails when generated types drift.
 - Zod usage is limited to runtime trust boundaries.
 
-## Phase 12 — Router Migration
+## Phase 14 — Router Migration
 
 Purpose: replace temporary shell routing with the chosen router.
 
@@ -474,7 +562,7 @@ Acceptance criteria:
 - Route params/search state are typed.
 - Navigation tests cover module entrypoints.
 
-## Phase 13 — Design System Foundation
+## Phase 15 — Design System Foundation
 
 Purpose: prevent module-by-module UI drift.
 
@@ -511,7 +599,7 @@ Acceptance criteria:
 - No feature creates competing app-shell or primitive systems.
 - Dark-first workstation presentation is consistent across modules.
 
-## Phase 14 — Platform Modules First
+## Phase 16 — Platform Modules First
 
 Purpose: build the modules that all feature modules depend on.
 
@@ -539,7 +627,8 @@ Tasks:
   - asset browser;
   - previews;
   - metadata;
-  - source job links.
+  - source job links;
+  - migrated/compatibility asset indicators where needed.
 - Reports module:
   - run reports;
   - RPG autoplay reports;
@@ -562,7 +651,7 @@ Acceptance criteria:
 - Feature modules can depend on provider/job/asset/diagnostics surfaces.
 - Playwright covers platform-module navigation and core empty states.
 
-## Phase 15 — Feature Module Migration
+## Phase 17 — Feature Module Migration
 
 Purpose: migrate user-facing feature behavior into the shared shell.
 
@@ -582,16 +671,18 @@ Acceptance criteria for each module:
 - The module lives under `apps/web/src/features/<module>`.
 - The module uses shared routing, API client, event client, Query hooks, design primitives, jobs, providers, and assets.
 - The module does not call workers directly.
+- The module preserves or migrates existing user data for that feature.
 - The module has unit or Playwright coverage for the main entrypoint.
 - Legacy UI behavior remains available until parity is reached.
 
-## Phase 16 — Legacy UI Retirement
+## Phase 18 — Legacy UI Retirement
 
-Purpose: remove old frontend paths after parity.
+Purpose: remove old frontend paths after parity and data safety are proven.
 
 Tasks:
 
 - Confirm every active browser-facing feature has a shared-shell equivalent.
+- Confirm existing on-disk data remains readable or has migrated successfully.
 - Freeze legacy UI changes.
 - Add redirects or clear startup docs pointing to the new web app.
 - Remove or archive legacy templates/static entrypoints when safe.
@@ -602,10 +693,11 @@ Acceptance criteria:
 
 - `apps/web` is the supported browser UI.
 - Legacy UI is no longer needed for active workflows.
+- Existing saves, settings, voice assets, reports, checkpoints, and generated media are not orphaned.
 - Documentation points to the new startup path.
 - No active tests depend on removed legacy frontend files.
 
-## Phase 17 — Hardening and Release Readiness
+## Phase 19 — Hardening and Release Readiness
 
 Purpose: make the redesigned platform reliable for long local sessions.
 
@@ -619,6 +711,7 @@ Tasks:
   - mock asset lifecycle;
   - event stream reconnect.
 - Add backend integration tests with mock workers.
+- Add migration/back-compat tests for representative existing data.
 - Add long-running local tests for GPU scheduling where available.
 - Add failure-mode tests:
   - worker down;
@@ -626,13 +719,16 @@ Tasks:
   - malformed event;
   - cancellation;
   - restart behavior;
-  - provider timeout.
+  - provider timeout;
+  - missing legacy asset;
+  - migration dry-run failure.
 - Add developer docs:
   - local process mode;
   - optional compose mode;
   - worker setup;
   - mock-worker testing;
-  - GPU scheduling expectations.
+  - GPU scheduling expectations;
+  - data migration and rollback.
 
 Acceptance criteria:
 
@@ -640,6 +736,7 @@ Acceptance criteria:
 - Local GPU/manual tests are documented separately.
 - Failure modes surface actionable diagnostics.
 - Long sessions do not leak event connections or orphan jobs.
+- Existing data compatibility is verified before legacy retirement.
 
 ## Slice Checklist Template
 
@@ -661,9 +758,11 @@ Risk:
 - Determinism risk?
 - GPU/resource risk?
 - Legacy compatibility risk?
+- Data migration/back-compat risk?
 
 Rollback:
 - How to revert safely.
+- How to restore or continue reading existing user data.
 ```
 
 ## Initial Suggested Slice Order
@@ -673,19 +772,22 @@ Use this order for the next work items:
 1. Harden `docs/WEB_APP_INFRASTRUCTURE.md` with the complete design.
 2. Add `models` and `reports` to `modules.ts`.
 3. Upgrade the shared event client and tests.
-4. Add backend inventory docs for jobs/providers/assets/prompts/replay.
-5. Define the worker health contract and mock-worker mode.
-6. Define the resource-aware job schema.
-7. Consolidate job queues behind the shared interface.
-8. Consolidate provider registries behind one facade.
-9. Generalize the asset store.
-10. Generalize prompt/template utilities.
-11. Add OpenAPI type generation.
-12. Migrate to TanStack Router.
-13. Add Mantine and Omnix design tokens.
-14. Build platform modules.
-15. Migrate feature modules.
-16. Retire legacy UI.
+4. Add backend inventory and feasibility docs for jobs/providers/assets/prompts/replay/data.
+5. Stand up the thin FastAPI gateway foundation and `/openapi.json`.
+6. Define the worker health contract and mock-worker mode.
+7. Add minimal OpenAPI type generation.
+8. Define the resource-aware job schema and safe scheduler behavior.
+9. Consolidate job queues behind the shared interface.
+10. Consolidate provider registries behind one facade.
+11. Generalize the asset store with data migration/back-compat.
+12. Generalize prompt/template utilities.
+13. Wrap and gradually platformize replay/persistence primitives.
+14. Harden API contract/typegen drift checks.
+15. Migrate to TanStack Router.
+16. Add Mantine and Omnix design tokens.
+17. Build platform modules.
+18. Migrate feature modules.
+19. Retire legacy UI only after data safety is verified.
 
 ## Stop Conditions
 
@@ -693,8 +795,10 @@ Pause implementation and update the design before continuing if any of these hap
 
 - A feature module needs to call a worker directly.
 - A new job queue, provider registry, asset store, or prompt system is proposed.
+- Existing queues/providers/assets cannot be consolidated as planned.
 - GPU-bound jobs can run concurrently without a scheduler decision.
 - A generated artifact cannot be represented by the shared asset model.
+- Existing user data would become unreadable or orphaned.
 - RPG replay parity changes unexpectedly.
 - API types must be hand-maintained because OpenAPI generation is insufficient.
 - A UI module needs styling primitives outside the shared design system.
@@ -711,6 +815,7 @@ The redesign is complete when:
 - The job system is resource-aware and represents multi-stage workflows.
 - The gateway degrades gracefully when workers are unavailable.
 - Generated files flow through the shared asset library.
+- Existing saves, voice assets, settings, reports, checkpoints, and generated media remain readable or are migrated safely.
 - API types are generated from the backend contract.
 - RPG determinism, replay, and save/load behavior remain intact.
 - CI can run meaningful gateway/web tests without GPU-backed model workers.
