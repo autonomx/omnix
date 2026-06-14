@@ -4,25 +4,7 @@ from typing import Any, Mapping
 
 from app.rpg.session.turn_memory_common import DIALOGUE_MEMORY_LIMIT, RETRIEVAL_LIMIT, bounded, d, i, l, s
 from app.rpg.session.turn_memory_retrieval_helpers import memory_haystack, query_tokens, visible_to
-
-
-def _score_entry(
-    entry: Mapping[str, Any],
-    *,
-    tokens: set[str],
-    wants_recall: bool,
-    addressed_actor_id: str,
-    location_id: str,
-) -> float:
-    score = float(entry.get("salience") or 0.0)
-    score += sum(1 for token in tokens if token in memory_haystack(entry)) * 0.4
-    if wants_recall and l(entry.get("facts")):
-        score += 2.0
-    if addressed_actor_id and addressed_actor_id in {s(value) for value in l(entry.get("listener_ids"))}:
-        score += 1.5
-    if location_id and location_id == s(entry.get("location_id")):
-        score += 0.5
-    return score
+from app.rpg.session.turn_memory_scoring import score_memory_entry
 
 
 def retrieve_relevant_memories(
@@ -39,9 +21,10 @@ def retrieve_relevant_memories(
     for entry in bounded(l(d(memory).get("dialogue_memories")), DIALOGUE_MEMORY_LIMIT):
         if not visible_to(entry, addressed_actor_id):
             continue
-        score = _score_entry(
+        score = score_memory_entry(
             entry,
             tokens=query_tokens(player_input),
+            haystack=memory_haystack(entry),
             wants_recall=wants_recall,
             addressed_actor_id=addressed_actor_id,
             location_id=location_id,
