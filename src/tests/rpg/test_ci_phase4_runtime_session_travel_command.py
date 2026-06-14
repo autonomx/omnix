@@ -50,7 +50,9 @@ def test_ci_phase4_session_runtime_routes_successful_travel_through_guarded_comm
     from app.rpg.locations import OLD_MILL
     from app.rpg.session import runtime, runtime_part27
 
-    assert runtime._apply_turn_authoritative.__module__ == "app.rpg.session.runtime_part27"
+    manifest = runtime.get_runtime_wrapper_manifest()
+    assert "runtime_part27" in manifest["part_modules"]
+    assert runtime._apply_turn_authoritative.__module__ == manifest["final_apply_turn_authoritative_module"]
     session_id = _session_id("success")
     session = _ready_old_mill_session(session_id)
     saved = _install_save_capture(monkeypatch, runtime_part27)
