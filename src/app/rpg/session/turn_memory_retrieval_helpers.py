@@ -31,7 +31,21 @@ def memory_tokens(text: str) -> set[str]:
 def memory_visible(entry: Mapping[str, Any], actor_id: str) -> bool:
     if s(entry.get("visibility")) != "private" or not actor_id:
         return True
-    return actor_id in {s(value) for value in l(entry.get("listener_ids"))}
+    listeners = {s(value) for value in l(entry.get("listener_ids"))}
+    return actor_id in listeners
+
+
+def _haystack(entry: Mapping[str, Any]) -> str:
+    facts = " ".join(
+        s(fact.get("value"))
+        for fact in l(entry.get("facts"))
+        if isinstance(fact, Mapping)
+    )
+    return " ".join([
+        s(entry.get("player_text")),
+        s(entry.get("npc_line")),
+        facts,
+    ]).lower()
 
 
 def memory_score(
@@ -42,12 +56,8 @@ def memory_score(
     actor_id: str,
     location_id: str,
 ) -> float:
-    facts = " ".join(
-        s(fact.get("value")) for fact in l(entry.get("facts")) if isinstance(fact, Mapping)
-    )
-    haystack = " ".join([s(entry.get("player_text")), s(entry.get("npc_line")), facts]).lower()
     score = float(entry.get("salience") or 0.0)
-    score += sum(1 for token in tokens if token in haystack) * 0.4
+    score += sum(1 for token in tokens if token in _haystack(entry)) * 0.4
     if recall and l(entry.get("facts")):
         score += 2.0
     if actor_id and actor_id in {s(value) for value in l(entry.get("listener_ids"))}:
