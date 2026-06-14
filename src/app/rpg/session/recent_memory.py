@@ -15,8 +15,7 @@ def _list(value: Any) -> list[Any]:
 
 
 def recent_memory(session: Mapping[str, Any] | None) -> dict[str, Any]:
-    runtime = _dict(_dict(session).get("runtime_state"))
-    memory = _dict(runtime.get("recent_memory"))
+    memory = _dict(_dict(_dict(session).get("runtime_state")).get("recent_memory"))
     return {
         "version": RECENT_MEMORY_VERSION,
         "turns": _list(memory.get("turns"))[-12:],
@@ -32,12 +31,10 @@ def add_recent_memory(
     npc_line: str = "",
 ) -> dict[str, Any]:
     updated = deepcopy(_dict(session))
-    runtime = _dict(updated.get("runtime_state"))
     memory = recent_memory(updated)
     entry = {"player_input": player_input[:500], "npc_id": npc_id, "npc_line": npc_line[:500]}
     memory["turns"] = [*memory["turns"], entry][-12:]
     if npc_id or npc_line:
         memory["dialogue"] = [*memory["dialogue"], entry][-20:]
-    runtime["recent_memory"] = memory
-    updated["runtime_state"] = runtime
+    updated["runtime_state"] = {**_dict(updated.get("runtime_state")), "recent_memory": memory}
     return updated
