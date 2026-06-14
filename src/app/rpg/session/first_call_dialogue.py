@@ -11,7 +11,6 @@ _STATEFUL_ACTION_TYPES = {
     "cast_spell", "sneak", "hack", "travel", "move", "flee", "threat", "intimidate",
     "persuade", "deceive", "quest_accept", "quest_complete", "buy", "sell",
 }
-
 _PLAYER_SPEAKER_ALIASES = {"player", "you", "the player", "adventurer", "traveler"}
 _INTERPRETIVE_DIALOGUE_ACTION_TYPES = {
     "ask",
@@ -20,6 +19,8 @@ _INTERPRETIVE_DIALOGUE_ACTION_TYPES = {
     "observe",
     "social_activity",
     "talk",
+    "social_affection",
+    "social_performance",
 }
 _SAFE_DIRECT_RISK_DOMAINS = {
     "",
@@ -96,8 +97,32 @@ def _visible_response_text(visible_response: Dict[str, Any]) -> str:
     return narration
 
 
+def _is_hybrid_flavor_action(advisory: Dict[str, Any]) -> bool:
+    advisory = _d(advisory)
+    return _s(advisory.get("semantic_route")).strip().lower() == "flavor_action"
+
+
+def _is_unsupported_consequential_action(advisory: Dict[str, Any]) -> bool:
+    advisory = _d(advisory)
+    route = _s(advisory.get("semantic_route")).strip().lower()
+    if route == "unsupported_consequential_action":
+        return True
+    if _b(advisory.get("unsupported_consequential_action"), False):
+        return True
+    if route == "mixed":
+        for component in _l(advisory.get("route_components")):
+            component = _d(component)
+            if _s(component.get("semantic_route")).strip().lower() == "unsupported_consequential_action":
+                return True
+            if component.get("supported") is False:
+                return True
+    return False
+
+
 def _looks_stateful(advisory: Dict[str, Any]) -> bool:
     advisory = _d(advisory)
+    if _is_hybrid_flavor_action(advisory):
+        return False
     action_type = _s(advisory.get("action_type")).strip().lower()
     semantic_family = _s(advisory.get("semantic_family")).strip().lower()
     if action_type in _STATEFUL_ACTION_TYPES:
@@ -151,13 +176,15 @@ def _is_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
         or _s(advisory.get("target_id"))
         or _s(advisory.get("target_name"))
         or interaction_mode == "direct"
-        or action_type in {"social_activity", "persuade", "deceive", "intimidate"}
+        or action_type in {"social_activity", "social_affection", "social_performance", "persuade", "deceive", "intimidate"}
         or semantic_family == "social"
     )
 
 
 def _is_interpretive_dialogue_candidate(advisory: Dict[str, Any]) -> bool:
     advisory = _d(advisory)
+    if _is_hybrid_flavor_action(advisory):
+        return True
     if not _is_direct_npc_dialogue(advisory):
         return False
     if _looks_stateful(advisory):
@@ -171,6 +198,8 @@ def _is_interpretive_dialogue_candidate(advisory: Dict[str, Any]) -> bool:
 
 def _direct_response_gate_allows(advisory: Dict[str, Any]) -> bool:
     advisory = _d(advisory)
+    if _is_hybrid_flavor_action(advisory) and not _b(advisory.get("state_mutation_requested"), False):
+        return True
     gate = _d(advisory.get("direct_response_gate"))
     if gate:
         return _b(gate.get("safe_to_display_now"), False)
@@ -182,6 +211,8 @@ def _direct_response_gate_allows(advisory: Dict[str, Any]) -> bool:
 
 def _semantic_risk_rejection(advisory: Dict[str, Any]) -> str:
     advisory = _d(advisory)
+    if _is_hybrid_flavor_action(advisory):
+        return ""
     risk_domain = _s(advisory.get("risk_domain")).strip().lower()
     utterance_mode = _s(advisory.get("utterance_mode")).strip().lower()
 
@@ -257,9 +288,11 @@ def choose_first_call_visible_response(
 ) -> Dict[str, Any]:
     """Return the safe first-call visible response, if runtime may consume it.
 
-    CE.1.3 rule:
+    Hybrid rule:
     - deterministic service/commerce/runtime matches win first;
     - stateful or needs_runtime_resolution=true LLM output is never consumed;
+    - semantic_route=flavor_action may be consumed without matching a flavor verb enum;
+    - semantic_route=unsupported_consequential_action is gracefully failed without state mutation;
     - direct NPC dialogue requires matching npc.speaker and non-empty npc.line;
     - player/restatement-only narration is not consumed as an NPC answer.
     """
@@ -279,6 +312,17 @@ def choose_first_call_visible_response(
     for source, advisory in candidates:
         if not advisory:
             continue
+        if _is_unsupported_consequential_action(advisory):
+            return {
+                "consumable": True,
+                "reason": "unsupported_consequential_graceful_failure",
+                "source": source,
+                "unsupported_consequential_action": True,
+                "semantic_route": _s(advisory.get("semantic_route")),
+                "advisory": deepcopy(advisory),
+                "first_call_grounding_diagnostics": deepcopy(_d(advisory.get("first_call_grounding_diagnostics"))),
+                "format_version": "first_call_visible_response_v1",
+            }
         if _looks_stateful(advisory):
             rejection_reasons.append(f"{source}:stateful_action_type")
             continue
@@ -306,7 +350,7 @@ def choose_first_call_visible_response(
             continue
         return {
             "consumable": True,
-            "reason": "non_stateful_interpretive_dialogue",
+            "reason": "non_stateful_flavor_action" if _is_hybrid_flavor_action(advisory) else "non_stateful_interpretive_dialogue",
             "source": source,
             "visible_response": deepcopy(visible_response),
             "narration": _s(visible_response.get("narration")).strip() or text,
@@ -314,6 +358,7 @@ def choose_first_call_visible_response(
             "text": text,
             "direct_response_gate": deepcopy(_d(advisory.get("direct_response_gate"))),
             "semantic_intent_gate": {
+                "semantic_route": _s(advisory.get("semantic_route")).strip(),
                 "utterance_mode": _s(advisory.get("utterance_mode")).strip(),
                 "literal_action_requested": _b(advisory.get("literal_action_requested"), False),
                 "state_mutation_requested": _b(advisory.get("state_mutation_requested"), False),
@@ -354,6 +399,87 @@ def _first_call_grounding_validation(selected: Dict[str, Any]) -> Dict[str, Any]
     }
 
 
+def _unsupported_failure_narration(selected: Dict[str, Any], player_input: str) -> str:
+    advisory = _d(selected.get("advisory"))
+    summary = _s(advisory.get("intent_summary")).strip()
+    unsupported_reason = _s(advisory.get("unsupported_reason")).strip()
+    if summary:
+        base = summary
+    else:
+        base = f"The attempted action could not be resolved: {_s(player_input).strip()}"
+    if unsupported_reason:
+        return f"{base} The attempt fails without changing the world state because this consequential action is not supported yet."
+    return f"{base} The attempt fails cleanly without changing the world state."
+
+
+def _build_unsupported_consequential_result(
+    *,
+    session: Dict[str, Any],
+    simulation_state: Dict[str, Any],
+    runtime_state: Dict[str, Any],
+    player_input: str,
+    selected: Dict[str, Any],
+) -> Dict[str, Any]:
+    advisory = _d(selected.get("advisory"))
+    diagnostics = _d(selected.get("first_call_grounding_diagnostics"))
+    grounding_validation = _first_call_grounding_validation(selected)
+    narration = _unsupported_failure_narration(selected, player_input)
+    resolved_result = {
+        "ok": True,
+        "action_type": "unsupported_consequential_action",
+        "semantic_action_type": "unsupported_consequential_action",
+        "semantic_family": _s(advisory.get("semantic_family") or "unknown"),
+        "semantic_route": _s(advisory.get("semantic_route") or "unsupported_consequential_action"),
+        "stateful": False,
+        "needs_runtime_resolution": False,
+        "visible_interaction_reason": "unsupported_consequential_graceful_failure",
+        "outcome": "unsupported_consequential_action_failed",
+        "success": False,
+        "state_mutation_applied": False,
+        "authoritative_state_mutation_allowed": False,
+        "graceful_failure_required": True,
+        "summary": narration,
+        "unsupported_reason": _s(advisory.get("unsupported_reason")),
+        "route_components": deepcopy(_l(advisory.get("route_components"))),
+        "first_call_visible_response": deepcopy(selected),
+        "first_call_grounding_diagnostics": deepcopy(diagnostics),
+        "grounding_validation": deepcopy(grounding_validation),
+        "source": "first_call_dialogue_unsupported_consequential_v1",
+    }
+    return {
+        "consumed": True,
+        "ok": True,
+        "result": deepcopy(resolved_result),
+        "resolved_result": deepcopy(resolved_result),
+        "narration": narration,
+        "final_narration": narration,
+        "summary": narration,
+        "llm_called": True,
+        "llm_purpose": "first_call_unsupported_consequential_graceful_failure",
+        "stateful": False,
+        "needs_runtime_resolution": False,
+        "state_mutation_applied": False,
+        "authoritative_state_mutation_allowed": False,
+        "simulation_state": deepcopy(_d(simulation_state)),
+        "runtime_state": deepcopy(_d(runtime_state)),
+        "session": deepcopy(_d(session)),
+        "player_input": _s(player_input),
+        "first_call_visible_response": deepcopy(selected),
+        "first_call_grounding_diagnostics": deepcopy(diagnostics),
+        "grounding_validation": deepcopy(grounding_validation),
+        "narration_context": {
+            "player_input": _s(player_input),
+            "action_type": "unsupported_consequential_action",
+            "resolved_result": deepcopy(resolved_result),
+            "simulation_state": deepcopy(_d(simulation_state)),
+            "runtime_state": deepcopy(_d(runtime_state)),
+            "first_call_grounding_diagnostics": deepcopy(diagnostics),
+            "grounding_validation": deepcopy(grounding_validation),
+        },
+        "source": "first_call_dialogue_unsupported_consequential_v1",
+    }
+
+
 def build_non_stateful_dialogue_result(
     *,
     session: Dict[str, Any],
@@ -371,26 +497,36 @@ def build_non_stateful_dialogue_result(
     )
     if not selected.get("consumable"):
         return {"consumed": False, "selection": selected}
+    if selected.get("reason") == "unsupported_consequential_graceful_failure":
+        return _build_unsupported_consequential_result(
+            session=session,
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            player_input=player_input,
+            selected=selected,
+        )
 
     visible_response = _d(selected.get("visible_response"))
     npc = _d(selected.get("npc"))
     narration = _s(selected.get("narration") or selected.get("text")).strip()
     grounding_validation = _first_call_grounding_validation(selected)
+    interaction_reason = "first_call_flavor_action" if selected.get("reason") == "non_stateful_flavor_action" else "first_call_non_stateful_dialogue"
     resolved_result = {
         "ok": True,
         "action_type": "npc_interpretive_dialogue",
         "semantic_action_type": "npc_interpretive_dialogue",
         "semantic_family": "social",
+        "semantic_route": "flavor_action" if selected.get("reason") == "non_stateful_flavor_action" else "dialogue",
         "stateful": False,
         "needs_runtime_resolution": False,
-        "visible_interaction_reason": "first_call_non_stateful_dialogue",
+        "visible_interaction_reason": interaction_reason,
         "outcome": "non_stateful_visible_response",
         "summary": narration,
         "npc": deepcopy(npc),
         "visible_response": deepcopy(visible_response),
         "conversation_result": {
             "triggered": True,
-            "reason": "first_call_non_stateful_interpretive_dialogue",
+            "reason": interaction_reason,
             "source": "first_call_dialogue_v1",
         },
         "first_call_visible_response": deepcopy(selected),
@@ -411,7 +547,7 @@ def build_non_stateful_dialogue_result(
         "npc": deepcopy(npc),
         "visible_response": deepcopy(visible_response),
         "llm_called": True,
-        "llm_purpose": "first_call_interpretive_dialogue",
+        "llm_purpose": "first_call_flavor_action" if selected.get("reason") == "non_stateful_flavor_action" else "first_call_interpretive_dialogue",
         "stateful": False,
         "needs_runtime_resolution": False,
         "simulation_state": deepcopy(_d(simulation_state)),
