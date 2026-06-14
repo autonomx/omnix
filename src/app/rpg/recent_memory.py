@@ -1,13 +1,10 @@
 VERSION = "recent_memory_v1"
 
-
 def _dict(value):
     return value if isinstance(value, dict) else {}
 
-
 def _list(value):
     return value if isinstance(value, list) else []
-
 
 def recent_memory(session):
     runtime = _dict(_dict(session).get("runtime_state"))
@@ -15,7 +12,6 @@ def recent_memory(session):
     turns = _list(memory.get("turns"))[-12:]
     dialogue = _list(memory.get("dialogue"))[-20:]
     return {"version": VERSION, "turns": turns, "dialogue": dialogue}
-
 
 def add_recent_memory(session, **values):
     updated = _dict(session)
@@ -26,5 +22,7 @@ def add_recent_memory(session, **values):
     memory["turns"] = [*memory["turns"], entry][-12:]
     if entry["npc_id"] or entry["npc_line"]:
         memory["dialogue"] = [*memory["dialogue"], entry][-20:]
-    updated["runtime_state"] = {"recent_memory": memory}
+    runtime = _dict(updated.get("runtime_state"))
+    runtime["recent_memory"] = memory
+    updated["runtime_state"] = runtime
     return updated
