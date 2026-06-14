@@ -3,35 +3,16 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Mapping
 
-from app.rpg.session.turn_memory_common import (
+from app.rpg.session.turn_memory_common import d, first, i, l, s
+from app.rpg.session.turn_memory_facts import extract_player_memory_facts
+from app.rpg.session.turn_memory_result_extractors import (
     action_type,
-    d,
-    first,
-    i,
-    l,
     npc,
     runtime_state,
-    s,
     simulation_state,
     summary,
 )
-from app.rpg.session.turn_memory_facts import extract_player_memory_facts
-
-
-def _topic_tags(player_input: str, resolved_action_type: str, facts: list[dict[str, str]]) -> list[str]:
-    text = f"{player_input} {resolved_action_type}".lower()
-    tags: set[str] = set()
-    if facts or any(term in text for term in ("remember", "name", "called", "trail name")):
-        tags.add("identity")
-    if any(term in text for term in ("rumor", "rumour", "gossip", "heard")):
-        tags.add("rumor")
-    if any(term in text for term in ("bandit", "road", "quarry", "clue")):
-        tags.add("quest_clue")
-    if any(term in text for term in ("buy", "sell", "price", "silver", "gold", "room", "ration")):
-        tags.add("commerce")
-    if "dialogue" in resolved_action_type.lower() or "npc" in resolved_action_type.lower():
-        tags.add("dialogue")
-    return sorted(tags)
+from app.rpg.session.turn_memory_topics import topic_tags
 
 
 def build_turn_memory_entry(
@@ -60,7 +41,7 @@ def build_turn_memory_entry(
         "npc_id": resolved_npc["id"],
         "npc_speaker": resolved_npc["speaker"],
         "npc_line": resolved_npc["line"][:500],
-        "topic_tags": _topic_tags(player_input, resolved_action_type, facts),
+        "topic_tags": topic_tags(player_input, resolved_action_type, facts),
         "salience": 0.85 if facts else (0.65 if resolved_npc["speaker"] else 0.35),
         "source": "deterministic_turn_memory_writer_v1",
     }
