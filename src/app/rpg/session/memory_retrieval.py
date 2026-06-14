@@ -11,7 +11,7 @@ from .memory_writer import (
 
 DEFAULT_RECENT_MEMORY_LIMIT = 6
 DEFAULT_RELEVANT_MEMORY_LIMIT = 8
-RETRIEVABLE_MEMORY_KINDS = {"turn", "dialogue"}
+RETRIEVABLE_MEMORY_KINDS = {"turn", "dialogue", "recap"}
 
 
 def _clean_text(value: Any, limit: int = MAX_MEMORY_TEXT) -> str:
