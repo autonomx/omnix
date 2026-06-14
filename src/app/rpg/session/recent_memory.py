@@ -14,19 +14,13 @@ def _list(value: Any) -> list[Any]:
 
 
 def recent_memory(session: Mapping[str, Any] | None) -> dict[str, Any]:
-    runtime = _dict(_dict(session).get("runtime_state"))
-    memory = _dict(runtime.get("recent_memory"))
-    return {
-        "version": VERSION,
-        "turns": _list(memory.get("turns"))[-12:],
-        "dialogue": _list(memory.get("dialogue"))[-20:],
-    }
+    memory = _dict(_dict(_dict(session).get("runtime_state")).get("recent_memory"))
+    return {"version": VERSION,
+            "turns": _list(memory.get("turns"))[-12:],
+            "dialogue": _list(memory.get("dialogue"))[-20:]}
 
 
-def add_recent_memory(
-    session: Mapping[str, Any] | None,
-    **values: str,
-) -> dict[str, Any]:
+def add_recent_memory(session: Mapping[str, Any] | None, **values: str) -> dict[str, Any]:
     updated = _dict(session)
     memory = recent_memory(updated)
     entry: dict[str, str] = {}
