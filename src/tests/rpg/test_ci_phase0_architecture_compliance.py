@@ -24,6 +24,10 @@ EXPECTED_COMBAT_CONTRACT_PARTS = [
     "runtime_part25",
     "runtime_part26",
 ]
+REQUIRED_RPG_WORKFLOWS = [
+    ".github/workflows/rpg-pr-deterministic.yml",
+    ".github/workflows/rpg-phase0-architecture-compliance.yml",
+]
 
 
 def _read(path: str) -> str:
@@ -124,6 +128,15 @@ def test_phase0_deterministic_ci_has_no_live_provider_requirements():
     assert "RPG_TEST_MODE: deterministic" in workflow
     for token in forbidden_tokens:
         assert token not in workflow
+
+
+def test_phase0_required_rpg_ci_workflows_are_not_path_filtered():
+    for workflow_path in REQUIRED_RPG_WORKFLOWS:
+        workflow = _read(workflow_path)
+        assert "pull_request:" in workflow
+        assert "branches: [rpg]" in workflow
+        assert "push:" in workflow
+        assert "paths:" not in workflow
 
 
 def test_phase0_deterministic_layers_do_not_import_live_providers():

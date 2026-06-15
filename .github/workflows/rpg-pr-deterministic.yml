@@ -31,16 +31,52 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart
+          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart playwright
 
       - name: Check RPG file line limits
-        run: python scripts/check_rpg_file_lines.py
+        run: |
+          set -o pipefail
+          python scripts/check_rpg_file_lines.py 2>&1 | tee rpg-file-line-limits-output.txt
+
+      - name: Upload file line diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpg-file-line-limits-output
+          path: rpg-file-line-limits-output.txt
 
       - name: Ruff runtime bridge checks
-        run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py
+        run: |
+          set -o pipefail
+          ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py 2>&1 | tee rpg-ruff-runtime-bridge-output.txt
+
+      - name: Upload ruff diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpg-ruff-runtime-bridge-output
+          path: rpg-ruff-runtime-bridge-output.txt
 
       - name: Gateway event stream regression
-        run: python -m pytest src/tests/app/test_gateway_events.py -q
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_gateway_events.py -q --tb=short 2>&1 | tee gateway-events-pytest-output.txt
+
+      - name: Upload gateway event diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-events-pytest-output
+          path: gateway-events-pytest-output.txt
 
       - name: RPG representative deterministic smoke
-        run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
+        run: |
+          set -o pipefail
+          python -m pytest src/app/rpg/tests/test_narration_queue.py -q --tb=short 2>&1 | tee rpg-narration-queue-pytest-output.txt
+
+      - name: Upload RPG smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpg-narration-queue-pytest-output
+          path: rpg-narration-queue-pytest-output.txt
