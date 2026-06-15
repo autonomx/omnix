@@ -3,20 +3,8 @@ name: RPG deterministic PR gates
 on:
   pull_request:
     branches: [rpg]
-    paths:
-      - "src/app/rpg/**"
-      - "src/tests/rpg/**"
-      - "scripts/check_rpg_file_lines.py"
-      - "ruff.toml"
-      - ".github/workflows/rpg-pr-deterministic.yml"
   push:
     branches: [rpg]
-    paths:
-      - "src/app/rpg/**"
-      - "src/tests/rpg/**"
-      - "scripts/check_rpg_file_lines.py"
-      - "ruff.toml"
-      - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
 
 permissions:
@@ -50,6 +38,9 @@ jobs:
 
       - name: Ruff runtime bridge checks
         run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py
+
+      - name: Gateway event stream regression
+        run: python -m pytest src/tests/app/test_gateway_events.py -q
 
       - name: RPG representative deterministic smoke
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
