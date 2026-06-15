@@ -109,6 +109,24 @@ function jobPayload(status: string, message: string) {
   };
 }
 
+function assetPayload(includeAsset: boolean) {
+  return {
+    assets: includeAsset
+      ? [
+          {
+            id: 'asset-1',
+            module: 'image-generation',
+            type: 'image',
+            mime_type: 'image/png',
+            storage_path: 'artifacts/image.png',
+            created_at: '2026-06-14T00:00:00Z',
+            source_job_id: 'job-1',
+          },
+        ]
+      : [],
+  };
+}
+
 afterEach(() => {
   MockEventSource.instances = [];
   vi.unstubAllGlobals();
@@ -211,21 +229,36 @@ describe('PlatformModuleWorkspace', () => {
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/jobs'))).toHaveLength(2);
   });
 
+  it('refreshes assets when shared job completion events arrive', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
+      const assetsCallCount = fetchMock.mock.calls.filter(([callInput]) => {
+        const callPath = typeof callInput === 'string' ? new URL(callInput, 'http://localhost').pathname : new URL(callInput.toString()).pathname;
+        return callPath === '/api/assets';
+      }).length;
+
+      if (path === '/api/assets') {
+        return Response.json(assetPayload(assetsCallCount > 1));
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPlatform('assets');
+
+    expect(await screen.findByText('No assets indexed in the shared library.')).toBeInTheDocument();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    MockEventSource.instances[0].emitMessage('job.completed', '{"job_id":"job-1"}');
+
+    expect(await screen.findByRole('heading', { name: 'image / image-generation' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/assets'))).toHaveLength(2);
+  });
+
   it('renders assets, reports, settings, and diagnostics data', async () => {
     mockGateway({
-      '/api/assets': {
-        assets: [
-          {
-            id: 'asset-1',
-            module: 'image-generation',
-            type: 'image',
-            mime_type: 'image/png',
-            storage_path: 'artifacts/image.png',
-            created_at: '2026-06-14T00:00:00Z',
-            source_job_id: 'job-1',
-          },
-        ],
-      },
+      '/api/assets': assetPayload(true),
       '/api/reports': {
         reports: [{ id: 'autoplay-report', kind: 'rpg_autoplay', path: 'reports/run.json', size_bytes: 512 }],
       },
