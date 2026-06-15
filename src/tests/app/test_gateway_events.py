@@ -4,7 +4,9 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from app.gateway.main import _live_job_event_stream, _parse_event_id, _sse_comment, _sse_event
+from fastapi.testclient import TestClient
+
+from app.gateway.main import create_gateway_app, _live_job_event_stream, _parse_event_id, _sse_comment, _sse_event
 
 
 @dataclass
@@ -68,3 +70,25 @@ def test_live_job_event_stream_resumes_after_supplied_event_id():
     )
     assert chunks[2] == ": heartbeat\n\n"
     assert after_ids[:2] == [1, 2]
+
+
+def test_finite_job_events_endpoint_emits_sse_ids_and_honors_after_id():
+    store = FakeJobStore(
+        [
+            FakeJobEvent(id=1, event_type="job.created", payload={"job_id": "old"}),
+            FakeJobEvent(id=2, event_type="job.completed", payload={"job_id": "current"}),
+        ]
+    )
+    app = create_gateway_app(job_store_factory=lambda: store)
+    client = TestClient(app)
+
+    response = client.get("/api/jobs/events?after_id=1&limit=5")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.text == (
+        'id: 2\n'
+        'event: job.completed\n'
+        'data: {"event_type": "job.completed", "id": 2, "job_id": "current"}\n\n'
+    )
+    assert store.after_ids == [1]
