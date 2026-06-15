@@ -127,6 +127,14 @@ function assetPayload(includeAsset: boolean) {
   };
 }
 
+function reportPayload(includeReport: boolean) {
+  return {
+    reports: includeReport
+      ? [{ id: 'autoplay-report', kind: 'rpg_autoplay', path: 'reports/run.json', size_bytes: 512 }]
+      : [],
+  };
+}
+
 afterEach(() => {
   MockEventSource.instances = [];
   vi.unstubAllGlobals();
@@ -256,12 +264,37 @@ describe('PlatformModuleWorkspace', () => {
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/assets'))).toHaveLength(2);
   });
 
+  it('refreshes reports when shared job completion events arrive', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
+      const reportsCallCount = fetchMock.mock.calls.filter(([callInput]) => {
+        const callPath = typeof callInput === 'string' ? new URL(callInput, 'http://localhost').pathname : new URL(callInput.toString()).pathname;
+        return callPath === '/api/reports';
+      }).length;
+
+      if (path === '/api/reports') {
+        return Response.json(reportPayload(reportsCallCount > 1));
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPlatform('reports');
+
+    expect(await screen.findByText('No generated reports found.')).toBeInTheDocument();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    MockEventSource.instances[0].emitMessage('job.completed', '{"job_id":"job-1"}');
+
+    expect(await screen.findByRole('heading', { name: 'autoplay-report' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/reports'))).toHaveLength(2);
+  });
+
   it('renders assets, reports, settings, and diagnostics data', async () => {
     mockGateway({
       '/api/assets': assetPayload(true),
-      '/api/reports': {
-        reports: [{ id: 'autoplay-report', kind: 'rpg_autoplay', path: 'reports/run.json', size_bytes: 512 }],
-      },
+      '/api/reports': reportPayload(true),
       '/api/settings': {
         provider: 'openai',
         audio_provider_tts: 'piper',
