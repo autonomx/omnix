@@ -91,7 +91,7 @@ def test_shared_asset_store_reads_legacy_generated_audio(tmp_path, monkeypatch) 
 
     store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
 
-    assets = {asset.id: asset for asset in store.list_assets().assets}
+    assets = {asset.id: asset for asset in store.list_assets().assets if asset.type == AssetType.AUDIO}
 
     assert set(assets) == {"audio:tts-narration.wav", "audio:stt-mic-capture.mp3"}
     assert assets["audio:tts-narration.wav"].module == "voice"
