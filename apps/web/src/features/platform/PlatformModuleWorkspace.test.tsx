@@ -6,7 +6,22 @@ import { omnixModules, type OmnixModuleId } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { PlatformModuleWorkspace } from './PlatformModuleWorkspace';
 
+class MockEventSource {
+  readonly url: string;
+
+  constructor(url: string | URL) {
+    this.url = String(url);
+  }
+
+  addEventListener() {}
+
+  removeEventListener() {}
+
+  close() {}
+}
+
 function renderPlatform(moduleId: OmnixModuleId) {
+  vi.stubGlobal('EventSource', MockEventSource);
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
