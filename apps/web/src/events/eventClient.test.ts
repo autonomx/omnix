@@ -73,15 +73,15 @@ describe('OmnixEventClient', () => {
     const handler = vi.fn();
 
     client.subscribeStatus((status) => statuses.push(status.state));
-    const unsubscribe = client.subscribe('jobs.updated', handler);
+    const unsubscribe = client.subscribe('job.updated', handler);
 
     expect(sources).toHaveLength(1);
     expect(sources[0].endpoint).toBe('/events');
-    expect(sources[0].listenerCount('jobs.updated')).toBe(1);
+    expect(sources[0].listenerCount('job.updated')).toBe(1);
     expect(statuses).toEqual(['idle', 'connecting']);
 
     sources[0].emitOpen();
-    sources[0].emitMessage('jobs.updated', '{"id":"job-1","progress":0.5}');
+    sources[0].emitMessage('job.updated', '{"id":"job-1","progress":0.5}');
 
     expect(handler).toHaveBeenCalledWith({ id: 'job-1', progress: 0.5 });
     expect(client.getStatus().state).toBe('open');
@@ -94,21 +94,21 @@ describe('OmnixEventClient', () => {
 
   it('multiplexes multiple named events over one source', () => {
     const { client, sources } = createClient();
-    const jobHandler = vi.fn();
-    const diagnosticsHandler = vi.fn();
+    const updatedHandler = vi.fn();
+    const completedHandler = vi.fn();
 
-    client.subscribe('jobs.updated', jobHandler);
-    client.subscribe('diagnostics.updated', diagnosticsHandler);
+    client.subscribe('job.updated', updatedHandler);
+    client.subscribe('job.completed', completedHandler);
 
     expect(sources).toHaveLength(1);
-    expect(sources[0].listenerCount('jobs.updated')).toBe(1);
-    expect(sources[0].listenerCount('diagnostics.updated')).toBe(1);
+    expect(sources[0].listenerCount('job.updated')).toBe(1);
+    expect(sources[0].listenerCount('job.completed')).toBe(1);
 
-    sources[0].emitMessage('jobs.updated', '{"id":"job-2"}');
-    sources[0].emitMessage('diagnostics.updated', '{"ok":true}');
+    sources[0].emitMessage('job.updated', '{"id":"job-2"}');
+    sources[0].emitMessage('job.completed', '{"id":"job-2","status":"completed"}');
 
-    expect(jobHandler).toHaveBeenCalledWith({ id: 'job-2' });
-    expect(diagnosticsHandler).toHaveBeenCalledWith({ ok: true });
+    expect(updatedHandler).toHaveBeenCalledWith({ id: 'job-2' });
+    expect(completedHandler).toHaveBeenCalledWith({ id: 'job-2', status: 'completed' });
   });
 
   it('supports multiple listeners for one named event', () => {
@@ -116,14 +116,14 @@ describe('OmnixEventClient', () => {
     const firstHandler = vi.fn();
     const secondHandler = vi.fn();
 
-    const unsubscribeFirst = client.subscribe('assets.created', firstHandler);
-    client.subscribe('assets.created', secondHandler);
+    const unsubscribeFirst = client.subscribe('asset.created', firstHandler);
+    client.subscribe('asset.created', secondHandler);
 
-    expect(sources[0].listenerCount('assets.created')).toBe(1);
+    expect(sources[0].listenerCount('asset.created')).toBe(1);
 
-    sources[0].emitMessage('assets.created', '{"assetId":"asset-1"}');
+    sources[0].emitMessage('asset.created', '{"assetId":"asset-1"}');
     unsubscribeFirst();
-    sources[0].emitMessage('assets.created', '{"assetId":"asset-2"}');
+    sources[0].emitMessage('asset.created', '{"assetId":"asset-2"}');
 
     expect(firstHandler).toHaveBeenCalledTimes(1);
     expect(secondHandler).toHaveBeenCalledTimes(2);
@@ -134,13 +134,13 @@ describe('OmnixEventClient', () => {
     const { client, sources } = createClient({ onMalformedEvent: malformedHandler });
     const handler = vi.fn();
 
-    client.subscribe('jobs.updated', handler);
-    sources[0].emitMessage('jobs.updated', '{not-json');
+    client.subscribe('job.updated', handler);
+    sources[0].emitMessage('job.updated', '{not-json');
 
     expect(handler).not.toHaveBeenCalled();
     expect(malformedHandler).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventName: 'jobs.updated',
+        eventName: 'job.updated',
         data: '{not-json',
       }),
     );
@@ -152,7 +152,7 @@ describe('OmnixEventClient', () => {
     const { client, sources } = createClient();
     const handler = vi.fn();
 
-    client.subscribe('jobs.updated', handler);
+    client.subscribe('job.updated', handler);
     sources[0].emitOpen();
     sources[0].emitError();
 
@@ -172,10 +172,10 @@ describe('OmnixEventClient', () => {
     expect(client.getStatus().state).toBe('connecting');
 
     sources[1].emitOpen();
-    sources[1].emitMessage('jobs.updated', '{"id":"job-3"}');
+    sources[1].emitMessage('job.updated', '{"id":"job-3"}');
 
     expect(client.getStatus()).toEqual({ state: 'open', reconnectAttempt: 0 });
-    expect(sources[1].listenerCount('jobs.updated')).toBe(1);
+    expect(sources[1].listenerCount('job.updated')).toBe(1);
     expect(handler).toHaveBeenCalledWith({ id: 'job-3' });
   });
 
@@ -184,7 +184,7 @@ describe('OmnixEventClient', () => {
 
     const { client, sources } = createClient();
 
-    client.subscribe('jobs.updated', vi.fn());
+    client.subscribe('job.updated', vi.fn());
     sources[0].emitError();
     client.close();
     vi.runAllTimers();
@@ -198,7 +198,7 @@ describe('OmnixEventClient', () => {
 
     const { client, sources } = createClient();
 
-    const unsubscribe = client.subscribe('jobs.updated', vi.fn());
+    const unsubscribe = client.subscribe('job.updated', vi.fn());
     sources[0].emitError();
     unsubscribe();
     vi.runAllTimers();
