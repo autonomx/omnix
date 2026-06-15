@@ -1,6 +1,6 @@
 import { Button, Group, Progress, Switch, Text, Title } from '@mantine/core';
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
+import { useEffect, useState, type ReactNode } from 'react';
 import type {
   AssetListResponse,
   DiagnosticsPayload,
@@ -13,6 +13,7 @@ import type {
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition, OmnixModuleId } from '../../app/modules';
 import { OmnixAssetCard, OmnixDiagnosticsView, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { omnixEventClient, type OmnixEventConnectionStatus } from '../../events/eventClient';
 
 const platformModuleIds = new Set<OmnixModuleId>([
   'providers',
@@ -23,6 +24,10 @@ const platformModuleIds = new Set<OmnixModuleId>([
   'settings',
   'diagnostics',
 ]);
+
+const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled'] as const;
+const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
+const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], ['platform', 'jobs']];
 
 export function isPlatformModule(moduleId: OmnixModuleId): boolean {
   return platformModuleIds.has(moduleId);
@@ -123,6 +128,8 @@ function ModelsView() {
 
 function JobsView() {
   const queryClient = useQueryClient();
+  const eventStatus = useEventConnectionStatus();
+  useJobEventRefresh(jobsEventQueryKeys);
   const query = useQuery({
     queryKey: ['platform', 'jobs'],
     queryFn: () => omnixApiClient.listJobs(),
@@ -133,47 +140,53 @@ function JobsView() {
   });
 
   return (
-    <QueryState query={query} empty={!query.data?.jobs.length} emptyText="No jobs in the shared queue.">
-      {(data) => (
-        <div className="platform-list">
-          {data.jobs.map((job) => {
-            const progressValue = progressPercent(job.progress);
-            const canCancel = ['queued', 'leased', 'running', 'waiting', 'retrying'].includes(job.status);
+    <>
+      <section className="platform-section">
+        <Title order={4}>Live updates</Title>
+        <DetailList rows={eventStatusRows(eventStatus)} />
+      </section>
+      <QueryState query={query} empty={!query.data?.jobs.length} emptyText="No jobs in the shared queue.">
+        {(data) => (
+          <div className="platform-list">
+            {data.jobs.map((job) => {
+              const progressValue = progressPercent(job.progress);
+              const canCancel = ['queued', 'leased', 'running', 'waiting', 'retrying'].includes(job.status);
 
-            return (
-              <section className="platform-section" key={job.id}>
-                <Group justify="space-between" align="start">
-                  <div>
-                    <Title order={4}>{job.type}</Title>
-                    <Text size="sm">{job.module}</Text>
-                  </div>
-                  <Group gap="xs">
-                    <OmnixStatusPill>{job.status}</OmnixStatusPill>
-                    <Button
-                      size="xs"
-                      variant="light"
-                      disabled={!canCancel || cancelMutation.isPending}
-                      onClick={() => cancelMutation.mutate(job.id)}
-                    >
-                      Cancel
-                    </Button>
+              return (
+                <section className="platform-section" key={job.id}>
+                  <Group justify="space-between" align="start">
+                    <div>
+                      <Title order={4}>{job.type}</Title>
+                      <Text size="sm">{job.module}</Text>
+                    </div>
+                    <Group gap="xs">
+                      <OmnixStatusPill>{job.status}</OmnixStatusPill>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        disabled={!canCancel || cancelMutation.isPending}
+                        onClick={() => cancelMutation.mutate(job.id)}
+                      >
+                        Cancel
+                      </Button>
+                    </Group>
                   </Group>
-                </Group>
-                <Progress value={progressValue} aria-label={`${job.type} progress`} />
-                <DetailList
-                  rows={[
-                    ['Resource lock', job.resource_class],
-                    ['Progress', job.progress?.message ?? `${progressValue}%`],
-                    ['Stages', job.stages?.map((stage) => `${stage.label}: ${stage.status}`).join(', ') || 'none'],
-                    ['Logs', job.logs?.length ? `${job.logs.length}` : 'none'],
-                  ]}
-                />
-              </section>
-            );
-          })}
-        </div>
-      )}
-    </QueryState>
+                  <Progress value={progressValue} aria-label={`${job.type} progress`} />
+                  <DetailList
+                    rows={[
+                      ['Resource lock', job.resource_class],
+                      ['Progress', job.progress?.message ?? `${progressValue}%`],
+                      ['Stages', job.stages?.map((stage) => `${stage.label}: ${stage.status}`).join(', ') || 'none'],
+                      ['Logs', job.logs?.length ? `${job.logs.length}` : 'none'],
+                    ]}
+                  />
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </QueryState>
+    </>
   );
 }
 
@@ -263,6 +276,8 @@ function SettingsView() {
 }
 
 function DiagnosticsView() {
+  const eventStatus = useEventConnectionStatus();
+  useJobEventRefresh(diagnosticsEventQueryKeys);
   const query = useQuery({
     queryKey: ['platform', 'diagnostics'],
     queryFn: () => omnixApiClient.getDiagnostics(),
@@ -285,7 +300,8 @@ function DiagnosticsView() {
                 rows={[
                   { label: 'Gateway', value: data.status },
                   { label: 'Workers', value: data.workers.status },
-                  { label: 'Event stream', value: data.event_stream?.status ?? 'unknown' },
+                  { label: 'Event stream', value: eventStatusText(eventStatus) },
+                  { label: 'Diagnostics payload', value: data.event_stream?.status ?? 'unknown' },
                 ]}
               />
             </section>
@@ -332,6 +348,33 @@ function QueryState<T>({
   return <>{children(query.data)}</>;
 }
 
+function useEventConnectionStatus(): OmnixEventConnectionStatus {
+  const [status, setStatus] = useState(() => omnixEventClient.getStatus());
+
+  useEffect(() => omnixEventClient.subscribeStatus(setStatus), []);
+
+  return status;
+}
+
+function useJobEventRefresh(queryKeys: QueryKey[]) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const invalidate = () => {
+      for (const queryKey of queryKeys) {
+        queryClient.invalidateQueries({ queryKey });
+      }
+    };
+    const unsubscribes = jobEventNames.map((eventName) => omnixEventClient.subscribe(eventName, invalidate));
+
+    return () => {
+      for (const unsubscribe of unsubscribes) {
+        unsubscribe();
+      }
+    };
+  }, [queryClient, queryKeys]);
+}
+
 function DetailList({ rows }: { rows: Array<[string, string]> }) {
   return (
     <dl className="platform-details">
@@ -351,6 +394,18 @@ function EmptyState({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function eventStatusRows(status: OmnixEventConnectionStatus): Array<[string, string]> {
+  return [
+    ['Event stream', eventStatusText(status)],
+    ['Retry attempt', `${status.reconnectAttempt}`],
+    ['Next retry', status.nextReconnectDelayMs ? `${status.nextReconnectDelayMs} ms` : 'none'],
+  ];
+}
+
+function eventStatusText(status: OmnixEventConnectionStatus): string {
+  return status.lastError ? `${status.state} (${status.lastError})` : status.state;
 }
 
 function progressPercent(progress: JobRecord['progress']): number {
