@@ -3,34 +3,8 @@ name: RPG deterministic PR gates
 on:
   pull_request:
     branches: [rpg]
-    paths:
-      - "apps/web/**"
-      - "src/app/gateway/**"
-      - "src/app/platform/**"
-      - "src/app/rpg/**"
-      - "src/tests/app/**"
-      - "src/tests/rpg/**"
-      - "docs/WEB_APP*.md"
-      - "docs/WEB_APP_*.md"
-      - "SPEC.md"
-      - "scripts/check_rpg_file_lines.py"
-      - "ruff.toml"
-      - ".github/workflows/rpg-pr-deterministic.yml"
   push:
     branches: [rpg]
-    paths:
-      - "apps/web/**"
-      - "src/app/gateway/**"
-      - "src/app/platform/**"
-      - "src/app/rpg/**"
-      - "src/tests/app/**"
-      - "src/tests/rpg/**"
-      - "docs/WEB_APP*.md"
-      - "docs/WEB_APP_*.md"
-      - "SPEC.md"
-      - "scripts/check_rpg_file_lines.py"
-      - "ruff.toml"
-      - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
 
 permissions:
