@@ -240,6 +240,8 @@ export class OmnixEventClient {
       const message = event as MessageEvent<string>;
       let payload: unknown;
 
+      this.rememberEventId(message.lastEventId);
+
       try {
         payload = JSON.parse(message.data);
       } catch (error) {
@@ -250,8 +252,6 @@ export class OmnixEventClient {
         });
         return;
       }
-
-      this.rememberEventId(message.lastEventId);
 
       const handlersForEvent = this.handlers.get(eventName);
       if (!handlersForEvent) {
