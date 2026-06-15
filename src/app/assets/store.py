@@ -16,11 +16,23 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _mtime_iso(path: Path) -> str:
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+    except OSError:
+        return _utcnow()
+
+
 def default_asset_manifest_path() -> Path:
     override = os.environ.get("OMNIX_ASSETS_MANIFEST_PATH")
     if override:
         return Path(override)
     return resources_data_root() / "assets" / "manifest.json"
+
+
+def _safe_voice_asset_id(voice_id: str) -> str:
+    safe = "-".join(voice_id.strip().split()) or "unnamed"
+    return f"voice-cloning:{safe}"
 
 
 class SharedAssetStore:
@@ -31,7 +43,10 @@ class SharedAssetStore:
         self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     def list_assets(self) -> AssetListResponse:
-        return AssetListResponse(assets=list(self._load_manifest().values()))
+        assets = self._load_manifest()
+        for asset in self._legacy_voice_clone_assets():
+            assets.setdefault(asset.id, asset)
+        return AssetListResponse(assets=list(assets.values()))
 
     def upsert_asset(self, asset: AssetRecord) -> AssetRecord:
         manifest = self._load_manifest()
@@ -87,6 +102,55 @@ class SharedAssetStore:
             manifest[asset.id] = asset
         self._save_manifest(manifest)
         return preview
+
+    def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
+        """Expose old voice clone profiles without mutating the shared manifest."""
+        try:
+            import app.shared as shared
+        except Exception:
+            return []
+
+        manifest_path = Path(getattr(shared, "VOICE_CLONES_FILE", ""))
+        if not manifest_path.is_file():
+            return []
+
+        try:
+            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+
+        clones_dir = Path(getattr(shared, "VOICE_CLONES_DIR", manifest_path.parent))
+        records: list[AssetRecord] = []
+        for voice_id, payload in sorted(dict(raw or {}).items()):
+            data = dict(payload or {})
+            clone_id = str(data.get("voice_clone_id") or voice_id)
+            wav_path = clones_dir / f"{clone_id}.wav"
+            storage_path = str(wav_path if wav_path.is_file() else manifest_path)
+            records.append(
+                AssetRecord(
+                    id=_safe_voice_asset_id(str(voice_id)),
+                    module="voice-cloning",
+                    type=AssetType.VOICE_PROFILE,
+                    mime_type="audio/wav" if wav_path.is_file() else "application/json",
+                    storage_path=storage_path,
+                    metadata={
+                        "voice_id": voice_id,
+                        "voice_clone_id": clone_id,
+                        "speaker": data.get("speaker") or "default",
+                        "language": data.get("language") or "",
+                        "gender": data.get("gender") or "neutral",
+                        "has_audio": bool(data.get("has_audio")),
+                        "is_preloaded": bool(data.get("is_preloaded")),
+                    },
+                    created_at=_mtime_iso(wav_path if wav_path.is_file() else manifest_path),
+                    compat={
+                        "legacy_system": "app.shared.VOICE_CLONES_FILE",
+                        "legacy_manifest": str(manifest_path),
+                        "legacy_voice_id": voice_id,
+                    },
+                )
+            )
+        return records
 
     def _load_manifest(self) -> dict[str, AssetRecord]:
         if not self.manifest_path.is_file():

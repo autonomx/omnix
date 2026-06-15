@@ -98,6 +98,18 @@ jobs:
           name: gateway-openapi-pytest-output
           path: gateway-openapi-pytest-output.txt
 
+      - name: Shared asset read-through regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_shared_assets_readthrough.py -q --tb=short 2>&1 | tee shared-assets-readthrough-pytest-output.txt
+
+      - name: Upload shared asset read-through diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-assets-readthrough-pytest-output
+          path: shared-assets-readthrough-pytest-output.txt
+
       - name: Web typecheck
         run: |
           set -o pipefail
