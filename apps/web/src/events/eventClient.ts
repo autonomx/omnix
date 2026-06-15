@@ -202,10 +202,13 @@ export class OmnixEventClient {
     }
 
     const [endpointWithoutHash, hashFragment] = this.endpoint.split('#', 2);
-    const separator = endpointWithoutHash.includes('?') ? '&' : '?';
+    const [path, queryString = ''] = endpointWithoutHash.split('?', 2);
+    const params = new URLSearchParams(queryString);
+    params.set('after_id', this.lastEventId);
+    const query = params.toString();
     const hashSuffix = hashFragment === undefined ? '' : `#${hashFragment}`;
 
-    return `${endpointWithoutHash}${separator}after_id=${encodeURIComponent(this.lastEventId)}${hashSuffix}`;
+    return `${path}${query ? `?${query}` : ''}${hashSuffix}`;
   }
 
   private bindEventName(eventName: string) {
