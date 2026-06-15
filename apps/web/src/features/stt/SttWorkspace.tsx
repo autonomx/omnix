@@ -1,0 +1,178 @@
+import { Button, Group, Progress, Text, Title } from '@mantine/core';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useForm } from 'react-hook-form';
+import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
+import type { OmnixModuleDefinition } from '../../app/modules';
+import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+
+interface SttFormValues {
+  providerId: string;
+  audioAssetId: string;
+  sourcePath: string;
+  language: string;
+}
+
+export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  const queryClient = useQueryClient();
+  const providersQuery = useQuery({
+    queryKey: ['platform', 'providers'],
+    queryFn: () => omnixApiClient.listProviders(),
+  });
+  const jobsQuery = useQuery({
+    queryKey: ['platform', 'jobs'],
+    queryFn: () => omnixApiClient.listJobs(),
+  });
+  const assetsQuery = useQuery({
+    queryKey: ['platform', 'assets'],
+    queryFn: () => omnixApiClient.listAssets(),
+  });
+  const { register, handleSubmit, reset } = useForm<SttFormValues>({
+    defaultValues: { providerId: '', audioAssetId: '', sourcePath: '', language: '' },
+  });
+  const sttProviders = useMemo(() => sttCapableProviders(providersQuery.data), [providersQuery.data]);
+  const audioAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'audio' || asset.type === 'voice_sample') ?? [];
+  const transcriptAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'transcript') ?? [];
+  const sttJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'stt') ?? [];
+  const createJobMutation = useMutation({
+    mutationFn: (values: SttFormValues) =>
+      omnixApiClient.createJob({
+        module: 'stt',
+        type: 'stt.transcribe',
+        resource_class: 'gpu:stt',
+        priority: 0,
+        input_ref: values.audioAssetId ? { asset_id: values.audioAssetId } : null,
+        input_payload: {
+          source_path: values.sourcePath || null,
+          provider_id: values.providerId || null,
+          language: values.language || null,
+        },
+        stages: [
+          { id: 'transcribe', label: 'Transcribe audio', resource_class: 'gpu:stt', status: 'queued' },
+          { id: 'align', label: 'Align transcript', resource_class: 'cpu', status: 'queued' },
+          { id: 'store-transcript', label: 'Store transcript asset', resource_class: 'cpu', status: 'queued' },
+        ],
+      }),
+    onSuccess: async (_job, values) => {
+      reset({ providerId: values.providerId, audioAssetId: values.audioAssetId, sourcePath: '', language: values.language });
+      await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+    },
+  });
+
+  return (
+    <WorkspacePanel>
+      <div className="workspace-heading">
+        <div>
+          <p className="eyebrow">Feature module</p>
+          <h3 id="module-title">{module.label}</h3>
+        </div>
+        <code>{module.route}</code>
+      </div>
+
+      <p className="workspace-summary">{module.summary}</p>
+
+      <div className="feature-layout">
+        <section className="feature-panel">
+          <Group justify="space-between" align="start">
+            <div>
+              <Title order={4}>Transcription</Title>
+              <Text size="sm">Shared STT job queue</Text>
+            </div>
+            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+          </Group>
+
+          <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
+            <label>
+              Provider
+              <select {...register('providerId')}>
+                <option value="">Default STT provider</option>
+                {sttProviders.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Audio asset
+              <select {...register('audioAssetId')}>
+                <option value="">External path</option>
+                {audioAssets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.storage_path}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Language
+              <input {...register('language')} placeholder="auto" />
+            </label>
+            <label className="feature-form-wide">
+              Source path
+              <input {...register('sourcePath')} placeholder="resources/data/input.wav" />
+            </label>
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
+              Queue transcription
+            </Button>
+          </form>
+
+          {createJobMutation.data ? (
+            <div className="feature-job-link" role="status">
+              STT job queued: {createJobMutation.data.id}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="feature-panel">
+          <Title order={4}>STT jobs</Title>
+          {sttJobs.length ? (
+            <div className="feature-list">
+              {sttJobs.map((job) => (
+                <article className="feature-mini-card" key={job.id}>
+                  <Group justify="space-between">
+                    <strong>{job.type}</strong>
+                    <OmnixStatusPill>{job.status}</OmnixStatusPill>
+                  </Group>
+                  <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
+                  <Text size="sm">{job.resource_class}</Text>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="platform-empty" role="status">
+              No STT jobs queued.
+            </div>
+          )}
+        </section>
+
+        <section className="feature-panel feature-panel-wide">
+          <Title order={4}>Transcript assets</Title>
+          {transcriptAssets.length ? (
+            <div className="platform-grid">
+              {transcriptAssets.map((asset) => (
+                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
+              ))}
+            </div>
+          ) : (
+            <div className="platform-empty" role="status">
+              No transcript assets indexed.
+            </div>
+          )}
+        </section>
+      </div>
+    </WorkspacePanel>
+  );
+}
+
+function sttCapableProviders(payload: ProviderFacadePayload | undefined) {
+  return payload?.providers.filter((provider) => provider.capabilities.includes('stt')) ?? [];
+}
+
+function progressPercent(progress: { current: number; total: number } | undefined): number {
+  if (!progress || progress.total <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.round((progress.current / progress.total) * 100));
+}

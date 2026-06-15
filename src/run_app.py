@@ -35,7 +35,7 @@ import requests
 import uvicorn
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -407,84 +407,15 @@ def _generate_tts_stream(session: ConversationSession, text: str):
 # ============== FASTAPI APP ==============
 app = FastAPI(title="Omnix FastAPI", lifespan=lifespan)
 
-# Serve static files directly
-from pathlib import Path
-
-from fastapi.responses import FileResponse, HTMLResponse
-
-BASE_DIR = Path(__file__).parent
-static_dir = BASE_DIR / 'static'
-templates_dir = BASE_DIR / 'templates'
-index_file = templates_dir / 'index.html'
-
-# Cache for processed index.html
-_index_html_cache = None
-
-def get_index_html():
-    """Get index.html with Flask url_for replaced"""
-    global _index_html_cache
-    if _index_html_cache is not None:
-        return _index_html_cache
-    
-    if index_file.exists():
-        content = index_file.read_text(encoding='utf-8')
-        # Replace Flask url_for with static paths
-        content = content.replace("{{ url_for('static', filename='", '/static/')
-        content = content.replace("') }}", '')
-
-        # Explicit legacy template variable replacements used by the frontend.
-        stt_http_url = os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201")
-        stt_ws_url = os.environ.get("OMNIX_STT_WS_URL", "ws://127.0.0.1:5201/ws/transcribe")
-
-        content = content.replace(
-            "{{ omnix_stt_url|default('http://127.0.0.1:5201') }}",
-            stt_http_url,
-        )
-        content = content.replace(
-            "{{ omnix_stt_ws_url|default('ws://127.0.0.1:5201/ws/transcribe') }}",
-            stt_ws_url,
-        )
-
-        # Generic fallback for any remaining {{ var|default('value') }} patterns.
-        def replace_template_var(match):
-            var_name = match.group(1)
-            default_val = match.group(2)
-            env_name = var_name.upper()
-            env_value = os.environ.get(env_name)
-            if env_value:
-                return env_value
-            return default_val.strip("'\"")
-
-        content = re.sub(r'{{\s*(\w+)\|default\(([^)]+)\)\s*}}', replace_template_var, content)
-
-        _index_html_cache = content
-        return content
-    return None
-
 @app.get("/")
 async def root():
-    """Serve the main HTML page"""
-    content = get_index_html()
-    if content:
-        return HTMLResponse(content)
-    return HTMLResponse("<h1>Omnix</h1><p>Static files not found</p>")
-
-@app.get("/static/{path:path}")
-async def serve_static(path: str):
-    """Serve static files"""
-    file_path = static_dir / path
-    if file_path.exists() and file_path.is_file():
-        return FileResponse(file_path)
-    return HTMLResponse("Not Found", status_code=404)
-
-@app.get("/logo/{path:path}")
-async def serve_logo(path: str):
-    """Serve logo files"""
-    logo_dir = Path(shared.BASE_DIR) / 'resources' / 'logo'
-    file_path = logo_dir / path
-    if file_path.exists() and file_path.is_file():
-        return FileResponse(file_path)
-    return HTMLResponse("Not Found", status_code=404)
+    """Return backend status; browser UI is served by apps/web."""
+    return {
+        "ok": True,
+        "service": "omnix-backend",
+        "browser_ui": "apps/web",
+        "gateway": "app.gateway.main:app",
+    }
 
 @app.get("/generated-images/{filename:path}")
 async def serve_generated_image(filename: str):

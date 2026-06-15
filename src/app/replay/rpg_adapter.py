@@ -1,0 +1,127 @@
+"""RPG replay/persistence adapter for shared platform contracts."""
+from __future__ import annotations
+
+from typing import Any
+
+from .models import CheckpointEnvelope, PersistenceInventory, ReplayPrimitive, ReplayPrimitiveList, StateHashResponse
+
+
+RPG_REPLAY_ADAPTER_VERSION = "rpg_replay_persistence_adapter_v1"
+
+
+class RpgReplayPersistenceAdapter:
+    """Delegate to RPG-owned replay and persistence helpers."""
+
+    def list_primitives(self) -> ReplayPrimitiveList:
+        return ReplayPrimitiveList(
+            primitives=[
+                ReplayPrimitive(
+                    kind="provider_recording",
+                    source="src/app/rpg/core/llm_recording.py",
+                    owner_module="rpg",
+                    behavior="Records provider outputs by stable prompt/context/config keys and refuses missing replay records.",
+                    compatibility_policy="Expose as platform metadata only; do not change recording keys without replay tests.",
+                ),
+                ReplayPrimitive(
+                    kind="state_hash",
+                    source="src/app/rpg/validation/state_hash.py",
+                    owner_module="rpg",
+                    behavior="Computes deterministic state fingerprints with stable serialization.",
+                    compatibility_policy="Use as the first shared hash delegate; RPG keeps hash semantics.",
+                ),
+                ReplayPrimitive(
+                    kind="checkpoint",
+                    source="src/app/rpg/interactive_cli_state_checkpoint.py",
+                    owner_module="rpg",
+                    behavior="Creates checksum-backed interactive CLI checkpoint envelopes and verifies restore.",
+                    compatibility_policy="Shared wrapper must preserve version and checksum behavior.",
+                ),
+                ReplayPrimitive(
+                    kind="session_persistence",
+                    source="src/app/rpg/session/durable_store.py",
+                    owner_module="rpg",
+                    behavior="Reads, migrates, normalizes, atomically writes, and quarantines corrupt RPG sessions.",
+                    compatibility_policy="Delegate first; do not move saved sessions or alter quarantine behavior.",
+                ),
+                ReplayPrimitive(
+                    kind="migration",
+                    source="src/app/rpg/persistence/migration_manager.py",
+                    owner_module="rpg",
+                    behavior="Versioned save-package migration with explicit version advancement.",
+                    compatibility_policy="Use migration reports as diagnostics before any storage move.",
+                ),
+            ]
+        )
+
+    def state_hash(self, state: dict[str, Any]) -> StateHashResponse:
+        from app.rpg.validation.state_hash import stable_serialize
+        import hashlib
+        import json
+
+        stable = stable_serialize(state)
+        digest = hashlib.sha256(
+            json.dumps(stable, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        return StateHashResponse(
+            hash=digest,
+            source="app.rpg.validation.state_hash.stable_serialize",
+            format_version=RPG_REPLAY_ADAPTER_VERSION,
+        )
+
+    def create_checkpoint(self, bundle: dict[str, Any], *, checkpoint_id: str | None = None) -> CheckpointEnvelope:
+        from app.rpg.interactive_cli_state_checkpoint import create_interactive_cli_state_checkpoint
+
+        checkpoint = create_interactive_cli_state_checkpoint(bundle, checkpoint_id=checkpoint_id)
+        return self._checkpoint_to_envelope(checkpoint)
+
+    def restore_checkpoint(self, checkpoint: dict[str, Any]) -> dict[str, Any]:
+        from app.rpg.interactive_cli_state_checkpoint import restore_interactive_cli_state_bundle_from_checkpoint
+
+        return restore_interactive_cli_state_bundle_from_checkpoint(checkpoint)
+
+    def save_checkpoint_file(self, checkpoint: dict[str, Any], path: str) -> str:
+        from app.rpg.interactive_cli_state_checkpoint import save_interactive_cli_state_checkpoint_file
+
+        return str(save_interactive_cli_state_checkpoint_file(checkpoint, path))
+
+    def load_checkpoint_file(self, path: str) -> CheckpointEnvelope:
+        from app.rpg.interactive_cli_state_checkpoint import load_interactive_cli_state_checkpoint_file
+
+        return self._checkpoint_to_envelope(load_interactive_cli_state_checkpoint_file(path))
+
+    def list_sessions(self) -> PersistenceInventory:
+        from app.rpg.session.durable_store import list_sessions_from_disk
+
+        sessions: list[dict[str, Any]] = []
+        diagnostics: list[dict[str, Any]] = []
+        for session in list_sessions_from_disk():
+            manifest = session.get("manifest") if isinstance(session, dict) else {}
+            if isinstance(manifest, dict):
+                sessions.append(
+                    {
+                        "session_id": manifest.get("session_id") or manifest.get("id") or "",
+                        "title": manifest.get("title") or manifest.get("name") or "",
+                        "archived": bool(manifest.get("archived")),
+                    }
+                )
+            else:
+                diagnostics.append({"kind": "missing_manifest", "source": "rpg_session"})
+        return PersistenceInventory(sessions=sessions, diagnostics=diagnostics)
+
+    def _checkpoint_to_envelope(self, checkpoint: dict[str, Any]) -> CheckpointEnvelope:
+        return CheckpointEnvelope(
+            checkpoint_id=str(checkpoint.get("checkpoint_id") or ""),
+            version=str(checkpoint.get("version") or ""),
+            source=str(checkpoint.get("source") or ""),
+            checksum=str(checkpoint.get("bundle_checksum") or ""),
+            payload=dict(checkpoint.get("bundle") or {}),
+            metadata={
+                "patch": checkpoint.get("patch") or "",
+                "turn_index": checkpoint.get("turn_index"),
+                "state_versions": dict(checkpoint.get("state_versions") or {}),
+            },
+        )
+
+
+def default_rpg_replay_adapter() -> RpgReplayPersistenceAdapter:
+    return RpgReplayPersistenceAdapter()

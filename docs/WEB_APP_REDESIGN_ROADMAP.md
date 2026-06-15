@@ -8,14 +8,30 @@ This roadmap is also ordered to avoid a second risk: building backend contracts 
 
 ## Implementation Status
 
-Last updated: 2026-06-14
+Last updated: 2026-06-15
 
 | Phase | Status | Evidence |
 | --- | --- | --- |
 | Phase 0 - Architecture Design Hardening | Implemented | `docs/WEB_APP_INFRASTRUCTURE.md` now records as-built drift, target stack decisions, the FastAPI gateway/worker split, single-user-for-now owner seams, resource-aware jobs, and data preservation requirements. |
 | Phase 1 - Tiny Frontend Alignment Patch | Implemented | `apps/web/src/app/modules.ts` now includes all 15 canonical modules in order, including `models` and `reports`; app shell, registry, and Playwright entrypoint tests cover the new modules. |
 | Phase 2 - Event Client Hardening | Implemented | `apps/web/src/events/eventClient.ts` now owns one multiplexed SSE connection, named-event subscriptions, connection status, reconnect backoff, listener rebinding, clean close behavior, pending reconnect cancellation, and an `eventSourceFactory` seam with focused Vitest coverage. |
-| Phase 3 - Backend Reality Inventory and Feasibility Notes | Next | Inventory existing jobs, providers, assets, prompts, replay, and persistence before any consolidation implementation. |
+| Phase 3 - Backend Reality Inventory and Feasibility Notes | Implemented | `docs/WEB_APP_BACKEND_REALITY_INVENTORY.md` inventories existing jobs, providers, assets, prompts, replay, persistence, incompatibilities, migration needs, tests, rollback paths, and reference implementation candidates. |
+| Phase 4 - FastAPI Gateway Cutover Foundation | Implemented | `src/app/gateway/main.py` provides a thin provider-free FastAPI gateway with health, runtime status, worker-health placeholder, compatibility handoff, and `/openapi.json`; `docs/WEB_APP_GATEWAY_STARTUP.md` documents coexistence with the current app. |
+| Phase 5 - Gateway and Worker Contract | Implemented | `src/app/gateway/workers.py` defines env-driven worker discovery, compatibility env support, standard health envelopes, unreachable-worker diagnostics, payload policy, and mock-worker mode for CI/local tests. |
+| Phase 6 - Minimal API Contract and Type Generation | Implemented | `openapi-typescript` is wired through `apps/web/package.json`; `scripts/export_gateway_openapi.py` exports the gateway schema; `apps/web/src/api/generated/types.ts` and `apps/web/src/api/client.ts` provide the generated import convention; `docs/WEB_APP_API_TYPES.md` documents regeneration and the deferred drift check. |
+| Phase 7 - Resource-Aware Job Schema and Scheduler Design | Implemented | `docs/WEB_APP_JOB_RUN_SCHEMA.md` defines the shared job/run schema, resource classes, safe single-GPU scheduler rules, stage/checkpoint semantics, cancellation, SSE lifecycle events, compatibility mapping, and Phase 8 implementation boundaries. |
+| Phase 8 - Shared Job/Run System Consolidation | Implemented | `src/app/jobs/` adds the SQLite-backed shared job store, resource-aware claim/lease scheduler, local async executor, TTS/image compatibility submission adapters, cancellation, completion/failure transitions, and job event records; `src/app/gateway/main.py` exposes typed `/api/jobs*` endpoints and regenerated OpenAPI types. |
+| Phase 9 - Provider and Model Registry Consolidation | Implemented | `src/app/providers/facade.py` normalizes existing LLM, audio, image, and RPG visual registries into one read-only provider/model facade; `src/app/gateway/main.py` exposes typed `/api/providers` and `/api/models`; generated API types include the facade contract. |
+| Phase 10 - Shared Asset and Artifact Library with Data Migration | Implemented | `src/app/assets/` defines the shared asset model and manifest-backed store; image-manifest compatibility import supports dry-run, missing-file diagnostics, and import without deleting legacy data; `src/app/gateway/main.py` exposes typed `/api/assets*` endpoints with regenerated API types. |
+| Phase 11 - Prompt and Template System | Implemented | `src/app/prompts/` adds shared prompt/template metadata, strict variable rendering, safety/grounding metadata propagation, replay metadata hashes, and a typed `/api/prompts/render` diagnostics endpoint without moving RPG-specific prompt semantics. |
+| Phase 12 - Replay and Persistence Platformization | Implemented | `src/app/replay/` defines shared replay/persistence primitives and an RPG delegate adapter for state hashing, provider recording metadata, checkpoint envelopes, session inventory, and migration references; `src/app/gateway/main.py` exposes typed `/api/replay/*` diagnostics without moving RPG internals. |
+| Phase 13 - API Contract Hardening and Typegen Drift Checks | Implemented | `src/app/platform/` adds typed settings, reports, and diagnostics summaries; gateway contract tests cover jobs, providers, assets, prompts, replay, settings, reports, and diagnostics; generated API files are refreshed; `apps/web/package.json` has a passing `api:check` drift gate. |
+| Phase 14 - Router Migration | Implemented | `@tanstack/react-router` is installed; `apps/web/src/app/router.tsx` defines the app route tree, root redirect, and canonical module routes; `OmnixApp` now uses `RouterProvider`; no top-level `pushState` shell routing remains; unit and Playwright navigation tests cover the route entrypoints. |
+| Phase 15 - Design System Foundation | Implemented | Mantine is installed and wired through `MantineProvider`; `apps/web/src/design/theme.ts` defines Omnix theme tokens; `apps/web/src/design/primitives.tsx` provides shared shell, nav, topbar, status, workspace, progress/log, transcript, audio, asset, and diagnostics primitives used by the app shell and workspace tests. |
+| Phase 16 - Platform Modules First | Implemented | `apps/web/src/features/platform/PlatformModuleWorkspace.tsx` provides Providers, Models, Jobs, Assets, Reports, Settings, and Diagnostics views against typed gateway helpers; focused Vitest and Playwright coverage use mocked gateway payloads and empty states. |
+| Phase 17 - Feature Module Migration | Implemented | Chatbot, Voice / TTS, STT, Image Generation, Storyteller, Podcast, Voice Cloning, and RPG now live in shared-shell feature workspaces with focused Vitest and Playwright coverage. |
+| Phase 18 - Legacy UI Retirement | Implemented | `src/run_app.py` no longer serves the classic browser shell or `/static/*`; gateway compatibility metadata reports the legacy UI as `retired`; retired static-source tests are skipped by default while gateway/new-web checks stay active; `src/templates` and `src/static` have been deleted. |
+| Phase 19 - Hardening and Release Readiness | Implemented | CI-safe backend and web readiness checks cover mock-worker runtime status, worker-down diagnostics, job failure/cancellation events, app-shell/module E2E smoke, mock job/asset/report lifecycle surfaces, generated-media compatibility, image migration dry-run/import diagnostics, and release runbook guidance. |
 
 ## Current Branch Baseline
 
@@ -24,7 +40,21 @@ The `rpg` branch already contains an early `apps/web` React/Vite scaffold and a 
 - The module registry now includes the canonical 15 modules, but the module workspaces are still placeholders.
 - Routing is still hand-rolled in the web shell rather than using the chosen router.
 - The event client now owns reconnect, status, listener rebinding, and a test/future auth-aware transport seam.
-- The browser UI still has legacy Flask/static entrypoints.
+- The backend reality inventory is captured in `docs/WEB_APP_BACKEND_REALITY_INVENTORY.md`; consolidation should use those reference candidates and compatibility notes before changing queues, registries, stores, prompts, or replay paths.
+- A thin provider-free FastAPI gateway now exists at `app.gateway.main:app` with `/openapi.json`, health, runtime status, worker health, payload policy, mock-worker mode, and compatibility handoff routes.
+- Gateway API types are generated from the FastAPI schema into `apps/web/src/api/generated/`; `GatewayApiPaths` is the shared frontend import seam, and strict CI drift checks are intentionally deferred until contracts stabilize.
+- The shared job/run schema is defined in `docs/WEB_APP_JOB_RUN_SCHEMA.md`; Phase 8 should implement the durable local adapter and executor without migrating RPG narration out of `runtime_state`.
+- The shared job/run system exists at `src/app/jobs/` with SQLite persistence, resource-aware claim/lease scheduling, a local async executor seam, TTS/image compatibility submission adapters, gateway job endpoints, named job event records, and generated TypeScript API coverage.
+- The provider/model facade exists at `src/app/providers/facade.py` and exposes existing LLM/audio/image/RPG visual registry metadata through `/api/providers` and `/api/models`. Live model refresh remains a later diagnostics operation; Phase 9 does not instantiate heavy providers during listing.
+- The shared asset library exists at `src/app/assets/` with a platform asset model, manifest-backed shared store, image-manifest dry-run/import compatibility path, missing-file diagnostics, gateway asset endpoints, and generated TypeScript API coverage. Existing image manifests and files remain in place.
+- The shared prompt/template helpers exist at `src/app/prompts/` with strict rendering, prompt metadata, replay hashes, safety/grounding metadata, and a typed gateway render endpoint. RPG prompt builders still own RPG-specific instructions and grounding semantics.
+- Shared replay/persistence wrappers exist at `src/app/replay/` with an RPG delegate adapter for deterministic state hashes, checkpoint envelopes, session inventory, and replay primitive metadata. RPG replay/session/checkpoint internals remain the source of truth.
+- Phase 13 contract hardening is implemented: typed settings, reports, and diagnostics gateway endpoints exist, representative gateway contract tests cover the platform API surface, generated API files are refreshed, and `api:check` passes.
+- TanStack Router now owns the web shell route tree. The canonical module routes live in `apps/web/src/app/router.tsx`, root navigation redirects into the RPG module, and the module nav uses typed router links instead of hand-rolled `window.history.pushState`.
+- Mantine and Omnix design tokens now back the web shell. Shared primitives live in `apps/web/src/design/primitives.tsx` and cover the shell, navigation, status, workspace panels, progress/logs, transcripts, audio controls, asset cards, and diagnostics rows.
+- The platform module workspaces now exist under `apps/web/src/features/platform/`. Providers, Models, Jobs, Assets, Reports, Settings, and Diagnostics consume typed gateway helpers and render core empty/error states, including mocked Playwright coverage for platform navigation.
+- Phase 17 feature migration is implemented. Chatbot now lives under `apps/web/src/features/chatbot/`, uses provider/model registry data, React Hook Form state, shared transcript primitives, backend-owned `/api/chat/sessions*` history, and shared `chat.generate` jobs rather than direct provider calls. Voice / TTS now lives under `apps/web/src/features/voice/`, queues `tts.synthesize` through `/api/jobs`, and reads shared voice jobs/audio assets without calling TTS workers directly. STT now lives under `apps/web/src/features/stt/`, queues `stt.transcribe`, and reads shared audio/transcript assets. Image Generation now lives under `apps/web/src/features/image-generation/`, queues `image.generate`, and reads shared image jobs/assets. Storyteller now lives under `apps/web/src/features/storyteller/`, queues `story.generate`, and reads shared story/export assets. Podcast now lives under `apps/web/src/features/podcast/`, queues multi-stage `podcast.generate`, and reads shared podcast script/audio/export assets. Voice Cloning now lives under `apps/web/src/features/voice-cloning/`, queues `voice-cloning.train`, and reads shared voice sample/profile assets. RPG now lives under `apps/web/src/features/rpg/`, reads shared replay inventory, jobs, reports, and checkpoint assets, and queues replay-preserving `rpg.turn` jobs without moving RPG deterministic internals.
+- The classic browser UI is retired. `src/run_app.py` now exposes backend status and compatibility routes rather than the old template/static shell; `apps/web` is the supported browser app; the retired static/template tree has been physically removed.
 - The backend is not greenfield: job queues, provider registries, asset handling, prompt builders, and RPG replay/persistence already exist in different forms.
 - Heavy model work must remain outside the gateway process because local GPU/VRAM residency is the core runtime constraint.
 - Existing on-disk user data, including RPG saves/checkpoints, settings, generated reports, voice assets, image assets, and local artifacts, must remain readable or migrate safely.
@@ -362,7 +392,7 @@ Purpose: converge duplicate queues into one job system.
 
 Tasks:
 
-- Choose the claim/lease model as the reference queue pattern if Phase 3 feasibility confirms it.
+- Use the claim/lease model as the reference queue pattern confirmed by Phase 3, while replacing the current in-memory storage with a durable adapter.
 - Add a SQLite-backed job table or adapter.
 - Add an in-process asyncio worker executor for local-first single-user mode.
 - Implement the safe default scheduler:
@@ -387,6 +417,12 @@ Acceptance criteria:
 - Network/cloud jobs are not serialized behind local GPU work.
 - Job progress emits named SSE events.
 - Existing TTS/image outputs are not orphaned by the queue transition.
+
+Implementation note 2026-06-14: the durable shared job core, typed gateway API,
+local executor seam, and TTS/image compatibility submission adapters are
+implemented. Existing feature queues remain intact behind compatibility
+adapters so current output locations and behavior are not removed during this
+phase.
 
 ## Phase 9 — Provider and Model Registry Consolidation
 
@@ -421,6 +457,12 @@ Acceptance criteria:
 - Feature modules request capabilities rather than concrete provider classes.
 - Existing LLM and audio provider behavior remains compatible.
 - No new feature module instantiates providers directly.
+
+Implementation note 2026-06-14: Phase 9 adds a read-only facade over the
+existing registries rather than creating a new discovery registry. The facade
+publishes capabilities, normalized provider families, status metadata, and
+settings-derived model hints without live provider instantiation. Live model
+refresh and active health probes should remain explicit diagnostics calls.
 
 ## Phase 10 — Shared Asset and Artifact Library with Data Migration
 
@@ -476,6 +518,11 @@ Acceptance criteria:
 - Jobs publish output assets instead of large inline payloads where practical.
 - Assets are inspectable from the Assets module.
 
+Implementation note 2026-06-14: Phase 10 adds the shared asset model, a JSON
+manifest-backed platform store, and image-manifest compatibility dry-run/import
+without deleting or moving legacy files. Broader audio/report/checkpoint
+migrations should use the same preview/import pattern before changing storage.
+
 ## Phase 11 — Prompt and Template System
 
 Purpose: prevent each AI module from inventing its own prompt conventions.
@@ -503,6 +550,12 @@ Acceptance criteria:
 - Prompt template version is recorded for replay/debugging.
 - Provider payload construction is centralized where practical.
 - RPG prompt behavior remains deterministic and compatible.
+
+Implementation note 2026-06-14: Phase 11 adds prompt metadata and rendering
+helpers only. Existing feature prompt builders should wrap this renderer where
+useful, but RPG-specific system instructions, grounding rules, and replay
+contracts stay in their current RPG modules until golden/replay tests authorize
+changes.
 
 ## Phase 12 — Replay and Persistence Platformization
 
@@ -533,6 +586,12 @@ Acceptance criteria:
 - Shared replay primitives can be reused by long-running non-RPG workflows.
 - RPG-specific simulation state, validators, and semantics remain inside RPG.
 
+Implementation note 2026-06-14: Phase 12 adds typed platform wrappers and
+gateway diagnostics around RPG replay/persistence primitives. It does not move
+RPG saved files, replay validators, state hash semantics, checkpoint checksum
+logic, or migration managers. Future extraction must be preceded by RPG parity
+and save/checkpoint compatibility tests.
+
 ## Phase 13 — API Contract Hardening and Typegen Drift Checks
 
 Purpose: make generated contracts enforceable after the core gateway APIs exist.
@@ -551,6 +610,11 @@ Acceptance criteria:
 - No duplicate hand-maintained interfaces mirror server models.
 - Frontend build or CI fails when generated types drift.
 - Zod usage is limited to runtime trust boundaries.
+
+Implementation note 2026-06-14: representative platform contracts now cover
+jobs, providers, assets, prompts, replay, settings, reports, and diagnostics.
+The `api:check` script regenerates the gateway schema/types and fails when
+checked-in generated API files drift.
 
 ## Phase 14 — Router Migration
 
@@ -572,6 +636,11 @@ Acceptance criteria:
 - Every canonical module has a route.
 - Route params/search state are typed.
 - Navigation tests cover module entrypoints.
+
+Implementation note 2026-06-14: Phase 14 replaces the temporary shell routing
+with TanStack Router while preserving the existing shared shell and placeholder
+module workspaces. The root path redirects to `/rpg`; all canonical modules have
+registered routes and Playwright coverage.
 
 ## Phase 15 — Design System Foundation
 
@@ -609,6 +678,12 @@ Acceptance criteria:
 - Mantine theme plus Omnix tokens becomes the styling contract.
 - No feature creates competing app-shell or primitive systems.
 - Dark-first workstation presentation is consistent across modules.
+
+Implementation note 2026-06-14: Phase 15 introduces Mantine, the Omnix theme,
+and shared workstation primitives while keeping the existing visual language and
+TanStack Router shell. Feature modules should consume these primitives instead
+of creating local app-shell, panel, status, log, transcript, audio, asset, or
+diagnostics components.
 
 ## Phase 16 — Platform Modules First
 
@@ -662,6 +737,13 @@ Acceptance criteria:
 - Feature modules can depend on provider/job/asset/diagnostics surfaces.
 - Playwright covers platform-module navigation and core empty states.
 
+Implementation note 2026-06-14: Phase 16 adds typed frontend API helpers for
+the core platform endpoints and routes the seven platform modules through
+`PlatformModuleWorkspace`. The views use gateway contracts for providers,
+models, jobs, assets, reports, settings, and diagnostics, while unit and
+Playwright tests provide mocked payloads and empty-state coverage so the web app
+does not require local model workers for platform-module validation.
+
 ## Phase 17 — Feature Module Migration
 
 Purpose: migrate user-facing feature behavior into the shared shell.
@@ -686,6 +768,60 @@ Acceptance criteria for each module:
 - The module has unit or Playwright coverage for the main entrypoint.
 - Legacy UI behavior remains available until parity is reached.
 
+Implementation note 2026-06-14: the Chatbot slice adds a lightweight
+backend-owned chat session contract in `src/app/chat/` and gateway routes under
+`/api/chat/sessions*`. The web workspace uses shared provider/model data,
+React Hook Form, shared transcript rendering, and queues `chat.generate` through
+the shared job API instead of invoking providers directly. Actual assistant
+generation remains a future worker/executor attachment point.
+
+Implementation note 2026-06-14: the Voice / TTS slice adds
+`apps/web/src/features/voice/VoiceWorkspace.tsx`. The workspace uses shared TTS
+provider data, React Hook Form, shared audio controls, shared job and asset
+queries, and submits `tts.synthesize` jobs to `/api/jobs` with explicit
+GPU-TTS/CPU stages. It does not call legacy TTS HTTP routes or model workers
+from the browser.
+
+Implementation note 2026-06-14: the STT / Transcription slice adds
+`apps/web/src/features/stt/SttWorkspace.tsx`. The workspace uses shared STT
+provider data, React Hook Form, shared audio/transcript asset references, shared
+job queries, and submits `stt.transcribe` jobs to `/api/jobs` with explicit
+GPU-STT and CPU alignment/storage stages.
+
+Implementation note 2026-06-14: the Image Generation slice adds
+`apps/web/src/features/image-generation/ImageGenerationWorkspace.tsx`. The
+workspace uses shared image provider data, React Hook Form, shared job and image
+asset queries, and submits `image.generate` jobs to `/api/jobs` with explicit
+GPU-image generation and CPU asset-storage stages.
+
+Implementation note 2026-06-14: the Storyteller slice adds
+`apps/web/src/features/storyteller/StorytellerWorkspace.tsx` with shared LLM
+provider data, React Hook Form, shared job/story asset queries, and
+`story.generate` submission through `/api/jobs`. Focused Vitest, typecheck, and
+Playwright coverage verify the workspace and mocked shared job handoff.
+
+Implementation note 2026-06-14: the Podcast slice adds
+`apps/web/src/features/podcast/PodcastWorkspace.tsx`. The workspace uses shared
+LLM and TTS provider data, React Hook Form, shared audio controls, shared job
+and podcast asset queries, and submits multi-stage `podcast.generate` jobs to
+`/api/jobs` for planning, scripting, voice synthesis, mixing, and export.
+
+Implementation note 2026-06-14: the Voice Cloning slice adds
+`apps/web/src/features/voice-cloning/VoiceCloningWorkspace.tsx`. The workspace
+uses shared TTS/voice-cloning provider data, React Hook Form, shared audio
+controls, shared voice sample/profile assets, and submits `voice-cloning.train`
+jobs to `/api/jobs` with sample ingest, profile build, preview, and storage
+stages. The route shell now prefers exact/longest route matches so
+`/voice-cloning` no longer collides with `/voice`.
+
+Implementation note 2026-06-14: the RPG slice adds
+`apps/web/src/features/rpg/RpgWorkspace.tsx`. The workspace uses shared replay
+persistence inventory, job, report, and asset APIs, reads existing RPG session
+and checkpoint metadata through platform contracts, and submits
+replay-preserving `rpg.turn` jobs to `/api/jobs` with load-session, apply-turn,
+narration, and checkpoint stages. It does not move RPG simulation, replay,
+state hashing, or checkpoint internals.
+
 ## Phase 18 — Legacy UI Retirement
 
 Purpose: remove old frontend paths after parity and data safety are proven.
@@ -707,6 +843,85 @@ Acceptance criteria:
 - Existing saves, settings, voice assets, reports, checkpoints, and generated media are not orphaned.
 - Documentation points to the new startup path.
 - No active tests depend on removed legacy frontend files.
+
+Implementation note 2026-06-14: Phase 18 cannot safely remove legacy browser
+files yet. `docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md` records the active
+`src/run_app.py`, `src/templates`, `src/static`, Flask client, and static JS
+test anchors that still block retirement. Startup docs now point new browser
+work at `apps/web` plus the FastAPI gateway on port `8000`, while
+`src/run_app.py` remains compatibility-only.
+
+Implementation note 2026-06-15: the first Phase 18 parity slice bridges
+`/api/settings` through the shared gateway. `GET /api/settings` remains the
+sanitized platform summary consumed by `apps/web`, adds a legacy-compatible
+`{ success, settings }` envelope with masked API keys, and `POST /api/settings`
+preserves the legacy settings/secrets split. Remaining blockers include legacy
+session routes, selected RPG routes, static JS test anchors, and representative
+data-compatibility tests.
+
+Implementation note 2026-06-15: the second Phase 18 parity slice bridges
+legacy `/api/sessions` CRUD and `/api/sessions/generate-title` fallback through
+the shared gateway. The routes preserve legacy response envelopes, file-backed
+session semantics, newest-first session ordering, update/delete behavior, and a
+safe title fallback without pulling provider calls into the gateway.
+
+Implementation note 2026-06-15: the third Phase 18 parity slice bridges
+low-risk RPG adventure-builder routes through the shared gateway:
+`GET /api/rpg/adventure/templates`, `POST /api/rpg/adventure/validate`, and
+`POST /api/rpg/adventure/preview`. These routes delegate to deterministic
+creator preview helpers and intentionally avoid adventure start, regeneration,
+live turn, replay mutation, and model-backed flows.
+
+Implementation note 2026-06-15: the fourth Phase 18 parity slice adds backend
+gateway compatibility for RPG session inspection routes:
+`POST /api/rpg/session/list` and `POST /api/rpg/session/get`. The bridge
+preserves the legacy list, missing-session-id, missing-session, and frontend
+bootstrap envelopes without mounting the full RPG routers or live turn mutation
+paths. Backend gateway tests pass for this slice; frontend OpenAPI/type
+generation and the shared generated route smoke test cover these routes.
+
+Implementation note 2026-06-15: the fifth Phase 18 parity slice adds backend
+gateway compatibility for deterministic RPG inspector read routes:
+`POST /api/rpg/inspect/timeline`,
+`POST /api/rpg/inspect/timeline_tick`,
+`POST /api/rpg/inspect/tick_diff`,
+`POST /api/rpg/inspect/npc_reasoning`, and
+`POST /api/rpg/inspect/world_events`. These routes delegate to analytics helper
+functions and intentionally exclude GM force/debug mutation routes. Backend
+gateway tests pass for this slice; frontend OpenAPI/type generation and the
+shared generated route smoke test cover these routes.
+
+Implementation note 2026-06-15: the sixth Phase 18 parity slice adds backend
+gateway compatibility for deterministic RPG player-facing read routes:
+`POST /api/rpg/player/state`, `POST /api/rpg/player/journal`,
+`POST /api/rpg/player/codex`, `POST /api/rpg/player/objectives`, and
+`POST /api/rpg/player/encounter`. These routes delegate to player state and
+encounter view helpers and intentionally exclude dialogue transitions,
+inventory mutations, equipment changes, progression allocation, and session
+persistence. Backend gateway tests pass for this slice; frontend OpenAPI/type
+generation and the shared generated route smoke test cover these routes.
+
+Implementation note 2026-06-15: the seventh Phase 18 parity slice adds backend
+gateway compatibility for deterministic RPG adventure-builder diagnostic
+routes: `POST /api/rpg/adventure/inspect-world`,
+`POST /api/rpg/adventure/inspect-world-snapshot`,
+`POST /api/rpg/adventure/compare-world`,
+`POST /api/rpg/adventure/compare-entity`,
+`POST /api/rpg/adventure/simulate-step`, and
+`POST /api/rpg/adventure/simulation-state`. These routes delegate to world
+inspection/simulation helpers and intentionally exclude adventure start,
+regeneration, generated package application, scene narration, and LLM-backed NPC
+filling. Backend gateway tests pass for this slice; frontend OpenAPI/type
+generation and the shared generated route smoke test cover these routes.
+
+Implementation note 2026-06-15: the eighth Phase 18 slice retires the classic
+browser serving path. `src/run_app.py` now returns backend status JSON from
+`GET /`, no longer mounts `/static/*` or `/logo/*`, and keeps
+`/generated-images/*` only as generated user/runtime data. Gateway
+compatibility metadata reports `legacy_ui_status: retired`. Retired static
+source-inspection tests are skipped by default through `src/tests/conftest.py`
+with `OMNIX_RUN_RETIRED_LEGACY_UI_TESTS=1` as an explicit archive-audit escape
+hatch. The retired `src/templates` and `src/static` tree has been deleted.
 
 ## Phase 19 — Hardening and Release Readiness
 
@@ -749,6 +964,26 @@ Acceptance criteria:
 - Long sessions do not leak event connections or orphan jobs.
 - Existing data compatibility is verified before legacy retirement.
 
+Implementation note 2026-06-15: the first Phase 19 hardening slice adds backend
+release-readiness contracts that run without real model workers. Gateway tests
+now prove `/api/runtime/status` reports CI mock workers, leased job cancellation
+is observable without losing the active lease, failed jobs preserve retryable
+diagnostics, and job SSE output includes terminal failure and cancellation
+events. Remaining Phase 19 work should continue with E2E smoke coverage,
+representative data compatibility tests, broader failure-mode tests, and
+developer release/runbook docs.
+
+Implementation note 2026-06-15: the final Phase 19 slice adds CI-safe web and
+data-compatibility coverage plus release documentation. The Playwright app-shell
+smoke now covers diagnostics, job cancellation, assets, reports, module
+navigation, and feature job submissions with mocked gateway payloads. Backend
+tests verify generated media remains served as runtime data after classic UI
+deletion, missing generated media returns structured diagnostics, and shared
+asset imports preserve missing legacy asset references in migration diagnostics.
+`docs/WEB_APP_RELEASE_READINESS.md` records local process mode, mock workers,
+worker setup, optional compose boundaries, GPU scheduling expectations, data
+migration/rollback, and CI-safe release validation commands.
+
 ## Slice Checklist Template
 
 Every implementation slice should include:
@@ -783,22 +1018,23 @@ Use this order for the next work items:
 1. Done 2026-06-14: Harden `docs/WEB_APP_INFRASTRUCTURE.md` with the complete design.
 2. Done 2026-06-14: Add `models` and `reports` to `modules.ts`.
 3. Done 2026-06-14: Upgrade the shared event client and tests.
-4. Next: Add backend inventory and feasibility docs for jobs/providers/assets/prompts/replay/data.
-5. Stand up the thin FastAPI gateway foundation and `/openapi.json`.
-6. Define the worker health contract and mock-worker mode.
-7. Add minimal OpenAPI type generation.
-8. Define the resource-aware job schema and safe scheduler behavior.
-9. Consolidate job queues behind the shared interface.
-10. Consolidate provider registries behind one facade.
-11. Generalize the asset store with data migration/back-compat.
-12. Generalize prompt/template utilities.
-13. Wrap and gradually platformize replay/persistence primitives.
-14. Harden API contract/typegen drift checks.
-15. Migrate to TanStack Router.
-16. Add Mantine and Omnix design tokens.
-17. Build platform modules.
-18. Migrate feature modules.
-19. Retire legacy UI only after data safety is verified.
+4. Done 2026-06-14: Add backend inventory and feasibility docs for jobs/providers/assets/prompts/replay/data.
+5. Done 2026-06-14: Stand up the thin FastAPI gateway foundation and `/openapi.json`.
+6. Done 2026-06-14: Define the worker health contract and mock-worker mode.
+7. Done 2026-06-14: Add minimal OpenAPI type generation.
+8. Done 2026-06-14: Define the resource-aware job schema and safe scheduler behavior.
+9. Done 2026-06-14: Consolidate job queues behind the shared interface with a durable job store, safe scheduler, local executor seam, gateway job API, named job event records, generated API types, and TTS/image compatibility submission adapters.
+10. Done 2026-06-14: Consolidate provider registries behind one facade.
+11. Done 2026-06-14: Generalize the asset store with data migration/back-compat.
+12. Done 2026-06-14: Generalize prompt/template utilities.
+13. Done 2026-06-14: Wrap and gradually platformize replay/persistence primitives.
+14. Done 2026-06-14: Harden API contract/typegen drift checks.
+15. Done 2026-06-14: Migrate to TanStack Router.
+16. Done 2026-06-14: Add Mantine and Omnix design tokens.
+17. Done 2026-06-14: Build platform modules.
+18. Done 2026-06-14: Migrate feature modules. Chatbot, Voice / TTS, STT / Transcription, Image Generation, Storyteller, Podcast, Voice Cloning, and RPG are now shared-shell workspaces.
+19. Done 2026-06-15: Retired the classic UI. Readiness ledger added; `/api/settings`, `/api/sessions`, low-risk RPG adventure preview/diagnostic routes, RPG session inspection routes, RPG inspector read routes, RPG player read routes, and RPG adventure diagnostics are covered with regenerated frontend API types; `src/run_app.py` no longer serves the classic browser shell; retired static-source tests are skipped by default; `src/templates` and `src/static` were deleted.
+20. Done 2026-06-15: Hardening and release readiness. Backend readiness covers mock-worker runtime status, worker-down diagnostics, leased-job cancellation, failed-job diagnostic/event contracts, generated-media compatibility, and image migration diagnostics. Web E2E smoke covers app shell, navigation, diagnostics, mock job cancellation, assets, reports, and feature job submissions without GPU/model workers. Release runbook added.
 
 ## Stop Conditions
 

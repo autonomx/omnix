@@ -10,10 +10,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "api:schema": "python ../../scripts/export_gateway_openapi.py apps/web/src/api/generated/openapi.json",
+    "api:types": "openapi-typescript src/api/generated/openapi.json -o src/api/generated/types.ts",
+    "api:generate": "npm run api:schema && npm run api:types",
+    "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated/openapi.json src/api/generated/types.ts"
   },
   "dependencies": {
+    "@mantine/core": "^9.3.1",
+    "@mantine/hooks": "^9.3.1",
     "@tanstack/react-query": "^5.90.0",
+    "@tanstack/react-router": "^1.170.15",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.68.0",
@@ -28,6 +35,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
     "jsdom": "^26.1.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.0",
     "vite": "^7.2.0",
     "vitest": "^4.1.0"

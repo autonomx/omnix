@@ -1,0 +1,275 @@
+"""Unified provider/model facade over existing Omnix registries."""
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, Callable, Literal
+
+from pydantic import BaseModel, Field
+
+
+ProviderFamily = Literal["llm", "tts", "stt", "image", "rpg_visual"]
+ProviderStatus = Literal["available", "configured", "unknown", "degraded"]
+ModelLocation = Literal["local", "remote", "unknown"]
+
+
+class ProviderCapability(str, Enum):
+    CHAT = "chat"
+    COMPLETION = "completion"
+    EMBEDDING = "embedding"
+    TTS = "tts"
+    STT = "stt"
+    IMAGE = "image"
+    VOICE_CLONING = "voice_cloning"
+    DIAGNOSTICS = "diagnostics"
+    MODEL_DISCOVERY = "model_discovery"
+
+
+class ProviderSummary(BaseModel):
+    id: str
+    label: str
+    family: ProviderFamily
+    capabilities: list[ProviderCapability]
+    status: ProviderStatus = "unknown"
+    source: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ModelSummary(BaseModel):
+    id: str
+    label: str
+    provider_id: str
+    capabilities: list[ProviderCapability]
+    location: ModelLocation = "unknown"
+    vram_hint_mb: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProviderFacadePayload(BaseModel):
+    providers: list[ProviderSummary]
+    models: list[ModelSummary]
+
+
+ProviderLister = Callable[[], list[dict[str, Any]]]
+SettingsLoader = Callable[[], dict[str, Any]]
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _dedupe_capabilities(values: list[ProviderCapability]) -> list[ProviderCapability]:
+    seen: set[ProviderCapability] = set()
+    result: list[ProviderCapability] = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
+def _map_llm_capabilities(values: list[Any]) -> list[ProviderCapability]:
+    mapped = [ProviderCapability.CHAT, ProviderCapability.COMPLETION, ProviderCapability.DIAGNOSTICS]
+    for value in values:
+        normalized = _safe_str(value).strip().lower()
+        if normalized in {"embeddings", "embedding"}:
+            mapped.append(ProviderCapability.EMBEDDING)
+        if normalized in {"models", "model_discovery"}:
+            mapped.append(ProviderCapability.MODEL_DISCOVERY)
+        if normalized in {"image_generation", "image"}:
+            mapped.append(ProviderCapability.IMAGE)
+    return _dedupe_capabilities(mapped)
+
+
+def _map_audio_capabilities(kind: Literal["tts", "stt"], values: list[Any]) -> list[ProviderCapability]:
+    mapped = [ProviderCapability.TTS if kind == "tts" else ProviderCapability.STT, ProviderCapability.DIAGNOSTICS]
+    for value in values:
+        normalized = _safe_str(value).strip().lower()
+        if normalized == "voice_cloning":
+            mapped.append(ProviderCapability.VOICE_CLONING)
+    return _dedupe_capabilities(mapped)
+
+
+def _provider_from_info(
+    info: dict[str, Any],
+    *,
+    family: ProviderFamily,
+    source: str,
+    capabilities: list[ProviderCapability],
+) -> ProviderSummary:
+    provider_id = _safe_str(info.get("name") or info.get("key")).strip()
+    label = _safe_str(info.get("display_name") or info.get("label") or provider_id).strip()
+    status = _safe_str(info.get("status")).strip().lower() or "available"
+    if status not in {"available", "configured", "unknown", "degraded"}:
+        status = "unknown"
+    return ProviderSummary(
+        id=f"{family}:{provider_id}",
+        label=label or provider_id,
+        family=family,
+        capabilities=capabilities,
+        status=status,  # type: ignore[arg-type]
+        source=source,
+        metadata={key: value for key, value in info.items() if key not in {"name", "key", "display_name", "label"}},
+    )
+
+
+class ProviderFacade:
+    """Read-only facade that normalizes existing provider registries."""
+
+    def __init__(
+        self,
+        *,
+        llm_lister: ProviderLister | None = None,
+        tts_lister: ProviderLister | None = None,
+        stt_lister: ProviderLister | None = None,
+        image_lister: ProviderLister | None = None,
+        visual_lister: ProviderLister | None = None,
+        settings_loader: SettingsLoader | None = None,
+    ) -> None:
+        self._llm_lister = llm_lister
+        self._tts_lister = tts_lister
+        self._stt_lister = stt_lister
+        self._image_lister = image_lister
+        self._visual_lister = visual_lister
+        self._settings_loader = settings_loader
+
+    def payload(self) -> ProviderFacadePayload:
+        providers = self.list_providers()
+        models = self.list_configured_models(providers)
+        return ProviderFacadePayload(providers=providers, models=models)
+
+    def list_providers(self) -> list[ProviderSummary]:
+        providers: list[ProviderSummary] = []
+
+        for info in self._list_llm():
+            providers.append(
+                _provider_from_info(
+                    info,
+                    family="llm",
+                    source="app.providers.registry",
+                    capabilities=_map_llm_capabilities(list(info.get("capabilities") or [])),
+                )
+            )
+
+        for info in self._list_tts():
+            providers.append(
+                _provider_from_info(
+                    info,
+                    family="tts",
+                    source="app.providers.audio_registry",
+                    capabilities=_map_audio_capabilities("tts", list(info.get("capabilities") or [])),
+                )
+            )
+
+        for info in self._list_stt():
+            providers.append(
+                _provider_from_info(
+                    info,
+                    family="stt",
+                    source="app.providers.audio_registry",
+                    capabilities=_map_audio_capabilities("stt", list(info.get("capabilities") or [])),
+                )
+            )
+
+        for info in self._list_image():
+            providers.append(
+                _provider_from_info(
+                    info,
+                    family="image",
+                    source="app.image.providers.registry",
+                    capabilities=[ProviderCapability.IMAGE, ProviderCapability.DIAGNOSTICS],
+                )
+            )
+
+        for info in self._list_visual():
+            providers.append(
+                _provider_from_info(
+                    info,
+                    family="rpg_visual",
+                    source="app.rpg.visual.providers.registry",
+                    capabilities=[ProviderCapability.IMAGE, ProviderCapability.DIAGNOSTICS],
+                )
+            )
+
+        return sorted(providers, key=lambda item: (item.family, item.id))
+
+    def list_configured_models(self, providers: list[ProviderSummary] | None = None) -> list[ModelSummary]:
+        settings = self._load_settings()
+        available_provider_ids = {provider.id for provider in providers or self.list_providers()}
+        models: list[ModelSummary] = []
+        configured = {
+            "llm:openrouter": ("openrouter", settings.get("openrouter", {}).get("model"), "remote"),
+            "llm:cerebras": ("cerebras", settings.get("cerebras", {}).get("model"), "remote"),
+            "llm:llamacpp": ("llamacpp", settings.get("llamacpp", {}).get("model"), "local"),
+            "llm:lmstudio": ("lmstudio", settings.get("lmstudio", {}).get("model"), "local"),
+            "tts:faster-qwen3-tts": (
+                "faster-qwen3-tts",
+                settings.get("faster-qwen3-tts", {}).get("model_name"),
+                "local",
+            ),
+        }
+        for provider_id, (label_prefix, model_id, location) in configured.items():
+            model_id = _safe_str(model_id).strip()
+            if not model_id or provider_id not in available_provider_ids:
+                continue
+            capabilities = [ProviderCapability.TTS] if provider_id.startswith("tts:") else [ProviderCapability.CHAT]
+            models.append(
+                ModelSummary(
+                    id=f"{provider_id}:{model_id}",
+                    label=f"{label_prefix}: {model_id}",
+                    provider_id=provider_id,
+                    capabilities=capabilities,
+                    location=location,  # type: ignore[arg-type]
+                    metadata={"source": "settings"},
+                )
+            )
+        return models
+
+    def _list_llm(self) -> list[dict[str, Any]]:
+        if self._llm_lister:
+            return self._llm_lister()
+        from app.providers.registry import list_available_providers
+
+        return list_available_providers()
+
+    def _list_tts(self) -> list[dict[str, Any]]:
+        if self._tts_lister:
+            return self._tts_lister()
+        from app.providers.audio_registry import list_available_tts_providers
+
+        return list_available_tts_providers()
+
+    def _list_stt(self) -> list[dict[str, Any]]:
+        if self._stt_lister:
+            return self._stt_lister()
+        from app.providers.audio_registry import list_available_stt_providers
+
+        return list_available_stt_providers()
+
+    def _list_image(self) -> list[dict[str, Any]]:
+        if self._image_lister:
+            return self._image_lister()
+        from app.image.providers.registry import list_image_providers
+
+        return list_image_providers()
+
+    def _list_visual(self) -> list[dict[str, Any]]:
+        if self._visual_lister:
+            return self._visual_lister()
+        from app.rpg.visual.providers.registry import list_visual_provider_options
+
+        return list_visual_provider_options()
+
+    def _load_settings(self) -> dict[str, Any]:
+        if self._settings_loader:
+            return self._settings_loader()
+        from app.shared import load_settings
+
+        return load_settings()
+
+
+def default_provider_facade() -> ProviderFacade:
+    return ProviderFacade()

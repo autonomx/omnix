@@ -1,0 +1,78 @@
+import { describe, expect, it } from 'vitest';
+import type { GatewayApiPaths } from './client';
+
+describe('generated gateway API types', () => {
+  it('exposes the current gateway paths through the shared import convention', () => {
+    const expectedWorkerPath = '/api/workers/health' satisfies keyof GatewayApiPaths;
+    const expectedChatSessionsPath = '/api/chat/sessions' satisfies keyof GatewayApiPaths;
+    const expectedChatMessagesPath = '/api/chat/sessions/{session_id}/messages' satisfies keyof GatewayApiPaths;
+    const expectedLegacySessionsPath = '/api/sessions' satisfies keyof GatewayApiPaths;
+    const expectedLegacySessionPath = '/api/sessions/{session_id}' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureTemplatesPath = '/api/rpg/adventure/templates' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureValidatePath = '/api/rpg/adventure/validate' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventurePreviewPath = '/api/rpg/adventure/preview' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureInspectWorldPath = '/api/rpg/adventure/inspect-world' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureInspectWorldSnapshotPath =
+      '/api/rpg/adventure/inspect-world-snapshot' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureCompareWorldPath = '/api/rpg/adventure/compare-world' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureCompareEntityPath = '/api/rpg/adventure/compare-entity' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureSimulateStepPath = '/api/rpg/adventure/simulate-step' satisfies keyof GatewayApiPaths;
+    const expectedRpgAdventureSimulationStatePath =
+      '/api/rpg/adventure/simulation-state' satisfies keyof GatewayApiPaths;
+    const expectedRpgSessionListPath = '/api/rpg/session/list' satisfies keyof GatewayApiPaths;
+    const expectedRpgSessionGetPath = '/api/rpg/session/get' satisfies keyof GatewayApiPaths;
+    const expectedRpgInspectTimelinePath = '/api/rpg/inspect/timeline' satisfies keyof GatewayApiPaths;
+    const expectedRpgInspectTimelineTickPath = '/api/rpg/inspect/timeline_tick' satisfies keyof GatewayApiPaths;
+    const expectedRpgInspectTickDiffPath = '/api/rpg/inspect/tick_diff' satisfies keyof GatewayApiPaths;
+    const expectedRpgInspectNpcReasoningPath = '/api/rpg/inspect/npc_reasoning' satisfies keyof GatewayApiPaths;
+    const expectedRpgInspectWorldEventsPath = '/api/rpg/inspect/world_events' satisfies keyof GatewayApiPaths;
+    const expectedRpgPlayerStatePath = '/api/rpg/player/state' satisfies keyof GatewayApiPaths;
+    const expectedRpgPlayerJournalPath = '/api/rpg/player/journal' satisfies keyof GatewayApiPaths;
+    const expectedRpgPlayerCodexPath = '/api/rpg/player/codex' satisfies keyof GatewayApiPaths;
+    const expectedRpgPlayerObjectivesPath = '/api/rpg/player/objectives' satisfies keyof GatewayApiPaths;
+    const expectedRpgPlayerEncounterPath = '/api/rpg/player/encounter' satisfies keyof GatewayApiPaths;
+    const expectedJobsPath = '/api/jobs' satisfies keyof GatewayApiPaths;
+    const expectedProvidersPath = '/api/providers' satisfies keyof GatewayApiPaths;
+    const expectedAssetsPath = '/api/assets' satisfies keyof GatewayApiPaths;
+    const expectedPromptsPath = '/api/prompts/render' satisfies keyof GatewayApiPaths;
+    const expectedReplayPath = '/api/replay/primitives' satisfies keyof GatewayApiPaths;
+    const expectedSettingsPath = '/api/settings' satisfies keyof GatewayApiPaths;
+    const expectedReportsPath = '/api/reports' satisfies keyof GatewayApiPaths;
+    const expectedDiagnosticsPath = '/api/diagnostics' satisfies keyof GatewayApiPaths;
+
+    expect(expectedWorkerPath).toBe('/api/workers/health');
+    expect(expectedChatSessionsPath).toBe('/api/chat/sessions');
+    expect(expectedChatMessagesPath).toBe('/api/chat/sessions/{session_id}/messages');
+    expect(expectedLegacySessionsPath).toBe('/api/sessions');
+    expect(expectedLegacySessionPath).toBe('/api/sessions/{session_id}');
+    expect(expectedRpgAdventureTemplatesPath).toBe('/api/rpg/adventure/templates');
+    expect(expectedRpgAdventureValidatePath).toBe('/api/rpg/adventure/validate');
+    expect(expectedRpgAdventurePreviewPath).toBe('/api/rpg/adventure/preview');
+    expect(expectedRpgAdventureInspectWorldPath).toBe('/api/rpg/adventure/inspect-world');
+    expect(expectedRpgAdventureInspectWorldSnapshotPath).toBe('/api/rpg/adventure/inspect-world-snapshot');
+    expect(expectedRpgAdventureCompareWorldPath).toBe('/api/rpg/adventure/compare-world');
+    expect(expectedRpgAdventureCompareEntityPath).toBe('/api/rpg/adventure/compare-entity');
+    expect(expectedRpgAdventureSimulateStepPath).toBe('/api/rpg/adventure/simulate-step');
+    expect(expectedRpgAdventureSimulationStatePath).toBe('/api/rpg/adventure/simulation-state');
+    expect(expectedRpgSessionListPath).toBe('/api/rpg/session/list');
+    expect(expectedRpgSessionGetPath).toBe('/api/rpg/session/get');
+    expect(expectedRpgInspectTimelinePath).toBe('/api/rpg/inspect/timeline');
+    expect(expectedRpgInspectTimelineTickPath).toBe('/api/rpg/inspect/timeline_tick');
+    expect(expectedRpgInspectTickDiffPath).toBe('/api/rpg/inspect/tick_diff');
+    expect(expectedRpgInspectNpcReasoningPath).toBe('/api/rpg/inspect/npc_reasoning');
+    expect(expectedRpgInspectWorldEventsPath).toBe('/api/rpg/inspect/world_events');
+    expect(expectedRpgPlayerStatePath).toBe('/api/rpg/player/state');
+    expect(expectedRpgPlayerJournalPath).toBe('/api/rpg/player/journal');
+    expect(expectedRpgPlayerCodexPath).toBe('/api/rpg/player/codex');
+    expect(expectedRpgPlayerObjectivesPath).toBe('/api/rpg/player/objectives');
+    expect(expectedRpgPlayerEncounterPath).toBe('/api/rpg/player/encounter');
+    expect(expectedJobsPath).toBe('/api/jobs');
+    expect(expectedProvidersPath).toBe('/api/providers');
+    expect(expectedAssetsPath).toBe('/api/assets');
+    expect(expectedPromptsPath).toBe('/api/prompts/render');
+    expect(expectedReplayPath).toBe('/api/replay/primitives');
+    expect(expectedSettingsPath).toBe('/api/settings');
+    expect(expectedReportsPath).toBe('/api/reports');
+    expect(expectedDiagnosticsPath).toBe('/api/diagnostics');
+  });
+});

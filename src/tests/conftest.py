@@ -7,6 +7,7 @@ console-error capture, and automatic screenshot-on-failure.
 
 from __future__ import annotations
 
+import inspect
 import os
 import sys
 from datetime import datetime, timezone
@@ -42,6 +43,28 @@ from pages.voice_studio_page import VoiceStudioPage
 # ---------------------------------------------------------------------------
 BASE_URL = os.environ.get("OMNIX_BASE_URL", "http://localhost:5000")
 SCREENSHOTS_DIR = Path(__file__).parent / "reports" / "screenshots"
+RUN_RETIRED_LEGACY_UI_TESTS = os.environ.get("OMNIX_RUN_RETIRED_LEGACY_UI_TESTS") == "1"
+LEGACY_UI_STATIC_TEST_FILES = {
+    Path("src/tests/api/rpg/test_rpg_player_focus_assets.py"),
+    Path("src/tests/e2e/test_js_variables.py"),
+    Path("src/tests/functional/test_phase846_inspector_shell_smoke.py"),
+    Path("src/tests/functional/test_phase847_inspector_polish_smoke.py"),
+    Path("src/tests/regression/test_phase846_inspector_regression.py"),
+    Path("src/tests/regression/test_phase847_inspector_polish_regression.py"),
+    Path("src/tests/unit/rpg/test_phase846_frontend_inspector_files.py"),
+    Path("src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py"),
+    Path("src/tests/unit/test_js_variables.py"),
+    Path("src/tests/unit/test_no_new_audio_per_chunk.py"),
+}
+LEGACY_UI_RETIREMENT_CONTRACT_TEST = Path("src/tests/api/test_legacy_ui_retirement.py")
+LEGACY_UI_STATIC_SOURCE_MARKERS = (
+    "src/static",
+    "src\\static",
+    "/static/",
+    "../../static",
+    "../../../static",
+    "static/rpg",
+)
 
 # ---------------------------------------------------------------------------
 # Pytest options
@@ -54,6 +77,31 @@ def pytest_addoption(parser):
         default=BASE_URL,
         help="Base URL for the running Omnix application",
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    if RUN_RETIRED_LEGACY_UI_TESTS:
+        return
+
+    legacy_skip = pytest.mark.skip(
+        reason=(
+            "classic src/static and src/templates browser UI retired in Phase 18; "
+            "run with OMNIX_RUN_RETIRED_LEGACY_UI_TESTS=1 to inspect archived static-source checks"
+        )
+    )
+    for item in items:
+        relative_path = Path(str(item.fspath)).resolve().relative_to(PROJECT_ROOT)
+        if relative_path == LEGACY_UI_RETIREMENT_CONTRACT_TEST:
+            continue
+        if relative_path in LEGACY_UI_STATIC_TEST_FILES:
+            item.add_marker(legacy_skip)
+            continue
+        try:
+            source = inspect.getsource(item.obj)
+        except (OSError, TypeError):
+            source = ""
+        if any(marker in source for marker in LEGACY_UI_STATIC_SOURCE_MARKERS):
+            item.add_marker(legacy_skip)
 
 
 # ---------------------------------------------------------------------------

@@ -8,17 +8,16 @@ See root app.py for the main FastAPI application entry point.
 """
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
-
-from app.rpg.visual.runtime_status import log_flux_klein_runtime_status
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize providers on application startup"""
     try:
+        from app.rpg.visual.runtime_status import log_flux_klein_runtime_status
+
         log_flux_klein_runtime_status()
     except Exception as e:
         print(f"[APP-STARTUP] Failed to validate FLUX runtime: {e}")
@@ -40,8 +39,6 @@ def create_fastapi_app() -> FastAPI:
     from .rpg.api.rpg_session_routes import rpg_session_bp
     from .rpg.creator_routes import creator_bp
 
-    pkg_dir = Path(__file__).resolve().parent
-    
     app = FastAPI(
         title="Omnix API",
         lifespan=lifespan,

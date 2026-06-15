@@ -15,11 +15,28 @@ export type OmnixModuleId =
   | 'settings'
   | 'diagnostics';
 
+export type OmnixModuleRoute =
+  | '/rpg'
+  | '/chatbot'
+  | '/storyteller'
+  | '/podcast'
+  | '/voice'
+  | '/voice-cloning'
+  | '/stt'
+  | '/image-generation'
+  | '/providers'
+  | '/models'
+  | '/jobs'
+  | '/assets'
+  | '/reports'
+  | '/settings'
+  | '/diagnostics';
+
 export interface OmnixModuleDefinition {
   id: OmnixModuleId;
   label: string;
   summary: string;
-  route: `/${string}`;
+  route: OmnixModuleRoute;
 }
 
 export const omnixModules: OmnixModuleDefinition[] = [

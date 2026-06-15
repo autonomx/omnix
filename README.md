@@ -98,6 +98,16 @@ npm run web:dev
 
 The Vite app runs on port `5173` and proxies `/api` and `/events` to the FastAPI backend on `http://localhost:8000`.
 
+Start the gateway used by the shared web app:
+
+```bash
+PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+```
+
+The classic `src/templates` and `src/static` browser UI is retired in favor of `apps/web`. `src/run_app.py` may still host backend compatibility routes and generated media, but it is no longer the supported browser app. See [`docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md`](docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md).
+
+Release and validation guidance lives in [`docs/WEB_APP_RELEASE_READINESS.md`](docs/WEB_APP_RELEASE_READINESS.md).
+
 Useful web commands:
 
 ```bash
@@ -117,7 +127,7 @@ npm run web:preview
 5. Generated audio, images, transcripts, reports, checkpoints, and exports must use the shared asset/artifact model.
 6. Provider and model selection must go through the shared provider/model registry.
 7. Frontend code may render backend truth but must not invent authoritative state.
-8. Legacy UI may remain temporarily during migration, but new behavior must not be added to legacy frontend entrypoints.
+8. Classic UI entrypoints are retired; new behavior must not be added to legacy frontend files or routes.
 
 ## Project Structure Target
 

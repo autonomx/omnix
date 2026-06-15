@@ -1,4 +1,14 @@
 import type { OmnixModuleDefinition } from '../app/modules';
+import { WorkspacePanel } from '../design/primitives';
+import { ChatbotWorkspace } from './chatbot/ChatbotWorkspace';
+import { ImageGenerationWorkspace } from './image-generation/ImageGenerationWorkspace';
+import { PodcastWorkspace } from './podcast/PodcastWorkspace';
+import { isPlatformModule, PlatformModuleWorkspace } from './platform/PlatformModuleWorkspace';
+import { RpgWorkspace } from './rpg/RpgWorkspace';
+import { SttWorkspace } from './stt/SttWorkspace';
+import { StorytellerWorkspace } from './storyteller/StorytellerWorkspace';
+import { VoiceCloningWorkspace } from './voice-cloning/VoiceCloningWorkspace';
+import { VoiceWorkspace } from './voice/VoiceWorkspace';
 
 const moduleCapabilities: Record<string, string[]> = {
   rpg: ['Turn contracts', 'Deterministic state', 'Journal', 'Party', 'Combat', 'Autoplay reports'],
@@ -19,10 +29,46 @@ const moduleCapabilities: Record<string, string[]> = {
 };
 
 export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  if (module.id === 'rpg') {
+    return <RpgWorkspace module={module} />;
+  }
+
+  if (module.id === 'chatbot') {
+    return <ChatbotWorkspace module={module} />;
+  }
+
+  if (module.id === 'podcast') {
+    return <PodcastWorkspace module={module} />;
+  }
+
+  if (module.id === 'voice') {
+    return <VoiceWorkspace module={module} />;
+  }
+
+  if (module.id === 'voice-cloning') {
+    return <VoiceCloningWorkspace module={module} />;
+  }
+
+  if (module.id === 'stt') {
+    return <SttWorkspace module={module} />;
+  }
+
+  if (module.id === 'image-generation') {
+    return <ImageGenerationWorkspace module={module} />;
+  }
+
+  if (module.id === 'storyteller') {
+    return <StorytellerWorkspace module={module} />;
+  }
+
+  if (isPlatformModule(module.id)) {
+    return <PlatformModuleWorkspace module={module} />;
+  }
+
   const capabilities = moduleCapabilities[module.id] ?? [];
 
   return (
-    <section className="workspace-card" aria-labelledby="module-title">
+    <WorkspacePanel>
       <div className="workspace-heading">
         <div>
           <p className="eyebrow">Module workspace</p>
@@ -53,6 +99,6 @@ export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
           </ul>
         </article>
       </div>
-    </section>
+    </WorkspacePanel>
   );
 }
