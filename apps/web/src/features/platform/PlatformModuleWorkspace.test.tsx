@@ -135,6 +135,22 @@ function reportPayload(includeReport: boolean) {
   };
 }
 
+function diagnosticsPayload(status: string, logMessage: string) {
+  return {
+    ok: status === 'ready',
+    status,
+    event_stream: { status },
+    workers: {
+      contract_version: 'omnix_worker_health_contract_v1',
+      format_version: 'omnix_gateway_foundation_v1',
+      ok: status === 'ready',
+      status,
+      workers: [{ id: 'llm', ok: true, mocked: true, source_env: 'OMNIX_LLM_WORKER_URL', status: 'mocked', url: '' }],
+    },
+    logs: [{ level: 'info', message: logMessage }],
+  };
+}
+
 afterEach(() => {
   MockEventSource.instances = [];
   vi.unstubAllGlobals();
@@ -291,6 +307,37 @@ describe('PlatformModuleWorkspace', () => {
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/reports'))).toHaveLength(2);
   });
 
+  it('refreshes diagnostics when shared job events arrive', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
+      const diagnosticsCallCount = fetchMock.mock.calls.filter(([callInput]) => {
+        const callPath = typeof callInput === 'string' ? new URL(callInput, 'http://localhost').pathname : new URL(callInput.toString()).pathname;
+        return callPath === '/api/diagnostics';
+      }).length;
+
+      if (path === '/api/diagnostics') {
+        return Response.json(
+          diagnosticsCallCount > 1
+            ? diagnosticsPayload('ready', 'after-event')
+            : diagnosticsPayload('degraded', 'before-event'),
+        );
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPlatform('diagnostics');
+
+    expect(await screen.findByText(/before-event/)).toBeInTheDocument();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    MockEventSource.instances[0].emitMessage('job.updated', '{"job_id":"job-1"}');
+
+    expect(await screen.findByText(/after-event/)).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/diagnostics'))).toHaveLength(2);
+  });
+
   it('renders assets, reports, settings, and diagnostics data', async () => {
     mockGateway({
       '/api/assets': assetPayload(true),
@@ -303,19 +350,7 @@ describe('PlatformModuleWorkspace', () => {
         rpg_visual_enabled: false,
         worker_urls: { llm: 'http://127.0.0.1:9001' },
       },
-      '/api/diagnostics': {
-        ok: true,
-        status: 'ready',
-        event_stream: { status: 'ready' },
-        workers: {
-          contract_version: 'omnix_worker_health_contract_v1',
-          format_version: 'omnix_gateway_foundation_v1',
-          ok: true,
-          status: 'ready',
-          workers: [{ id: 'llm', ok: true, mocked: true, source_env: 'OMNIX_LLM_WORKER_URL', status: 'mocked', url: '' }],
-        },
-        logs: [{ level: 'info', message: 'ready' }],
-      },
+      '/api/diagnostics': diagnosticsPayload('ready', 'ready'),
     });
 
     renderPlatform('assets');
