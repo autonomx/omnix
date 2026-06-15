@@ -146,6 +146,22 @@ describe('OmnixEventClient', () => {
     );
   });
 
+  it('still resumes after malformed JSON events with SSE ids', () => {
+    vi.useFakeTimers();
+
+    const malformedHandler = vi.fn();
+    const { client, sources } = createClient({ onMalformedEvent: malformedHandler });
+
+    client.subscribe('job.updated', vi.fn());
+    sources[0].emitMessage('job.updated', '{not-json', '99');
+    sources[0].emitError();
+
+    vi.runOnlyPendingTimers();
+
+    expect(malformedHandler).toHaveBeenCalledOnce();
+    expect(sources[1].endpoint).toBe('/events?after_id=99');
+  });
+
   it('reconnects with backoff and rebinds named-event listeners', () => {
     vi.useFakeTimers();
 
