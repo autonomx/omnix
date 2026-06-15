@@ -7,17 +7,47 @@ import { omnixTheme } from '../../design/theme';
 import { PlatformModuleWorkspace } from './PlatformModuleWorkspace';
 
 class MockEventSource {
+  static instances: MockEventSource[] = [];
+
   readonly url: string;
+  private readonly listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
   constructor(url: string | URL) {
     this.url = String(url);
+    MockEventSource.instances.push(this);
   }
 
-  addEventListener() {}
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject | null) {
+    if (!listener) {
+      return;
+    }
 
-  removeEventListener() {}
+    const listenersForType = this.listeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+    listenersForType.add(listener);
+    this.listeners.set(type, listenersForType);
+  }
+
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null) {
+    if (!listener) {
+      return;
+    }
+
+    this.listeners.get(type)?.delete(listener);
+  }
 
   close() {}
+
+  emitMessage(type: string, data: string) {
+    const event = new MessageEvent(type, { data });
+
+    for (const listener of this.listeners.get(type) ?? []) {
+      if (typeof listener === 'function') {
+        listener(event);
+      } else {
+        listener.handleEvent(event);
+      }
+    }
+  }
 }
 
 function renderPlatform(moduleId: OmnixModuleId) {
@@ -59,7 +89,28 @@ function mockGateway(payloads: Record<string, unknown>) {
   return fetchMock;
 }
 
+function jobPayload(status: string, message: string) {
+  return {
+    jobs: [
+      {
+        id: 'job-1',
+        type: 'tts.generate',
+        module: 'voice',
+        status,
+        resource_class: 'gpu:tts',
+        created_at: '2026-06-14T00:00:00Z',
+        updated_at: '2026-06-14T00:00:01Z',
+        priority: 0,
+        progress: { current: status === 'completed' ? 4 : 1, total: 4, message },
+        stages: [{ id: 's1', label: 'Synthesis', status, resource_class: 'gpu:tts' }],
+        logs: [{ level: 'info', message: 'started' }],
+      },
+    ],
+  };
+}
+
 afterEach(() => {
+  MockEventSource.instances = [];
   vi.unstubAllGlobals();
 });
 
@@ -108,23 +159,7 @@ describe('PlatformModuleWorkspace', () => {
 
   it('renders jobs with progress and cancellation through the shared queue API', async () => {
     const fetchMock = mockGateway({
-      '/api/jobs': {
-        jobs: [
-          {
-            id: 'job-1',
-            type: 'tts.generate',
-            module: 'voice',
-            status: 'running',
-            resource_class: 'gpu:tts',
-            created_at: '2026-06-14T00:00:00Z',
-            updated_at: '2026-06-14T00:00:01Z',
-            priority: 0,
-            progress: { current: 1, total: 4, message: 'Synthesizing' },
-            stages: [{ id: 's1', label: 'Synthesis', status: 'running', resource_class: 'gpu:tts' }],
-            logs: [{ level: 'info', message: 'started' }],
-          },
-        ],
-      },
+      '/api/jobs': jobPayload('running', 'Synthesizing'),
       '/api/jobs/job-1/cancel': {
         id: 'job-1',
         type: 'tts.generate',
@@ -147,6 +182,33 @@ describe('PlatformModuleWorkspace', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/jobs/job-1/cancel', expect.objectContaining({ method: 'POST' }));
     });
+  });
+
+  it('refreshes jobs when shared job events arrive', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
+      const jobsCallCount = fetchMock.mock.calls.filter(([callInput]) => {
+        const callPath = typeof callInput === 'string' ? new URL(callInput, 'http://localhost').pathname : new URL(callInput.toString()).pathname;
+        return callPath === '/api/jobs';
+      }).length;
+
+      if (path === '/api/jobs') {
+        return Response.json(jobsCallCount <= 1 ? jobPayload('running', 'Synthesizing') : jobPayload('completed', 'Finished'));
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPlatform('jobs');
+
+    expect(await screen.findByText('Synthesizing')).toBeInTheDocument();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    MockEventSource.instances[0].emitMessage('job.updated', '{"job_id":"job-1"}');
+
+    expect(await screen.findByText('Finished')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/jobs'))).toHaveLength(2);
   });
 
   it('renders assets, reports, settings, and diagnostics data', async () => {
