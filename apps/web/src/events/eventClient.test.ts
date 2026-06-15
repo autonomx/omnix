@@ -33,8 +33,8 @@ class FakeEventSource implements OmnixEventSource {
     this.emit('error', new Event('error'));
   }
 
-  emitMessage(type: string, data: string) {
-    this.emit(type, new MessageEvent(type, { data }));
+  emitMessage(type: string, data: string, lastEventId = '') {
+    this.emit(type, new MessageEvent(type, { data, lastEventId }));
   }
 
   private emit(type: string, event: Event) {
@@ -177,6 +177,36 @@ describe('OmnixEventClient', () => {
     expect(client.getStatus()).toEqual({ state: 'open', reconnectAttempt: 0 });
     expect(sources[1].listenerCount('job.updated')).toBe(1);
     expect(handler).toHaveBeenCalledWith({ id: 'job-3' });
+  });
+
+  it('resumes reconnects from the last delivered SSE id', () => {
+    vi.useFakeTimers();
+
+    const { client, sources } = createClient();
+
+    client.subscribe('job.completed', vi.fn());
+    sources[0].emitOpen();
+    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    sources[0].emitError();
+
+    vi.runOnlyPendingTimers();
+
+    expect(sources).toHaveLength(2);
+    expect(sources[1].endpoint).toBe('/events?after_id=42');
+  });
+
+  it('appends resume cursors to endpoints that already have query strings', () => {
+    vi.useFakeTimers();
+
+    const { client, sources } = createClient({ endpoint: '/events?stream=jobs' });
+
+    client.subscribe('job.completed', vi.fn());
+    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    sources[0].emitError();
+
+    vi.runOnlyPendingTimers();
+
+    expect(sources[1].endpoint).toBe('/events?stream=jobs&after_id=42');
   });
 
   it('cancels pending reconnect when closed', () => {
