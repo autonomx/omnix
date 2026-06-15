@@ -209,6 +209,20 @@ describe('OmnixEventClient', () => {
     expect(sources[1].endpoint).toBe('/events?stream=jobs&after_id=42');
   });
 
+  it('replaces existing resume cursors instead of duplicating after_id params', () => {
+    vi.useFakeTimers();
+
+    const { client, sources } = createClient({ endpoint: '/events?after_id=5&stream=jobs' });
+
+    client.subscribe('job.completed', vi.fn());
+    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    sources[0].emitError();
+
+    vi.runOnlyPendingTimers();
+
+    expect(sources[1].endpoint).toBe('/events?after_id=42&stream=jobs');
+  });
+
   it('cancels pending reconnect when closed', () => {
     vi.useFakeTimers();
 
