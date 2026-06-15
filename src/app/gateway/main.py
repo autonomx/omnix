@@ -6,12 +6,13 @@ and legacy browser paths remain available during migration.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from collections.abc import Callable
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -118,6 +119,9 @@ from .workers import (
 
 DEFAULT_GATEWAY_HOST = "127.0.0.1"
 DEFAULT_GATEWAY_PORT = 5050
+EVENT_STREAM_BATCH_LIMIT = 100
+EVENT_STREAM_POLL_SECONDS = 1.0
+EVENT_STREAM_HEARTBEAT_SECONDS = 15.0
 
 
 class GatewayHealth(BaseModel):
@@ -192,8 +196,55 @@ def _runtime_status() -> RuntimeStatusPayload:
     )
 
 
-def _sse_event(event_type: str, payload: dict[str, Any]) -> str:
-    return f"event: {event_type}\ndata: {json.dumps(payload, sort_keys=True)}\n\n"
+def _sse_event(event_type: str, payload: dict[str, Any], event_id: int | None = None) -> str:
+    lines = []
+    if event_id is not None:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {event_type}")
+    lines.append(f"data: {json.dumps(payload, sort_keys=True)}")
+    return "\n".join(lines) + "\n\n"
+
+
+def _sse_comment(comment: str) -> str:
+    return f": {comment}\n\n"
+
+
+def _parse_event_id(value: str | None, fallback: int = 0) -> int:
+    if not value:
+        return fallback
+    try:
+        return int(value)
+    except ValueError:
+        return fallback
+
+
+async def _live_job_event_stream(job_store: SQLiteJobStore, after_id: int = 0):
+    """Yield a live SSE stream for shared job events.
+
+    The finite `/api/jobs/events` route remains a compatibility/history endpoint.
+    The browser-facing shared event client uses `/events`, which stays open,
+    emits event ids for EventSource resume, and sends heartbeat comments so
+    proxies and diagnostics can tell the stream is still alive.
+    """
+    last_event_id = max(0, after_id)
+    seconds_until_heartbeat = 0.0
+    yield _sse_comment("omnix-events-open")
+
+    while True:
+        events = job_store.list_events(after_id=last_event_id, limit=EVENT_STREAM_BATCH_LIMIT)
+        if events:
+            for event in events:
+                last_event_id = max(last_event_id, event.id)
+                yield _sse_event(event.event_type, event.model_dump(mode="json"), event_id=event.id)
+            seconds_until_heartbeat = 0.0
+            continue
+
+        if seconds_until_heartbeat <= 0:
+            yield _sse_comment("heartbeat")
+            seconds_until_heartbeat = EVENT_STREAM_HEARTBEAT_SECONDS
+
+        await asyncio.sleep(EVENT_STREAM_POLL_SECONDS)
+        seconds_until_heartbeat -= EVENT_STREAM_POLL_SECONDS
 
 
 def create_gateway_app(
@@ -481,13 +532,22 @@ def create_gateway_app(
     async def list_jobs() -> JobListResponse:
         return JobListResponse(jobs=get_job_store().list_jobs())
 
+    @gateway.get("/events", include_in_schema=False)
+    async def events(after_id: int = 0, last_event_id: str | None = Header(default=None, alias="Last-Event-ID")) -> StreamingResponse:
+        start_after_id = _parse_event_id(last_event_id, fallback=after_id)
+        return StreamingResponse(
+            _live_job_event_stream(get_job_store(), after_id=start_after_id),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
+
     @gateway.get("/api/jobs/events", tags=["jobs"])
     async def job_events(after_id: int = 0, limit: int = 100) -> StreamingResponse:
         events = get_job_store().list_events(after_id=after_id, limit=limit)
 
         def generate():
             for event in events:
-                yield _sse_event(event.event_type, event.model_dump(mode="json"))
+                yield _sse_event(event.event_type, event.model_dump(mode="json"), event_id=event.id)
 
         return StreamingResponse(generate(), media_type="text/event-stream")
 
