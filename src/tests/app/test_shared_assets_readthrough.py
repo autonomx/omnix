@@ -77,3 +77,55 @@ def test_manifest_asset_overrides_matching_legacy_voice_clone(tmp_path, monkeypa
 
     assert assets["voice-cloning:Narrator"].storage_path == "shared/profile.bin"
     assert assets["voice-cloning:Narrator"].metadata == {"source": "shared-manifest"}
+
+
+def test_shared_asset_store_reads_legacy_generated_audio(tmp_path, monkeypatch) -> None:
+    tts_dir = tmp_path / "tts"
+    stt_dir = tmp_path / "stt"
+    tts_dir.mkdir()
+    stt_dir.mkdir()
+    (tts_dir / "narration.wav").write_bytes(b"RIFF")
+    (stt_dir / "mic capture.mp3").write_bytes(b"ID3")
+    (stt_dir / "transcript.txt").write_text("not audio", encoding="utf-8")
+    monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", f"{tts_dir}:{stt_dir}")
+
+    store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
+
+    assets = {asset.id: asset for asset in store.list_assets().assets if asset.type == AssetType.AUDIO}
+
+    assert set(assets) == {"audio:tts-narration.wav", "audio:stt-mic-capture.mp3"}
+    assert assets["audio:tts-narration.wav"].module == "voice"
+    assert assets["audio:tts-narration.wav"].type == AssetType.AUDIO
+    assert assets["audio:tts-narration.wav"].mime_type == "audio/wav"
+    assert assets["audio:tts-narration.wav"].storage_path.endswith("narration.wav")
+    assert assets["audio:tts-narration.wav"].metadata["legacy_root"] == "tts"
+    assert assets["audio:stt-mic-capture.mp3"].module == "stt"
+    assert assets["audio:stt-mic-capture.mp3"].mime_type == "audio/mpeg"
+    assert assets["audio:stt-mic-capture.mp3"].compat["legacy_relative_path"] == "mic capture.mp3"
+
+    assert not store.manifest_path.exists()
+
+
+def test_manifest_asset_overrides_matching_legacy_audio_file(tmp_path, monkeypatch) -> None:
+    tts_dir = tmp_path / "tts"
+    tts_dir.mkdir()
+    (tts_dir / "narration.wav").write_bytes(b"RIFF")
+    monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", str(tts_dir))
+
+    store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
+    store.upsert_asset(
+        AssetRecord(
+            id="audio:tts-narration.wav",
+            module="voice",
+            type=AssetType.AUDIO,
+            mime_type="audio/wav",
+            storage_path="shared/audio/narration.wav",
+            metadata={"source": "shared-manifest"},
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+
+    assets = {asset.id: asset for asset in store.list_assets().assets}
+
+    assert assets["audio:tts-narration.wav"].storage_path == "shared/audio/narration.wav"
+    assert assets["audio:tts-narration.wav"].metadata == {"source": "shared-manifest"}

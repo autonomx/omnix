@@ -14,6 +14,7 @@ This note tracks what is still left after the current web-platform hardening wor
 - Web typecheck and Vitest are part of the required deterministic gate.
 - Image assets have explicit shared-asset import diagnostics.
 - Existing voice clone profiles are exposed through shared asset read-through without mutating legacy data.
+- Existing generated STT/TTS audio files are exposed through shared asset read-through without mutating legacy data.
 
 ## Phases left
 
@@ -23,7 +24,6 @@ Goal: finish compatibility read-through or import diagnostics for every legacy d
 
 Remaining work:
 
-- Prove old STT/TTS generated audio remains discoverable through shared assets.
 - Prove podcast, story, and generic exported files remain discoverable through shared assets.
 - Add explicit dry-run/import diagnostics for non-image asset families where read-through alone is not enough.
 - Add more settings and secrets preservation tests, especially masked API-key round trips and provider-cache invalidation behavior.
