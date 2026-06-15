@@ -28,6 +28,7 @@ const platformModuleIds = new Set<OmnixModuleId>([
 const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled'] as const;
 const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
 const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], ['platform', 'jobs']];
+const artifactEventQueryKeys: QueryKey[] = [['platform', 'assets'], ['platform', 'reports']];
 
 export function isPlatformModule(moduleId: OmnixModuleId): boolean {
   return platformModuleIds.has(moduleId);
@@ -191,6 +192,7 @@ function JobsView() {
 }
 
 function AssetsView() {
+  useJobEventRefresh(artifactEventQueryKeys);
   const query = useQuery({
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
@@ -214,6 +216,7 @@ function AssetsView() {
 }
 
 function ReportsView() {
+  useJobEventRefresh(artifactEventQueryKeys);
   const query = useQuery({
     queryKey: ['platform', 'reports'],
     queryFn: () => omnixApiClient.listReports(),
