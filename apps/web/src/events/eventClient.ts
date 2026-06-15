@@ -53,6 +53,7 @@ export class OmnixEventClient {
   private source: OmnixEventSource | null = null;
   private reconnectTimer: TimeoutHandle | null = null;
   private reconnectAttempt = 0;
+  private lastEventId: string | null = null;
   private closedByClient = false;
   private status: OmnixEventConnectionStatus = {
     state: 'idle',
@@ -181,7 +182,7 @@ export class OmnixEventClient {
   private openConnection(state: OmnixEventConnectionState) {
     this.cancelReconnect();
     this.closeSource();
-    this.source = this.eventSourceFactory(this.endpoint);
+    this.source = this.eventSourceFactory(this.connectionEndpoint());
     this.source.addEventListener('open', this.handleOpen);
     this.source.addEventListener('error', this.handleError);
 
@@ -193,6 +194,18 @@ export class OmnixEventClient {
       state,
       reconnectAttempt: this.reconnectAttempt,
     });
+  }
+
+  private connectionEndpoint() {
+    if (!this.lastEventId) {
+      return this.endpoint;
+    }
+
+    const [endpointWithoutHash, hashFragment] = this.endpoint.split('#', 2);
+    const separator = endpointWithoutHash.includes('?') ? '&' : '?';
+    const hashSuffix = hashFragment === undefined ? '' : `#${hashFragment}`;
+
+    return `${endpointWithoutHash}${separator}after_id=${encodeURIComponent(this.lastEventId)}${hashSuffix}`;
   }
 
   private bindEventName(eventName: string) {
@@ -235,6 +248,8 @@ export class OmnixEventClient {
         return;
       }
 
+      this.rememberEventId(message.lastEventId);
+
       const handlersForEvent = this.handlers.get(eventName);
       if (!handlersForEvent) {
         return;
@@ -247,6 +262,12 @@ export class OmnixEventClient {
 
     this.sourceEventListeners.set(eventName, listener);
     return listener;
+  }
+
+  private rememberEventId(eventId: string) {
+    if (eventId) {
+      this.lastEventId = eventId;
+    }
   }
 
   private scheduleReconnect(error: Event) {
