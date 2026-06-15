@@ -4,9 +4,13 @@ on:
   pull_request:
     branches: [rpg]
     paths:
+      - "apps/web/**"
+      - "src/app/gateway/**"
+      - "src/app/platform/**"
       - "src/app/rpg/**"
       - "src/static/rpg/**"
       - "src/static/rpg-conversation-settings.js"
+      - "src/tests/app/**"
       - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
       - "src/tests/rpg/test_ci_phase8_*_note.py"
       - "src/tests/rpg/test_ci_phase9_1_endurance_baseline.py"
@@ -27,6 +31,8 @@ on:
       - "src/tests/rpg/test_ci_phase10_3_persistence_diagnostics_evidence_envelope.py"
       - "src/tests/rpg/test_ci_phase10_4_player_safe_error_handling_evidence_envelope.py"
       - "src/tests/rpg/test_ci_phase10_4_completion_note.py"
+      - "docs/WEB_APP*.md"
+      - "docs/WEB_APP_*.md"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_*_completion_note.md"
       - "docs/plans/rpg_phase9_1_endurance_baseline.md"
@@ -47,14 +53,19 @@ on:
       - "docs/plans/rpg_phase10_3_persistence_diagnostics_evidence_envelope.md"
       - "docs/plans/rpg_phase10_4_player_safe_error_handling_evidence_envelope.md"
       - "docs/plans/rpg_phase10_4_completion_note.md"
+      - "SPEC.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
     branches: [rpg]
     paths:
+      - "apps/web/**"
+      - "src/app/gateway/**"
+      - "src/app/platform/**"
       - "src/app/rpg/**"
       - "src/static/rpg/**"
       - "src/static/rpg-conversation-settings.js"
+      - "src/tests/app/**"
       - "src/tests/rpg/test_ci_phase0_architecture_compliance.py"
       - "src/tests/rpg/test_ci_phase8_*_note.py"
       - "src/tests/rpg/test_ci_phase9_1_endurance_baseline.py"
@@ -75,6 +86,8 @@ on:
       - "src/tests/rpg/test_ci_phase10_3_persistence_diagnostics_evidence_envelope.py"
       - "src/tests/rpg/test_ci_phase10_4_player_safe_error_handling_evidence_envelope.py"
       - "src/tests/rpg/test_ci_phase10_4_completion_note.py"
+      - "docs/WEB_APP*.md"
+      - "docs/WEB_APP_*.md"
       - "docs/plans/rpg_production_readiness_plan.md"
       - "docs/plans/rpg_phase8_*_completion_note.md"
       - "docs/plans/rpg_phase9_1_endurance_baseline.md"
@@ -95,6 +108,7 @@ on:
       - "docs/plans/rpg_phase10_3_persistence_diagnostics_evidence_envelope.md"
       - "docs/plans/rpg_phase10_4_player_safe_error_handling_evidence_envelope.md"
       - "docs/plans/rpg_phase10_4_completion_note.md"
+      - "SPEC.md"
       - ".github/workflows/rpg-phase0-architecture-compliance.yml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
