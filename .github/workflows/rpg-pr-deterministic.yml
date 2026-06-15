@@ -4,16 +4,30 @@ on:
   pull_request:
     branches: [rpg]
     paths:
+      - "apps/web/**"
+      - "src/app/gateway/**"
+      - "src/app/platform/**"
       - "src/app/rpg/**"
+      - "src/tests/app/**"
       - "src/tests/rpg/**"
+      - "docs/WEB_APP*.md"
+      - "docs/WEB_APP_*.md"
+      - "SPEC.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
       - ".github/workflows/rpg-pr-deterministic.yml"
   push:
     branches: [rpg]
     paths:
+      - "apps/web/**"
+      - "src/app/gateway/**"
+      - "src/app/platform/**"
       - "src/app/rpg/**"
+      - "src/tests/app/**"
       - "src/tests/rpg/**"
+      - "docs/WEB_APP*.md"
+      - "docs/WEB_APP_*.md"
+      - "SPEC.md"
       - "scripts/check_rpg_file_lines.py"
       - "ruff.toml"
       - ".github/workflows/rpg-pr-deterministic.yml"
@@ -50,6 +64,9 @@ jobs:
 
       - name: Ruff runtime bridge checks
         run: ruff check src/app/rpg/session/runtime_part16.py src/app/rpg/session/runtime_part17.py src/app/rpg/session/runtime_part18.py src/app/rpg/session/runtime_part19.py
+
+      - name: Gateway event stream regression
+        run: python -m pytest src/tests/app/test_gateway_events.py -q
 
       - name: RPG representative deterministic smoke
         run: python -m pytest src/app/rpg/tests/test_narration_queue.py -q
