@@ -12,6 +12,18 @@ from app.runtime_paths import resources_data_root
 from .models import AssetListResponse, AssetMigrationPreview, AssetRecord, AssetType
 
 
+_AUDIO_MIME_TYPES = {
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".m4a": "audio/mp4",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".wav": "audio/wav",
+    ".webm": "audio/webm",
+}
+
+
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -30,9 +42,51 @@ def default_asset_manifest_path() -> Path:
     return resources_data_root() / "assets" / "manifest.json"
 
 
+def _safe_asset_segment(value: str) -> str:
+    normalized = value.strip().replace("\\", "/")
+    normalized = normalized.replace(":", "-")
+    pieces = [piece for part in normalized.split("/") for piece in part.split()]
+    return "-".join(pieces) or "unnamed"
+
+
 def _safe_voice_asset_id(voice_id: str) -> str:
-    safe = "-".join(voice_id.strip().split()) or "unnamed"
-    return f"voice-cloning:{safe}"
+    return f"voice-cloning:{_safe_asset_segment(voice_id)}"
+
+
+def _safe_audio_asset_id(root: Path, path: Path) -> str:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = Path(path.name)
+    scoped_path = Path(root.name) / relative
+    return f"audio:{_safe_asset_segment(str(scoped_path))}"
+
+
+def _legacy_audio_roots() -> list[Path]:
+    override = os.environ.get("OMNIX_LEGACY_AUDIO_DIRS")
+    if override:
+        return [Path(part) for part in override.split(os.pathsep) if part.strip()]
+
+    data_root = resources_data_root()
+    return [
+        data_root / "generated_audio",
+        data_root / "tts",
+        data_root / "stt",
+        data_root / "voice",
+        data_root / "voice_studio",
+        data_root / "podcast_audio",
+    ]
+
+
+def _legacy_audio_module(root: Path) -> str:
+    name = root.name.lower()
+    if "stt" in name:
+        return "stt"
+    if "podcast" in name:
+        return "podcast"
+    if "tts" in name or "voice" in name:
+        return "voice"
+    return "audio"
 
 
 class SharedAssetStore:
@@ -45,6 +99,8 @@ class SharedAssetStore:
     def list_assets(self) -> AssetListResponse:
         assets = self._load_manifest()
         for asset in self._legacy_voice_clone_assets():
+            assets.setdefault(asset.id, asset)
+        for asset in self._legacy_audio_assets():
             assets.setdefault(asset.id, asset)
         return AssetListResponse(assets=list(assets.values()))
 
@@ -150,6 +206,46 @@ class SharedAssetStore:
                     },
                 )
             )
+        return records
+
+    def _legacy_audio_assets(self) -> list[AssetRecord]:
+        """Expose legacy generated audio files without mutating the shared manifest."""
+        records: list[AssetRecord] = []
+        for root in _legacy_audio_roots():
+            if not root.is_dir():
+                continue
+            module = _legacy_audio_module(root)
+            for path in sorted(root.rglob("*")):
+                if not path.is_file():
+                    continue
+                suffix = path.suffix.lower()
+                mime_type = _AUDIO_MIME_TYPES.get(suffix)
+                if not mime_type:
+                    continue
+                try:
+                    relative = str(path.relative_to(root))
+                except ValueError:
+                    relative = path.name
+                records.append(
+                    AssetRecord(
+                        id=_safe_audio_asset_id(root, path),
+                        module=module,
+                        type=AssetType.AUDIO,
+                        mime_type=mime_type,
+                        storage_path=str(path),
+                        metadata={
+                            "filename": path.name,
+                            "extension": suffix.lstrip("."),
+                            "legacy_root": root.name,
+                        },
+                        created_at=_mtime_iso(path),
+                        compat={
+                            "legacy_system": "resources/data generated audio file",
+                            "legacy_root": str(root),
+                            "legacy_relative_path": relative,
+                        },
+                    )
+                )
         return records
 
     def _load_manifest(self) -> dict[str, AssetRecord]:
