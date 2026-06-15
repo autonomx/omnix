@@ -239,6 +239,18 @@ describe('OmnixEventClient', () => {
     expect(sources[1].endpoint).toBe('/events?after_id=42&stream=jobs');
   });
 
+  it('clears the resume cursor when explicitly closed', () => {
+    const { client, sources } = createClient();
+
+    client.subscribe('job.completed', vi.fn());
+    sources[0].emitMessage('job.completed', '{"id":"job-7"}', '42');
+    client.close();
+    client.connect();
+
+    expect(sources).toHaveLength(2);
+    expect(sources[1].endpoint).toBe('/events');
+  });
+
   it('cancels pending reconnect when closed', () => {
     vi.useFakeTimers();
 
