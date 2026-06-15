@@ -149,6 +149,7 @@ export class OmnixEventClient {
     this.cancelReconnect();
     this.closeSource();
     this.reconnectAttempt = 0;
+    this.lastEventId = null;
     this.setStatus({
       state: 'closed',
       reconnectAttempt: 0,
