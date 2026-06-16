@@ -17,14 +17,16 @@ def test_default_service_specs_keep_image_disabled_by_default(monkeypatch) -> No
     specs = build_default_service_specs(Path("F:/LLM/omnix"))
     by_id = {spec.service_id: spec for spec in specs}
 
-    assert {"stt", "tts", "app", "image"}.issubset(by_id)
+    assert {"stt", "tts", "gateway", "web", "image"}.issubset(by_id)
     assert by_id["image"].enabled is False
     assert by_id["image"].auto_start is False
     assert by_id["image"].optional is True
-    assert by_id["app"].env["OMNIX_IMAGE_ENABLED"] == "0"
-    assert by_id["app"].env["OMNIX_IMAGE_URL"] == ""
-    assert by_id["app"].env["OMNIX_LAUNCHER_KILL_PORT"] == "1"
-    assert by_id["app"].ports == (5000,)
+    assert by_id["gateway"].env["OMNIX_IMAGE_ENABLED"] == "0"
+    assert by_id["gateway"].env["OMNIX_IMAGE_URL"] == ""
+    assert by_id["gateway"].env["OMNIX_LAUNCHER_KILL_PORT"] == "1"
+    assert by_id["gateway"].ports == (8000,)
+    assert by_id["web"].ports == (5173,)
+    assert by_id["web"].command[-2:] == ["run", "web:dev"]
     assert by_id["tts"].ports == (5101,)
     assert by_id["stt"].ports == (5201,)
     assert by_id["image"].ports == (5301,)
@@ -204,6 +206,8 @@ def test_start_all_routes_through_launcher_dashboard() -> None:
     assert "--port 5055" in text
     assert "Launcher Control" in text
     assert "OMNIX_APP_OPEN_URL" in text
+    assert "http://localhost:5173/" in text
+    assert "http://localhost:5000/" not in text
     assert 'start "Parakeet STT"' not in text
     assert 'start "Omnix TTS"' not in text
     assert 'start "Omnix FastAPI"' not in text

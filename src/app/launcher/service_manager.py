@@ -30,6 +30,10 @@ def _python_env(name: str, fallback: str) -> str:
     return os.environ.get(name, fallback)
 
 
+def _npm_command() -> str:
+    return "npm.cmd" if os.name == "nt" else "npm"
+
+
 @dataclass(frozen=True)
 class ServiceSpec:
     service_id: str
@@ -325,13 +329,22 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             description="Text-to-speech service on 127.0.0.1:5101.",
         ),
         ServiceSpec(
-            service_id="app",
-            label="Omnix FastAPI App",
-            command=[app_python, str(root / "src" / "launch.py")],
+            service_id="gateway",
+            label="Omnix Gateway",
+            command=[app_python, "-m", "uvicorn", "app.gateway.main:app", "--host", "127.0.0.1", "--port", "8000"],
             cwd=root,
             env=dict(common),
-            ports=(5000,),
-            description="Main FastAPI/UI app.",
+            ports=(8000,),
+            description="FastAPI gateway for the redesigned web app on 127.0.0.1:8000.",
+        ),
+        ServiceSpec(
+            service_id="web",
+            label="Omnix Web App",
+            command=[_npm_command(), "run", "web:dev"],
+            cwd=root,
+            env=dict(common),
+            ports=(5173,),
+            description="React/Vite browser app on 127.0.0.1:5173.",
         ),
         ServiceSpec(
             service_id="image",

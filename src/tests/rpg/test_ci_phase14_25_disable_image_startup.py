@@ -13,7 +13,7 @@ def test_start_all_disables_image_service_by_default() -> None:
     assert 'if not defined OMNIX_IMAGE_ENABLED set "OMNIX_IMAGE_ENABLED=0"' in script
     assert 'if not defined OMNIX_START_IMAGE_SERVICE set "OMNIX_START_IMAGE_SERVICE=0"' in script
     assert 'set "OMNIX_IMAGE_URL="' in script
-    assert "[IMAGE SERVICE] Skipped" in script
+    assert "The launcher will not start image service" in script
     assert "OMNIX_IMAGE_ENABLED=1" in script
     assert "OMNIX_START_IMAGE_SERVICE=1" in script
 
@@ -23,9 +23,12 @@ def test_start_all_does_not_import_diffusers_during_default_app_startup() -> Non
 
     assert "[APP][FLUX] diffusers OK" not in script
     assert 'import diffusers; print' not in script
-    assert "OMNIX_IMAGE_PRELOAD=1" in script
-    assert "OMNIX_IMAGE_WARMUP=1" in script
     assert 'if /I "%OMNIX_IMAGE_ENABLED%"=="1" if /I "%OMNIX_START_IMAGE_SERVICE%"=="1"' in script
+
+    service_manager = (_repo_root() / "src" / "app" / "launcher" / "service_manager.py").read_text(encoding="utf-8")
+    assert '"OMNIX_IMAGE_PRELOAD": "1"' in service_manager
+    assert '"OMNIX_IMAGE_WARMUP": "1"' in service_manager
+    assert 'service_id="image"' in service_manager
 
 
 def test_image_config_defaults_to_mock_when_disabled(monkeypatch) -> None:

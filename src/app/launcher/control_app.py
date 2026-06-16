@@ -15,7 +15,7 @@ from app.launcher.service_manager import LAUNCHER_MANAGER_VERSION, get_default_m
 
 app = FastAPI(title="Omnix Launcher Control", version=LAUNCHER_MANAGER_VERSION)
 
-_DEFAULT_APP_OPEN_URL = "http://localhost:5000/"
+_DEFAULT_APP_OPEN_URL = "http://localhost:5173/"
 
 
 def _app_open_url() -> str:

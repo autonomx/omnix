@@ -8,7 +8,7 @@ set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
 set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
 set "OMNIX_LAUNCHER_URL=http://127.0.0.1:5055"
-if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5000/"
+if not defined OMNIX_APP_OPEN_URL set "OMNIX_APP_OPEN_URL=http://localhost:5173/"
 
 REM Image generation is disabled by default to avoid loading FLUX/diffusers or
 REM consuming GPU/VRAM during normal app startup. To re-enable later, run:
