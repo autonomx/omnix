@@ -1,0 +1,76 @@
+/* Default generated-style Storyteller thumbnails.
+   PR 541 keeps this UI-only: stories without explicit cover art receive
+   polished theme art so the Library and project header never look empty. */
+.storyteller-cover,
+.storyteller-thumb {
+  background-position: center;
+  background-size: cover;
+  overflow: hidden;
+  position: relative;
+}
+
+.storyteller-cover::after,
+.storyteller-thumb::after {
+  background:
+    radial-gradient(circle at 24% 24%, rgba(255, 255, 255, 0.86), transparent 0.36rem),
+    linear-gradient(180deg, transparent, rgba(7, 6, 13, 0.42));
+  content: '';
+  inset: 0;
+  position: absolute;
+}
+
+.storyteller-cover,
+.storyteller-recent-list button:nth-of-type(6n + 1) .storyteller-thumb,
+.storyteller-library-section button:nth-of-type(6n + 1) .storyteller-thumb {
+  background-image:
+    radial-gradient(circle at 70% 24%, rgba(219, 234, 254, 0.95) 0 0.7rem, transparent 0.78rem),
+    radial-gradient(circle at 58% 58%, rgba(251, 191, 36, 0.75) 0 0.44rem, transparent 0.52rem),
+    linear-gradient(135deg, transparent 44%, rgba(250, 204, 21, 0.68) 45% 50%, transparent 51%),
+    linear-gradient(160deg, #050716 0%, #102a54 44%, #6d28d9 72%, #0f172a 100%);
+}
+
+.storyteller-recent-list button:nth-of-type(6n + 2) .storyteller-thumb,
+.storyteller-library-section button:nth-of-type(6n + 2) .storyteller-thumb {
+  background-image:
+    radial-gradient(circle at 76% 20%, rgba(216, 180, 254, 0.9) 0 1.1rem, transparent 1.18rem),
+    linear-gradient(90deg, transparent 52%, rgba(34, 211, 238, 0.76) 53% 56%, transparent 57%),
+    linear-gradient(160deg, #111827 0%, #312e81 48%, #ec4899 100%);
+}
+
+.storyteller-recent-list button:nth-of-type(6n + 3) .storyteller-thumb,
+.storyteller-library-section button:nth-of-type(6n + 3) .storyteller-thumb {
+  background-image:
+    radial-gradient(circle at 72% 28%, rgba(251, 191, 36, 0.92) 0 0.42rem, transparent 0.5rem),
+    radial-gradient(circle at 35% 65%, rgba(249, 250, 251, 0.85) 0 0.3rem, transparent 0.38rem),
+    linear-gradient(135deg, #020617 0%, #1e1b4b 48%, #78350f 100%);
+}
+
+.storyteller-recent-list button:nth-of-type(6n + 4) .storyteller-thumb,
+.storyteller-library-section button:nth-of-type(6n + 4) .storyteller-thumb {
+  background-image:
+    radial-gradient(circle at 62% 18%, rgba(219, 234, 254, 0.95) 0 0.72rem, transparent 0.8rem),
+    linear-gradient(145deg, transparent 45%, rgba(147, 51, 234, 0.68) 46% 50%, transparent 51%),
+    linear-gradient(160deg, #020617 0%, #111827 44%, #312e81 100%);
+}
+
+.storyteller-recent-list button:nth-of-type(6n + 5) .storyteller-thumb,
+.storyteller-library-section button:nth-of-type(6n + 5) .storyteller-thumb {
+  background-image:
+    radial-gradient(circle at 28% 22%, rgba(251, 191, 36, 0.9) 0 0.42rem, transparent 0.5rem),
+    radial-gradient(circle at 72% 72%, rgba(244, 114, 182, 0.82) 0 0.55rem, transparent 0.64rem),
+    linear-gradient(135deg, #1f1235 0%, #7c2d12 54%, #f0abfc 100%);
+}
+
+.storyteller-recent-list button:nth-of-type(6n + 6) .storyteller-thumb,
+.storyteller-library-section button:nth-of-type(6n + 6) .storyteller-thumb {
+  background-image:
+    linear-gradient(120deg, rgba(147, 51, 234, 0.88) 0 30%, transparent 31%),
+    linear-gradient(240deg, rgba(34, 211, 238, 0.82) 0 30%, transparent 31%),
+    radial-gradient(circle at 50% 45%, rgba(251, 191, 36, 0.85) 0 0.7rem, transparent 0.8rem),
+    linear-gradient(160deg, #020617 0%, #312e81 55%, #0f172a 100%);
+}
+
+.storyteller-thumb.muted {
+  filter: saturate(0.82) contrast(0.96);
+  opacity: 0.92;
+}
