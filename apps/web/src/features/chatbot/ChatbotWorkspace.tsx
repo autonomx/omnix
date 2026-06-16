@@ -2,7 +2,7 @@ import { Button, Group, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
+import { ApiError, omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, OmnixTranscriptView, WorkspacePanel } from '../../design/primitives';
 
@@ -28,7 +28,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     queryFn: () => omnixApiClient.getChatSession(selectedSessionId ?? ''),
     enabled: Boolean(selectedSessionId),
   });
-  const { register, handleSubmit, reset, watch } = useForm<ChatbotFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm<ChatbotFormValues>({
     defaultValues: { content: '', providerId: '', modelId: '' },
   });
   const selectedProviderId = watch('providerId');
@@ -71,7 +77,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
   });
 
-  const activeSession = sessionQuery.data;
+  const activeSession = sessionQuery.data ?? sendMutation.data?.session;
+  const submitStatus = sendMutation.isPending ? 'queueing' : sendMutation.isError ? 'error' : sendMutation.data?.generation_status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -92,7 +99,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <Title order={4}>Conversation</Title>
               <Text size="sm">{activeSession?.title ?? 'New chat'}</Text>
             </div>
-            <OmnixStatusPill>{sendMutation.data?.generation_status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           {activeSession?.messages?.length ? (
@@ -128,12 +135,30 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             </label>
             <label className="feature-form-wide">
               Message
-              <textarea rows={4} {...register('content', { required: true })} />
+              <textarea rows={4} aria-invalid={Boolean(errors.content)} {...register('content', { required: true })} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={sendMutation.isPending}>
-              Queue response
+            <Button className="feature-form-action" type="submit" disabled={sendMutation.isPending} loading={sendMutation.isPending}>
+              {sendMutation.isPending ? 'Queueing response…' : 'Queue response'}
             </Button>
           </form>
+
+          {errors.content ? (
+            <div className="platform-empty" role="alert">
+              Enter a message before queueing a response.
+            </div>
+          ) : null}
+
+          {sendMutation.isPending ? (
+            <div className="feature-job-link" role="status" aria-live="polite">
+              Queueing chat response…
+            </div>
+          ) : null}
+
+          {sendMutation.isError ? (
+            <div className="platform-empty" role="alert">
+              {chatbotSubmitErrorMessage(sendMutation.error)}
+            </div>
+          ) : null}
 
           {sendMutation.data ? (
             <div className="feature-job-link" role="status">
@@ -180,4 +205,16 @@ function chatCapableModels(payload: ProviderFacadePayload | undefined, providerI
       return providerMatches && model.capabilities.includes('chat');
     }) ?? []
   );
+}
+
+function chatbotSubmitErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return `Chat request failed with status ${error.status}. Check that the gateway is running and reachable.`;
+  }
+
+  if (error instanceof Error && error.message) {
+    return `Chat request failed: ${error.message}`;
+  }
+
+  return 'Chat request failed. Check that the gateway is running and reachable.';
 }
