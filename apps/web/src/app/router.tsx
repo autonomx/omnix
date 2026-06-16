@@ -17,12 +17,14 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
   OmnixModuleId,
   OmnixModuleDefinition
 >;
+const defaultModule = moduleById.chatbot;
+const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'voice', 'image-generation'];
 
 function moduleFromPath(pathname: string): OmnixModuleDefinition {
   return (
     [...omnixModules]
       .sort((left, right) => right.route.length - left.route.length)
-      .find((module) => pathname === module.route || pathname.startsWith(`${module.route}/`)) ?? omnixModules[0]
+      .find((module) => pathname === module.route || pathname.startsWith(`${module.route}/`)) ?? defaultModule
   );
 }
 
@@ -30,9 +32,7 @@ function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   const activeModule = moduleFromPath(pathname);
-  const modeModules = omnixModules.filter((module) =>
-    ['chatbot', 'rpg', 'voice', 'image-generation'].includes(module.id),
-  );
+  const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
 
   return (
     <OmnixShellLayout
@@ -66,7 +66,7 @@ function OmnixShell() {
               aria-label={`Open ${module.label} mode`}
               onClick={() => void navigate({ to: module.route as never })}
             >
-              {module.label}
+              {module.label === 'Chatbot' ? 'Chat' : module.label}
             </button>
           ))}
         </OmnixTopBar>
@@ -84,7 +84,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => <Navigate to={omnixModules[0].route as never} replace />,
+  component: () => <Navigate to={defaultModule.route as never} replace />,
 });
 
 function moduleRoute<const TPath extends string>(moduleId: OmnixModuleId, path: TPath) {

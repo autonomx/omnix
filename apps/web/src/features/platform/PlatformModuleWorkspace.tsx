@@ -293,17 +293,102 @@ function ReportsView() {
 }
 
 function SettingsView() {
+  const queryClient = useQueryClient();
+  const [llmProvider, setLlmProvider] = useState('lmstudio');
+  const [ttsProvider, setTtsProvider] = useState('faster-qwen3-tts');
+  const [sttProvider, setSttProvider] = useState('parakeet');
   const query = useQuery({
     queryKey: ['platform', 'settings'],
     queryFn: () => omnixApiClient.getSettings(),
   });
+  const providersQuery = useQuery({
+    queryKey: ['platform', 'providers'],
+    queryFn: () => omnixApiClient.listProviders(),
+  });
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      omnixApiClient.saveSettings({
+        provider: llmProvider,
+        audio_provider_tts: ttsProvider,
+        audio_provider_stt: sttProvider,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['platform', 'settings'] });
+      await queryClient.invalidateQueries({ queryKey: ['platform', 'providers'] });
+      await queryClient.invalidateQueries({ queryKey: ['platform', 'models'] });
+      await queryClient.invalidateQueries({ queryKey: ['platform', 'diagnostics'] });
+    },
+  });
+
+  useEffect(() => {
+    if (query.data) {
+      setLlmProvider(query.data.provider || 'lmstudio');
+      setTtsProvider(query.data.audio_provider_tts || 'faster-qwen3-tts');
+      setSttProvider(query.data.audio_provider_stt || 'parakeet');
+    }
+  }, [query.data]);
+
+  const llmOptions = providerOptions(providersQuery.data, 'llm', ['lmstudio', 'openrouter', 'cerebras', 'llamacpp']);
+  const ttsOptions = providerOptions(providersQuery.data, 'tts', ['faster-qwen3-tts']);
+  const sttOptions = providerOptions(providersQuery.data, 'stt', ['parakeet']);
 
   return (
     <QueryState query={query} empty={!query.data} emptyText="Settings payload is unavailable.">
       {(data) => (
         <div className="platform-grid">
+          <section className="platform-section platform-section-wide">
+            <Title order={4}>Provider settings</Title>
+            <Text size="sm">Choose the same default provider families used by the legacy app, including LM Studio and remote LLM providers.</Text>
+            <form
+              className="provider-settings-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveMutation.mutate();
+              }}
+            >
+              <div className="provider-settings-grid">
+                <label>
+                  LLM provider
+                  <select aria-label="LLM provider" value={llmProvider} onChange={(event) => setLlmProvider(event.target.value)}>
+                    {llmOptions.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  TTS provider
+                  <select aria-label="TTS provider" value={ttsProvider} onChange={(event) => setTtsProvider(event.target.value)}>
+                    {ttsOptions.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  STT provider
+                  <select aria-label="STT provider" value={sttProvider} onChange={(event) => setSttProvider(event.target.value)}>
+                    {sttOptions.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="provider-settings-actions">
+                {saveMutation.isError ? <Text role="alert">Provider settings failed to save: {saveMutation.error.message}</Text> : null}
+                {saveMutation.isSuccess ? <Text role="status">Provider settings saved.</Text> : null}
+                <Button type="submit" variant="light" loading={saveMutation.isPending} disabled={saveMutation.isPending}>
+                  Save provider defaults
+                </Button>
+              </div>
+            </form>
+          </section>
           <section className="platform-section">
-            <Title order={4}>Provider defaults</Title>
+            <Title order={4}>Current defaults</Title>
             <DetailList
               rows={[
                 ['LLM provider', data.provider],
@@ -311,6 +396,17 @@ function SettingsView() {
                 ['STT provider', data.audio_provider_stt],
               ]}
             />
+          </section>
+          <section className="platform-section">
+            <Title order={4}>Provider configuration</Title>
+            <div className="provider-config-list">
+              {['lmstudio', 'openrouter', 'cerebras', 'llamacpp'].map((providerId) => (
+                <article className="provider-config-card" key={providerId}>
+                  <Title order={5}>{providerLabel(providerId)}</Title>
+                  <DetailList rows={providerSettingsRows(data.settings, providerId)} />
+                </article>
+              ))}
+            </div>
           </section>
           <section className="platform-section">
             <Title order={4}>Local services</Title>
@@ -473,6 +569,62 @@ function progressPercent(progress: JobRecord['progress']): number {
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
+function providerOptions(payload: ProviderFacadePayload | undefined, family: 'llm' | 'tts' | 'stt', fallbackIds: string[]) {
+  const options = new Map<string, { id: string; label: string }>();
+
+  for (const id of fallbackIds) {
+    options.set(id, { id, label: providerLabel(id) });
+  }
+
+  for (const provider of payload?.providers ?? []) {
+    if (providerMatchesFamily(provider, family)) {
+      options.set(provider.id, { id: provider.id, label: provider.label || providerLabel(provider.id) });
+    }
+  }
+
+  return Array.from(options.values());
+}
+
+function providerMatchesFamily(provider: ProviderFacadePayload['providers'][number], family: 'llm' | 'tts' | 'stt'): boolean {
+  if (family === 'llm') {
+    return provider.family === 'llm' || provider.capabilities.includes('chat');
+  }
+
+  if (family === 'tts') {
+    return provider.family === 'tts' || provider.capabilities.includes('tts') || provider.id.includes('tts');
+  }
+
+  return provider.family === 'stt' || provider.capabilities.includes('stt') || provider.id.includes('stt') || provider.id === 'parakeet';
+}
+
+function providerLabel(providerId: string): string {
+  const labels: Record<string, string> = {
+    lmstudio: 'LM Studio',
+    openrouter: 'OpenRouter',
+    cerebras: 'Cerebras',
+    llamacpp: 'llama.cpp',
+    'faster-qwen3-tts': 'Faster Qwen3 TTS',
+    parakeet: 'Parakeet STT',
+  };
+
+  return labels[providerId] ?? providerId;
+}
+
+function providerSettingsRows(settings: SettingsPayload['settings'] | undefined, providerId: string): Array<[string, string]> {
+  const value = settings?.[providerId];
+
+  if (!isRecord(value)) {
+    return [['Status', 'not configured']];
+  }
+
+  const rows = Object.entries(value)
+    .filter(([key]) => key !== 'api_key')
+    .slice(0, 5)
+    .map(([key, item]) => [key, stringifyUnknown(item)] as [string, string]);
+
+  return rows.length ? rows : [['Status', 'configured']];
+}
+
 function metadataValue(metadata: Record<string, unknown> | undefined, key: string): string {
   const value = metadata?.[key];
 
@@ -481,6 +633,10 @@ function metadataValue(metadata: Record<string, unknown> | undefined, key: strin
   }
 
   return typeof value === 'string' ? value : stringifyUnknown(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function stringifyUnknown(value: unknown): string {
