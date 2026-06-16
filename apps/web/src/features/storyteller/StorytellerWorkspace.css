@@ -51,6 +51,12 @@
   overflow: auto;
 }
 
+.storyteller-outline {
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .storyteller-panel-heading {
   align-items: center;
   display: flex;
@@ -500,14 +506,37 @@
 .storyteller-outline li {
   border-radius: 0.45rem;
   color: #dfd9f4;
-  display: grid;
-  gap: 0.25rem;
-  grid-template-columns: 4.2rem minmax(0, 1fr);
-  padding: 0.45rem;
+  min-width: 0;
+  padding: 0.3rem;
 }
 
 .storyteller-outline li.active {
   background: rgba(124, 58, 237, 0.2);
+}
+
+.storyteller-outline li button {
+  align-items: start;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.storyteller-outline li button span,
+.storyteller-outline li button strong {
+  min-width: 0;
+}
+
+.storyteller-outline li button strong {
+  color: #f7f3ff;
+  display: -webkit-box;
+  line-height: 1.25;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .storyteller-add-chapter {

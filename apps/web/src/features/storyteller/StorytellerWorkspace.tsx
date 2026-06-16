@@ -25,6 +25,8 @@ interface StoryGenerationRequest {
   action: StoryActionMode;
   sourceText: string | null;
   sourceJobId: string | null;
+  sourceLibraryItemId?: string | null;
+  sourceStoryTitle?: string | null;
   generateTitle?: boolean;
   interactionMode?: StoryWorkspaceMode;
   userResponse?: string | null;
@@ -35,6 +37,7 @@ interface StoryOutlineScene {
   id: string;
   label: string;
   title: string;
+  placeholder?: boolean;
 }
 
 interface StoryOutlineChapter {
@@ -88,8 +91,23 @@ interface TrashedStoryLibraryItem extends StoryLibraryItem {
   trashedAt: string;
 }
 
+interface StorySceneAddition {
+  id: string;
+  sourceItemId: string;
+  sourceJobId: string;
+  chapterNumber: number;
+  sceneNumber: number;
+  title: string;
+  chapterTitle?: string;
+  startsNewChapter?: boolean;
+  content: string;
+  storyTitle: string | null;
+  createdAt: string;
+}
+
 const storyDraftStorageKey = 'omnix:storyteller:last-draft';
 const storyTrashStorageKey = 'omnix:storyteller:trash';
+const storySceneAdditionsStorageKey = 'omnix:storyteller:scene-additions';
 const toneOptions = ['Cozy', 'Hopeful', 'Gentle', 'Mystery'];
 const styleOptions = ['Lyrical & Descriptive', 'Fast-paced', 'Dialogue-heavy', 'Cinematic', 'Literary'];
 
@@ -112,6 +130,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const [isNewDraft, setIsNewDraft] = useState(false);
   const [savedDraft, setSavedDraft] = useState<SavedStoryDraft | null>(() => readSavedStoryDraft());
   const [trashedLibraryItems, setTrashedLibraryItems] = useState<TrashedStoryLibraryItem[]>(() => readTrashedStoryLibraryItems());
+  const [storySceneAdditions, setStorySceneAdditions] = useState<StorySceneAddition[]>(() => readStorySceneAdditions());
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
   const [storyModeResponse, setStoryModeResponse] = useState('');
 
@@ -126,7 +145,18 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   });
 
   const createJobMutation = useMutation<JobRecord, Error, StoryGenerationRequest>({
-    mutationFn: ({ values, action, sourceText, sourceJobId, generateTitle, interactionMode, userResponse, suggestedChoice }) =>
+    mutationFn: ({
+      values,
+      action,
+      sourceText,
+      sourceJobId,
+      sourceLibraryItemId,
+      sourceStoryTitle,
+      generateTitle,
+      interactionMode,
+      userResponse,
+      suggestedChoice,
+    }) =>
       omnixApiClient.createJob({
         module: 'storyteller',
         type: 'story.generate',
@@ -144,6 +174,8 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           suggested_choice: suggestedChoice ?? null,
           source_text: sourceText,
           source_job_id: sourceJobId,
+          source_library_item_id: sourceLibraryItemId ?? null,
+          source_story_title: sourceStoryTitle ?? null,
           tone: selectedTone,
           writing_style: writingStyle,
           chapter: selectedChapter,
@@ -167,7 +199,21 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     onSuccess: async (job, request) => {
       reset({ providerId: request.values.providerId, title: request.values.title, premise: request.values.premise });
       setIsNewDraft(false);
-      if (job.status === 'completed' && fullJobOutputText(job)) {
+      const completedText = fullJobOutputText(job);
+      if (job.status === 'completed' && completedText && isSceneAppendRequest(request)) {
+        const addition = buildStorySceneAddition(job, request);
+        if (addition) {
+          setStorySceneAdditions((current) => {
+            const next = upsertStorySceneAddition(current, addition);
+            persistStorySceneAdditions(next);
+            return next;
+          });
+          setSelectedLibraryItemId(addition.sourceItemId);
+          setSelectedChapter(addition.chapterNumber);
+          setActiveLibrarySection(addition.sourceItemId.startsWith('draft:') ? 'drafts' : 'stories');
+          setSaveFeedback({ kind: 'saved', message: `Added ${addition.title} to ${addition.storyTitle ?? request.sourceStoryTitle ?? 'the story'}.` });
+        }
+      } else if (job.status === 'completed' && completedText) {
         setSelectedLibraryItemId(libraryJobId(job.id));
         setActiveLibrarySection('stories');
       }
@@ -190,10 +236,12 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     [queriedStoryJobs, createJobMutation.data],
   );
   const completedStoryJobs = storyJobs.filter((job) => job.status === 'completed' && fullJobOutputText(job));
+  const libraryStoryJobs = completedStoryJobs.filter((job) =>
+    !isStorySceneAppendJob(job) && !storySceneAdditions.some((addition) => addition.sourceJobId === job.id));
   const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
   const allLibraryItems = useMemo(
-    () => buildStoryLibraryItems(savedDraft, completedStoryJobs, storyAssets as StoryAssetSummary[]),
-    [savedDraft, completedStoryJobs, storyAssets],
+    () => buildStoryLibraryItems(savedDraft, libraryStoryJobs, storyAssets as StoryAssetSummary[]),
+    [savedDraft, libraryStoryJobs, storyAssets],
   );
   const trashItems = useMemo(
     () => mergeTrashedStoryLibraryItems(trashedLibraryItems, allLibraryItems),
@@ -228,8 +276,19 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const activeAssetText = activeAsset && assetContentQuery.data?.asset.id === activeAsset.id
     ? assetContentQuery.data.content
     : null;
-  const activeStoryText = activeLibraryItem?.content ?? activeAssetText ?? null;
-  const storyTitle = storyDisplayTitle(activeLibraryItem?.title || watchedTitle, activeStoryText);
+  const activeItemSceneAdditions = useMemo(
+    () => activeLibraryItem ? storySceneAdditions.filter((addition) => addition.sourceItemId === activeLibraryItem.id) : [],
+    [activeLibraryItem, storySceneAdditions],
+  );
+  const baseActiveStoryText = activeLibraryItem?.content ?? activeAssetText ?? null;
+  const activeStoryText = useMemo(
+    () => applyStorySceneAdditions(baseActiveStoryText, activeItemSceneAdditions),
+    [baseActiveStoryText, activeItemSceneAdditions],
+  );
+  const storyTitle = storyDisplayTitle(
+    latestStoryTitleOverride(activeItemSceneAdditions) || activeLibraryItem?.title || watchedTitle,
+    activeStoryText,
+  );
   const premise = activeLibraryItem?.source === 'draft'
     ? savedDraft?.premise ?? watchedPremise
     : watchedPremise || jobInputString(activeJob, 'premise') || '';
@@ -241,7 +300,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const sourceJobId = activeJob?.id ?? activeLibraryItem?.jobId ?? null;
   const outline = useMemo(() => deriveStoryOutline(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
   const activeChapter = outline.find((chapter) => chapter.number === selectedChapter) ?? outline[0] ?? null;
-  const chapterCount = outline.length || Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
+  const chapterCount = outline.length || Math.max(1, Math.min(12, libraryStoryJobs.length || selectedChapter));
   const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
   const submitStatus = createJobMutation.isPending
@@ -275,18 +334,27 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   };
 
   const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
+    const appendToActiveStory = action === 'continue' && Boolean(activeLibraryItem?.id && activeStoryText?.trim());
+    const generateTitle = appendToActiveStory && shouldGenerateStoryTitle(watchedTitle, storyTitle);
     setSaveFeedback(null);
     createJobMutation.mutate({
-      values,
+      values: appendToActiveStory ? requestValues({ allowGeneratedTitle: true }) : values,
       action,
       sourceText: activeStoryText,
       sourceJobId,
+      sourceLibraryItemId: appendToActiveStory ? activeLibraryItem?.id ?? null : null,
+      sourceStoryTitle: appendToActiveStory ? storyTitle : null,
+      generateTitle,
       interactionMode: 'writing',
     });
   };
 
   const submitQuickAction = (action: StoryQuickActionMode) => {
-    void handleSubmit((values) => submitStoryRequest(values, action))();
+    if (!activeStoryText?.trim()) {
+      setSaveFeedback({ kind: 'error', message: 'Select or generate a story before using quick actions.' });
+      return;
+    }
+    submitStoryRequest(requestValues({ allowGeneratedTitle: action === 'continue' }), action);
   };
 
   const submitStoryModeMove = (moveText: string, suggestedChoice: string | null = null) => {
@@ -299,11 +367,42 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       action: 'continue',
       sourceText: storyModeContext(activeStoryText, response),
       sourceJobId,
+      sourceLibraryItemId: activeLibraryItem?.id ?? null,
+      sourceStoryTitle: storyTitle,
       generateTitle,
       interactionMode: 'story',
       userResponse: response,
       suggestedChoice,
     });
+  };
+
+  const addChapterToActiveStory = () => {
+    if (!activeLibraryItem?.id || !activeStoryText?.trim()) {
+      setSaveFeedback({ kind: 'error', message: 'Select or generate a story before adding a chapter.' });
+      return;
+    }
+    const chapterNumber = nextChapterNumber(outline);
+    const createdAt = new Date().toISOString();
+    const addition: StorySceneAddition = {
+      id: `chapter:${activeLibraryItem.id}:${createdAt}`,
+      sourceItemId: activeLibraryItem.id,
+      sourceJobId: `local:${createdAt}`,
+      chapterNumber,
+      sceneNumber: 1,
+      title: 'Opening',
+      chapterTitle: 'New chapter',
+      startsNewChapter: true,
+      content: '',
+      storyTitle,
+      createdAt,
+    };
+    setStorySceneAdditions((current) => {
+      const next = upsertStorySceneAddition(current, addition);
+      persistStorySceneAdditions(next);
+      return next;
+    });
+    setSelectedChapter(chapterNumber);
+    setSaveFeedback({ kind: 'saved', message: `Added Chapter ${chapterNumber} to ${storyTitle}.` });
   };
 
   const selectLibraryItem = (itemId: string) => {
@@ -356,7 +455,9 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
 
   const selectOutlineTarget = (chapterNumber: number, targetId: string) => {
     setSelectedChapter(chapterNumber);
-    const target = document.getElementById(targetId) as
+    const target = (document.getElementById(targetId) ??
+      document.getElementById(`story-chapter-${chapterNumber}`) ??
+      document.querySelector('[aria-label="Story manuscript"]')) as
       | (HTMLElement & { scrollIntoView?: (options?: ScrollIntoViewOptions) => void })
       | null;
     target?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
@@ -522,6 +623,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
                   errors={errors}
                   handleSubmit={handleSubmit}
                   latestJob={storyJobs[0] ?? null}
+                  onAddChapter={addChapterToActiveStory}
                   onGenerate={(values) => submitStoryRequest(values, 'draft')}
                   providers={storyProviders}
                   register={register}
@@ -537,13 +639,13 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
               <StoryActionBar disabled={createJobMutation.isPending} onAction={submitQuickAction} />
               <StoryVersions
                 activeJobId={activeJob?.id ?? null}
-                jobs={completedStoryJobs}
+                jobs={libraryStoryJobs}
                 onSelect={(jobId) => selectLibraryItem(libraryJobId(jobId))}
               />
             </>
           )}
         </main>
-        <StoryOutline chapters={outline} selectedChapter={selectedChapter} onSelect={selectOutlineTarget} />
+        <StoryOutline chapters={outline} selectedChapter={selectedChapter} onAddChapter={addChapterToActiveStory} onSelect={selectOutlineTarget} />
       </div>
     </WorkspacePanel>
   );
@@ -557,7 +659,7 @@ function StoryModeSwitch({ mode, onChange }: { mode: StoryWorkspaceMode; onChang
         <span>Draft, revise, save, and export manuscripts.</span>
       </button>
       <button className={mode === 'story' ? 'active' : ''} type="button" onClick={() => onChange('story')}>
-        <strong>Story Mode</strong>
+        <strong>Interactive Story Mode</strong>
         <span>Read a page, make a move, and let AI continue.</span>
       </button>
     </section>
@@ -593,7 +695,7 @@ function StoryModePanel({
 }) {
   const latestPage = activeStoryText ? lastStoryPage(activeStoryText) : null;
   return (
-    <section className="story-mode-panel" aria-label="Story mode">
+    <section className="story-mode-panel" aria-label="Interactive story mode">
       <div className="story-mode-reader">
         <div className="storyteller-manuscript-meta">
           <span>{activeChapterLabel}</span>
@@ -617,15 +719,15 @@ function StoryModePanel({
           />
         )}
       </div>
-      <aside className="story-mode-controls" aria-label="Story mode controls">
+      <aside className="story-mode-controls" aria-label="Interactive story mode controls">
         <div className="storyteller-panel-heading">
-          <div><p className="eyebrow">Story mode</p><h3>Your next move</h3></div>
+          <div><p className="eyebrow">Interactive story mode</p><h3>Your next move</h3></div>
           <OmnixStatusPill>{pending ? 'continuing' : 'ready'}</OmnixStatusPill>
         </div>
         <label>
           Write your response
           <textarea
-            aria-label="Story mode response"
+            aria-label="Interactive story mode response"
             onChange={(event) => setResponse(event.target.value)}
             placeholder="I examine the glowing door, but keep one hand on the charm."
             rows={5}
@@ -690,6 +792,7 @@ interface StoryControlsProps {
   selectedChapter: number;
   setSelectedChapter: (chapter: number) => void;
   onGenerate: (values: StorytellerFormValues) => void;
+  onAddChapter: () => void;
   handleSubmit: UseFormHandleSubmit<StorytellerFormValues>;
   latestJob: JobRecord | null;
 }
@@ -707,6 +810,7 @@ function StoryControls({
   selectedChapter,
   setSelectedChapter,
   onGenerate,
+  onAddChapter,
   handleSubmit,
   latestJob,
 }: StoryControlsProps) {
@@ -753,7 +857,7 @@ function StoryControls({
           <button type="button" onClick={() => setSelectedChapter(Math.max(1, selectedChapter - 1))}>‹</button>
           <strong>{selectedChapter}</strong>
           <button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>›</button>
-          <button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>New chapter</button>
+          <button type="button" onClick={onAddChapter}>New chapter</button>
         </div>
         <Button className="storyteller-generate" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
           {createJobMutation.isPending ? 'Generating story…' : 'Generate story'}
@@ -974,21 +1078,33 @@ function StoryVersions({ activeJobId, jobs, onSelect }: { activeJobId: string | 
   );
 }
 
-function StoryOutline({ chapters, selectedChapter, onSelect }: {
+function StoryOutline({ chapters, selectedChapter, onAddChapter, onSelect }: {
   chapters: StoryOutlineChapter[];
   selectedChapter: number;
+  onAddChapter: () => void;
   onSelect: (chapterNumber: number, targetId: string) => void;
 }) {
+  const [showScenes, setShowScenes] = useState(true);
   return (
     <aside className="storyteller-outline" aria-label="Story outline">
-      <div className="storyteller-panel-heading compact"><p className="eyebrow">Outline</p><button type="button">☰</button></div>
+      <div className="storyteller-panel-heading compact">
+        <p className="eyebrow">Outline</p>
+        <button
+          aria-expanded={showScenes}
+          aria-label={showScenes ? 'Collapse outline scenes' : 'Expand outline scenes'}
+          type="button"
+          onClick={() => setShowScenes((current) => !current)}
+        >
+          ☰
+        </button>
+      </div>
       {chapters.map((chapter) => (
         <article className={selectedChapter === chapter.number ? 'active' : ''} key={chapter.id}>
           <button type="button" onClick={() => onSelect(chapter.number, chapter.id)}>
             <strong>{chapter.label}</strong>
             <span>{chapter.title}</span>
           </button>
-          <ol>
+          {showScenes ? <ol>
             {chapter.scenes.map((scene, sceneIndex) => (
               <li className={selectedChapter === chapter.number && sceneIndex === 0 ? 'active' : ''} key={scene.id}>
                 <button type="button" onClick={() => onSelect(chapter.number, scene.id)}>
@@ -997,10 +1113,10 @@ function StoryOutline({ chapters, selectedChapter, onSelect }: {
                 </button>
               </li>
             ))}
-          </ol>
+          </ol> : null}
         </article>
       ))}
-      <button className="storyteller-add-chapter" type="button">Add chapter</button>
+      <button className="storyteller-add-chapter" type="button" onClick={onAddChapter}>Add chapter</button>
     </aside>
   );
 }
@@ -1170,6 +1286,145 @@ function mergeTrashedStoryLibraryItems(
   });
 }
 
+function readStorySceneAdditions(): StorySceneAddition[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(storySceneAdditionsStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(toStorySceneAddition).filter((addition): addition is StorySceneAddition => Boolean(addition));
+  } catch {
+    return [];
+  }
+}
+
+function persistStorySceneAdditions(additions: StorySceneAddition[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (additions.length) {
+      window.localStorage.setItem(storySceneAdditionsStorageKey, JSON.stringify(additions));
+    } else {
+      window.localStorage.removeItem(storySceneAdditionsStorageKey);
+    }
+  } catch {
+    // Local scene history is best-effort; the active view still updates from React state.
+  }
+}
+
+function toStorySceneAddition(value: unknown): StorySceneAddition | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.id !== 'string' ||
+    typeof record.sourceItemId !== 'string' ||
+    typeof record.sourceJobId !== 'string' ||
+    typeof record.content !== 'string' ||
+    (!record.content.trim() && record.startsNewChapter !== true)
+  ) {
+    return null;
+  }
+  return {
+    id: record.id,
+    sourceItemId: record.sourceItemId,
+    sourceJobId: record.sourceJobId,
+    chapterNumber: typeof record.chapterNumber === 'number' ? record.chapterNumber : 1,
+    sceneNumber: typeof record.sceneNumber === 'number' ? record.sceneNumber : 1,
+    title: typeof record.title === 'string' && record.title.trim() ? record.title : 'Continuation',
+    chapterTitle: typeof record.chapterTitle === 'string' && record.chapterTitle.trim() ? record.chapterTitle : undefined,
+    startsNewChapter: record.startsNewChapter === true,
+    content: record.content,
+    storyTitle: typeof record.storyTitle === 'string' && record.storyTitle.trim() ? record.storyTitle : null,
+    createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date(0).toISOString(),
+  };
+}
+
+function isSceneAppendRequest(request: StoryGenerationRequest): boolean {
+  return request.action === 'continue' && Boolean(request.sourceLibraryItemId);
+}
+
+function isStorySceneAppendJob(job: JobRecord): boolean {
+  return jobInputString(job, 'action') === 'continue' && Boolean(jobInputString(job, 'source_library_item_id'));
+}
+
+function buildStorySceneAddition(job: JobRecord, request: StoryGenerationRequest): StorySceneAddition | null {
+  const sourceItemId = request.sourceLibraryItemId;
+  const rawContent = fullJobOutputText(job);
+  if (!sourceItemId || !rawContent) return null;
+  const storyTitle = cleanStoryTitle(request.values.title) ??
+    fullJobOutputTitle(job) ??
+    titleFromStoryText(rawContent) ??
+    cleanStoryTitle(request.sourceStoryTitle);
+  const outline = deriveStoryOutline(request.sourceText, storyTitle ?? request.sourceStoryTitle ?? 'Untitled story');
+  const latestChapter = outline[outline.length - 1] ?? { number: 1, scenes: [] };
+  const sceneNumber = latestChapter.scenes.filter((scene) => !scene.placeholder).length + 1;
+  const normalized = normalizeContinuationSceneContent(rawContent);
+  return {
+    id: `scene:${sourceItemId}:${job.id}`,
+    sourceItemId,
+    sourceJobId: job.id,
+    chapterNumber: latestChapter.number,
+    sceneNumber,
+    title: normalized.title ?? sceneTitleFromText(normalized.content) ?? 'Continuation',
+    content: normalized.content,
+    storyTitle,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function upsertStorySceneAddition(additions: StorySceneAddition[], addition: StorySceneAddition): StorySceneAddition[] {
+  return [...additions.filter((entry) => entry.id !== addition.id), addition];
+}
+
+function applyStorySceneAdditions(baseText: string | null, additions: StorySceneAddition[]): string | null {
+  if (!additions.length) return baseText;
+  return additions
+    .slice()
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .reduce((storyText, addition) => {
+      const chapterBlock = addition.startsNewChapter
+        ? `Chapter ${addition.chapterNumber}: ${addition.chapterTitle ?? `Chapter ${addition.chapterNumber}`}`
+        : null;
+      const sceneBlock = [addition.content.trim() || !addition.startsNewChapter ? `Scene ${addition.sceneNumber}: ${addition.title}` : null, addition.content.trim()]
+        .filter(Boolean)
+        .join('\n\n');
+      return [storyText?.trim(), chapterBlock, sceneBlock].filter(Boolean).join('\n\n');
+    }, baseText?.trim() ?? '');
+}
+
+function latestStoryTitleOverride(additions: StorySceneAddition[]): string | null {
+  return additions.slice().reverse().find((addition) => cleanStoryTitle(addition.storyTitle))?.storyTitle ?? null;
+}
+
+function normalizeContinuationSceneContent(text: string): { title: string | null; content: string } {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  while (lines.length && !lines[0].trim()) lines.shift();
+  if (lines[0]?.trim().startsWith('# ')) {
+    lines.shift();
+    while (lines.length && !lines[0].trim()) lines.shift();
+  }
+  const firstCleaned = lines[0]?.replace(/^#{1,4}\s*/, '').trim() ?? '';
+  if (/^chapter\s+\d+/i.test(firstCleaned)) {
+    lines.shift();
+    while (lines.length && !lines[0].trim()) lines.shift();
+  }
+  const sceneMatch = lines[0]?.replace(/^#{1,4}\s*/, '').trim().match(/^scene\s+\d+\s*[:\-]?\s*(.*)$/i);
+  const title = sceneMatch?.[1]?.trim() || null;
+  if (sceneMatch) {
+    lines.shift();
+    while (lines.length && !lines[0].trim()) lines.shift();
+  }
+  const content = lines.join('\n').trim() || text.trim();
+  return { title: cleanStoryTitle(title), content };
+}
+
+function sceneTitleFromText(text: string): string | null {
+  const firstParagraph = storyParagraphs(text)[0]?.replace(/^#{1,4}\s*/, '').trim();
+  if (!firstParagraph) return null;
+  const sentence = firstParagraph.split(/[.!?]/)[0]?.trim();
+  return sentence ? truncate(sentence, 48) : null;
+}
+
 function libraryJobId(jobId: string): string { return `job:${jobId}`; }
 function libraryAssetId(assetId: string): string { return `asset:${assetId}`; }
 
@@ -1236,18 +1491,32 @@ function actionLabel(action: StoryActionMode): string {
   return action === 'dialogue' ? 'polish dialogue' : action;
 }
 
+function nextChapterNumber(outline: StoryOutlineChapter[]): number {
+  return Math.max(0, ...outline.map((chapter) => chapter.number)) + 1;
+}
+
 function deriveStoryOutline(text: string | null, fallbackTitle: string): StoryOutlineChapter[] {
   if (!text?.trim()) {
     return [{ id: 'story-chapter-1', number: 1, label: 'Chapter 1', title: fallbackTitle, scenes: [{ id: 'story-scene-1-1', label: 'Scene 1', title: 'Opening' }] }];
   }
   const chapters: StoryOutlineChapter[] = [];
   let current: StoryOutlineChapter | null = null;
+  let sawContentBeforeFirstChapter = false;
   text.split(/\n+/).forEach((line) => {
     const cleaned = line.replace(/^#{1,4}\s*/, '').trim();
     const chapterMatch = cleaned.match(/^chapter\s+(\d+)\s*[:\-–—]?\s*(.*)$/i);
     const sceneMatch = cleaned.match(/^scene\s+(\d+)\s*[:\-–—]?\s*(.*)$/i);
     if (chapterMatch) {
       const number = Number(chapterMatch[1]);
+      if (!chapters.length && sawContentBeforeFirstChapter && number !== 1) {
+        chapters.push({
+          id: 'story-chapter-1',
+          number: 1,
+          label: 'Chapter 1',
+          title: fallbackTitle,
+          scenes: [{ id: 'story-scene-1-1', label: 'Scene 1', title: 'Opening' }],
+        });
+      }
       current = {
         id: `story-chapter-${number}`,
         number,
@@ -1257,6 +1526,19 @@ function deriveStoryOutline(text: string | null, fallbackTitle: string): StoryOu
       };
       chapters.push(current);
       return;
+    }
+    if (cleaned && !current && !chapters.length && !sceneMatch) {
+      sawContentBeforeFirstChapter = true;
+    }
+    if (sceneMatch && !current) {
+      current = {
+        id: 'story-chapter-1',
+        number: 1,
+        label: 'Chapter 1',
+        title: fallbackTitle,
+        scenes: [],
+      };
+      chapters.push(current);
     }
     if (sceneMatch && current) {
       const sceneNumber = Number(sceneMatch[1]);
@@ -1278,7 +1560,7 @@ function deriveStoryOutline(text: string | null, fallbackTitle: string): StoryOu
   }
   return chapters.map((chapter) => ({
     ...chapter,
-    scenes: chapter.scenes.length ? chapter.scenes : [{ id: `story-scene-${chapter.number}-1`, label: 'Scene 1', title: 'Opening' }],
+    scenes: chapter.scenes.length ? chapter.scenes : [{ id: `story-scene-${chapter.number}-1`, label: 'Scene 1', title: 'Opening', placeholder: true }],
   }));
 }
 
@@ -1291,6 +1573,7 @@ function storyTextBlocks(text: string, outline: StoryOutlineChapter[]): StoryTex
     const sceneMatch = cleaned.match(/^scene\s+(\d+)\s*[:\-–—]?\s*(.*)$/i);
     if (chapterMatch) {
       const number = Number(chapterMatch[1]) || ++chapterIndex;
+      chapterIndex = number;
       return { kind: 'chapter', id: `story-chapter-${number}`, text: chapterMatch[2]?.trim() || `Chapter ${number}` };
     }
     if (sceneMatch) {

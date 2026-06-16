@@ -276,12 +276,44 @@ describe('StorytellerWorkspace', () => {
     expect((await within(manuscript).findAllByRole('heading', { name: 'The Memory Market' })).length).toBeGreaterThan(0);
   });
 
+  it('adds local chapters from the controls and outline panels', async () => {
+    stubStoryApi([storyJob()]);
+    renderStoryteller();
+
+    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    let outline = await screen.findByRole('complementary', { name: 'Story outline' });
+    expect(within(outline).getByRole('button', { name: /Chapter 1 The Glass Orchard/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New chapter' }));
+    expect(await screen.findByText('Added Chapter 2 to The Glass Orchard.')).toBeInTheDocument();
+    expect(await within(screen.getByRole('complementary', { name: 'Story outline' })).findByRole('button', { name: /Chapter 2 New chapter/ })).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Story manuscript' })).getAllByRole('heading', { name: 'New chapter' }).length).toBeGreaterThan(0);
+
+    outline = screen.getByRole('complementary', { name: 'Story outline' });
+    fireEvent.click(within(outline).getByRole('button', { name: 'Add chapter' }));
+    expect(await screen.findByText('Added Chapter 3 to The Glass Orchard.')).toBeInTheDocument();
+    expect(await within(screen.getByRole('complementary', { name: 'Story outline' })).findByRole('button', { name: /Chapter 3 New chapter/ })).toBeInTheDocument();
+
+    outline = screen.getByRole('complementary', { name: 'Story outline' });
+    fireEvent.click(within(outline).getAllByRole('button')[0]);
+    expect(within(outline).queryByRole('button', { name: /Scene 1 Opening/ })).not.toBeInTheDocument();
+
+    fireEvent.click(within(outline).getAllByRole('button')[0]);
+    expect(within(outline).getAllByRole('button', { name: /Scene 1 Opening/ }).length).toBeGreaterThan(0);
+  });
+
   it('submits quick actions with active manuscript context', async () => {
     const baseText = 'The orchard rang like crystal at sunset.\n\nEach branch remembered a name.';
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
       if (path === '/api/providers') return Response.json(providerPayload());
-      if (path === '/api/jobs' && init?.method === 'POST') return Response.json(storyJob({ id: 'job:continue' }));
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return Response.json(storyJob({
+          id: 'job:continue',
+          input_payload: { title: 'Continuation Job', action: 'continue' },
+          output_refs: [{ kind: 'text', title: 'Continuation Job', content: 'Mira stepped into the moonlit row.' }],
+        }));
+      }
       if (path === '/api/jobs') return Response.json({ jobs: [storyJob({ id: 'job:base', output_refs: [{ kind: 'text', content: baseText }] })] });
       if (path === '/api/assets') return Response.json(assetPayload());
       if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
@@ -291,7 +323,6 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
     const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
     expect(await within(manuscript).findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A city grows fruit made of memory.' } });
     fireEvent.click(screen.getByRole('button', { name: /Continue Story/ }));
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(([input, init]) =>
@@ -300,7 +331,51 @@ describe('StorytellerWorkspace', () => {
       expect(body.input_payload?.action).toBe('continue');
       expect(body.input_payload?.interaction_mode).toBe('writing');
       expect(body.input_payload?.source_text).toBe(baseText);
+      expect(body.input_payload?.source_library_item_id).toBe('job:job:base');
+      expect(body.input_payload?.premise).toBe('A city grows fruit made of memory.');
     });
+    expect(await within(manuscript).findByText('Mira stepped into the moonlit row.')).toBeInTheDocument();
+    const outline = screen.getByRole('complementary', { name: 'Story outline' });
+    expect(await within(outline).findByRole('button', { name: /Scene 2 Mira stepped into the moonlit row/ })).toBeInTheDocument();
+    const library = screen.getByRole('complementary', { name: 'Story library' });
+    const recentStories = within(library).getByText('Recent stories').closest('section') as HTMLElement | null;
+    if (!recentStories) throw new Error('Recent stories section is missing');
+    expect(within(recentStories).queryByRole('button', { name: /Continuation Job/ })).not.toBeInTheDocument();
+  });
+
+  it('submits non-continue quick actions without requiring the premise field', async () => {
+    const baseText = 'The orchard rang like crystal at sunset.\n\nEach branch remembered a name.';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return Response.json(storyJob({
+          id: 'job:rewrite',
+          input_payload: { title: 'The Glass Orchard', action: 'rewrite' },
+          output_refs: [{ kind: 'text', title: 'The Glass Orchard', content: 'The orchard sang like glass as sunset gathered.' }],
+        }));
+      }
+      if (path === '/api/jobs') return Response.json({ jobs: [storyJob({ id: 'job:base', output_refs: [{ kind: 'text', content: baseText }] })] });
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderStoryteller();
+
+    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Rewrite Paragraph/ }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input, init]) =>
+        requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
+      expect(body.input_payload?.action).toBe('rewrite');
+      expect(body.input_payload?.interaction_mode).toBe('writing');
+      expect(body.input_payload?.source_text).toBe(baseText);
+      expect(body.input_payload?.source_library_item_id).toBeNull();
+      expect(body.input_payload?.premise).toBe('A city grows fruit made of memory.');
+    });
+    expect(screen.queryByText('Enter a premise before generating a story.')).not.toBeInTheDocument();
   });
 
   it('submits typed Story Mode responses with active story context', async () => {
@@ -308,7 +383,13 @@ describe('StorytellerWorkspace', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
       if (path === '/api/providers') return Response.json(providerPayload());
-      if (path === '/api/jobs' && init?.method === 'POST') return Response.json(storyJob({ id: 'job:story-mode' }));
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return Response.json(storyJob({
+          id: 'job:story-mode',
+          input_payload: { title: 'Story Mode Continuation', action: 'continue' },
+          output_refs: [{ kind: 'text', title: 'Story Mode Continuation', content: 'The lantern flared, revealing stairs under the roots.' }],
+        }));
+      }
       if (path === '/api/jobs') return Response.json({ jobs: [storyJob({ id: 'job:base', output_refs: [{ kind: 'text', content: baseText }] })] });
       if (path === '/api/assets') return Response.json(assetPayload());
       if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
@@ -318,10 +399,10 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
 
     expect((await screen.findAllByText('The orchard rang like crystal at sunset.')).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
-    expect(await screen.findByRole('region', { name: 'Story mode' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Interactive Story Mode/ }));
+    expect(await screen.findByRole('region', { name: 'Interactive story mode' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open the door carefully' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Story mode response'), { target: { value: 'I light a lantern and step through the secret door.' } });
+    fireEvent.change(screen.getByLabelText('Interactive story mode response'), { target: { value: 'I light a lantern and step through the secret door.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue with my response' }));
 
     await waitFor(() => {
@@ -334,6 +415,12 @@ describe('StorytellerWorkspace', () => {
       expect(String(body.input_payload?.source_text)).toContain('Player response: I light a lantern and step through the secret door.');
       expect(body.input_payload?.source_job_id).toBe('job:base');
     });
+    const interactiveReader = screen.getByRole('region', { name: 'Interactive story mode' });
+    expect(await within(interactiveReader).findByText('The lantern flared, revealing stairs under the roots.')).toBeInTheDocument();
+    const library = screen.getByRole('complementary', { name: 'Story library' });
+    const recentStories = within(library).getByText('Recent stories').closest('section') as HTMLElement | null;
+    if (!recentStories) throw new Error('Recent stories section is missing');
+    expect(within(recentStories).queryByRole('button', { name: /Story Mode Continuation/ })).not.toBeInTheDocument();
   });
 
   it('asks Story Mode jobs to generate a title when the current story is untitled', async () => {
@@ -360,8 +447,8 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
 
     expect((await screen.findAllByText(baseText)).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
-    fireEvent.change(screen.getByLabelText('Story mode response'), { target: { value: 'I climb aboard and ring the bell.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Interactive Story Mode/ }));
+    fireEvent.change(screen.getByLabelText('Interactive story mode response'), { target: { value: 'I climb aboard and ring the bell.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue with my response' }));
 
     await waitFor(() => {
@@ -390,7 +477,7 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
 
     expect((await screen.findAllByText(baseText)).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Interactive Story Mode/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open the door carefully' }));
 
     await waitFor(() => {
