@@ -1,9 +1,4 @@
-"""Thin browser-facing gateway foundation.
-
-This app is intentionally small. It exposes the stable health/runtime/OpenAPI
-surface that later redesign phases can build on while the current larger app
-and legacy browser paths remain available during migration.
-"""
+"""Thin browser-facing gateway foundation."""
 from __future__ import annotations
 
 import asyncio
@@ -46,8 +41,8 @@ from app.jobs import (
     ModelResidencyDiagnostics,
     ModelResidencyRecord,
     ResourceClass,
-    SQLiteModelResidencyStore,
     SQLiteJobStore,
+    SQLiteModelResidencyStore,
     default_job_store,
     default_model_residency_store,
 )
@@ -95,21 +90,9 @@ from app.platform import (
     update_legacy_session,
     validate_adventure_payload,
 )
-from app.prompts import (
-    PromptRenderError,
-    PromptRenderRequest,
-    PromptTemplateRenderer,
-    RenderedPrompt,
-)
-from app.providers.facade import (
-    ProviderFacade,
-    ProviderFacadePayload,
-    default_provider_facade,
-)
-from app.providers.cache_status import (
-    ProviderModelRefreshRequest,
-    create_provider_model_refresh_job_request,
-)
+from app.prompts import PromptRenderError, PromptRenderRequest, PromptTemplateRenderer, RenderedPrompt
+from app.providers.cache_status import ProviderModelRefreshRequest, create_provider_model_refresh_job_request
+from app.providers.facade import ProviderFacade, ProviderFacadePayload, default_provider_facade
 from app.replay import (
     CheckpointEnvelope,
     PersistenceInventory,
@@ -120,6 +103,7 @@ from app.replay import (
     default_rpg_replay_adapter,
 )
 
+from .story_asset_save import SaveStoryAssetRequest, SavedStoryAssetResponse, save_story_asset
 from .workers import (
     GATEWAY_FORMAT_VERSION,
     WorkerHealthPayload,
@@ -167,9 +151,8 @@ class CompatibilityHandoffPayload(BaseModel):
     existing_fastapi_app: str = "run_app:app"
     domain_logic_policy: str = "delegate_to_existing_service_modules"
     migration_note: str = (
-        "The classic template/static browser UI is retired. Backend domain "
-        "routes may remain as compatibility surfaces until feature-specific "
-        "contracts are migrated."
+        "The classic template/static browser UI is retired. Backend domain routes may remain "
+        "as compatibility surfaces until feature-specific contracts are migrated."
     )
     handoff_targets: list[dict[str, str]] = Field(default_factory=list)
 
@@ -185,26 +168,10 @@ class AssetContentResponse(BaseModel):
 def _compatibility_handoff() -> CompatibilityHandoffPayload:
     return CompatibilityHandoffPayload(
         handoff_targets=[
-            {
-                "namespace": "/api/rpg",
-                "current_owner": "run_app:app and app.rpg.api routers",
-                "gateway_phase": "future typed contract wrapper",
-            },
-            {
-                "namespace": "/api/image",
-                "current_owner": "app.image.api and image service",
-                "gateway_phase": "future worker-backed image contract",
-            },
-            {
-                "namespace": "/api/voice, /api/tts, /api/stt",
-                "current_owner": "run_app:app, tts_server, parakeet_stt_server",
-                "gateway_phase": "future worker health and job contract",
-            },
-            {
-                "namespace": "/generated-images",
-                "current_owner": "run_app:app static asset route",
-                "gateway_phase": "future shared asset reference route",
-            },
+            {"namespace": "/api/rpg", "current_owner": "run_app:app and app.rpg.api routers", "gateway_phase": "future typed contract wrapper"},
+            {"namespace": "/api/image", "current_owner": "app.image.api and image service", "gateway_phase": "future worker-backed image contract"},
+            {"namespace": "/api/voice, /api/tts, /api/stt", "current_owner": "run_app:app, tts_server, parakeet_stt_server", "gateway_phase": "future worker health and job contract"},
+            {"namespace": "/generated-images", "current_owner": "run_app:app static asset route", "gateway_phase": "future shared asset reference route"},
         ]
     )
 
@@ -216,11 +183,7 @@ def _runtime_status() -> RuntimeStatusPayload:
         status="ready" if workers.ok else "degraded",
         gateway=GatewayHealth(),
         workers=workers,
-        compatibility={
-            "legacy_ui_status": "retired",
-            "existing_fastapi_app": "run_app:app",
-            "domain_logic_policy": "delegate_to_existing_service_modules",
-        },
+        compatibility={"legacy_ui_status": "retired", "existing_fastapi_app": "run_app:app", "domain_logic_policy": "delegate_to_existing_service_modules"},
     )
 
 
@@ -258,41 +221,28 @@ def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | 
 def _read_text_asset(asset: AssetRecord) -> AssetContentResponse:
     if not _text_asset_supported(asset):
         raise HTTPException(status_code=415, detail="asset_content_not_text")
-
     path = Path(asset.storage_path)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="asset_file_not_found")
-
     try:
         size_bytes = path.stat().st_size
     except OSError as exc:
         raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
-
     if size_bytes > TEXT_ASSET_MAX_BYTES:
         raise HTTPException(status_code=413, detail="asset_content_too_large")
-
     try:
         content = path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise HTTPException(status_code=415, detail="asset_content_not_utf8") from exc
     except OSError as exc:
         raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
-
     return AssetContentResponse(asset=asset, content=content, size_bytes=size_bytes)
 
 
 async def _live_job_event_stream(job_store: SQLiteJobStore, after_id: int = 0):
-    """Yield a live SSE stream for shared job events.
-
-    The finite `/api/jobs/events` route remains a compatibility/history endpoint.
-    The browser-facing shared event client uses `/events`, which stays open,
-    emits event ids for EventSource resume, and sends heartbeat comments so
-    proxies and diagnostics can tell the stream is still alive.
-    """
     last_event_id = max(0, after_id)
     seconds_until_heartbeat = 0.0
     yield _sse_comment("omnix-events-open")
-
     while True:
         events = job_store.list_events(after_id=last_event_id, limit=EVENT_STREAM_BATCH_LIMIT)
         if events:
@@ -301,11 +251,9 @@ async def _live_job_event_stream(job_store: SQLiteJobStore, after_id: int = 0):
                 yield _sse_event(event.event_type, event.model_dump(mode="json"), event_id=event.id)
             seconds_until_heartbeat = 0.0
             continue
-
         if seconds_until_heartbeat <= 0:
             yield _sse_comment("heartbeat")
             seconds_until_heartbeat = EVENT_STREAM_HEARTBEAT_SECONDS
-
         await asyncio.sleep(EVENT_STREAM_POLL_SECONDS)
         seconds_until_heartbeat -= EVENT_STREAM_POLL_SECONDS
 
@@ -318,18 +266,13 @@ def create_gateway_app(
     replay_adapter_factory: Callable[[], RpgReplayPersistenceAdapter] | None = None,
     model_residency_store_factory: Callable[[], SQLiteModelResidencyStore] | None = None,
 ) -> FastAPI:
-    """Create the thin gateway app without importing model-heavy services."""
     get_job_store = job_store_factory or default_job_store
     get_provider_facade = provider_facade_factory or default_provider_facade
     get_asset_store = asset_store_factory or default_asset_store
     get_chat_store = chat_store_factory or default_chat_store
     get_replay_adapter = replay_adapter_factory or default_rpg_replay_adapter
     get_model_residency_store = model_residency_store_factory or default_model_residency_store
-    gateway = FastAPI(
-        title="Omnix Web Gateway",
-        version="0.1.0",
-        summary="Thin local-first gateway foundation for the Omnix web app redesign.",
-    )
+    gateway = FastAPI(title="Omnix Web Gateway", version="0.1.0", summary="Thin local-first gateway foundation for the Omnix web app redesign.")
 
     @gateway.get("/health", response_model=GatewayHealth, tags=["gateway"])
     async def health() -> GatewayHealth:
@@ -351,11 +294,7 @@ def create_gateway_app(
     async def worker_payload_policy() -> WorkerPayloadPolicy:
         return get_worker_payload_policy()
 
-    @gateway.get(
-        "/api/compatibility/legacy",
-        response_model=CompatibilityHandoffPayload,
-        tags=["compatibility"],
-    )
+    @gateway.get("/api/compatibility/legacy", response_model=CompatibilityHandoffPayload, tags=["compatibility"])
     async def compatibility_handoff() -> CompatibilityHandoffPayload:
         return _compatibility_handoff()
 
@@ -374,16 +313,11 @@ def create_gateway_app(
             raise HTTPException(status_code=404, detail="chat session not found")
         return session
 
-    @gateway.post(
-        "/api/chat/sessions/{session_id}/messages",
-        response_model=SendChatMessageResponse,
-        tags=["chat"],
-    )
+    @gateway.post("/api/chat/sessions/{session_id}/messages", response_model=SendChatMessageResponse, tags=["chat"])
     async def send_chat_message(session_id: str, request: SendChatMessageRequest) -> SendChatMessageResponse:
         appended = get_chat_store().append_user_message(session_id, request)
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
-
         session, user_message = appended
         job = get_job_store().create_job(
             CreateJobRequest(
@@ -433,11 +367,7 @@ def create_gateway_app(
     async def create_session() -> LegacySessionCreateResponse:
         return create_legacy_session()
 
-    @gateway.post(
-        "/api/sessions/generate-title",
-        response_model=LegacyGenerateTitleResponse,
-        tags=["legacy-sessions"],
-    )
+    @gateway.post("/api/sessions/generate-title", response_model=LegacyGenerateTitleResponse, tags=["legacy-sessions"])
     async def generate_session_title(request: LegacyGenerateTitleRequest) -> LegacyGenerateTitleResponse:
         return generate_legacy_session_title(request)
 
@@ -581,19 +511,15 @@ def create_gateway_app(
             raise HTTPException(status_code=404, detail="asset_not_found")
         return _read_text_asset(asset)
 
-    @gateway.post(
-        "/api/assets/migrations/image/dry-run",
-        response_model=AssetMigrationPreview,
-        tags=["assets"],
-    )
+    @gateway.post("/api/assets/story", response_model=SavedStoryAssetResponse, include_in_schema=False)
+    async def save_story_asset_endpoint(request: SaveStoryAssetRequest) -> SavedStoryAssetResponse:
+        return save_story_asset(get_asset_store(), request)
+
+    @gateway.post("/api/assets/migrations/image/dry-run", response_model=AssetMigrationPreview, tags=["assets"])
     async def image_asset_migration_dry_run() -> AssetMigrationPreview:
         return get_asset_store().import_image_manifest_dry_run()
 
-    @gateway.post(
-        "/api/assets/migrations/image/import",
-        response_model=AssetMigrationPreview,
-        tags=["assets"],
-    )
+    @gateway.post("/api/assets/migrations/image/import", response_model=AssetMigrationPreview, tags=["assets"])
     async def image_asset_migration_import() -> AssetMigrationPreview:
         return get_asset_store().import_image_manifest()
 
@@ -638,9 +564,8 @@ def create_gateway_app(
 
     @gateway.get("/events", include_in_schema=False)
     async def events(after_id: int = 0, last_event_id: str | None = Header(default=None, alias="Last-Event-ID")) -> StreamingResponse:
-        start_after_id = _parse_event_id(last_event_id, fallback=after_id)
         return StreamingResponse(
-            _live_job_event_stream(get_job_store(), after_id=start_after_id),
+            _live_job_event_stream(get_job_store(), after_id=_parse_event_id(last_event_id, fallback=after_id)),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
