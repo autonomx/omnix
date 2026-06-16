@@ -207,6 +207,39 @@ describe('StorytellerWorkspace', () => {
     expect(await within(manuscript).findByText('Older roots remembered every footstep.')).toBeInTheDocument();
   });
 
+  it('loads a saved local draft from the Story library', async () => {
+    window.localStorage.setItem(
+      'omnix:storyteller:last-draft',
+      JSON.stringify({
+        title: 'Local Draft Orchard',
+        premise: 'A local draft waits in storage.',
+        sourceJobId: 'job:draft-source',
+        content: 'Local draft roots hummed beneath the glass soil.',
+      }),
+    );
+    stubStoryApi([storyJob()]);
+
+    renderStoryteller();
+
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    expect(await within(manuscript).findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Local Draft Orchard/ }));
+    expect(await within(manuscript).findByText('Local draft roots hummed beneath the glass soil.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Local Draft Orchard' })).toBeInTheDocument();
+  });
+
+  it('selects story assets from the Story library', async () => {
+    stubStoryApi([]);
+
+    renderStoryteller();
+
+    const library = await screen.findByRole('complementary', { name: 'Story library' });
+    fireEvent.click(within(library).getByRole('button', { name: /the glass orchard/ }));
+
+    expect(await screen.findByRole('heading', { name: 'the glass orchard' })).toBeInTheDocument();
+    expect(screen.getByText('This library asset is available, but content preview is not exposed by the assets API yet.')).toBeInTheDocument();
+  });
+
   it('saves the selected story version to local browser storage', async () => {
     const selected = storyJob({
       id: 'job:selected',
