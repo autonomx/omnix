@@ -219,7 +219,7 @@ describe('StorytellerWorkspace', () => {
 
     const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
     expect(await within(manuscript).findByText('Newer branches glittered over the city.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Select v1: Rewrite paragraph • Older Orchard/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Older Orchard 5 words/ }));
     expect(await within(manuscript).findByText('Older roots remembered every footstep.')).toBeInTheDocument();
   });
 
@@ -255,7 +255,7 @@ describe('StorytellerWorkspace', () => {
 
     const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
     expect(await within(manuscript).findByText('Asset branches chimed softly when Mira opened the gate.')).toBeInTheDocument();
-    expect((await screen.findAllByRole('heading', { name: 'The Glass Orchard' })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByRole('heading', { name: /the glass orchard/i })).length).toBeGreaterThan(0);
   });
 
   it('saves the selected story version to local browser storage', async () => {
