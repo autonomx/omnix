@@ -77,8 +77,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
   });
 
-  const activeSession = sessionQuery.data ?? sendMutation.data?.session;
-  const submitStatus = sendMutation.isPending ? 'queueing' : sendMutation.isError ? 'error' : sendMutation.data?.generation_status ?? 'ready';
+  const activeSession = sendMutation.data?.session ?? sessionQuery.data;
+  const submitStatus = sendMutation.isPending ? 'generating' : sendMutation.isError ? 'error' : sendMutation.data?.generation_status ?? 'ready';
+  const generationComplete = sendMutation.data?.generation_status === 'completed';
 
   return (
     <WorkspacePanel>
@@ -138,19 +139,19 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <textarea rows={4} aria-invalid={Boolean(errors.content)} {...register('content', { required: true })} />
             </label>
             <Button className="feature-form-action" type="submit" disabled={sendMutation.isPending} loading={sendMutation.isPending}>
-              {sendMutation.isPending ? 'Queueing response…' : 'Queue response'}
+              {sendMutation.isPending ? 'Generating response…' : 'Send message'}
             </Button>
           </form>
 
           {errors.content ? (
             <div className="platform-empty" role="alert">
-              Enter a message before queueing a response.
+              Enter a message before sending.
             </div>
           ) : null}
 
           {sendMutation.isPending ? (
             <div className="feature-job-link" role="status" aria-live="polite">
-              Queueing chat response…
+              Contacting the selected chat provider…
             </div>
           ) : null}
 
@@ -162,7 +163,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
 
           {sendMutation.data ? (
             <div className="feature-job-link" role="status">
-              Generation job queued: {sendMutation.data.job.id}
+              {generationComplete ? 'Generation completed' : 'Generation job queued'}: {sendMutation.data.job.id}
             </div>
           ) : null}
         </section>
@@ -209,12 +210,12 @@ function chatCapableModels(payload: ProviderFacadePayload | undefined, providerI
 
 function chatbotSubmitErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    return `Chat request failed with status ${error.status}. Check that the gateway is running and reachable.`;
+    return `Chat request failed with status ${error.status}. Check that the gateway and selected provider are running.`;
   }
 
   if (error instanceof Error && error.message) {
     return `Chat request failed: ${error.message}`;
   }
 
-  return 'Chat request failed. Check that the gateway is running and reachable.';
+  return 'Chat request failed. Check that the gateway and selected provider are running.';
 }
