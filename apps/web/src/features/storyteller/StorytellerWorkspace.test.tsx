@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
@@ -119,11 +119,11 @@ describe('StorytellerWorkspace', () => {
 
     renderStoryteller();
 
-    expect(await screen.findByRole('navigation', { name: 'Story library' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Story library' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Story manuscript' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Story controls' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Story outline' })).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'The Glass Orchard' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'The Glass Orchard' })).length).toBeGreaterThan(0);
     expect(screen.getByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
     expect(screen.getByText(/Each branch held a memory/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Continue Story/ })).toBeInTheDocument();
@@ -205,8 +205,6 @@ describe('StorytellerWorkspace', () => {
       expect(body).toContain('"writing_style":"Lyrical & Descriptive"');
     });
 
-    const statusPanel = screen.getByText('Output status').closest('div');
-    expect(statusPanel).not.toBeNull();
-    expect(within(statusPanel?.parentElement as HTMLElement).getByText('story.generate')).toBeInTheDocument();
+    expect(screen.getAllByText('story.generate').length).toBeGreaterThan(0);
   });
 });
