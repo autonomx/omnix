@@ -2,8 +2,8 @@
   color-scheme: dark;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #071018;
-  color: #eef6ff;
+  background: #07060d;
+  color: #f3f0ff;
 }
 
 * {
@@ -15,8 +15,9 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(64, 143, 255, 0.22), transparent 32rem),
-    linear-gradient(135deg, #071018 0%, #0b1320 48%, #0d1018 100%);
+    linear-gradient(115deg, rgba(124, 58, 237, 0.18), transparent 30%),
+    linear-gradient(225deg, rgba(21, 186, 196, 0.1), transparent 34%),
+    linear-gradient(135deg, #090812 0%, #0d0b17 46%, #07060d 100%);
 }
 
 button,
@@ -28,38 +29,56 @@ select {
 
 .omnix-shell {
   display: grid;
-  grid-template-columns: 18rem 1fr;
+  grid-template-columns: 5.625rem minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .omnix-sidebar {
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(7, 16, 24, 0.82);
-  backdrop-filter: blur(18px);
-  padding: 1.25rem;
+  border-right: 1px solid rgba(151, 114, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(18, 17, 29, 0.94), rgba(8, 8, 15, 0.96)),
+    rgba(9, 8, 18, 0.92);
+  backdrop-filter: blur(22px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  justify-items: center;
+  padding: 1.25rem 0.75rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
 
 .omnix-brand {
   align-items: center;
-  display: flex;
-  gap: 0.875rem;
-  margin-bottom: 1.5rem;
+  display: grid;
+  justify-items: center;
+  margin-bottom: 1.125rem;
 }
 
 .omnix-brand-mark {
   align-items: center;
-  background: linear-gradient(135deg, #82b8ff, #72f0d7);
-  border-radius: 1rem;
-  color: #04111f;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.92), transparent 0.42rem),
+    radial-gradient(circle at 62% 62%, rgba(22, 211, 238, 0.85), transparent 1.3rem),
+    linear-gradient(135deg, #7c3aed 0%, #2dd4bf 100%);
+  border: 1px solid rgba(205, 191, 255, 0.38);
+  border-radius: 0.5rem;
+  box-shadow:
+    0 0 0 0.25rem rgba(124, 58, 237, 0.13),
+    0 0.75rem 2rem rgba(124, 58, 237, 0.25);
+  color: #f8f7ff;
   display: inline-flex;
   font-weight: 800;
-  height: 2.5rem;
+  height: 3rem;
   justify-content: center;
-  width: 2.5rem;
+  text-shadow: 0 0.2rem 0.6rem rgba(0, 0, 0, 0.55);
+  width: 3rem;
 }
 
 .omnix-brand h1,
 .omnix-brand p,
+.omnix-topbar h1,
+.workspace-card h2,
 .omnix-topbar h2,
 .workspace-card h3,
 .workspace-card h4 {
@@ -70,35 +89,89 @@ select {
 .eyebrow,
 .workspace-summary,
 .workspace-card li {
-  color: #a9b7ca;
+  color: #aaa5bc;
 }
 
 .omnix-nav {
-  display: grid;
-  gap: 0.375rem;
+  align-content: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  width: 100%;
 }
 
 .omnix-nav a {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 0.75rem;
-  color: #d9e7f7;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(151, 114, 255, 0.12);
+  border-radius: 0.5rem;
+  color: #d8d3ea;
   cursor: pointer;
-  display: block;
-  padding: 0.75rem 0.875rem;
-  text-align: left;
+  display: flex;
+  height: 3rem;
+  justify-content: center;
+  padding: 0;
+  position: relative;
   text-decoration: none;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.omnix-nav a::after {
+  background: #8b5cf6;
+  border-radius: 999px;
+  content: "";
+  height: 1.4rem;
+  left: -0.78rem;
+  opacity: 0;
+  position: absolute;
+  top: 0.8rem;
+  width: 0.18rem;
+}
+
+.omnix-nav-item {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+}
+
+.omnix-nav-icon {
+  color: #cfc8ff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.omnix-nav-label {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 .omnix-nav a:hover,
 .omnix-nav a:focus-visible,
 .omnix-nav a.active {
-  background: rgba(130, 184, 255, 0.12);
-  border-color: rgba(130, 184, 255, 0.28);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.32), rgba(21, 186, 196, 0.12));
+  border-color: rgba(151, 114, 255, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 1.1rem rgba(124, 58, 237, 0.22);
   outline: none;
+  transform: translateX(0.08rem);
+}
+
+.omnix-nav a.active::after {
+  opacity: 1;
 }
 
 .omnix-main {
+  background: rgba(5, 5, 10, 0.42);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -106,35 +179,123 @@ select {
 
 .omnix-topbar {
   align-items: center;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  background:
+    linear-gradient(180deg, rgba(24, 22, 36, 0.94), rgba(14, 13, 23, 0.9)),
+    rgba(12, 11, 20, 0.92);
+  border-bottom: 1px solid rgba(151, 114, 255, 0.18);
+  box-shadow: 0 0.8rem 2rem rgba(0, 0, 0, 0.24);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(14rem, auto) minmax(16rem, 1fr) auto;
+  min-height: 5.5rem;
+  padding: 1rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.omnix-topbar-brand {
+  align-items: center;
   display: flex;
-  justify-content: space-between;
-  padding: 1.25rem 1.5rem;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.omnix-logo-core {
+  background:
+    radial-gradient(circle at 42% 38%, #f7f4ff 0 0.16rem, transparent 0.18rem),
+    radial-gradient(circle at 50% 50%, rgba(124, 58, 237, 0.45), transparent 1rem),
+    linear-gradient(135deg, #8b5cf6, #15bac4);
+  border: 1px solid rgba(214, 199, 255, 0.42);
+  border-radius: 0.5rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 0.8rem 2rem rgba(124, 58, 237, 0.28);
+  height: 3rem;
+  width: 3rem;
+}
+
+.omnix-topbar-brand h1 {
+  color: #f4f1ff;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.omnix-topbar-brand p {
+  color: #aaa5bc;
+}
+
+.omnix-mode-tabs {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(151, 114, 255, 0.14);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 0.25rem;
+  justify-self: start;
+  min-width: 0;
+  padding: 0.25rem;
+}
+
+.omnix-mode-tabs button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #d8d3ea;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 0.45rem 0.85rem;
+  white-space: nowrap;
+}
+
+.omnix-mode-tabs button:hover,
+.omnix-mode-tabs button:focus-visible,
+.omnix-mode-tabs button.active {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.82), rgba(124, 58, 237, 0.56));
+  border-color: rgba(205, 191, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0.5rem 1.5rem rgba(124, 58, 237, 0.28);
+  color: #ffffff;
+  outline: none;
+}
+
+.omnix-topbar-status {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  justify-self: end;
 }
 
 .eyebrow {
   font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .status-pill,
 .workspace-heading code {
-  background: rgba(114, 240, 215, 0.12);
-  border: 1px solid rgba(114, 240, 215, 0.25);
+  background: rgba(124, 58, 237, 0.16);
+  border: 1px solid rgba(151, 114, 255, 0.32);
   border-radius: 999px;
-  color: #b6fff2;
-  padding: 0.45rem 0.7rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #e7ddff;
+  padding: 0.42rem 0.68rem;
 }
 
 .workspace-card {
-  background: rgba(10, 22, 34, 0.76);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 1.25rem;
-  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.25);
-  margin: 1.5rem;
-  padding: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(23, 22, 34, 0.9), rgba(13, 12, 22, 0.86)),
+    rgba(14, 13, 23, 0.86);
+  border: 1px solid rgba(151, 114, 255, 0.16);
+  border-radius: 0.5rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+  margin: 1rem 1.5rem 1.5rem;
+  padding: 1.35rem 1.45rem;
 }
 
 .workspace-heading {
@@ -146,7 +307,7 @@ select {
 
 .workspace-summary {
   font-size: 1rem;
-  line-height: 1.65;
+  line-height: 1.55;
   max-width: 64rem;
 }
 
@@ -159,8 +320,8 @@ select {
 
 .workspace-grid article {
   background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 1rem;
+  border: 1px solid rgba(151, 114, 255, 0.13);
+  border-radius: 0.5rem;
   padding: 1rem;
 }
 
@@ -184,7 +345,7 @@ select {
 
 .platform-section {
   background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(151, 114, 255, 0.13);
   border-radius: 0.5rem;
   display: grid;
   gap: 0.875rem;
@@ -210,12 +371,12 @@ select {
 }
 
 .platform-details dt {
-  color: #a9b7ca;
+  color: #aaa5bc;
   font-size: 0.8rem;
 }
 
 .platform-details dd {
-  color: #eef6ff;
+  color: #f3f0ff;
   margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -223,9 +384,9 @@ select {
 
 .platform-empty {
   background: rgba(255, 255, 255, 0.035);
-  border: 1px dashed rgba(169, 183, 202, 0.28);
+  border: 1px dashed rgba(170, 165, 188, 0.28);
   border-radius: 0.5rem;
-  color: #a9b7ca;
+  color: #aaa5bc;
   margin-top: 1.25rem;
   padding: 1rem;
 }
@@ -236,10 +397,10 @@ select {
 }
 
 .platform-log {
-  background: rgba(7, 16, 24, 0.58);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(7, 6, 13, 0.58);
+  border: 1px solid rgba(151, 114, 255, 0.13);
   border-radius: 0.5rem;
-  color: #d7efe6;
+  color: #dfd9f4;
   display: grid;
   gap: 0.35rem;
   max-height: 14rem;
@@ -263,7 +424,7 @@ select {
 
 .feature-panel {
   background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(151, 114, 255, 0.13);
   border-radius: 0.5rem;
   display: grid;
   gap: 1rem;
@@ -278,7 +439,7 @@ select {
 }
 
 .feature-form label {
-  color: #a9b7ca;
+  color: #c8bee8;
   display: grid;
   gap: 0.4rem;
   font-size: 0.85rem;
@@ -287,16 +448,24 @@ select {
 .feature-form input,
 .feature-form select,
 .feature-form textarea {
-  background: rgba(7, 16, 24, 0.72);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(7, 6, 13, 0.82);
+  border: 1px solid rgba(151, 114, 255, 0.16);
   border-radius: 0.5rem;
-  color: #eef6ff;
+  color: #f3f0ff;
   min-width: 0;
   padding: 0.7rem 0.75rem;
 }
 
 .feature-form textarea {
   resize: vertical;
+}
+
+.feature-form input:focus,
+.feature-form select:focus,
+.feature-form textarea:focus {
+  border-color: rgba(151, 114, 255, 0.72);
+  box-shadow: 0 0 0 0.18rem rgba(124, 58, 237, 0.18);
+  outline: none;
 }
 
 .feature-form-wide,
@@ -323,8 +492,8 @@ select {
 }
 
 .feature-mini-card {
-  background: rgba(7, 16, 24, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(7, 6, 13, 0.58);
+  border: 1px solid rgba(151, 114, 255, 0.14);
   border-radius: 0.5rem;
   display: grid;
   gap: 0.625rem;
@@ -332,10 +501,10 @@ select {
 }
 
 .feature-list button {
-  background: rgba(7, 16, 24, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(7, 6, 13, 0.58);
+  border: 1px solid rgba(151, 114, 255, 0.14);
   border-radius: 0.5rem;
-  color: #eef6ff;
+  color: #f3f0ff;
   cursor: pointer;
   display: grid;
   gap: 0.2rem;
@@ -346,13 +515,13 @@ select {
 .feature-list button.active,
 .feature-list button:hover,
 .feature-list button:focus-visible {
-  background: rgba(130, 184, 255, 0.12);
-  border-color: rgba(130, 184, 255, 0.28);
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(151, 114, 255, 0.42);
   outline: none;
 }
 
 .feature-list small {
-  color: #a9b7ca;
+  color: #aaa5bc;
 }
 
 @media (max-width: 900px) {
@@ -363,10 +532,33 @@ select {
   .omnix-sidebar {
     border-bottom: 1px solid rgba(148, 163, 184, 0.18);
     border-right: 0;
+    height: auto;
+    overflow-x: auto;
+    padding: 0.75rem;
+    position: static;
   }
 
   .omnix-nav {
-    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    flex-direction: row;
+  }
+
+  .omnix-nav a {
+    flex: 0 0 3rem;
+  }
+
+  .omnix-topbar {
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
+  .omnix-topbar-status,
+  .omnix-mode-tabs {
+    justify-self: stretch;
+    overflow-x: auto;
+  }
+
+  .workspace-card {
+    margin: 0.875rem;
   }
 
   .workspace-grid {

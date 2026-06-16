@@ -6,6 +6,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  useNavigate,
   useRouterState,
 } from '@tanstack/react-router';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
@@ -27,25 +28,51 @@ function moduleFromPath(pathname: string): OmnixModuleDefinition {
 
 function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const navigate = useNavigate();
   const activeModule = moduleFromPath(pathname);
+  const modeModules = omnixModules.filter((module) =>
+    ['chatbot', 'rpg', 'voice', 'image-generation'].includes(module.id),
+  );
 
   return (
     <OmnixShellLayout
       sidebar={
         <OmnixSidebar>
           <OmnixBrand />
-        <nav className="omnix-nav">
-          {omnixModules.map((module) => (
-            <Link key={module.id} to={module.route as never} activeProps={{ className: 'active' }}>
-              <OmnixNavItem active={module.id === activeModule.id}>{module.label}</OmnixNavItem>
-            </Link>
-          ))}
-        </nav>
+          <nav className="omnix-nav">
+            {omnixModules.map((module) => (
+              <Link
+                key={module.id}
+                to={module.route as never}
+                aria-label={module.label}
+                title={module.label}
+                activeProps={{ className: 'active' }}
+              >
+                <OmnixNavItem active={module.id === activeModule.id} moduleId={module.id}>
+                  {module.label}
+                </OmnixNavItem>
+              </Link>
+            ))}
+          </nav>
         </OmnixSidebar>
       }
-      topbar={<OmnixTopBar title={activeModule.label} />}
+      topbar={
+        <OmnixTopBar title={activeModule.label}>
+          {modeModules.map((module) => (
+            <button
+              key={module.id}
+              type="button"
+              className={module.id === activeModule.id ? 'active' : undefined}
+              aria-label={`Open ${module.label} mode`}
+              onClick={() => void navigate({ to: module.route as never })}
+            >
+              {module.label}
+            </button>
+          ))}
+        </OmnixTopBar>
+      }
     >
-        <Outlet />
+      <Outlet />
     </OmnixShellLayout>
   );
 }

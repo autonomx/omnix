@@ -1,5 +1,6 @@
-import { Badge, Box, Group, NavLink, Paper, Progress, Stack, Text, Title } from '@mantine/core';
+import { Badge, Box, Group, Paper, Progress, Stack, Text, Title } from '@mantine/core';
 import type { ReactNode } from 'react';
+import type { OmnixModuleId } from '../app/modules';
 
 export function OmnixShellLayout({ sidebar, topbar, children }: { sidebar: ReactNode; topbar: ReactNode; children: ReactNode }) {
   return (
@@ -23,30 +24,64 @@ export function OmnixSidebar({ children }: { children: ReactNode }) {
 
 export function OmnixBrand() {
   return (
-    <Group className="omnix-brand" gap="sm">
+    <div className="omnix-brand" aria-label="Omnix">
       <span className="omnix-brand-mark">O</span>
-      <div>
-        <Title order={1}>Omnix</Title>
-        <Text size="sm">AI workstation</Text>
-      </div>
-    </Group>
+    </div>
   );
 }
 
-export function OmnixNavItem({ active, children }: { active: boolean; children: ReactNode }) {
+const moduleMonograms: Record<OmnixModuleId, string> = {
+  rpg: 'R',
+  chatbot: 'C',
+  storyteller: 'S',
+  podcast: 'P',
+  voice: 'T',
+  'voice-cloning': 'VC',
+  stt: 'ST',
+  'image-generation': 'I',
+  providers: 'PR',
+  models: 'M',
+  jobs: 'J',
+  assets: 'A',
+  reports: 'RP',
+  settings: 'SE',
+  diagnostics: 'D',
+};
+
+export function OmnixNavItem({ active, moduleId, children }: { active: boolean; moduleId: OmnixModuleId; children: ReactNode }) {
   return (
-    <NavLink className={active ? 'active' : undefined} active={active} label={children} component="span" />
+    <span className={active ? 'omnix-nav-item active' : 'omnix-nav-item'}>
+      <span className="omnix-nav-icon" aria-hidden="true">
+        {moduleMonograms[moduleId]}
+      </span>
+      <span className="omnix-nav-label">{children}</span>
+    </span>
   );
 }
 
-export function OmnixTopBar({ title, status = 'Local-first' }: { title: string; status?: string }) {
+export function OmnixTopBar({
+  title,
+  status = 'Local-first',
+  children,
+}: {
+  title: string;
+  status?: string;
+  children?: ReactNode;
+}) {
   return (
     <header className="omnix-topbar">
-      <div>
-        <Text className="eyebrow">Shared Omnix platform</Text>
-        <Title order={2}>{title}</Title>
+      <div className="omnix-topbar-brand">
+        <span className="omnix-logo-core" aria-hidden="true" />
+        <div>
+          <Title order={1}>Omnix</Title>
+          <Text size="sm">Local AI workstation</Text>
+        </div>
       </div>
-      <OmnixStatusPill>{status}</OmnixStatusPill>
+      {children ? <div className="omnix-mode-tabs">{children}</div> : null}
+      <div className="omnix-topbar-status" aria-label="Platform status">
+        <OmnixStatusPill>{title}</OmnixStatusPill>
+        <OmnixStatusPill>{status}</OmnixStatusPill>
+      </div>
     </header>
   );
 }

@@ -72,7 +72,7 @@ export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
       <div className="workspace-heading">
         <div>
           <p className="eyebrow">Module workspace</p>
-          <h3 id="module-title">{module.label}</h3>
+          <h2 id="module-title">{module.label}</h2>
         </div>
         <code>{module.route}</code>
       </div>
