@@ -1,0 +1,77 @@
+.storyteller-library nav button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  color: #d8d3ea;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.65rem 0.7rem;
+  text-align: left;
+  width: 100%;
+}
+
+.storyteller-library nav button.active,
+.storyteller-library nav button:hover,
+.storyteller-library nav button:focus-visible,
+.storyteller-trash.active {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(151, 114, 255, 0.34);
+  outline: none;
+}
+
+.storyteller-library-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.storyteller-recent-list button,
+.storyteller-library-section article {
+  align-items: center;
+  background: rgba(7, 6, 13, 0.52);
+  border: 1px solid rgba(151, 114, 255, 0.12);
+  border-radius: 0.5rem;
+  color: #f3f0ff;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  padding: 0.55rem;
+  text-align: left;
+  width: 100%;
+}
+
+.storyteller-recent-list button {
+  cursor: pointer;
+}
+
+.storyteller-recent-list button.active,
+.storyteller-recent-list button:hover,
+.storyteller-recent-list button:focus-visible {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.28), rgba(21, 186, 196, 0.12));
+  border-color: rgba(34, 211, 238, 0.46);
+  outline: none;
+}
+
+.storyteller-library-empty {
+  align-items: start !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.storyteller-library-empty strong,
+.storyteller-library-empty small {
+  overflow: visible;
+  text-overflow: initial;
+  white-space: normal;
+}
+
+.storyteller-library-empty button {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(151, 114, 255, 0.18);
+  border-radius: 0.5rem;
+  color: #f3f0ff;
+  cursor: pointer;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}

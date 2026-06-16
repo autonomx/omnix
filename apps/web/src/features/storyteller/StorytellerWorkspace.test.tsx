@@ -27,7 +27,16 @@ function requestPath(input: RequestInfo | URL): string {
 
 function providerPayload() {
   return {
-    providers: [{ id: 'lmstudio', label: 'LM Studio', family: 'llm', source: 'settings', status: 'configured', capabilities: ['chat', 'completion'] }],
+    providers: [
+      {
+        id: 'lmstudio',
+        label: 'LM Studio',
+        family: 'llm',
+        source: 'settings',
+        status: 'configured',
+        capabilities: ['chat', 'completion'],
+      },
+    ],
     models: [],
   };
 }
@@ -48,12 +57,18 @@ function storyJob(overrides: Record<string, unknown> = {}) {
       premise: 'A city grows fruit made of memory.',
       provider_id: 'lmstudio',
       action: 'draft',
-      ...(typeof overrides.input_payload === 'object' && overrides.input_payload ? (overrides.input_payload as Record<string, unknown>) : {}),
+      ...(typeof overrides.input_payload === 'object' && overrides.input_payload
+        ? (overrides.input_payload as Record<string, unknown>)
+        : {}),
     },
     output_refs: [
       {
         kind: 'text',
-        content: 'The orchard rang like crystal at sunset.\n\nEach branch held a memory bright enough to bruise the dark, and Mira knew the city would wake hungry for forgotten names.',
+        content: [
+          'The orchard rang like crystal at sunset.',
+          '',
+          'Each branch held a memory bright enough to bruise the dark, and Mira knew the city would wake hungry for forgotten names.',
+        ].join('\n'),
       },
     ],
     ...overrides,
@@ -62,7 +77,16 @@ function storyJob(overrides: Record<string, unknown> = {}) {
 
 function assetPayload() {
   return {
-    assets: [{ id: 'asset:story', module: 'storyteller', type: 'story', mime_type: 'text/markdown', storage_path: 'artifacts/the-glass-orchard.md', created_at: '2026-06-14T00:00:00Z' }],
+    assets: [
+      {
+        id: 'asset:story',
+        module: 'storyteller',
+        type: 'story',
+        mime_type: 'text/markdown',
+        storage_path: 'artifacts/the-glass-orchard.md',
+        created_at: '2026-06-14T00:00:00Z',
+      },
+    ],
   };
 }
 
@@ -113,6 +137,19 @@ describe('StorytellerWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Export Markdown' })).toBeDisabled();
   });
 
+  it('switches Story library sections and starts a new draft from the sidebar', async () => {
+    stubStoryApi([storyJob()]);
+    renderStoryteller();
+    const library = await screen.findByRole('complementary', { name: 'Story library' });
+    fireEvent.click(within(library).getByRole('button', { name: 'Characters' }));
+    expect(await within(library).findByText('Characters not created yet')).toBeInTheDocument();
+    fireEvent.click(within(library).getByRole('button', { name: 'World Notes' }));
+    expect(await within(library).findByText('World notes not created yet')).toBeInTheDocument();
+    fireEvent.click(within(library).getByRole('button', { name: 'New story draft' }));
+    expect(await screen.findByText('New draft ready. Add a premise to begin.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save story' })).toBeDisabled();
+  });
+
   it('generates stories through the shared jobs API from the redesigned controls', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
@@ -134,8 +171,13 @@ describe('StorytellerWorkspace', () => {
 
     expect(await screen.findByText('Story generated: job:story')).toBeInTheDocument();
     await waitFor(() => {
-      const createCall = fetchMock.mock.calls.find(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
-      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown>; module?: string; type?: string };
+      const createCall = fetchMock.mock.calls.find(([input, init]) =>
+        requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as {
+        input_payload?: Record<string, unknown>;
+        module?: string;
+        type?: string;
+      };
       expect(body.module).toBe('storyteller');
       expect(body.type).toBe('story.generate');
       expect(body.input_payload?.prompt_template_id).toBe('storyteller.draft.v1');
@@ -160,13 +202,19 @@ describe('StorytellerWorkspace', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
-    const selected = storyJob({ id: 'job:selected', input_payload: { title: 'Saved Orchard', action: 'rewrite' }, output_refs: [{ kind: 'text', content: 'Saved roots remembered every footstep.' }] });
+    const selected = storyJob({
+      id: 'job:selected',
+      input_payload: { title: 'Saved Orchard', action: 'rewrite' },
+      output_refs: [{ kind: 'text', content: 'Saved roots remembered every footstep.' }],
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
       if (path === '/api/providers') return Response.json(providerPayload());
       if (path === '/api/jobs') return Response.json({ jobs: [selected] });
       if (path === '/api/assets' && init?.method !== 'POST') return Response.json(assetPayload());
-      if (path === '/api/assets/story' && init?.method === 'POST') return Response.json({ asset: assetPayload().assets[0], content: 'Saved roots remembered every footstep.' });
+      if (path === '/api/assets/story' && init?.method === 'POST') {
+        return Response.json({ asset: assetPayload().assets[0], content: 'Saved roots remembered every footstep.' });
+      }
       if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
       return new Response('not found', { status: 404 });
     });
@@ -183,7 +231,14 @@ describe('StorytellerWorkspace', () => {
   });
 
   it('derives outline entries from generated chapter and scene headings', async () => {
-    const chapteredStory = ['Chapter 1: The Glass Orchard', 'Scene 1: The Crystal Row', 'The orchard rang like crystal at sunset.', 'Chapter 2: The Memory Market', 'Scene 1: The Name Seller', 'Mira traded a silver thread for a forgotten lullaby.'].join('\n\n');
+    const chapteredStory = [
+      'Chapter 1: The Glass Orchard',
+      'Scene 1: The Crystal Row',
+      'The orchard rang like crystal at sunset.',
+      'Chapter 2: The Memory Market',
+      'Scene 1: The Name Seller',
+      'Mira traded a silver thread for a forgotten lullaby.',
+    ].join('\n\n');
     stubStoryApi([storyJob({ output_refs: [{ kind: 'text', content: chapteredStory }] })]);
     renderStoryteller();
     const outline = await screen.findByRole('complementary', { name: 'Story outline' });
@@ -212,7 +267,8 @@ describe('StorytellerWorkspace', () => {
     fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A city grows fruit made of memory.' } });
     fireEvent.click(screen.getByRole('button', { name: /Continue Story/ }));
     await waitFor(() => {
-      const createCall = fetchMock.mock.calls.find(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
+      const createCall = fetchMock.mock.calls.find(([input, init]) =>
+        requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
       const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
       expect(body.input_payload?.action).toBe('continue');
       expect(body.input_payload?.interaction_mode).toBe('writing');
@@ -237,12 +293,13 @@ describe('StorytellerWorkspace', () => {
     expect((await screen.findAllByText('The orchard rang like crystal at sunset.')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
     expect(await screen.findByRole('region', { name: 'Story mode' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Investigate the strange clue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open the door carefully' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Story mode response'), { target: { value: 'I light a lantern and step through the secret door.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue with my response' }));
 
     await waitFor(() => {
-      const createCall = fetchMock.mock.calls.find(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
+      const createCall = fetchMock.mock.calls.find(([input, init]) =>
+        requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
       const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
       expect(body.input_payload?.action).toBe('continue');
       expect(body.input_payload?.interaction_mode).toBe('story');
@@ -268,14 +325,15 @@ describe('StorytellerWorkspace', () => {
 
     expect((await screen.findAllByText(baseText)).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Investigate the strange clue' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the door carefully' }));
 
     await waitFor(() => {
-      const createCall = fetchMock.mock.calls.find(([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
+      const createCall = fetchMock.mock.calls.find(([input, init]) =>
+        requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
       const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
       expect(body.input_payload?.interaction_mode).toBe('story');
-      expect(body.input_payload?.user_response).toBe('Investigate the strange clue');
-      expect(body.input_payload?.suggested_choice).toBe('Investigate the strange clue');
+      expect(body.input_payload?.user_response).toBe('Open the door carefully');
+      expect(body.input_payload?.suggested_choice).toBe('Open the door carefully');
     });
   });
 });

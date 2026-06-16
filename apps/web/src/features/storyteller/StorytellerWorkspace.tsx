@@ -18,6 +18,7 @@ type StoryQuickActionMode = Exclude<StoryActionMode, 'draft'>;
 type SaveFeedbackKind = 'saved' | 'exported' | 'error';
 type StoryLibrarySource = 'draft' | 'job' | 'asset';
 type StoryWorkspaceMode = 'writing' | 'story';
+type StoryLibrarySection = 'drafts' | 'stories' | 'characters' | 'world-notes' | 'prompts' | 'trash';
 
 interface StoryGenerationRequest {
   values: StorytellerFormValues;
@@ -97,15 +98,20 @@ const quickActions: Array<{ mode: StoryQuickActionMode; label: string; descripti
 export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const [workspaceMode, setWorkspaceMode] = useState<StoryWorkspaceMode>('writing');
+  const [activeLibrarySection, setActiveLibrarySection] = useState<StoryLibrarySection>('drafts');
   const [selectedTone, setSelectedTone] = useState('Cozy');
   const [writingStyle, setWritingStyle] = useState(styleOptions[0]);
   const [selectedChapter, setSelectedChapter] = useState(1);
   const [selectedLibraryItemId, setSelectedLibraryItemId] = useState<string | null>(null);
+  const [isNewDraft, setIsNewDraft] = useState(false);
   const [savedDraft, setSavedDraft] = useState<SavedStoryDraft | null>(() => readSavedStoryDraft());
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
   const [storyModeResponse, setStoryModeResponse] = useState('');
 
-  const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
+  const providersQuery = useQuery({
+    queryKey: ['platform', 'providers'],
+    queryFn: () => omnixApiClient.listProviders(),
+  });
   const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<StorytellerFormValues>({
@@ -135,15 +141,27 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           chapter: selectedChapter,
         },
         stages: [
-          { id: 'outline', label: action === 'draft' ? 'Build outline' : `Plan ${actionLabel(action)}`, resource_class: 'gpu:llm', status: 'queued' },
-          { id: 'draft', label: action === 'draft' ? 'Draft story' : actionLabel(action), resource_class: 'gpu:llm', status: 'queued' },
+          {
+            id: 'outline',
+            label: action === 'draft' ? 'Build outline' : `Plan ${actionLabel(action)}`,
+            resource_class: 'gpu:llm',
+            status: 'queued',
+          },
+          {
+            id: 'draft',
+            label: action === 'draft' ? 'Draft story' : actionLabel(action),
+            resource_class: 'gpu:llm',
+            status: 'queued',
+          },
           { id: 'store-story', label: 'Store story asset', resource_class: 'cpu', status: 'queued' },
         ],
       }),
     onSuccess: async (job, request) => {
       reset({ providerId: request.values.providerId, title: request.values.title, premise: request.values.premise });
+      setIsNewDraft(false);
       if (job.status === 'completed' && fullJobOutputText(job)) {
         setSelectedLibraryItemId(libraryJobId(job.id));
+        setActiveLibrarySection('stories');
       }
       if (request.interactionMode === 'story') {
         setStoryModeResponse('');
@@ -159,19 +177,25 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const watchedProvider = watch('providerId');
   const storyProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
   const queriedStoryJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'storyteller') ?? [];
-  const storyJobs = useMemo(() => includeMutationJob(queriedStoryJobs, createJobMutation.data ?? null), [queriedStoryJobs, createJobMutation.data]);
+  const storyJobs = useMemo(
+    () => includeMutationJob(queriedStoryJobs, createJobMutation.data ?? null),
+    [queriedStoryJobs, createJobMutation.data],
+  );
   const completedStoryJobs = storyJobs.filter((job) => job.status === 'completed' && fullJobOutputText(job));
   const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
   const libraryItems = useMemo(
     () => buildStoryLibraryItems(savedDraft, completedStoryJobs, storyAssets as StoryAssetSummary[]),
     [savedDraft, completedStoryJobs, storyAssets],
   );
-  const activeLibraryItem =
-    libraryItems.find((item) => item.id === selectedLibraryItemId) ??
-    libraryItems.find((item) => item.source === 'job') ??
-    libraryItems.find((item) => item.source === 'draft') ??
-    null;
-  const activeJob = activeLibraryItem?.jobId ? completedStoryJobs.find((job) => job.id === activeLibraryItem.jobId) ?? null : null;
+  const activeLibraryItem = isNewDraft
+    ? null
+    : libraryItems.find((item) => item.id === selectedLibraryItemId) ??
+      libraryItems.find((item) => item.source === 'job') ??
+      libraryItems.find((item) => item.source === 'draft') ??
+      null;
+  const activeJob = activeLibraryItem?.jobId
+    ? completedStoryJobs.find((job) => job.id === activeLibraryItem.jobId) ?? null
+    : null;
   const activeAsset = activeLibraryItem?.assetId
     ? (storyAssets as StoryAssetSummary[]).find((asset) => asset.id === activeLibraryItem.assetId) ?? null
     : null;
@@ -181,9 +205,11 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     enabled: Boolean(activeAsset?.id),
     retry: false,
   });
-  const activeAssetText = activeAsset && assetContentQuery.data?.asset.id === activeAsset.id ? assetContentQuery.data.content : null;
+  const activeAssetText = activeAsset && assetContentQuery.data?.asset.id === activeAsset.id
+    ? assetContentQuery.data.content
+    : null;
   const activeStoryText = activeLibraryItem?.content ?? activeAssetText ?? null;
-  const storyTitle = activeLibraryItem?.title || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
+  const storyTitle = activeLibraryItem?.title || watchedTitle || 'Untitled story';
   const premise = activeLibraryItem?.source === 'draft'
     ? savedDraft?.premise ?? watchedPremise
     : watchedPremise || jobInputString(activeJob, 'premise') || '';
@@ -198,12 +224,17 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const chapterCount = outline.length || Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
   const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
-  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+  const submitStatus = createJobMutation.isPending
+    ? 'queueing'
+    : createJobMutation.isError
+      ? 'error'
+      : createJobMutation.data?.status ?? 'ready';
   const canPersistStory = Boolean(activeStoryText?.trim());
   const storyModeChoices = useMemo(() => suggestedStoryMoves(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
 
   useEffect(() => {
-    if (selectedLibraryItemId && !libraryItems.some((item) => item.id === selectedLibraryItemId)) {
+    if (!selectedLibraryItemId) return;
+    if (!libraryItems.some((item) => item.id === selectedLibraryItemId)) {
       setSelectedLibraryItemId(null);
     }
   }, [libraryItems, selectedLibraryItemId]);
@@ -222,7 +253,13 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
 
   const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
     setSaveFeedback(null);
-    createJobMutation.mutate({ values, action, sourceText: activeStoryText, sourceJobId, interactionMode: 'writing' });
+    createJobMutation.mutate({
+      values,
+      action,
+      sourceText: activeStoryText,
+      sourceJobId,
+      interactionMode: 'writing',
+    });
   };
 
   const submitQuickAction = (action: StoryQuickActionMode) => {
@@ -245,14 +282,30 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   };
 
   const selectLibraryItem = (itemId: string) => {
+    const item = libraryItems.find((entry) => entry.id === itemId);
+    setIsNewDraft(false);
     setSelectedLibraryItemId(itemId);
     setSelectedChapter(1);
     setSaveFeedback(null);
+    if (item?.source === 'draft') setActiveLibrarySection('drafts');
+    if (item?.source === 'job' || item?.source === 'asset') setActiveLibrarySection('stories');
+  };
+
+  const startNewDraft = () => {
+    reset({ providerId: watchedProvider, title: '', premise: '' });
+    setActiveLibrarySection('drafts');
+    setIsNewDraft(true);
+    setSelectedLibraryItemId(null);
+    setSelectedChapter(1);
+    setWorkspaceMode('writing');
+    setSaveFeedback({ kind: 'saved', message: 'New draft ready. Add a premise to begin.' });
   };
 
   const selectOutlineTarget = (chapterNumber: number, targetId: string) => {
     setSelectedChapter(chapterNumber);
-    const target = document.getElementById(targetId) as (HTMLElement & { scrollIntoView?: (options?: ScrollIntoViewOptions) => void }) | null;
+    const target = document.getElementById(targetId) as
+      | (HTMLElement & { scrollIntoView?: (options?: ScrollIntoViewOptions) => void })
+      | null;
     target?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   };
 
@@ -291,14 +344,22 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
         metadata: { source: activeLibraryItem?.source ?? 'workspace' },
       });
       setSaveFeedback({ kind: 'saved', message: `Saved “${storyTitle}” as a shared story asset.` });
+      setIsNewDraft(false);
+      setActiveLibrarySection('stories');
       setSelectedLibraryItemId(libraryAssetId(saved.asset.id));
       await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
     } catch {
       try {
         persistLocalDraft(draft);
+        setActiveLibrarySection('drafts');
+        setSelectedLibraryItemId('draft:last');
+        setIsNewDraft(false);
         setSaveFeedback({ kind: 'saved', message: `Saved “${storyTitle}” locally.` });
       } catch (error) {
-        setSaveFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'Unable to save story.' });
+        setSaveFeedback({
+          kind: 'error',
+          message: error instanceof Error ? error.message : 'Unable to save story.',
+        });
       }
     }
   };
@@ -309,7 +370,15 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       return;
     }
     try {
-      const markdown = formatStoryMarkdown({ title: storyTitle, premise, providerLabel, wordCount, chapterCount, sourceJobId, text: activeStoryText });
+      const markdown = formatStoryMarkdown({
+        title: storyTitle,
+        premise,
+        providerLabel,
+        wordCount,
+        chapterCount,
+        sourceJobId,
+        text: activeStoryText,
+      });
       const filename = `${slugify(storyTitle || 'story')}.md`;
       if (typeof Blob === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
         setSaveFeedback({ kind: 'exported', message: `Prepared Markdown export for ${filename}.` });
@@ -334,27 +403,34 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   return (
     <WorkspacePanel>
       <div className="storyteller-workspace" aria-labelledby="module-title">
-        <StoryLibrary activeItemId={activeLibraryItem?.id ?? null} items={libraryItems} onSelect={selectLibraryItem} />
+        <StoryLibrary
+          activeItemId={activeLibraryItem?.id ?? null}
+          activeSection={activeLibrarySection}
+          items={libraryItems}
+          onNewDraft={startNewDraft}
+          onSectionChange={setActiveLibrarySection}
+          onSelect={selectLibraryItem}
+        />
         <main className="storyteller-stage">
           <StoryProjectHeader
-            title={storyTitle}
-            premise={premise}
-            providerLabel={providerLabel}
-            wordCount={wordCount}
+            canPersistStory={canPersistStory}
             chapterCount={chapterCount}
             moduleRoute={module.route}
-            canPersistStory={canPersistStory}
-            saveFeedback={saveFeedback}
-            onSave={saveStoryDraft}
             onExport={exportStoryMarkdown}
+            onSave={saveStoryDraft}
+            premise={premise}
+            providerLabel={providerLabel}
+            saveFeedback={saveFeedback}
+            title={storyTitle}
+            wordCount={wordCount}
           />
           <StoryModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
           {workspaceMode === 'story' ? (
             <StoryModePanel
+              activeAsset={activeAsset}
               activeChapterLabel={activeChapter?.label ?? `Chapter ${selectedChapter}`}
               activeStoryText={activeStoryText}
               assetError={assetContentQuery.error}
-              activeAsset={activeAsset}
               isAssetLoading={assetContentQuery.isLoading || assetContentQuery.isFetching}
               module={module}
               onMove={submitStoryModeMove}
@@ -387,24 +463,28 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
                   )}
                 </section>
                 <StoryControls
+                  createJobMutation={createJobMutation}
+                  errors={errors}
+                  handleSubmit={handleSubmit}
+                  latestJob={storyJobs[0] ?? null}
+                  onGenerate={(values) => submitStoryRequest(values, 'draft')}
                   providers={storyProviders}
                   register={register}
-                  errors={errors}
-                  createJobMutation={createJobMutation}
-                  submitStatus={submitStatus}
-                  selectedTone={selectedTone}
-                  setSelectedTone={setSelectedTone}
-                  writingStyle={writingStyle}
-                  setWritingStyle={setWritingStyle}
                   selectedChapter={selectedChapter}
+                  selectedTone={selectedTone}
                   setSelectedChapter={setSelectedChapter}
-                  onGenerate={(values) => submitStoryRequest(values, 'draft')}
-                  latestJob={storyJobs[0] ?? null}
-                  handleSubmit={handleSubmit}
+                  setSelectedTone={setSelectedTone}
+                  setWritingStyle={setWritingStyle}
+                  submitStatus={submitStatus}
+                  writingStyle={writingStyle}
                 />
               </div>
               <StoryActionBar disabled={createJobMutation.isPending} onAction={submitQuickAction} />
-              <StoryVersions activeJobId={activeJob?.id ?? null} jobs={completedStoryJobs} onSelect={(jobId) => selectLibraryItem(libraryJobId(jobId))} />
+              <StoryVersions
+                activeJobId={activeJob?.id ?? null}
+                jobs={completedStoryJobs}
+                onSelect={(jobId) => selectLibraryItem(libraryJobId(jobId))}
+              />
             </>
           )}
         </main>
@@ -468,7 +548,9 @@ function StoryModePanel({
         <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
         {latestPage ? (
           <div className="story-mode-page">
-            {storyParagraphs(latestPage).map((paragraph, index) => <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>)}
+            {storyParagraphs(latestPage).map((paragraph, index) => (
+              <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>
+            ))}
           </div>
         ) : (
           <StoryEmptyState
@@ -522,14 +604,20 @@ function StoryEmptyState({ activeAsset, assetError, isAssetLoading, module, stor
       : isAssetLoading
         ? 'Loading story asset content…'
         : 'This story asset is selected but has no readable manuscript text.';
-    return <div className="storyteller-empty-manuscript" role="status"><p className="eyebrow">Story asset</p><h3>{storyTitle}</h3><p>{message}</p></div>;
+    return (
+      <div className="storyteller-empty-manuscript" role="status">
+        <p className="eyebrow">Story asset</p>
+        <h3>{storyTitle}</h3>
+        <p>{message}</p>
+      </div>
+    );
   }
   return (
     <div className="storyteller-empty-manuscript" role="status">
       <p className="eyebrow">Feature module</p>
       <h3>{module.label}</h3>
       <p>{module.summary}</p>
-      <p>Start with a premise, choose a tone, then generate the first scene. Completed output will appear here as a manuscript instead of a job-card preview.</p>
+      <p>Start with a premise, choose a tone, then generate the first scene.</p>
     </div>
   );
 }
@@ -551,22 +639,92 @@ interface StoryControlsProps {
   latestJob: JobRecord | null;
 }
 
-function StoryControls({ providers, register, errors, createJobMutation, submitStatus, selectedTone, setSelectedTone, writingStyle, setWritingStyle, selectedChapter, setSelectedChapter, onGenerate, handleSubmit, latestJob }: StoryControlsProps) {
+function StoryControls({
+  providers,
+  register,
+  errors,
+  createJobMutation,
+  submitStatus,
+  selectedTone,
+  setSelectedTone,
+  writingStyle,
+  setWritingStyle,
+  selectedChapter,
+  setSelectedChapter,
+  onGenerate,
+  handleSubmit,
+  latestJob,
+}: StoryControlsProps) {
   return (
     <aside className="storyteller-controls" aria-label="Story controls">
-      <div className="storyteller-panel-heading"><div><p className="eyebrow">Story controls</p><h3>Guide the next passage</h3></div><OmnixStatusPill>{submitStatus}</OmnixStatusPill></div>
+      <div className="storyteller-panel-heading">
+        <div><p className="eyebrow">Story controls</p><h3>Guide the next passage</h3></div>
+        <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
+      </div>
       <form className="storyteller-form" onSubmit={handleSubmit(onGenerate)}>
-        <label>Provider<select {...register('providerId')}><option value="">Default LLM provider</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
+        <label>
+          Provider
+          <select {...register('providerId')}>
+            <option value="">Default LLM provider</option>
+            {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
+          </select>
+        </label>
         <label>Title<input {...register('title')} placeholder="Untitled story" /></label>
-        <label>Premise <span>0/500</span><textarea rows={4} aria-invalid={Boolean(errors.premise)} {...register('premise', { required: true })} placeholder="A young herbalist discovers a small secret that could change her quiet valley." /></label>
-        <div className="storyteller-control-block"><span>Tone & mood</span><div className="storyteller-chip-row">{toneOptions.map((tone) => <button className={tone === selectedTone ? 'active' : ''} key={tone} type="button" onClick={() => setSelectedTone(tone)}>{tone}</button>)}</div></div>
-        <label>Writing style<select value={writingStyle} onChange={(event) => setWritingStyle(event.target.value)}>{styleOptions.map((style) => <option key={style} value={style}>{style}</option>)}</select></label>
-        <div className="storyteller-chapter-controls"><span>Chapter</span><button type="button" onClick={() => setSelectedChapter(Math.max(1, selectedChapter - 1))}>‹</button><strong>{selectedChapter}</strong><button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>›</button><button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>New chapter</button></div>
-        <Button className="storyteller-generate" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>{createJobMutation.isPending ? 'Generating story…' : 'Generate story'}</Button>
+        <label>
+          Premise <span>0/500</span>
+          <textarea
+            aria-invalid={Boolean(errors.premise)}
+            placeholder="A young herbalist discovers a small secret that could change her quiet valley."
+            rows={4}
+            {...register('premise', { required: true })}
+          />
+        </label>
+        <div className="storyteller-control-block">
+          <span>Tone & mood</span>
+          <div className="storyteller-chip-row">
+            {toneOptions.map((tone) => (
+              <button className={tone === selectedTone ? 'active' : ''} key={tone} type="button" onClick={() => setSelectedTone(tone)}>{tone}</button>
+            ))}
+          </div>
+        </div>
+        <label>
+          Writing style
+          <select value={writingStyle} onChange={(event) => setWritingStyle(event.target.value)}>
+            {styleOptions.map((style) => <option key={style} value={style}>{style}</option>)}
+          </select>
+        </label>
+        <div className="storyteller-chapter-controls">
+          <span>Chapter</span>
+          <button type="button" onClick={() => setSelectedChapter(Math.max(1, selectedChapter - 1))}>‹</button>
+          <strong>{selectedChapter}</strong>
+          <button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>›</button>
+          <button type="button" onClick={() => setSelectedChapter(selectedChapter + 1)}>New chapter</button>
+        </div>
+        <Button className="storyteller-generate" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+          {createJobMutation.isPending ? 'Generating story…' : 'Generate story'}
+        </Button>
       </form>
       <FeatureValidationMessage show={Boolean(errors.premise)} message="Enter a premise before generating a story." />
-      <FeatureSubmitFeedback error={createJobMutation.error} errorPrefix="Story request" isError={createJobMutation.isError} isPending={createJobMutation.isPending} jobId={createJobMutation.data?.id} pendingMessage="Generating story…" successPrefix={createJobMutation.data?.status === 'completed' ? 'Story generated' : 'Story job queued'} />
-      <div className="storyteller-output-status"><div className="storyteller-panel-heading compact"><p className="eyebrow">Output status</p><button type="button">Clear</button></div>{latestJob ? <article className="storyteller-output-card"><div><strong>{latestJob.type}</strong><OmnixStatusPill>{latestJob.status}</OmnixStatusPill></div><Progress value={progressPercent(latestJob.progress)} aria-label={`${latestJob.type} progress`} /><small>{latestJob.resource_class}</small>{fullJobOutputText(latestJob) ? <p>{truncate(fullJobOutputText(latestJob) ?? '', 180)}</p> : null}</article> : <div className="storyteller-empty-small">No generation yet.</div>}</div>
+      <FeatureSubmitFeedback
+        error={createJobMutation.error}
+        errorPrefix="Story request"
+        isError={createJobMutation.isError}
+        isPending={createJobMutation.isPending}
+        jobId={createJobMutation.data?.id}
+        pendingMessage="Generating story…"
+        successPrefix={createJobMutation.data?.status === 'completed' ? 'Story generated' : 'Story job queued'}
+      />
+      <div className="storyteller-output-status">
+        <div className="storyteller-panel-heading compact"><p className="eyebrow">Output status</p><button type="button">Clear</button></div>
+        {latestJob ? (
+          <article className="storyteller-output-card">
+            <div><strong>{latestJob.type}</strong><OmnixStatusPill>{latestJob.status}</OmnixStatusPill></div>
+            <Progress value={progressPercent(latestJob.progress)} aria-label={`${latestJob.type} progress`} />
+            <small>{latestJob.resource_class}</small>
+            {fullJobOutputText(latestJob) ? <p>{truncate(fullJobOutputText(latestJob) ?? '', 180)}</p> : null}
+          </article>
+        ) : <div className="storyteller-empty-small">No generation yet.</div>}
+      </div>
     </aside>
   );
 }
@@ -586,44 +744,229 @@ function StoryProjectHeader({ title, premise, providerLabel, wordCount, chapterC
   return (
     <header className="storyteller-project-header">
       <div className="storyteller-cover" aria-hidden="true" />
-      <div className="storyteller-project-copy"><p className="eyebrow">{moduleRoute}</p><h1>{title}</h1><p>{premise || 'A new local-first story draft.'}</p><div className="storyteller-tags"><span>Fantasy</span><span>Cozy</span><span>Mystery</span><span>Slice of Life</span></div>{saveFeedback ? <p className={`storyteller-persist-feedback ${saveFeedback.kind}`} role="status">{saveFeedback.message}</p> : null}</div>
-      <div className="storyteller-project-stats"><div><strong>{wordCount.toLocaleString()}</strong><span>Words</span></div><div><strong>{chapterCount}</strong><span>Chapters</span></div><div><strong>{providerLabel}</strong><span>Default provider</span></div></div>
-      <div className="storyteller-project-actions"><button disabled={!canPersistStory} type="button" onClick={onSave}>Save story</button><button disabled={!canPersistStory} type="button" onClick={onExport}>Export Markdown</button></div>
+      <div className="storyteller-project-copy">
+        <p className="eyebrow">{moduleRoute}</p>
+        <h1>{title}</h1>
+        <p>{premise || 'A new local-first story draft.'}</p>
+        <div className="storyteller-tags"><span>Fantasy</span><span>Cozy</span><span>Mystery</span><span>Slice of Life</span></div>
+        {saveFeedback ? <p className={`storyteller-persist-feedback ${saveFeedback.kind}`} role="status">{saveFeedback.message}</p> : null}
+      </div>
+      <div className="storyteller-project-stats">
+        <div><strong>{wordCount.toLocaleString()}</strong><span>Words</span></div>
+        <div><strong>{chapterCount}</strong><span>Chapters</span></div>
+        <div><strong>{providerLabel}</strong><span>Default provider</span></div>
+      </div>
+      <div className="storyteller-project-actions">
+        <button disabled={!canPersistStory} type="button" onClick={onSave}>Save story</button>
+        <button disabled={!canPersistStory} type="button" onClick={onExport}>Export Markdown</button>
+      </div>
     </header>
   );
 }
 
-function StoryLibrary({ items, activeItemId, onSelect }: { items: StoryLibraryItem[]; activeItemId: string | null; onSelect: (itemId: string) => void }) {
+function StoryLibrary({
+  items,
+  activeItemId,
+  activeSection,
+  onNewDraft,
+  onSectionChange,
+  onSelect,
+}: {
+  items: StoryLibraryItem[];
+  activeItemId: string | null;
+  activeSection: StoryLibrarySection;
+  onNewDraft: () => void;
+  onSectionChange: (section: StoryLibrarySection) => void;
+  onSelect: (itemId: string) => void;
+}) {
+  const sectionItems = activeSection === 'drafts'
+    ? items.filter((item) => item.source === 'draft')
+    : activeSection === 'stories'
+      ? items.filter((item) => item.source !== 'draft')
+      : [];
   return (
     <aside className="storyteller-library" aria-label="Story library">
-      <div className="storyteller-panel-heading compact"><p className="eyebrow">Library</p><button type="button">+</button></div>
-      <nav><a className="active" href="#drafts">Drafts</a><a href="#stories">Stories</a><a href="#characters">Characters</a><a href="#world-notes">World Notes</a><a href="#prompts">Prompts</a></nav>
-      <section><p className="eyebrow">Recent stories</p><div className="storyteller-recent-list">{items.length ? items.slice(0, 6).map((item) => <button aria-pressed={item.id === activeItemId} className={item.id === activeItemId ? 'active' : ''} key={item.id} type="button" onClick={() => onSelect(item.id)}><span className={`storyteller-thumb ${item.source === 'asset' ? 'muted' : ''}`} /><div><strong>{item.title}</strong><small>{item.subtitle}</small></div></button>) : <article><span className="storyteller-thumb muted" /><div><strong>No stories yet</strong><small>Generate or save a story</small></div></article>}</div></section>
-      <button className="storyteller-trash" type="button">Trash</button>
+      <div className="storyteller-panel-heading compact">
+        <p className="eyebrow">Library</p>
+        <button aria-label="New story draft" type="button" onClick={onNewDraft}>+</button>
+      </div>
+      <nav aria-label="Story library sections">
+        {librarySections.map((section) => (
+          <button
+            aria-pressed={activeSection === section.id}
+            className={activeSection === section.id ? 'active' : ''}
+            key={section.id}
+            type="button"
+            onClick={() => onSectionChange(section.id)}
+          >
+            {section.label}
+          </button>
+        ))}
+      </nav>
+      <section className="storyteller-library-section" aria-label={`${librarySectionLabel(activeSection)} library pane`}>
+        <p className="eyebrow">{librarySectionLabel(activeSection)}</p>
+        {sectionItems.length ? (
+          <div className="storyteller-recent-list">
+            {sectionItems.map((item) => (
+              <LibraryItemButton activeItemId={activeItemId} item={item} key={item.id} onSelect={onSelect} />
+            ))}
+          </div>
+        ) : (
+          <LibrarySectionEmpty section={activeSection} onNewDraft={onNewDraft} />
+        )}
+      </section>
+      <section>
+        <p className="eyebrow">Recent stories</p>
+        <div className="storyteller-recent-list">
+          {items.length ? (
+            items.slice(0, 6).map((item) => (
+              <LibraryItemButton activeItemId={activeItemId} item={item} key={item.id} onSelect={onSelect} />
+            ))
+          ) : (
+            <article>
+              <span className="storyteller-thumb muted" />
+              <div><strong>No stories yet</strong><small>Generate or save a story</small></div>
+            </article>
+          )}
+        </div>
+      </section>
+      <button
+        aria-pressed={activeSection === 'trash'}
+        className={`storyteller-trash ${activeSection === 'trash' ? 'active' : ''}`}
+        type="button"
+        onClick={() => onSectionChange('trash')}
+      >
+        Trash
+      </button>
     </aside>
   );
 }
 
+function LibraryItemButton({ item, activeItemId, onSelect }: {
+  item: StoryLibraryItem;
+  activeItemId: string | null;
+  onSelect: (itemId: string) => void;
+}) {
+  return (
+    <button
+      aria-pressed={item.id === activeItemId}
+      className={item.id === activeItemId ? 'active' : ''}
+      type="button"
+      onClick={() => onSelect(item.id)}
+    >
+      <span className={`storyteller-thumb ${item.source === 'asset' ? 'muted' : ''}`} />
+      <div><strong>{item.title}</strong><small>{item.subtitle}</small></div>
+    </button>
+  );
+}
+
+function LibrarySectionEmpty({ section, onNewDraft }: { section: StoryLibrarySection; onNewDraft: () => void }) {
+  const copy: Record<StoryLibrarySection, { title: string; body: string }> = {
+    drafts: { title: 'No saved drafts', body: 'Start a blank draft or save the active manuscript.' },
+    stories: { title: 'No story assets yet', body: 'Generated and saved stories will appear here.' },
+    characters: { title: 'Characters not created yet', body: 'Character cards will attach cast details to future generations.' },
+    'world-notes': { title: 'World notes not created yet', body: 'World notes will collect lore, places, factions, and rules.' },
+    prompts: { title: 'Prompt presets not created yet', body: 'Prompt presets will save reusable Storyteller instructions.' },
+    trash: { title: 'Trash is empty', body: 'Deleted drafts and story assets will be recoverable here later.' },
+  };
+  return (
+    <article className="storyteller-library-empty" role="status">
+      <strong>{copy[section].title}</strong>
+      <small>{copy[section].body}</small>
+      {section === 'drafts' ? <button type="button" onClick={onNewDraft}>Start blank draft</button> : null}
+    </article>
+  );
+}
+
 function StoryActionBar({ disabled, onAction }: { disabled: boolean; onAction: (action: StoryQuickActionMode) => void }) {
-  return <section className="storyteller-action-bar" aria-label="Story actions">{quickActions.map((action) => <button disabled={disabled} key={action.mode} type="button" onClick={() => onAction(action.mode)}><strong>{action.label}</strong><span>{action.description}</span></button>)}</section>;
+  return (
+    <section className="storyteller-action-bar" aria-label="Story actions">
+      {quickActions.map((action) => (
+        <button disabled={disabled} key={action.mode} type="button" onClick={() => onAction(action.mode)}>
+          <strong>{action.label}</strong>
+          <span>{action.description}</span>
+        </button>
+      ))}
+    </section>
+  );
 }
 
 function StoryVersions({ activeJobId, jobs, onSelect }: { activeJobId: string | null; jobs: JobRecord[]; onSelect: (jobId: string) => void }) {
-  return <section className="storyteller-versions" aria-label="Recent versions"><div><p className="eyebrow">Recent versions</p></div>{jobs.slice(0, 5).length ? jobs.slice(0, 5).map((job, index) => <button aria-pressed={job.id === activeJobId} className={job.id === activeJobId ? 'active' : ''} key={job.id} type="button" onClick={() => onSelect(job.id)}><strong>{index === 0 ? 'v7' : `v${Math.max(1, 7 - index)}`}</strong><span>{storyVersionTitle(job, index)}</span></button>) : <span>No versions yet</span>}</section>;
+  const visibleJobs = jobs.slice(0, 5);
+  return (
+    <section className="storyteller-versions" aria-label="Recent versions">
+      <div><p className="eyebrow">Recent versions</p></div>
+      {visibleJobs.length ? visibleJobs.map((job, index) => (
+        <button
+          aria-pressed={job.id === activeJobId}
+          className={job.id === activeJobId ? 'active' : ''}
+          key={job.id}
+          type="button"
+          onClick={() => onSelect(job.id)}
+        >
+          <strong>{index === 0 ? 'v7' : `v${Math.max(1, 7 - index)}`}</strong>
+          <span>{storyVersionTitle(job, index)}</span>
+        </button>
+      )) : <span>No versions yet</span>}
+    </section>
+  );
 }
 
-function StoryOutline({ chapters, selectedChapter, onSelect }: { chapters: StoryOutlineChapter[]; selectedChapter: number; onSelect: (chapterNumber: number, targetId: string) => void }) {
-  return <aside className="storyteller-outline" aria-label="Story outline"><div className="storyteller-panel-heading compact"><p className="eyebrow">Outline</p><button type="button">☰</button></div>{chapters.map((chapter) => <article className={selectedChapter === chapter.number ? 'active' : ''} key={chapter.id}><button type="button" onClick={() => onSelect(chapter.number, chapter.id)}><strong>{chapter.label}</strong><span>{chapter.title}</span></button><ol>{chapter.scenes.map((scene, sceneIndex) => <li className={selectedChapter === chapter.number && sceneIndex === 0 ? 'active' : ''} key={scene.id}><button type="button" onClick={() => onSelect(chapter.number, scene.id)}><span>{scene.label}</span><strong>{scene.title}</strong></button></li>)}</ol></article>)}<button className="storyteller-add-chapter" type="button">Add chapter</button></aside>;
+function StoryOutline({ chapters, selectedChapter, onSelect }: {
+  chapters: StoryOutlineChapter[];
+  selectedChapter: number;
+  onSelect: (chapterNumber: number, targetId: string) => void;
+}) {
+  return (
+    <aside className="storyteller-outline" aria-label="Story outline">
+      <div className="storyteller-panel-heading compact"><p className="eyebrow">Outline</p><button type="button">☰</button></div>
+      {chapters.map((chapter) => (
+        <article className={selectedChapter === chapter.number ? 'active' : ''} key={chapter.id}>
+          <button type="button" onClick={() => onSelect(chapter.number, chapter.id)}>
+            <strong>{chapter.label}</strong>
+            <span>{chapter.title}</span>
+          </button>
+          <ol>
+            {chapter.scenes.map((scene, sceneIndex) => (
+              <li className={selectedChapter === chapter.number && sceneIndex === 0 ? 'active' : ''} key={scene.id}>
+                <button type="button" onClick={() => onSelect(chapter.number, scene.id)}>
+                  <span>{scene.label}</span>
+                  <strong>{scene.title}</strong>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </article>
+      ))}
+      <button className="storyteller-add-chapter" type="button">Add chapter</button>
+    </aside>
+  );
 }
 
 function StoryText({ text, outline }: { text: string; outline: StoryOutlineChapter[] }) {
   const blocks = useMemo(() => storyTextBlocks(text, outline), [text, outline]);
-  return <div className="storyteller-prose">{blocks.map((block, index) => {
-    const key = `${block.kind}-${block.id ?? block.text.slice(0, 18)}-${index}`;
-    if (block.kind === 'chapter') return <h3 id={block.id} key={key} tabIndex={-1}>{block.text}</h3>;
-    if (block.kind === 'scene') return <h4 id={block.id} key={key} tabIndex={-1}>{block.text}</h4>;
-    return <p key={key}>{block.text}</p>;
-  })}</div>;
+  return (
+    <div className="storyteller-prose">
+      {blocks.map((block, index) => {
+        const key = `${block.kind}-${block.id ?? block.text.slice(0, 18)}-${index}`;
+        if (block.kind === 'chapter') return <h3 id={block.id} key={key} tabIndex={-1}>{block.text}</h3>;
+        if (block.kind === 'scene') return <h4 id={block.id} key={key} tabIndex={-1}>{block.text}</h4>;
+        return <p key={key}>{block.text}</p>;
+      })}
+    </div>
+  );
+}
+
+const librarySections: Array<{ id: StoryLibrarySection; label: string }> = [
+  { id: 'drafts', label: 'Drafts' },
+  { id: 'stories', label: 'Stories' },
+  { id: 'characters', label: 'Characters' },
+  { id: 'world-notes', label: 'World Notes' },
+  { id: 'prompts', label: 'Prompts' },
+];
+
+function librarySectionLabel(section: StoryLibrarySection): string {
+  return librarySections.find((entry) => entry.id === section)?.label ?? 'Trash';
 }
 
 function llmCapableProviders(payload: ProviderFacadePayload | undefined) {
@@ -635,7 +978,8 @@ function progressPercent(progress: { current: number; total: number } | undefine
 }
 
 function fullJobOutputText(job: { output_refs?: Array<{ content?: unknown }>; logs?: Array<{ content?: unknown }> }): string | null {
-  const content = job.output_refs?.find((ref) => typeof ref.content === 'string')?.content ?? job.logs?.find((log) => typeof log.content === 'string')?.content;
+  const content = job.output_refs?.find((ref) => typeof ref.content === 'string')?.content ??
+    job.logs?.find((log) => typeof log.content === 'string')?.content;
   return typeof content === 'string' && content.trim() ? content : null;
 }
 
@@ -644,9 +988,33 @@ function includeMutationJob(jobs: JobRecord[], mutationJob: JobRecord | null): J
 }
 
 function buildStoryLibraryItems(savedDraft: SavedStoryDraft | null, jobs: JobRecord[], assets: StoryAssetSummary[]): StoryLibraryItem[] {
-  const draftItems: StoryLibraryItem[] = savedDraft?.content ? [{ id: 'draft:last', source: 'draft', title: savedDraft.title || 'Saved local draft', subtitle: `${countWords(savedDraft.content).toLocaleString()} words • saved draft`, content: savedDraft.content, jobId: savedDraft.sourceJobId ?? null, assetId: null }] : [];
-  const jobItems = jobs.map((job) => ({ id: libraryJobId(job.id), source: 'job' as const, title: jobInputString(job, 'title') || 'Untitled story', subtitle: `${countWords(fullJobOutputText(job) ?? '').toLocaleString()} words • ${jobInputString(job, 'action') ?? 'draft'}`, content: fullJobOutputText(job), jobId: job.id, assetId: null }));
-  const assetItems = assets.map((asset) => ({ id: libraryAssetId(asset.id), source: 'asset' as const, title: storyAssetTitle(asset.storage_path), subtitle: `${asset.type}${asset.created_at ? ` • ${shortDate(asset.created_at)}` : ''}`, content: null, jobId: null, assetId: asset.id }));
+  const draftItems: StoryLibraryItem[] = savedDraft?.content ? [{
+    id: 'draft:last',
+    source: 'draft',
+    title: savedDraft.title || 'Saved local draft',
+    subtitle: `${countWords(savedDraft.content).toLocaleString()} words • saved draft`,
+    content: savedDraft.content,
+    jobId: savedDraft.sourceJobId ?? null,
+    assetId: null,
+  }] : [];
+  const jobItems = jobs.map((job) => ({
+    id: libraryJobId(job.id),
+    source: 'job' as const,
+    title: jobInputString(job, 'title') || 'Untitled story',
+    subtitle: `${countWords(fullJobOutputText(job) ?? '').toLocaleString()} words • ${jobInputString(job, 'action') ?? 'draft'}`,
+    content: fullJobOutputText(job),
+    jobId: job.id,
+    assetId: null,
+  }));
+  const assetItems = assets.map((asset) => ({
+    id: libraryAssetId(asset.id),
+    source: 'asset' as const,
+    title: storyAssetTitle(asset.storage_path),
+    subtitle: `${asset.type}${asset.created_at ? ` • ${shortDate(asset.created_at)}` : ''}`,
+    content: null,
+    jobId: null,
+    assetId: asset.id,
+  }));
   return [...draftItems, ...jobItems, ...assetItems];
 }
 
@@ -695,101 +1063,138 @@ function providerDisplayName(providers: Array<{ id: string; label: string }>, se
 function countWords(text: string): number { return text.trim() ? text.trim().split(/\s+/).length : 0; }
 function truncate(text: string, length: number): string { return text.length > length ? `${text.slice(0, length)}…` : text; }
 
-function storyVersionTitle(job: JobRecord | null, index: number): string {
-  if (!job) return index === 0 ? 'Just now' : 'Draft';
-  const action = jobInputString(job, 'action');
-  const title = jobInputString(job, 'title') || 'Untitled story';
-  return action && action !== 'draft' ? `${actionLabel(action as StoryActionMode)} • ${title}` : title;
+function storyVersionTitle(job: JobRecord, index: number): string {
+  return jobInputString(job, 'action') ?? (index === 0 ? 'Just now' : 'Previous');
 }
 
-function promptTemplateForAction(action: StoryActionMode): string { return `storyteller.${action}.v1`; }
+function shortDate(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function promptTemplateForAction(action: StoryActionMode): string {
+  return `storyteller.${action}.v1`;
+}
 
 function actionLabel(action: StoryActionMode): string {
-  switch (action) {
-    case 'continue': return 'Continue story';
-    case 'rewrite': return 'Rewrite paragraph';
-    case 'expand': return 'Expand scene';
-    case 'dialogue': return 'Dialogue polish';
-    case 'summarize': return 'Summarize';
-    case 'draft':
-    default: return 'Draft story';
-  }
-}
-
-function formatStoryMarkdown({ title, premise, providerLabel, wordCount, chapterCount, sourceJobId, text }: { title: string; premise: string; providerLabel: string; wordCount: number; chapterCount: number; sourceJobId: string | null; text: string }): string {
-  const metadata = [`Provider: ${providerLabel}`, `Words: ${wordCount}`, `Chapters: ${chapterCount}`, sourceJobId ? `Source job: ${sourceJobId}` : null, premise ? `Premise: ${premise}` : null].filter(Boolean);
-  return [`# ${title || 'Untitled story'}`, metadata.join('\n'), '---', text.trim(), ''].filter(Boolean).join('\n\n');
+  return action === 'dialogue' ? 'polish dialogue' : action;
 }
 
 function deriveStoryOutline(text: string | null, fallbackTitle: string): StoryOutlineChapter[] {
-  if (!text?.trim()) return [fallbackChapter(fallbackTitle)];
+  if (!text?.trim()) {
+    return [{ id: 'story-chapter-1', number: 1, label: 'Chapter 1', title: fallbackTitle, scenes: [{ id: 'story-scene-1-1', label: 'Scene 1', title: 'Opening' }] }];
+  }
   const chapters: StoryOutlineChapter[] = [];
-  let currentChapter: StoryOutlineChapter | null = null;
-  storyParagraphs(text).forEach((paragraph) => {
-    const heading = headingInfo(paragraph);
-    if (heading?.kind === 'chapter') {
-      const number = chapters.length + 1;
-      currentChapter = { id: sectionId('chapter', number, heading.title || `Chapter ${number}`), number, label: `Chapter ${number}`, title: heading.title || `Chapter ${number}`, scenes: [] };
-      chapters.push(currentChapter);
+  let current: StoryOutlineChapter | null = null;
+  text.split(/\n+/).forEach((line) => {
+    const cleaned = line.replace(/^#{1,4}\s*/, '').trim();
+    const chapterMatch = cleaned.match(/^chapter\s+(\d+)\s*[:\-–—]?\s*(.*)$/i);
+    const sceneMatch = cleaned.match(/^scene\s+(\d+)\s*[:\-–—]?\s*(.*)$/i);
+    if (chapterMatch) {
+      const number = Number(chapterMatch[1]);
+      current = {
+        id: `story-chapter-${number}`,
+        number,
+        label: `Chapter ${number}`,
+        title: chapterMatch[2]?.trim() || `Chapter ${number}`,
+        scenes: [],
+      };
+      chapters.push(current);
       return;
     }
-    if (!currentChapter) {
-      currentChapter = { id: sectionId('chapter', 1, fallbackTitle), number: 1, label: 'Chapter 1', title: fallbackTitle || 'Untitled story', scenes: [] };
-      chapters.push(currentChapter);
-    }
-    if (heading?.kind === 'scene') {
-      const sceneNumber = currentChapter.scenes.length + 1;
-      currentChapter.scenes.push({ id: sectionId('scene', sceneNumber, heading.title || `Scene ${sceneNumber}`), label: `Scene ${sceneNumber}`, title: heading.title || `Scene ${sceneNumber}` });
+    if (sceneMatch && current) {
+      const sceneNumber = Number(sceneMatch[1]);
+      current.scenes.push({
+        id: `story-scene-${current.number}-${sceneNumber}`,
+        label: `Scene ${sceneNumber}`,
+        title: sceneMatch[2]?.trim() || `Scene ${sceneNumber}`,
+      });
     }
   });
-  chapters.forEach((chapter) => {
-    if (!chapter.scenes.length) chapter.scenes.push({ id: sectionId('scene', 1, chapter.title), label: 'Scene 1', title: firstSceneTitle(text, chapter.title) });
-  });
-  return chapters.length ? chapters : [fallbackChapter(fallbackTitle)];
+  if (!chapters.length) {
+    chapters.push({
+      id: 'story-chapter-1',
+      number: 1,
+      label: 'Chapter 1',
+      title: fallbackTitle,
+      scenes: [{ id: 'story-scene-1-1', label: 'Scene 1', title: 'Opening' }],
+    });
+  }
+  return chapters.map((chapter) => ({
+    ...chapter,
+    scenes: chapter.scenes.length ? chapter.scenes : [{ id: `story-scene-${chapter.number}-1`, label: 'Scene 1', title: 'Opening' }],
+  }));
 }
 
 function storyTextBlocks(text: string, outline: StoryOutlineChapter[]): StoryTextBlock[] {
-  const chaptersByTitle = new Map(outline.map((chapter) => [chapter.title.toLowerCase(), chapter]));
-  const scenesByTitle = new Map(outline.flatMap((chapter) => chapter.scenes.map((scene) => [scene.title.toLowerCase(), scene])));
-  return storyParagraphs(text).map((paragraph) => {
-    const heading = headingInfo(paragraph);
-    if (heading?.kind === 'chapter') return { kind: 'chapter', id: chaptersByTitle.get((heading.title || paragraph).toLowerCase())?.id, text: heading.title || paragraph };
-    if (heading?.kind === 'scene') return { kind: 'scene', id: scenesByTitle.get((heading.title || paragraph).toLowerCase())?.id, text: heading.title || paragraph };
-    return { kind: 'paragraph', text: paragraph };
+  let chapterIndex = 0;
+  const sceneIndexByChapter = new Map<number, number>();
+  return text.split(/\n{2,}|\r?\n/).map((raw) => raw.trim()).filter(Boolean).map((line) => {
+    const cleaned = line.replace(/^#{1,4}\s*/, '').trim();
+    const chapterMatch = cleaned.match(/^chapter\s+(\d+)\s*[:\-–—]?\s*(.*)$/i);
+    const sceneMatch = cleaned.match(/^scene\s+(\d+)\s*[:\-–—]?\s*(.*)$/i);
+    if (chapterMatch) {
+      const number = Number(chapterMatch[1]) || ++chapterIndex;
+      return { kind: 'chapter', id: `story-chapter-${number}`, text: chapterMatch[2]?.trim() || `Chapter ${number}` };
+    }
+    if (sceneMatch) {
+      const activeChapter = outline[Math.max(0, chapterIndex - 1)] ?? outline[0];
+      const chapterNumber = activeChapter?.number ?? 1;
+      const sceneNumber = Number(sceneMatch[1]) || (sceneIndexByChapter.get(chapterNumber) ?? 0) + 1;
+      sceneIndexByChapter.set(chapterNumber, sceneNumber);
+      return { kind: 'scene', id: `story-scene-${chapterNumber}-${sceneNumber}`, text: sceneMatch[2]?.trim() || `Scene ${sceneNumber}` };
+    }
+    return { kind: 'paragraph', text: cleaned };
   });
 }
 
-function storyModeContext(activeStoryText: string | null, userResponse: string): string {
-  return [activeStoryText?.trim() || 'Begin the interactive story from the current premise.', `Player response: ${userResponse}`].join('\n\n');
+function storyParagraphs(text: string): string[] {
+  return text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
 }
 
 function lastStoryPage(text: string): string {
-  const paragraphs = storyParagraphs(text);
-  return paragraphs.slice(Math.max(0, paragraphs.length - 4)).join('\n\n');
+  const chunks = storyParagraphs(text);
+  return chunks.slice(Math.max(0, chunks.length - 5)).join('\n\n');
 }
 
 function suggestedStoryMoves(text: string | null, title: string): string[] {
-  const subject = title && title !== 'Untitled story' ? title : 'the scene';
-  const hasMystery = /door|key|shadow|voice|glass|memory|secret|whisper/i.test(text ?? '');
-  if (hasMystery) {
-    return ['Investigate the strange clue', 'Ask who is watching', 'Leave quietly before it notices'];
+  if (!text) {
+    return ['Begin the story quietly', 'Open with a mystery', 'Introduce the main character'];
   }
-  return [`Look closer at ${subject}`, 'Speak to the nearest character', 'Take a bold action'];
+  const lower = `${title} ${text}`.toLowerCase();
+  if (lower.includes('door')) return ['Open the door carefully', 'Listen before entering', 'Mark the doorway and leave'];
+  if (lower.includes('cat')) return ['Follow the cat', 'Offer the cat food', 'Ask why the cat is watching'];
+  return ['Investigate the strange clue', 'Ask who is watching', 'Leave quietly before it notices'];
 }
 
-function storyParagraphs(text: string): string[] { return text.split(/\n{2,}|\r?\n/).map((part) => part.trim()).filter(Boolean); }
-
-function headingInfo(paragraph: string): { kind: 'chapter' | 'scene'; title: string } | null {
-  const normalized = paragraph.replace(/^#+\s*/, '').trim();
-  const chapter = normalized.match(/^chapter\s+\d+\s*[:\-–—]?\s*(.*)$/i);
-  if (chapter) return { kind: 'chapter', title: chapter[1]?.trim() || normalized };
-  const scene = normalized.match(/^scene\s+\d+\s*[:\-–—]?\s*(.*)$/i);
-  if (scene) return { kind: 'scene', title: scene[1]?.trim() || normalized };
-  return null;
+function storyModeContext(activeStoryText: string | null, response: string): string {
+  return [activeStoryText, `Player response: ${response}`].filter(Boolean).join('\n\n');
 }
 
-function fallbackChapter(title: string): StoryOutlineChapter { return { id: sectionId('chapter', 1, title), number: 1, label: 'Chapter 1', title: title || 'Untitled story', scenes: [{ id: sectionId('scene', 1, title), label: 'Scene 1', title: title || 'Opening scene' }] }; }
-function firstSceneTitle(text: string | null, fallback: string): string { return storyParagraphs(text ?? '').find((paragraph) => !headingInfo(paragraph))?.slice(0, 48) || fallback || 'Opening scene'; }
-function sectionId(kind: 'chapter' | 'scene', number: number, title: string): string { return `${kind}-${number}-${slugify(title).slice(0, 40)}`; }
-function slugify(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'story'; }
-function shortDate(value: string): string { return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+function formatStoryMarkdown({ title, premise, providerLabel, wordCount, chapterCount, sourceJobId, text }: {
+  title: string;
+  premise: string;
+  providerLabel: string;
+  wordCount: number;
+  chapterCount: number;
+  sourceJobId: string | null;
+  text: string;
+}): string {
+  return [
+    `# ${title}`,
+    '',
+    `- Provider: ${providerLabel}`,
+    `- Words: ${wordCount}`,
+    `- Chapters: ${chapterCount}`,
+    sourceJobId ? `- Source job: ${sourceJobId}` : null,
+    premise ? `- Premise: ${premise}` : null,
+    '',
+    '---',
+    '',
+    text,
+    '',
+  ].filter((line) => line !== null).join('\n');
+}
+
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'story';
+}
