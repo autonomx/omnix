@@ -17,12 +17,16 @@ type StoryActionMode = 'draft' | 'continue' | 'rewrite' | 'expand' | 'dialogue' 
 type StoryQuickActionMode = Exclude<StoryActionMode, 'draft'>;
 type SaveFeedbackKind = 'saved' | 'exported' | 'error';
 type StoryLibrarySource = 'draft' | 'job' | 'asset';
+type StoryWorkspaceMode = 'writing' | 'story';
 
 interface StoryGenerationRequest {
   values: StorytellerFormValues;
   action: StoryActionMode;
   sourceText: string | null;
   sourceJobId: string | null;
+  interactionMode?: StoryWorkspaceMode;
+  userResponse?: string | null;
+  suggestedChoice?: string | null;
 }
 
 interface StoryOutlineScene {
@@ -92,12 +96,14 @@ const quickActions: Array<{ mode: StoryQuickActionMode; label: string; descripti
 
 export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
+  const [workspaceMode, setWorkspaceMode] = useState<StoryWorkspaceMode>('writing');
   const [selectedTone, setSelectedTone] = useState('Cozy');
   const [writingStyle, setWritingStyle] = useState(styleOptions[0]);
   const [selectedChapter, setSelectedChapter] = useState(1);
   const [selectedLibraryItemId, setSelectedLibraryItemId] = useState<string | null>(null);
   const [savedDraft, setSavedDraft] = useState<SavedStoryDraft | null>(() => readSavedStoryDraft());
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
+  const [storyModeResponse, setStoryModeResponse] = useState('');
 
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
@@ -107,7 +113,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   });
 
   const createJobMutation = useMutation<JobRecord, Error, StoryGenerationRequest>({
-    mutationFn: ({ values, action, sourceText, sourceJobId }) =>
+    mutationFn: ({ values, action, sourceText, sourceJobId, interactionMode, userResponse, suggestedChoice }) =>
       omnixApiClient.createJob({
         module: 'storyteller',
         type: 'story.generate',
@@ -119,6 +125,9 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           provider_id: values.providerId || null,
           prompt_template_id: promptTemplateForAction(action),
           action,
+          interaction_mode: interactionMode ?? 'writing',
+          user_response: userResponse ?? null,
+          suggested_choice: suggestedChoice ?? null,
           source_text: sourceText,
           source_job_id: sourceJobId,
           tone: selectedTone,
@@ -135,6 +144,10 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       reset({ providerId: request.values.providerId, title: request.values.title, premise: request.values.premise });
       if (job.status === 'completed' && fullJobOutputText(job)) {
         setSelectedLibraryItemId(libraryJobId(job.id));
+      }
+      if (request.interactionMode === 'story') {
+        setStoryModeResponse('');
+        setWorkspaceMode('story');
       }
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
@@ -187,6 +200,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
   const canPersistStory = Boolean(activeStoryText?.trim());
+  const storyModeChoices = useMemo(() => suggestedStoryMoves(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
 
   useEffect(() => {
     if (selectedLibraryItemId && !libraryItems.some((item) => item.id === selectedLibraryItemId)) {
@@ -200,13 +214,34 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     }
   }, [outline, selectedChapter]);
 
+  const requestValues = (): StorytellerFormValues => ({
+    providerId: watchedProvider,
+    title: watchedTitle || storyTitle,
+    premise: watchedPremise || premise || 'Continue this interactive story.',
+  });
+
   const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
     setSaveFeedback(null);
-    createJobMutation.mutate({ values, action, sourceText: activeStoryText, sourceJobId });
+    createJobMutation.mutate({ values, action, sourceText: activeStoryText, sourceJobId, interactionMode: 'writing' });
   };
 
   const submitQuickAction = (action: StoryQuickActionMode) => {
     void handleSubmit((values) => submitStoryRequest(values, action))();
+  };
+
+  const submitStoryModeMove = (moveText: string, suggestedChoice: string | null = null) => {
+    const response = moveText.trim();
+    if (!response) return;
+    setSaveFeedback(null);
+    createJobMutation.mutate({
+      values: requestValues(),
+      action: 'continue',
+      sourceText: storyModeContext(activeStoryText, response),
+      sourceJobId,
+      interactionMode: 'story',
+      userResponse: response,
+      suggestedChoice,
+    });
   };
 
   const selectLibraryItem = (itemId: string) => {
@@ -313,49 +348,164 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
             onSave={saveStoryDraft}
             onExport={exportStoryMarkdown}
           />
-          <div className="storyteller-compose-grid">
-            <section className="storyteller-manuscript" aria-label="Story manuscript">
-              <div className="storyteller-manuscript-meta">
-                <span>{activeChapter?.label ?? `Chapter ${selectedChapter}`}</span>
-                <span>{readingMinutes} min read</span>
-              </div>
-              <h2 id="module-title">{activeChapter?.title ?? storyTitle}</h2>
-              <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
-              {activeStoryText ? (
-                <StoryText outline={outline} text={activeStoryText} />
-              ) : (
-                <StoryEmptyState
-                  activeAsset={activeAsset}
-                  assetError={assetContentQuery.error}
-                  isAssetLoading={assetContentQuery.isLoading || assetContentQuery.isFetching}
-                  module={module}
-                  storyTitle={storyTitle}
-                />
-              )}
-            </section>
-            <StoryControls
-              providers={storyProviders}
-              register={register}
-              errors={errors}
-              createJobMutation={createJobMutation}
-              submitStatus={submitStatus}
-              selectedTone={selectedTone}
-              setSelectedTone={setSelectedTone}
-              writingStyle={writingStyle}
-              setWritingStyle={setWritingStyle}
-              selectedChapter={selectedChapter}
-              setSelectedChapter={setSelectedChapter}
-              onGenerate={(values) => submitStoryRequest(values, 'draft')}
-              latestJob={storyJobs[0] ?? null}
-              handleSubmit={handleSubmit}
+          <StoryModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
+          {workspaceMode === 'story' ? (
+            <StoryModePanel
+              activeChapterLabel={activeChapter?.label ?? `Chapter ${selectedChapter}`}
+              activeStoryText={activeStoryText}
+              assetError={assetContentQuery.error}
+              activeAsset={activeAsset}
+              isAssetLoading={assetContentQuery.isLoading || assetContentQuery.isFetching}
+              module={module}
+              onMove={submitStoryModeMove}
+              pending={createJobMutation.isPending}
+              response={storyModeResponse}
+              setResponse={setStoryModeResponse}
+              storyTitle={storyTitle}
+              suggestedMoves={storyModeChoices}
             />
-          </div>
-          <StoryActionBar disabled={createJobMutation.isPending} onAction={submitQuickAction} />
-          <StoryVersions activeJobId={activeJob?.id ?? null} jobs={completedStoryJobs} onSelect={(jobId) => selectLibraryItem(libraryJobId(jobId))} />
+          ) : (
+            <>
+              <div className="storyteller-compose-grid">
+                <section className="storyteller-manuscript" aria-label="Story manuscript">
+                  <div className="storyteller-manuscript-meta">
+                    <span>{activeChapter?.label ?? `Chapter ${selectedChapter}`}</span>
+                    <span>{readingMinutes} min read</span>
+                  </div>
+                  <h2 id="module-title">{activeChapter?.title ?? storyTitle}</h2>
+                  <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
+                  {activeStoryText ? (
+                    <StoryText outline={outline} text={activeStoryText} />
+                  ) : (
+                    <StoryEmptyState
+                      activeAsset={activeAsset}
+                      assetError={assetContentQuery.error}
+                      isAssetLoading={assetContentQuery.isLoading || assetContentQuery.isFetching}
+                      module={module}
+                      storyTitle={storyTitle}
+                    />
+                  )}
+                </section>
+                <StoryControls
+                  providers={storyProviders}
+                  register={register}
+                  errors={errors}
+                  createJobMutation={createJobMutation}
+                  submitStatus={submitStatus}
+                  selectedTone={selectedTone}
+                  setSelectedTone={setSelectedTone}
+                  writingStyle={writingStyle}
+                  setWritingStyle={setWritingStyle}
+                  selectedChapter={selectedChapter}
+                  setSelectedChapter={setSelectedChapter}
+                  onGenerate={(values) => submitStoryRequest(values, 'draft')}
+                  latestJob={storyJobs[0] ?? null}
+                  handleSubmit={handleSubmit}
+                />
+              </div>
+              <StoryActionBar disabled={createJobMutation.isPending} onAction={submitQuickAction} />
+              <StoryVersions activeJobId={activeJob?.id ?? null} jobs={completedStoryJobs} onSelect={(jobId) => selectLibraryItem(libraryJobId(jobId))} />
+            </>
+          )}
         </main>
         <StoryOutline chapters={outline} selectedChapter={selectedChapter} onSelect={selectOutlineTarget} />
       </div>
     </WorkspacePanel>
+  );
+}
+
+function StoryModeSwitch({ mode, onChange }: { mode: StoryWorkspaceMode; onChange: (mode: StoryWorkspaceMode) => void }) {
+  return (
+    <section className="storyteller-mode-switch" aria-label="Storyteller mode">
+      <button className={mode === 'writing' ? 'active' : ''} type="button" onClick={() => onChange('writing')}>
+        <strong>Writing Mode</strong>
+        <span>Draft, revise, save, and export manuscripts.</span>
+      </button>
+      <button className={mode === 'story' ? 'active' : ''} type="button" onClick={() => onChange('story')}>
+        <strong>Story Mode</strong>
+        <span>Read a page, make a move, and let AI continue.</span>
+      </button>
+    </section>
+  );
+}
+
+function StoryModePanel({
+  activeAsset,
+  activeChapterLabel,
+  activeStoryText,
+  assetError,
+  isAssetLoading,
+  module,
+  onMove,
+  pending,
+  response,
+  setResponse,
+  storyTitle,
+  suggestedMoves,
+}: {
+  activeAsset: StoryAssetSummary | null;
+  activeChapterLabel: string;
+  activeStoryText: string | null;
+  assetError: Error | null;
+  isAssetLoading: boolean;
+  module: OmnixModuleDefinition;
+  onMove: (moveText: string, suggestedChoice?: string | null) => void;
+  pending: boolean;
+  response: string;
+  setResponse: (value: string) => void;
+  storyTitle: string;
+  suggestedMoves: string[];
+}) {
+  const latestPage = activeStoryText ? lastStoryPage(activeStoryText) : null;
+  return (
+    <section className="story-mode-panel" aria-label="Story mode">
+      <div className="story-mode-reader">
+        <div className="storyteller-manuscript-meta">
+          <span>{activeChapterLabel}</span>
+          <span>Interactive page</span>
+        </div>
+        <h2>{storyTitle}</h2>
+        <div className="storyteller-flourish" aria-hidden="true"><span /><strong>◇</strong><span /></div>
+        {latestPage ? (
+          <div className="story-mode-page">
+            {storyParagraphs(latestPage).map((paragraph, index) => <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>)}
+          </div>
+        ) : (
+          <StoryEmptyState
+            activeAsset={activeAsset}
+            assetError={assetError}
+            isAssetLoading={isAssetLoading}
+            module={module}
+            storyTitle={storyTitle}
+          />
+        )}
+      </div>
+      <aside className="story-mode-controls" aria-label="Story mode controls">
+        <div className="storyteller-panel-heading">
+          <div><p className="eyebrow">Story mode</p><h3>Your next move</h3></div>
+          <OmnixStatusPill>{pending ? 'continuing' : 'ready'}</OmnixStatusPill>
+        </div>
+        <label>
+          Write your response
+          <textarea
+            aria-label="Story mode response"
+            onChange={(event) => setResponse(event.target.value)}
+            placeholder="I examine the glowing door, but keep one hand on the charm."
+            rows={5}
+            value={response}
+          />
+        </label>
+        <Button disabled={pending || !response.trim()} loading={pending} onClick={() => onMove(response)} type="button">
+          Continue with my response
+        </Button>
+        <div className="story-mode-suggestions">
+          <p className="eyebrow">Suggested next moves</p>
+          {suggestedMoves.map((move) => (
+            <button disabled={pending} key={move} type="button" onClick={() => onMove(move, move)}>{move}</button>
+          ))}
+        </div>
+      </aside>
+    </section>
   );
 }
 
@@ -607,6 +757,24 @@ function storyTextBlocks(text: string, outline: StoryOutlineChapter[]): StoryTex
     if (heading?.kind === 'scene') return { kind: 'scene', id: scenesByTitle.get((heading.title || paragraph).toLowerCase())?.id, text: heading.title || paragraph };
     return { kind: 'paragraph', text: paragraph };
   });
+}
+
+function storyModeContext(activeStoryText: string | null, userResponse: string): string {
+  return [activeStoryText?.trim() || 'Begin the interactive story from the current premise.', `Player response: ${userResponse}`].join('\n\n');
+}
+
+function lastStoryPage(text: string): string {
+  const paragraphs = storyParagraphs(text);
+  return paragraphs.slice(Math.max(0, paragraphs.length - 4)).join('\n\n');
+}
+
+function suggestedStoryMoves(text: string | null, title: string): string[] {
+  const subject = title && title !== 'Untitled story' ? title : 'the scene';
+  const hasMystery = /door|key|shadow|voice|glass|memory|secret|whisper/i.test(text ?? '');
+  if (hasMystery) {
+    return ['Investigate the strange clue', 'Ask who is watching', 'Leave quietly before it notices'];
+  }
+  return [`Look closer at ${subject}`, 'Speak to the nearest character', 'Take a bold action'];
 }
 
 function storyParagraphs(text: string): string[] { return text.split(/\n{2,}|\r?\n/).map((part) => part.trim()).filter(Boolean); }

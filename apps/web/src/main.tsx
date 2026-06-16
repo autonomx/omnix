@@ -8,6 +8,7 @@ import { omnixTheme } from './design/theme';
 import './styles.css';
 import './legacy-layout.css';
 import './features/storyteller/StorytellerWorkspace.css';
+import './features/storyteller/StoryMode.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
