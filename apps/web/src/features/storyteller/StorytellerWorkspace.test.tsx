@@ -176,7 +176,7 @@ describe('StorytellerWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save story' }));
     expect(await screen.findByText('Saved “Saved Orchard” as a shared story asset.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Export Markdown' }));
-    expect(await screen.findByText('Exported saved-orchard.md.')).toBeInTheDocument();
+    expect(await screen.findByText('Exported the-glass-orchard.md.')).toBeInTheDocument();
     expect(createObjectUrl).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:story-export');
