@@ -10,6 +10,7 @@ import './legacy-layout.css';
 import './features/storyteller/StorytellerWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
+import './features/storyteller/StoryThemeThumbnails.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
