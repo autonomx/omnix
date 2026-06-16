@@ -122,7 +122,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   });
 
   const createJobMutation = useMutation<JobRecord, Error, StoryGenerationRequest>({
-    mutationFn: ({ values, action, sourceText, sourceJobId }: StoryGenerationRequest) =>
+    mutationFn: ({ values, action, sourceText, sourceJobId }) =>
       omnixApiClient.createJob({
         module: 'storyteller',
         type: 'story.generate',
@@ -192,7 +192,16 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const activeAsset = activeLibraryItem?.assetId
     ? (storyAssets as StoryAssetSummary[]).find((asset) => asset.id === activeLibraryItem.assetId) ?? null
     : null;
-  const activeStoryText = activeLibraryItem?.content ?? null;
+  const assetContentQuery = useQuery({
+    queryKey: ['platform', 'assets', activeAsset?.id, 'content'],
+    queryFn: () => omnixApiClient.getAssetContent(activeAsset?.id ?? ''),
+    enabled: Boolean(activeAsset?.id),
+    retry: false,
+  });
+  const activeAssetText = activeAsset && assetContentQuery.data?.asset.id === activeAsset.id
+    ? assetContentQuery.data.content
+    : null;
+  const activeStoryText = activeLibraryItem?.content ?? activeAssetText ?? null;
   const storyTitle = activeLibraryItem?.title || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
   const premise =
     activeLibraryItem?.source === 'draft'
@@ -349,12 +358,13 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
               {activeStoryText ? (
                 <StoryText outline={outline} text={activeStoryText} />
               ) : (
-                <div className="storyteller-empty-manuscript" role="status">
-                  <p className="eyebrow">{activeAsset ? 'Story asset' : 'Feature module'}</p>
-                  <h3>{activeAsset ? storyTitle : module.label}</h3>
-                  <p>{activeAsset ? 'This library asset is available, but content preview is not exposed by the assets API yet.' : module.summary}</p>
-                  <p>Start with a premise, choose a tone, then generate the first scene. Completed output will appear here as a manuscript instead of a job-card preview.</p>
-                </div>
+                <StoryEmptyState
+                  activeAsset={activeAsset}
+                  assetError={assetContentQuery.error}
+                  isAssetLoading={assetContentQuery.isLoading || assetContentQuery.isFetching}
+                  module={module}
+                  storyTitle={storyTitle}
+                />
               )}
             </section>
 
@@ -387,6 +397,46 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
         <StoryOutline chapters={outline} selectedChapter={selectedChapter} onSelect={selectOutlineTarget} />
       </div>
     </WorkspacePanel>
+  );
+}
+
+function StoryEmptyState({
+  activeAsset,
+  assetError,
+  isAssetLoading,
+  module,
+  storyTitle,
+}: {
+  activeAsset: StoryAssetSummary | null;
+  assetError: Error | null;
+  isAssetLoading: boolean;
+  module: OmnixModuleDefinition;
+  storyTitle: string;
+}) {
+  if (activeAsset) {
+    const message = assetError
+      ? 'This story asset could not be loaded as readable text.'
+      : isAssetLoading
+        ? 'Loading story asset content…'
+        : 'This story asset is selected but has no readable manuscript text.';
+    return (
+      <div className="storyteller-empty-manuscript" role="status">
+        <p className="eyebrow">Story asset</p>
+        <h3>{storyTitle}</h3>
+        <p>{message}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="storyteller-empty-manuscript" role="status">
+      <p className="eyebrow">Feature module</p>
+      <h3>{module.label}</h3>
+      <p>{module.summary}</p>
+      <p>
+        Start with a premise, choose a tone, then generate the first scene. Completed output will appear here as a manuscript instead of a job-card preview.
+      </p>
+    </div>
   );
 }
 
@@ -675,32 +725,39 @@ function StoryActionBar({ disabled, onAction }: { disabled: boolean; onAction: (
 function StoryVersions({ activeJobId, jobs, onSelect }: { activeJobId: string | null; jobs: JobRecord[]; onSelect: (jobId: string) => void }) {
   const versionJobs = jobs.slice(0, 5);
   return (
-    <section className="storyteller-versions" aria-label="Recent story versions">
-      <p className="eyebrow">Recent versions</p>
-      {(versionJobs.length ? versionJobs : [null, null, null]).map((job, index) => {
-        const version = `v${versionJobs.length ? versionJobs.length - index : index + 1}`;
-        const title = storyVersionTitle(job, index);
-        return (
+    <section className="storyteller-versions" aria-label="Recent versions">
+      <div>
+        <p className="eyebrow">Recent versions</p>
+      </div>
+      {versionJobs.length ? (
+        versionJobs.map((job, index) => (
           <button
-            aria-label={job ? `Select ${version}: ${title}` : `Placeholder ${version}`}
-            aria-pressed={Boolean(job && job.id === activeJobId)}
-            className={job && job.id === activeJobId ? 'active' : ''}
-            disabled={!job}
-            key={job?.id ?? `placeholder-${index}`}
+            aria-pressed={job.id === activeJobId}
+            className={job.id === activeJobId ? 'active' : ''}
+            key={job.id}
             type="button"
-            onClick={() => job && onSelect(job.id)}
+            onClick={() => onSelect(job.id)}
           >
-            <strong>{version}</strong>
-            <span>{job ? title : index === 0 ? 'Just now' : 'Draft'}</span>
+            <strong>{index === 0 ? 'v7' : `v${Math.max(1, 7 - index)}`}</strong>
+            <span>{storyVersionTitle(job, index)}</span>
           </button>
-        );
-      })}
-      <button type="button">View all</button>
+        ))
+      ) : (
+        <span>No versions yet</span>
+      )}
     </section>
   );
 }
 
-function StoryOutline({ chapters, selectedChapter, onSelect }: { chapters: StoryOutlineChapter[]; selectedChapter: number; onSelect: (chapterNumber: number, targetId: string) => void }) {
+function StoryOutline({
+  chapters,
+  selectedChapter,
+  onSelect,
+}: {
+  chapters: StoryOutlineChapter[];
+  selectedChapter: number;
+  onSelect: (chapterNumber: number, targetId: string) => void;
+}) {
   return (
     <aside className="storyteller-outline" aria-label="Story outline">
       <div className="storyteller-panel-heading compact">
@@ -1010,7 +1067,9 @@ function deriveStoryOutline(text: string | null, fallbackTitle: string): StoryOu
 
 function storyTextBlocks(text: string, outline: StoryOutlineChapter[]): StoryTextBlock[] {
   const chaptersByTitle = new Map(outline.map((chapter) => [normalizeHeading(chapter.title), chapter]));
-  const scenesByTitle = new Map(outline.flatMap((chapter) => chapter.scenes.map((scene) => [normalizeHeading(scene.title), scene] as const)));
+  const scenesByTitle = new Map(
+    outline.flatMap((chapter) => chapter.scenes.map((scene) => [normalizeHeading(scene.title), scene] as const)),
+  );
   return storyParagraphs(text).map((paragraph) => {
     const heading = headingInfo(paragraph);
     if (heading?.kind === 'chapter') {
@@ -1056,33 +1115,31 @@ function fallbackChapter(title: string): StoryOutlineChapter {
   };
 }
 
-function sectionId(prefix: string, index: number, value: string): string {
-  return `${prefix}-${index}-${slugify(value || 'section')}`;
+function sectionId(prefix: string, index: number, title: string): string {
+  return `${prefix}-${index}-${slugify(title).slice(0, 32) || 'section'}`;
 }
 
-function slugify(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'section'
-  );
+function sceneTitleFromParagraph(paragraph: string, index: number): string {
+  const firstSentence = paragraph.split(/[.!?]/)[0]?.trim() || paragraph;
+  return firstSentence.length > 48 ? `${firstSentence.slice(0, 48)}…` : firstSentence || `Scene ${index + 1}`;
 }
 
 function normalizeHeading(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function sceneTitleFromParagraph(paragraph: string, index: number): string {
-  const words = paragraph.replace(/[“”"']/g, '').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
-  return words ? `${words}${paragraph.split(/\s+/).length > 5 ? '…' : ''}` : `Scene ${index + 1}`;
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'story';
 }
 
 function shortDate(value: string): string {
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
     return value;
   }
-  return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

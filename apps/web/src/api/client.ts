@@ -23,6 +23,14 @@ export type SendChatMessageResponse = components['schemas']['SendChatMessageResp
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];
 
+export interface AssetContentResponse {
+  asset: AssetListResponse['assets'][number];
+  content: string;
+  encoding: string;
+  size_bytes: number;
+  truncated: boolean;
+}
+
 export interface ApiClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -124,6 +132,10 @@ export class OmnixApiClient {
 
   async listAssets(): Promise<AssetListResponse> {
     return this.get<AssetListResponse>('/api/assets');
+  }
+
+  async getAssetContent(assetId: string): Promise<AssetContentResponse> {
+    return this.get<AssetContentResponse>(`/api/assets/${encodeURIComponent(assetId)}/content`);
   }
 
   async previewLegacyNonImageAssetImport(): Promise<AssetLegacyImportDryRun> {
