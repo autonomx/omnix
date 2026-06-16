@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules, type OmnixModuleDefinition } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
@@ -26,7 +27,7 @@ function moduleById(moduleId: OmnixModuleDefinition['id']): OmnixModuleDefinitio
   return module;
 }
 
-function renderWithProviders(children: React.ReactNode) {
+function renderWithProviders(children: ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
