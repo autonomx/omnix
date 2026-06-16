@@ -93,6 +93,8 @@ function assetPayload() {
 }
 
 afterEach(() => {
+  window.localStorage.clear();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -158,6 +160,8 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
 
     expect(await screen.findByText('Start with a premise, choose a tone, then generate the first scene. Completed output will appear here as a manuscript instead of a job-card preview.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save story' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Markdown' })).toBeDisabled();
   });
 
   it('generates stories through the shared jobs API from the redesigned controls', async () => {
@@ -254,6 +258,80 @@ describe('StorytellerWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Select v1: Rewrite paragraph • Older Orchard/ }));
 
     expect(await within(manuscript).findByText('Older roots remembered every footstep.')).toBeInTheDocument();
+  });
+
+  it('saves the selected story version to local browser storage', async () => {
+    const selected = storyJob({
+      id: 'job:selected',
+      input_payload: { title: 'Saved Orchard', action: 'rewrite' },
+      output_refs: [{ kind: 'text', content: 'Saved roots remembered every footstep.' }],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = requestPath(input);
+        if (path === '/api/providers') {
+          return Response.json(providerPayload());
+        }
+        if (path === '/api/jobs') {
+          return Response.json({ jobs: [selected] });
+        }
+        if (path === '/api/assets') {
+          return Response.json(assetPayload());
+        }
+        return new Response('not found', { status: 404 });
+      }),
+    );
+
+    renderStoryteller();
+
+    expect(await screen.findByText('Saved roots remembered every footstep.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save story' }));
+
+    expect(await screen.findByText('Saved “Saved Orchard” locally.')).toBeInTheDocument();
+    const saved = JSON.parse(window.localStorage.getItem('omnix:storyteller:last-draft') ?? '{}') as Record<string, unknown>;
+    expect(saved.title).toBe('Saved Orchard');
+    expect(saved.sourceJobId).toBe('job:selected');
+    expect(saved.content).toBe('Saved roots remembered every footstep.');
+  });
+
+  it('exports the selected story version as Markdown', async () => {
+    const createObjectUrl = vi.fn(() => 'blob:story-export');
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const selected = storyJob({
+      id: 'job:exported',
+      input_payload: { title: 'Exported Orchard', action: 'expand' },
+      output_refs: [{ kind: 'text', content: 'Exported branches glittered over the city.' }],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = requestPath(input);
+        if (path === '/api/providers') {
+          return Response.json(providerPayload());
+        }
+        if (path === '/api/jobs') {
+          return Response.json({ jobs: [selected] });
+        }
+        if (path === '/api/assets') {
+          return Response.json(assetPayload());
+        }
+        return new Response('not found', { status: 404 });
+      }),
+    );
+
+    renderStoryteller();
+
+    expect(await screen.findByText('Exported branches glittered over the city.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Export Markdown' }));
+
+    expect(await screen.findByText('Exported exported-orchard.md.')).toBeInTheDocument();
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:story-export');
   });
 
   it('derives outline entries from generated chapter and scene headings', async () => {
