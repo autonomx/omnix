@@ -1,5 +1,5 @@
 import { Badge, Box, Group, Paper, Progress, Stack, Text, Title } from '@mantine/core';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { OmnixModuleId } from '../app/modules';
 
 export function OmnixShellLayout({ sidebar, topbar, children }: { sidebar: ReactNode; topbar: ReactNode; children: ReactNode }) {
@@ -15,8 +15,19 @@ export function OmnixShellLayout({ sidebar, topbar, children }: { sidebar: React
 }
 
 export function OmnixSidebar({ children }: { children: ReactNode }) {
+  const [expanded, setExpanded] = useState(true);
+
   return (
-    <aside className="omnix-sidebar" aria-label="Omnix modules">
+    <aside className={expanded ? 'omnix-sidebar expanded' : 'omnix-sidebar collapsed'} aria-label="Omnix navigation">
+      <button
+        className="omnix-sidebar-toggle"
+        type="button"
+        aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span aria-hidden="true">☰</span>
+      </button>
       {children}
     </aside>
   );
@@ -26,13 +37,17 @@ export function OmnixBrand() {
   return (
     <div className="omnix-brand" aria-label="Omnix">
       <span className="omnix-brand-mark">O</span>
+      <span className="omnix-brand-copy">
+        <strong>Omnix</strong>
+        <small>Chats</small>
+      </span>
     </div>
   );
 }
 
 const moduleMonograms: Record<OmnixModuleId, string> = {
-  rpg: 'R',
   chatbot: 'C',
+  rpg: 'R',
   storyteller: 'S',
   podcast: 'P',
   voice: 'T',
@@ -94,9 +109,11 @@ export function OmnixStatusPill({ children }: { children: ReactNode }) {
   );
 }
 
-export function WorkspacePanel({ children }: { children: ReactNode }) {
+export function WorkspacePanel({ children, className }: { children: ReactNode; className?: string }) {
+  const panelClassName = className ? `workspace-card ${className}` : 'workspace-card';
+
   return (
-    <Paper className="workspace-card" component="section" aria-labelledby="module-title">
+    <Paper className={panelClassName} component="section" aria-labelledby="module-title">
       {children}
     </Paper>
   );
