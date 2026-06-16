@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
+    "dev:devtools": "vite --host 0.0.0.0 --port 5173 --mode devtools",
+    "devtools": "react-devtools",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "test": "vitest run",
@@ -36,6 +38,7 @@
     "@vitejs/plugin-react": "^5.1.0",
     "jsdom": "^26.1.0",
     "openapi-typescript": "^7.13.0",
+    "react-devtools": "^7.0.1",
     "typescript": "^5.9.0",
     "vite": "^7.2.0",
     "vitest": "^4.1.0"

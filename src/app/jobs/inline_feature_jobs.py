@@ -8,7 +8,7 @@ from .models import CompleteJobRequest, FailJobRequest, JobRecord
 INLINE_FEATURE_JOB_TYPES = {"story.generate", "podcast.generate", "rpg.turn"}
 
 
-def install_inline_feature_job_execution(sqlite_job_store_cls: type) -> None:
+def install_inline_feature_job_execution(sqlite_job_store_cls: Any) -> None:
     """Patch ``SQLiteJobStore.create_job`` once with local-first feature execution.
 
     The shared job queue remains worker-compatible. This wrapper only handles the
@@ -79,15 +79,37 @@ def _render_job(job: JobRecord) -> dict[str, Any]:
     model_id = _text(payload.get("model_id"))
 
     if job.type == "story.generate":
-        title = _text(payload.get("title")) or "Untitled story"
+        requested_title = _text(payload.get("title"))
+        generate_title = _bool(payload.get("generate_title")) or requested_title is None
         premise = _require_text(payload.get("premise"), "Story premise is required")
-        prompt = (
-            "Write a polished long-form story draft.\n"
-            f"Title: {title}\n"
-            f"Premise: {premise}\n"
-            "Return the story text only."
+        action = _text(payload.get("action")) or "draft"
+        interaction_mode = _text(payload.get("interaction_mode")) or "writing"
+        source_text = _text(payload.get("source_text"))
+        user_response = _text(payload.get("user_response"))
+        prompt_lines = [
+            "Write a polished long-form story draft.",
+            (
+                "Generate an evocative, concise title for this story. Start the response with a "
+                "level-1 Markdown heading containing only the generated title."
+            )
+            if generate_title
+            else f"Title: {requested_title}",
+            f"Premise: {premise}",
+            f"Action: {action}",
+            f"Interaction mode: {interaction_mode}",
+        ]
+        if source_text:
+            prompt_lines.extend(["Story context:", source_text])
+        if user_response and user_response not in (source_text or ""):
+            prompt_lines.extend(["Player response:", user_response])
+        prompt_lines.append(
+            "Return Markdown with the generated title as the first line, then the story text."
+            if generate_title
+            else "Return the story text only."
         )
+        prompt = "\n".join(prompt_lines)
         content, resolved_model = _call_chat_provider(prompt, provider_id=provider_id, model_id=model_id)
+        title = requested_title or _extract_markdown_title(content) or "Untitled story"
         return {
             "artifact_type": "story",
             "title": title,
@@ -149,8 +171,8 @@ def _render_job(job: JobRecord) -> dict[str, Any]:
 
 
 def _call_chat_provider(prompt: str, *, provider_id: str | None, model_id: str | None) -> tuple[str, str | None]:
-    from app import shared
-    from app.providers import ChatMessage as ProviderMessage
+    from app import shared  # type: ignore[import-not-found]
+    from app.providers import ChatMessage as ProviderMessage  # type: ignore[import-not-found]
 
     provider_name = _provider_key(provider_id)
     provider = shared.get_provider(provider_name)
@@ -192,6 +214,23 @@ def _text(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _extract_markdown_title(content: str) -> str | None:
+    for line in content.splitlines():
+        text = line.strip()
+        if text.startswith("# "):
+            title = text.removeprefix("# ").strip()
+            return title or None
+    return None
 
 
 def _require_text(value: object, message: str) -> str:

@@ -25,6 +25,7 @@ interface StoryGenerationRequest {
   action: StoryActionMode;
   sourceText: string | null;
   sourceJobId: string | null;
+  generateTitle?: boolean;
   interactionMode?: StoryWorkspaceMode;
   userResponse?: string | null;
   suggestedChoice?: string | null;
@@ -83,7 +84,12 @@ interface StoryLibraryItem {
   assetId: string | null;
 }
 
+interface TrashedStoryLibraryItem extends StoryLibraryItem {
+  trashedAt: string;
+}
+
 const storyDraftStorageKey = 'omnix:storyteller:last-draft';
+const storyTrashStorageKey = 'omnix:storyteller:trash';
 const toneOptions = ['Cozy', 'Hopeful', 'Gentle', 'Mystery'];
 const styleOptions = ['Lyrical & Descriptive', 'Fast-paced', 'Dialogue-heavy', 'Cinematic', 'Literary'];
 
@@ -105,6 +111,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const [selectedLibraryItemId, setSelectedLibraryItemId] = useState<string | null>(null);
   const [isNewDraft, setIsNewDraft] = useState(false);
   const [savedDraft, setSavedDraft] = useState<SavedStoryDraft | null>(() => readSavedStoryDraft());
+  const [trashedLibraryItems, setTrashedLibraryItems] = useState<TrashedStoryLibraryItem[]>(() => readTrashedStoryLibraryItems());
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
   const [storyModeResponse, setStoryModeResponse] = useState('');
 
@@ -119,7 +126,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   });
 
   const createJobMutation = useMutation<JobRecord, Error, StoryGenerationRequest>({
-    mutationFn: ({ values, action, sourceText, sourceJobId, interactionMode, userResponse, suggestedChoice }) =>
+    mutationFn: ({ values, action, sourceText, sourceJobId, generateTitle, interactionMode, userResponse, suggestedChoice }) =>
       omnixApiClient.createJob({
         module: 'storyteller',
         type: 'story.generate',
@@ -131,6 +138,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           provider_id: values.providerId || null,
           prompt_template_id: promptTemplateForAction(action),
           action,
+          generate_title: Boolean(generateTitle),
           interaction_mode: interactionMode ?? 'writing',
           user_response: userResponse ?? null,
           suggested_choice: suggestedChoice ?? null,
@@ -183,13 +191,25 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   );
   const completedStoryJobs = storyJobs.filter((job) => job.status === 'completed' && fullJobOutputText(job));
   const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
-  const libraryItems = useMemo(
+  const allLibraryItems = useMemo(
     () => buildStoryLibraryItems(savedDraft, completedStoryJobs, storyAssets as StoryAssetSummary[]),
     [savedDraft, completedStoryJobs, storyAssets],
   );
+  const trashItems = useMemo(
+    () => mergeTrashedStoryLibraryItems(trashedLibraryItems, allLibraryItems),
+    [trashedLibraryItems, allLibraryItems],
+  );
+  const libraryItems = useMemo(
+    () => allLibraryItems.filter((item) => !trashItems.some((trashedItem) => trashedItem.id === item.id)),
+    [allLibraryItems, trashItems],
+  );
+  const selectableLibraryItems = useMemo(
+    () => [...libraryItems, ...trashItems],
+    [libraryItems, trashItems],
+  );
   const activeLibraryItem = isNewDraft
     ? null
-    : libraryItems.find((item) => item.id === selectedLibraryItemId) ??
+    : selectableLibraryItems.find((item) => item.id === selectedLibraryItemId) ??
       libraryItems.find((item) => item.source === 'job') ??
       libraryItems.find((item) => item.source === 'draft') ??
       null;
@@ -209,7 +229,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     ? assetContentQuery.data.content
     : null;
   const activeStoryText = activeLibraryItem?.content ?? activeAssetText ?? null;
-  const storyTitle = activeLibraryItem?.title || watchedTitle || 'Untitled story';
+  const storyTitle = storyDisplayTitle(activeLibraryItem?.title || watchedTitle, activeStoryText);
   const premise = activeLibraryItem?.source === 'draft'
     ? savedDraft?.premise ?? watchedPremise
     : watchedPremise || jobInputString(activeJob, 'premise') || '';
@@ -234,10 +254,10 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
 
   useEffect(() => {
     if (!selectedLibraryItemId) return;
-    if (!libraryItems.some((item) => item.id === selectedLibraryItemId)) {
+    if (!selectableLibraryItems.some((item) => item.id === selectedLibraryItemId)) {
       setSelectedLibraryItemId(null);
     }
-  }, [libraryItems, selectedLibraryItemId]);
+  }, [selectableLibraryItems, selectedLibraryItemId]);
 
   useEffect(() => {
     if (outline.length && !outline.some((chapter) => chapter.number === selectedChapter)) {
@@ -245,11 +265,14 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     }
   }, [outline, selectedChapter]);
 
-  const requestValues = (): StorytellerFormValues => ({
-    providerId: watchedProvider,
-    title: watchedTitle || storyTitle,
-    premise: watchedPremise || premise || 'Continue this interactive story.',
-  });
+  const requestValues = ({ allowGeneratedTitle = false }: { allowGeneratedTitle?: boolean } = {}): StorytellerFormValues => {
+    const shouldGenerateTitle = allowGeneratedTitle && shouldGenerateStoryTitle(watchedTitle, storyTitle);
+    return {
+      providerId: watchedProvider,
+      title: shouldGenerateTitle ? '' : watchedTitle || storyTitle,
+      premise: watchedPremise || premise || 'Continue this interactive story.',
+    };
+  };
 
   const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
     setSaveFeedback(null);
@@ -269,12 +292,14 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const submitStoryModeMove = (moveText: string, suggestedChoice: string | null = null) => {
     const response = moveText.trim();
     if (!response) return;
+    const generateTitle = shouldGenerateStoryTitle(watchedTitle, storyTitle);
     setSaveFeedback(null);
     createJobMutation.mutate({
-      values: requestValues(),
+      values: requestValues({ allowGeneratedTitle: true }),
       action: 'continue',
       sourceText: storyModeContext(activeStoryText, response),
       sourceJobId,
+      generateTitle,
       interactionMode: 'story',
       userResponse: response,
       suggestedChoice,
@@ -299,6 +324,34 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     setSelectedChapter(1);
     setWorkspaceMode('writing');
     setSaveFeedback({ kind: 'saved', message: 'New draft ready. Add a premise to begin.' });
+  };
+
+  const trashActiveStory = () => {
+    if (activeLibrarySection === 'trash') {
+      setActiveLibrarySection('trash');
+      return;
+    }
+
+    const item = activeLibraryItem;
+    if (!item || trashItems.some((trashedItem) => trashedItem.id === item.id)) {
+      setActiveLibrarySection('trash');
+      return;
+    }
+
+    const nextTrashItems = upsertTrashedStoryLibraryItem(trashedLibraryItems, {
+      ...item,
+      trashedAt: new Date().toISOString(),
+    });
+    persistTrashedStoryLibraryItems(nextTrashItems);
+    setTrashedLibraryItems(nextTrashItems);
+    if (item.source === 'draft') {
+      window.localStorage.removeItem(storyDraftStorageKey);
+      setSavedDraft(null);
+    }
+    setIsNewDraft(false);
+    setSelectedLibraryItemId(item.id);
+    setActiveLibrarySection('trash');
+    setSaveFeedback({ kind: 'saved', message: `Moved "${item.title}" to Trash.` });
   };
 
   const selectOutlineTarget = (chapterNumber: number, targetId: string) => {
@@ -410,6 +463,8 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           onNewDraft={startNewDraft}
           onSectionChange={setActiveLibrarySection}
           onSelect={selectLibraryItem}
+          onTrashActiveItem={trashActiveStory}
+          trashItems={trashItems}
         />
         <main className="storyteller-stage">
           <StoryProjectHeader
@@ -768,22 +823,28 @@ function StoryLibrary({
   items,
   activeItemId,
   activeSection,
+  trashItems,
   onNewDraft,
   onSectionChange,
   onSelect,
+  onTrashActiveItem,
 }: {
   items: StoryLibraryItem[];
   activeItemId: string | null;
   activeSection: StoryLibrarySection;
+  trashItems: TrashedStoryLibraryItem[];
   onNewDraft: () => void;
   onSectionChange: (section: StoryLibrarySection) => void;
   onSelect: (itemId: string) => void;
+  onTrashActiveItem: () => void;
 }) {
   const sectionItems = activeSection === 'drafts'
     ? items.filter((item) => item.source === 'draft')
     : activeSection === 'stories'
       ? items.filter((item) => item.source !== 'draft')
-      : [];
+      : activeSection === 'trash'
+        ? trashItems
+        : [];
   return (
     <aside className="storyteller-library" aria-label="Story library">
       <div className="storyteller-panel-heading compact">
@@ -834,7 +895,8 @@ function StoryLibrary({
         aria-pressed={activeSection === 'trash'}
         className={`storyteller-trash ${activeSection === 'trash' ? 'active' : ''}`}
         type="button"
-        onClick={() => onSectionChange('trash')}
+        title={activeSection === 'trash' ? 'Trash' : 'Move selected story to Trash'}
+        onClick={onTrashActiveItem}
       >
         Trash
       </button>
@@ -867,7 +929,7 @@ function LibrarySectionEmpty({ section, onNewDraft }: { section: StoryLibrarySec
     characters: { title: 'Characters not created yet', body: 'Character cards will attach cast details to future generations.' },
     'world-notes': { title: 'World notes not created yet', body: 'World notes will collect lore, places, factions, and rules.' },
     prompts: { title: 'Prompt presets not created yet', body: 'Prompt presets will save reusable Storyteller instructions.' },
-    trash: { title: 'Trash is empty', body: 'Deleted drafts and story assets will be recoverable here later.' },
+    trash: { title: 'Trash is empty', body: 'Stories moved to Trash will be hidden from recent stories.' },
   };
   return (
     <article className="storyteller-library-empty" role="status">
@@ -983,6 +1045,11 @@ function fullJobOutputText(job: { output_refs?: Array<{ content?: unknown }>; lo
   return typeof content === 'string' && content.trim() ? content : null;
 }
 
+function fullJobOutputTitle(job: { output_refs?: Array<{ title?: unknown }> }): string | null {
+  const title = job.output_refs?.find((ref) => typeof ref.title === 'string')?.title;
+  return cleanStoryTitle(typeof title === 'string' ? title : null);
+}
+
 function includeMutationJob(jobs: JobRecord[], mutationJob: JobRecord | null): JobRecord[] {
   return mutationJob ? [mutationJob, ...jobs.filter((job) => job.id !== mutationJob.id)] : jobs;
 }
@@ -1000,7 +1067,7 @@ function buildStoryLibraryItems(savedDraft: SavedStoryDraft | null, jobs: JobRec
   const jobItems = jobs.map((job) => ({
     id: libraryJobId(job.id),
     source: 'job' as const,
-    title: jobInputString(job, 'title') || 'Untitled story',
+    title: storyJobTitle(job),
     subtitle: `${countWords(fullJobOutputText(job) ?? '').toLocaleString()} words • ${jobInputString(job, 'action') ?? 'draft'}`,
     content: fullJobOutputText(job),
     jobId: job.id,
@@ -1040,6 +1107,69 @@ function readSavedStoryDraft(): SavedStoryDraft | null {
   }
 }
 
+function readTrashedStoryLibraryItems(): TrashedStoryLibraryItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(storyTrashStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(toTrashedStoryLibraryItem).filter((item): item is TrashedStoryLibraryItem => Boolean(item));
+  } catch {
+    return [];
+  }
+}
+
+function persistTrashedStoryLibraryItems(items: TrashedStoryLibraryItem[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (items.length) {
+      window.localStorage.setItem(storyTrashStorageKey, JSON.stringify(items));
+    } else {
+      window.localStorage.removeItem(storyTrashStorageKey);
+    }
+  } catch {
+    // Best-effort local trash; the visible list still updates from React state.
+  }
+}
+
+function toTrashedStoryLibraryItem(value: unknown): TrashedStoryLibraryItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== 'string' || !isStoryLibrarySource(record.source)) return null;
+  return {
+    id: record.id,
+    source: record.source,
+    title: typeof record.title === 'string' && record.title.trim() ? record.title : 'Untitled story',
+    subtitle: typeof record.subtitle === 'string' ? record.subtitle : '',
+    content: typeof record.content === 'string' ? record.content : null,
+    jobId: typeof record.jobId === 'string' ? record.jobId : null,
+    assetId: typeof record.assetId === 'string' ? record.assetId : null,
+    trashedAt: typeof record.trashedAt === 'string' ? record.trashedAt : new Date(0).toISOString(),
+  };
+}
+
+function isStoryLibrarySource(value: unknown): value is StoryLibrarySource {
+  return value === 'draft' || value === 'job' || value === 'asset';
+}
+
+function upsertTrashedStoryLibraryItem(
+  items: TrashedStoryLibraryItem[],
+  item: TrashedStoryLibraryItem,
+): TrashedStoryLibraryItem[] {
+  return [item, ...items.filter((entry) => entry.id !== item.id)];
+}
+
+function mergeTrashedStoryLibraryItems(
+  trashItems: TrashedStoryLibraryItem[],
+  currentItems: StoryLibraryItem[],
+): TrashedStoryLibraryItem[] {
+  return trashItems.map((trashedItem) => {
+    const currentItem = currentItems.find((item) => item.id === trashedItem.id);
+    return currentItem ? { ...currentItem, trashedAt: trashedItem.trashedAt } : trashedItem;
+  });
+}
+
 function libraryJobId(jobId: string): string { return `job:${jobId}`; }
 function libraryAssetId(assetId: string): string { return `asset:${assetId}`; }
 
@@ -1054,6 +1184,33 @@ function storyAssetTitle(storagePath: string | undefined): string {
   if (!storagePath) return 'Untitled Draft';
   const filename = storagePath.split(/[\\/]/).pop() ?? storagePath;
   return filename.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') || 'Untitled Draft';
+}
+
+function storyJobTitle(job: JobRecord): string {
+  const text = fullJobOutputText(job);
+  return cleanStoryTitle(jobInputString(job, 'title')) ??
+    fullJobOutputTitle(job) ??
+    titleFromStoryText(text) ??
+    'Untitled story';
+}
+
+function storyDisplayTitle(title: string | null | undefined, storyText: string | null): string {
+  return cleanStoryTitle(title) ?? titleFromStoryText(storyText) ?? 'Untitled story';
+}
+
+function shouldGenerateStoryTitle(formTitle: string, displayTitle: string): boolean {
+  return !formTitle.trim() && !cleanStoryTitle(displayTitle);
+}
+
+function cleanStoryTitle(value: string | null | undefined): string | null {
+  const title = value?.trim();
+  if (!title || /^untitled story\b/i.test(title)) return null;
+  return title;
+}
+
+function titleFromStoryText(text: string | null): string | null {
+  const heading = text?.split(/\r?\n/).map((line) => line.trim()).find((line) => /^#\s+\S/.test(line));
+  return cleanStoryTitle(heading?.replace(/^#\s+/, ''));
 }
 
 function providerDisplayName(providers: Array<{ id: string; label: string }>, selectedProviderId: string, fallbackLabel: string | null = null): string {

@@ -11,14 +11,15 @@ from app.jobs import SQLiteJobStore
 
 
 class FakeProvider:
-    def __init__(self) -> None:
+    def __init__(self, content: str = "Hello from the provider.") -> None:
         self.calls: list[dict[str, object]] = []
+        self.content = content
 
     def chat_completion(self, *, messages, model, stream=False):
         prompt = messages[-1].content
         self.calls.append({"messages": messages, "model": model, "stream": stream, "prompt": prompt})
         return SimpleNamespace(
-            content="Hello from the provider.",
+            content=self.content,
             model=model or "default-model",
             usage={"total_tokens": 12},
             thinking="",
@@ -69,8 +70,8 @@ def test_chat_store_invokes_provider_and_persists_assistant_message(monkeypatch,
     assert reloaded.messages[-1].content == "Hello from the provider."
 
 
-def _gateway_client(tmp_path, monkeypatch):
-    provider = FakeProvider()
+def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello from the provider."):
+    provider = FakeProvider(provider_content)
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     store = SQLiteJobStore(tmp_path / "jobs.sqlite")
@@ -104,6 +105,41 @@ def test_story_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
     assert payload["output_refs"][0]["content"] == "Hello from the provider."
     assert provider.calls[0]["model"] == "test-model"
     assert "long-form story draft" in provider.calls[0]["prompt"]
+
+
+def test_story_jobs_with_empty_title_generate_title(monkeypatch, tmp_path):
+    client, provider = _gateway_client(
+        tmp_path,
+        monkeypatch,
+        provider_content="# Lantern Road\n\nA courier follows a road lit by patient stars.",
+    )
+
+    response = client.post(
+        "/api/jobs",
+        json={
+            "module": "storyteller",
+            "type": "story.generate",
+            "resource_class": "gpu:llm",
+            "input_payload": {
+                "title": "",
+                "premise": "A courier follows a road.",
+                "provider_id": "llm:lmstudio",
+                "model_id": "llm:lmstudio:test-model",
+                "generate_title": True,
+                "interaction_mode": "story",
+                "source_text": "Player response: I follow the road.",
+            },
+        },
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["status"] == "completed"
+    assert payload["output_refs"][0]["title"] == "Lantern Road"
+    assert payload["output_refs"][0]["content"].startswith("# Lantern Road")
+    assert "Generate an evocative, concise title" in provider.calls[0]["prompt"]
+    assert "Story context:" in provider.calls[0]["prompt"]
+    assert "Player response: I follow the road." in provider.calls[0]["prompt"]
 
 
 def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):

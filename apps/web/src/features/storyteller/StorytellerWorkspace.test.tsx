@@ -100,12 +100,12 @@ function assetContentPayload() {
   };
 }
 
-function stubStoryApi(jobs: unknown[] = [storyJob()]) {
+function stubStoryApi(jobs: unknown[] = [storyJob()], assets: ReturnType<typeof assetPayload> = assetPayload()) {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const path = requestPath(input);
     if (path === '/api/providers') return Response.json(providerPayload());
     if (path === '/api/jobs') return Response.json({ jobs });
-    if (path === '/api/assets') return Response.json(assetPayload());
+    if (path === '/api/assets') return Response.json(assets);
     if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
     return new Response('not found', { status: 404 });
   }));
@@ -194,6 +194,33 @@ describe('StorytellerWorkspace', () => {
     fireEvent.click(await within(library).findByRole('button', { name: /the glass orchard/ }));
     const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
     expect(await within(manuscript).findByText('Asset branches chimed softly when Mira opened the gate.')).toBeInTheDocument();
+  });
+
+  it('moves the selected story to Trash and removes it from recent stories', async () => {
+    const deletedStory = storyJob({
+      id: 'job:flying-cat',
+      input_payload: { title: 'Flying Cat', action: 'draft' },
+      output_refs: [{ kind: 'text', content: 'The flying cat skimmed moonlight over the roofs.' }],
+    });
+    const keptStory = storyJob({
+      id: 'job:moon-bakery',
+      input_payload: { title: 'Moon Bakery', action: 'continue' },
+      output_refs: [{ kind: 'text', content: 'The moon bakery opened only when the tide forgot its name.' }],
+    });
+    stubStoryApi([deletedStory, keptStory], { assets: [] });
+    renderStoryteller();
+
+    const library = await screen.findByRole('complementary', { name: 'Story library' });
+    expect(await within(library).findByRole('button', { name: /Flying Cat/ })).toBeInTheDocument();
+    fireEvent.click(within(library).getByRole('button', { name: 'Trash' }));
+
+    expect(await screen.findByText('Moved "Flying Cat" to Trash.')).toBeInTheDocument();
+    const recentStories = within(library).getByText('Recent stories').closest('section') as HTMLElement | null;
+    if (!recentStories) throw new Error('Recent stories section is missing');
+    expect(within(recentStories).queryByRole('button', { name: /Flying Cat/ })).not.toBeInTheDocument();
+    expect(within(recentStories).getByRole('button', { name: /Moon Bakery/ })).toBeInTheDocument();
+    const trashPane = within(library).getByRole('region', { name: 'Trash library pane' });
+    expect(within(trashPane).getByRole('button', { name: /Flying Cat/ })).toBeInTheDocument();
   });
 
   it('saves and exports the selected story version', async () => {
@@ -306,6 +333,45 @@ describe('StorytellerWorkspace', () => {
       expect(body.input_payload?.user_response).toBe('I light a lantern and step through the secret door.');
       expect(String(body.input_payload?.source_text)).toContain('Player response: I light a lantern and step through the secret door.');
       expect(body.input_payload?.source_job_id).toBe('job:base');
+    });
+  });
+
+  it('asks Story Mode jobs to generate a title when the current story is untitled', async () => {
+    const baseText = 'The little engine waited under a sky full of silver smoke.';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/jobs' && init?.method === 'POST') return Response.json(storyJob({ id: 'job:titled-by-ai' }));
+      if (path === '/api/jobs') {
+        return Response.json({
+          jobs: [
+            storyJob({
+              id: 'job:untitled',
+              input_payload: { title: '', premise: 'A tiny train learns courage.', action: 'draft' },
+              output_refs: [{ kind: 'text', content: baseText }],
+            }),
+          ],
+        });
+      }
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderStoryteller();
+
+    expect((await screen.findAllByText(baseText)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
+    fireEvent.change(screen.getByLabelText('Story mode response'), { target: { value: 'I climb aboard and ring the bell.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with my response' }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input, init]) =>
+        requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST');
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
+      expect(body.input_payload?.interaction_mode).toBe('story');
+      expect(body.input_payload?.title).toBeNull();
+      expect(body.input_payload?.generate_title).toBe(true);
+      expect(String(body.input_payload?.source_text)).toContain(baseText);
     });
   });
 
