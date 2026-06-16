@@ -256,6 +256,56 @@ describe('StorytellerWorkspace', () => {
     expect(await within(manuscript).findByText('Older roots remembered every footstep.')).toBeInTheDocument();
   });
 
+  it('derives outline entries from generated chapter and scene headings', async () => {
+    const chapteredStory = [
+      'Chapter 1: The Glass Orchard',
+      'Scene 1: The Crystal Row',
+      'The orchard rang like crystal at sunset.',
+      'Chapter 2: The Memory Market',
+      'Scene 1: The Name Seller',
+      'Mira traded a silver thread for a forgotten lullaby.',
+    ].join('\n\n');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = requestPath(input);
+
+        if (path === '/api/providers') {
+          return Response.json(providerPayload());
+        }
+
+        if (path === '/api/jobs') {
+          return Response.json({
+            jobs: [
+              storyJob({
+                output_refs: [{ kind: 'text', content: chapteredStory }],
+              }),
+            ],
+          });
+        }
+
+        if (path === '/api/assets') {
+          return Response.json(assetPayload());
+        }
+
+        return new Response('not found', { status: 404 });
+      }),
+    );
+
+    renderStoryteller();
+
+    const outline = await screen.findByRole('complementary', { name: 'Story outline' });
+    expect(await within(outline).findByRole('button', { name: /Chapter 1 The Glass Orchard/ })).toBeInTheDocument();
+    expect(within(outline).getByRole('button', { name: /Scene 1 The Crystal Row/ })).toBeInTheDocument();
+    const chapterTwoButton = await within(outline).findByRole('button', { name: /Chapter 2 The Memory Market/ });
+    expect(chapterTwoButton).toBeInTheDocument();
+
+    fireEvent.click(chapterTwoButton);
+
+    const manuscript = screen.getByRole('region', { name: 'Story manuscript' });
+    expect((await within(manuscript).findAllByRole('heading', { name: 'The Memory Market' })).length).toBeGreaterThan(0);
+  });
+
   it('submits quick actions with active manuscript context', async () => {
     const baseText = 'The orchard rang like crystal at sunset.\n\nEach branch remembered a name.';
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
