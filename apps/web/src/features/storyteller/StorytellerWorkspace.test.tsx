@@ -405,7 +405,8 @@ describe('StorytellerWorkspace', () => {
 
     renderStoryteller();
 
-    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    expect(await within(manuscript).findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A city grows fruit made of memory.' } });
     fireEvent.click(screen.getByRole('button', { name: /Continue Story/ }));
 
