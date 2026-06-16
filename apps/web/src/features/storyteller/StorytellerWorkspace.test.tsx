@@ -92,6 +92,16 @@ function assetPayload() {
   };
 }
 
+function assetContentPayload() {
+  return {
+    asset: assetPayload().assets[0],
+    content: '# The Glass Orchard\n\nAsset branches chimed softly when Mira opened the gate.',
+    encoding: 'utf-8',
+    size_bytes: 68,
+    truncated: false,
+  };
+}
+
 function stubStoryApi(jobs: unknown[] = [storyJob()]) {
   vi.stubGlobal(
     'fetch',
@@ -105,6 +115,9 @@ function stubStoryApi(jobs: unknown[] = [storyJob()]) {
       }
       if (path === '/api/assets') {
         return Response.json(assetPayload());
+      }
+      if (path === '/api/assets/asset%3Astory/content') {
+        return Response.json(assetContentPayload());
       }
       return new Response('not found', { status: 404 });
     }),
@@ -159,6 +172,9 @@ describe('StorytellerWorkspace', () => {
       }
       if (path === '/api/assets') {
         return Response.json(assetPayload());
+      }
+      if (path === '/api/assets/asset%3Astory/content') {
+        return Response.json(assetContentPayload());
       }
       return new Response('not found', { status: 404 });
     });
@@ -228,7 +244,7 @@ describe('StorytellerWorkspace', () => {
     expect(screen.getAllByRole('heading', { name: 'Local Draft Orchard' }).length).toBeGreaterThan(0);
   });
 
-  it('selects story assets from the Story library', async () => {
+  it('loads readable story asset content from the Story library', async () => {
     stubStoryApi([]);
 
     renderStoryteller();
@@ -237,8 +253,9 @@ describe('StorytellerWorkspace', () => {
     const assetButton = await within(library).findByRole('button', { name: /the glass orchard/ });
     fireEvent.click(assetButton);
 
-    expect((await screen.findAllByRole('heading', { name: 'the glass orchard' })).length).toBeGreaterThan(0);
-    expect(screen.getByText('This library asset is available, but content preview is not exposed by the assets API yet.')).toBeInTheDocument();
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    expect(await within(manuscript).findByText('Asset branches chimed softly when Mira opened the gate.')).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'The Glass Orchard' })).length).toBeGreaterThan(0);
   });
 
   it('saves the selected story version to local browser storage', async () => {
@@ -327,6 +344,9 @@ describe('StorytellerWorkspace', () => {
       }
       if (path === '/api/assets') {
         return Response.json(assetPayload());
+      }
+      if (path === '/api/assets/asset%3Astory/content') {
+        return Response.json(assetContentPayload());
       }
       return new Response('not found', { status: 404 });
     });
