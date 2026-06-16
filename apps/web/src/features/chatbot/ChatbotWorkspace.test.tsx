@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
@@ -146,7 +146,8 @@ describe('ChatbotWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     expect(await screen.findByText('Generation job queued: job:1')).toBeInTheDocument();
-    expect(await screen.findByText('Hello Omnix')).toBeInTheDocument();
+    const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('user'));
+    expect(transcriptMessage).toBeTruthy();
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
