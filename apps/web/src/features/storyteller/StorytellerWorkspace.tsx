@@ -1,7 +1,7 @@
 import { Button, Progress } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useForm, type FieldErrors, type UseFormRegister } from 'react-hook-form';
+import { useForm, type FieldErrors, type UseFormHandleSubmit, type UseFormRegister } from 'react-hook-form';
 import { omnixApiClient, type JobRecord, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
@@ -213,7 +213,7 @@ interface StoryControlsProps {
   selectedChapter: number;
   setSelectedChapter: (chapter: number) => void;
   onGenerate: (values: StorytellerFormValues) => void;
-  handleSubmit: ReturnType<typeof useForm<StorytellerFormValues>>['handleSubmit'];
+  handleSubmit: UseFormHandleSubmit<StorytellerFormValues>;
   latestJob: JobRecord | null;
 }
 
