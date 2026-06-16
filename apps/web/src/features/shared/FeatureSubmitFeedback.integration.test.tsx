@@ -122,9 +122,9 @@ describe('provider-backed feature submit feedback', () => {
     installFailingJobApiMock();
     renderWithProviders(<StorytellerWorkspace module={moduleById('storyteller')} />);
 
-    expect(await screen.findByRole('heading', { name: 'Story request' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Premise'), { target: { value: 'A memory orchard.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue story' }));
+    expect(await screen.findByText('Story controls')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A memory orchard.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate story' }));
 
     expect(await screen.findByText(/Story request failed with status 500/)).toBeInTheDocument();
   });
