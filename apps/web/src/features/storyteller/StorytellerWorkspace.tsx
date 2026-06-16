@@ -16,6 +16,7 @@ interface StorytellerFormValues {
 type StoryActionMode = 'draft' | 'continue' | 'rewrite' | 'expand' | 'dialogue' | 'summarize';
 type StoryQuickActionMode = Exclude<StoryActionMode, 'draft'>;
 type SaveFeedbackKind = 'saved' | 'exported' | 'error';
+type StoryLibrarySource = 'draft' | 'job' | 'asset';
 
 interface StoryGenerationRequest {
   values: StorytellerFormValues;
@@ -49,6 +50,34 @@ interface SaveFeedback {
   message: string;
 }
 
+interface SavedStoryDraft {
+  title: string;
+  premise?: string;
+  providerLabel?: string;
+  wordCount?: number;
+  chapterCount?: number;
+  sourceJobId?: string | null;
+  savedAt?: string;
+  content: string;
+}
+
+interface StoryAssetSummary {
+  id: string;
+  storage_path: string;
+  type: string;
+  created_at?: string;
+}
+
+interface StoryLibraryItem {
+  id: string;
+  source: StoryLibrarySource;
+  title: string;
+  subtitle: string;
+  content: string | null;
+  jobId: string | null;
+  assetId: string | null;
+}
+
 const storyDraftStorageKey = 'omnix:storyteller:last-draft';
 const toneOptions = ['Cozy', 'Hopeful', 'Gentle', 'Mystery'];
 const styleOptions = ['Lyrical & Descriptive', 'Fast-paced', 'Dialogue-heavy', 'Cinematic', 'Literary'];
@@ -66,8 +95,10 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const [selectedTone, setSelectedTone] = useState('Cozy');
   const [writingStyle, setWritingStyle] = useState(styleOptions[0]);
   const [selectedChapter, setSelectedChapter] = useState(1);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedLibraryItemId, setSelectedLibraryItemId] = useState<string | null>(null);
+  const [savedDraft, setSavedDraft] = useState<SavedStoryDraft | null>(() => readSavedStoryDraft());
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
+
   const providersQuery = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
@@ -110,15 +141,25 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           chapter: selectedChapter,
         },
         stages: [
-          { id: 'outline', label: action === 'draft' ? 'Build outline' : `Plan ${actionLabel(action)}`, resource_class: 'gpu:llm', status: 'queued' },
-          { id: 'draft', label: action === 'draft' ? 'Draft story' : actionLabel(action), resource_class: 'gpu:llm', status: 'queued' },
+          {
+            id: 'outline',
+            label: action === 'draft' ? 'Build outline' : `Plan ${actionLabel(action)}`,
+            resource_class: 'gpu:llm',
+            status: 'queued',
+          },
+          {
+            id: 'draft',
+            label: action === 'draft' ? 'Draft story' : actionLabel(action),
+            resource_class: 'gpu:llm',
+            status: 'queued',
+          },
           { id: 'store-story', label: 'Store story asset', resource_class: 'cpu', status: 'queued' },
         ],
       }),
     onSuccess: async (job, request) => {
       reset({ providerId: request.values.providerId, title: request.values.title, premise: request.values.premise });
       if (job.status === 'completed' && fullJobOutputText(job)) {
-        setSelectedJobId(job.id);
+        setSelectedLibraryItemId(libraryJobId(job.id));
       }
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
@@ -130,14 +171,38 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const watchedProvider = watch('providerId');
   const storyProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
   const queriedStoryJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'storyteller') ?? [];
-  const storyJobs = useMemo(() => includeMutationJob(queriedStoryJobs, createJobMutation.data ?? null), [queriedStoryJobs, createJobMutation.data]);
+  const storyJobs = useMemo(
+    () => includeMutationJob(queriedStoryJobs, createJobMutation.data ?? null),
+    [queriedStoryJobs, createJobMutation.data],
+  );
   const completedStoryJobs = storyJobs.filter((job) => job.status === 'completed' && fullJobOutputText(job));
-  const activeJob = completedStoryJobs.find((job) => job.id === selectedJobId) ?? completedStoryJobs[0] ?? null;
-  const activeStoryText = activeJob ? fullJobOutputText(activeJob) : null;
   const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
-  const storyTitle = jobInputString(activeJob, 'title') || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
-  const premise = watchedPremise || jobInputString(activeJob, 'premise') || '';
-  const providerLabel = providerDisplayName(storyProviders, watchedProvider || jobInputString(activeJob, 'provider_id') || '');
+  const libraryItems = useMemo(
+    () => buildStoryLibraryItems(savedDraft, completedStoryJobs, storyAssets as StoryAssetSummary[]),
+    [savedDraft, completedStoryJobs, storyAssets],
+  );
+  const activeLibraryItem =
+    libraryItems.find((item) => item.id === selectedLibraryItemId) ??
+    libraryItems.find((item) => item.source === 'job') ??
+    libraryItems.find((item) => item.source === 'draft') ??
+    null;
+  const activeJob = activeLibraryItem?.jobId
+    ? completedStoryJobs.find((job) => job.id === activeLibraryItem.jobId) ?? null
+    : null;
+  const activeAsset = activeLibraryItem?.assetId
+    ? (storyAssets as StoryAssetSummary[]).find((asset) => asset.id === activeLibraryItem.assetId) ?? null
+    : null;
+  const activeStoryText = activeLibraryItem?.content ?? null;
+  const storyTitle = activeLibraryItem?.title || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
+  const premise =
+    activeLibraryItem?.source === 'draft'
+      ? savedDraft?.premise ?? watchedPremise
+      : watchedPremise || jobInputString(activeJob, 'premise') || '';
+  const providerLabel = providerDisplayName(
+    storyProviders,
+    watchedProvider || jobInputString(activeJob, 'provider_id') || '',
+    activeLibraryItem?.source === 'draft' ? savedDraft?.providerLabel ?? null : null,
+  );
   const outline = useMemo(() => deriveStoryOutline(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
   const activeChapter = outline.find((chapter) => chapter.number === selectedChapter) ?? outline[0] ?? null;
   const chapterCount = outline.length || Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
@@ -147,10 +212,10 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const canPersistStory = Boolean(activeStoryText?.trim());
 
   useEffect(() => {
-    if (selectedJobId && !completedStoryJobs.some((job) => job.id === selectedJobId)) {
-      setSelectedJobId(null);
+    if (selectedLibraryItemId && !libraryItems.some((item) => item.id === selectedLibraryItemId)) {
+      setSelectedLibraryItemId(null);
     }
-  }, [completedStoryJobs, selectedJobId]);
+  }, [libraryItems, selectedLibraryItemId]);
 
   useEffect(() => {
     if (outline.length && !outline.some((chapter) => chapter.number === selectedChapter)) {
@@ -164,12 +229,18 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       values,
       action,
       sourceText: activeStoryText,
-      sourceJobId: activeJob?.id ?? null,
+      sourceJobId: activeJob?.id ?? activeLibraryItem?.jobId ?? null,
     });
   };
 
   const submitQuickAction = (action: StoryQuickActionMode) => {
     void handleSubmit((values) => submitStoryRequest(values, action))();
+  };
+
+  const selectLibraryItem = (itemId: string) => {
+    setSelectedLibraryItemId(itemId);
+    setSelectedChapter(1);
+    setSaveFeedback(null);
   };
 
   const selectOutlineTarget = (chapterNumber: number, targetId: string) => {
@@ -184,7 +255,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     providerLabel,
     wordCount,
     chapterCount,
-    sourceJobId: activeJob?.id ?? null,
+    sourceJobId: activeJob?.id ?? activeLibraryItem?.jobId ?? null,
     text: activeStoryText ?? '',
   });
 
@@ -194,19 +265,18 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       return;
     }
     try {
-      window.localStorage.setItem(
-        storyDraftStorageKey,
-        JSON.stringify({
-          title: storyTitle,
-          premise,
-          providerLabel,
-          wordCount,
-          chapterCount,
-          sourceJobId: activeJob?.id ?? null,
-          savedAt: new Date().toISOString(),
-          content: activeStoryText,
-        }),
-      );
+      const draft: SavedStoryDraft = {
+        title: storyTitle,
+        premise,
+        providerLabel,
+        wordCount,
+        chapterCount,
+        sourceJobId: activeJob?.id ?? activeLibraryItem?.jobId ?? null,
+        savedAt: new Date().toISOString(),
+        content: activeStoryText,
+      };
+      window.localStorage.setItem(storyDraftStorageKey, JSON.stringify(draft));
+      setSavedDraft(draft);
       setSaveFeedback({ kind: 'saved', message: `Saved “${storyTitle}” locally.` });
     } catch (error) {
       setSaveFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'Unable to save story locally.' });
@@ -244,7 +314,11 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   return (
     <WorkspacePanel>
       <div className="storyteller-workspace" aria-labelledby="module-title">
-        <StoryLibrary storyAssets={storyAssets} completedStoryJobs={completedStoryJobs} activeTitle={storyTitle} />
+        <StoryLibrary
+          activeItemId={activeLibraryItem?.id ?? null}
+          items={libraryItems}
+          onSelect={selectLibraryItem}
+        />
 
         <main className="storyteller-stage">
           <StoryProjectHeader
@@ -276,9 +350,9 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
                 <StoryText outline={outline} text={activeStoryText} />
               ) : (
                 <div className="storyteller-empty-manuscript" role="status">
-                  <p className="eyebrow">Feature module</p>
-                  <h3>{module.label}</h3>
-                  <p>{module.summary}</p>
+                  <p className="eyebrow">{activeAsset ? 'Story asset' : 'Feature module'}</p>
+                  <h3>{activeAsset ? storyTitle : module.label}</h3>
+                  <p>{activeAsset ? 'This library asset is available, but content preview is not exposed by the assets API yet.' : module.summary}</p>
                   <p>Start with a premise, choose a tone, then generate the first scene. Completed output will appear here as a manuscript instead of a job-card preview.</p>
                 </div>
               )}
@@ -303,7 +377,11 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           </div>
 
           <StoryActionBar disabled={createJobMutation.isPending} onAction={submitQuickAction} />
-          <StoryVersions activeJobId={activeJob?.id ?? null} jobs={completedStoryJobs} onSelect={setSelectedJobId} />
+          <StoryVersions
+            activeJobId={activeJob?.id ?? null}
+            jobs={completedStoryJobs}
+            onSelect={(jobId) => selectLibraryItem(libraryJobId(jobId))}
+          />
         </main>
 
         <StoryOutline chapters={outline} selectedChapter={selectedChapter} onSelect={selectOutlineTarget} />
@@ -373,7 +451,12 @@ function StoryControls({
         </label>
         <label>
           Premise <span>0/500</span>
-          <textarea rows={4} aria-invalid={Boolean(errors.premise)} {...register('premise', { required: true })} placeholder="A young herbalist discovers a small secret that could change her quiet valley." />
+          <textarea
+            rows={4}
+            aria-invalid={Boolean(errors.premise)}
+            {...register('premise', { required: true })}
+            placeholder="A young herbalist discovers a small secret that could change her quiet valley."
+          />
         </label>
 
         <div className="storyteller-control-block">
@@ -508,23 +591,26 @@ function StoryProjectHeader({
         </div>
       </div>
       <div className="storyteller-project-actions">
-        <button disabled={!canPersistStory} type="button" onClick={onSave}>Save story</button>
-        <button disabled={!canPersistStory} type="button" onClick={onExport}>Export Markdown</button>
+        <button disabled={!canPersistStory} type="button" onClick={onSave}>
+          Save story
+        </button>
+        <button disabled={!canPersistStory} type="button" onClick={onExport}>
+          Export Markdown
+        </button>
       </div>
     </header>
   );
 }
 
 function StoryLibrary({
-  storyAssets,
-  completedStoryJobs,
-  activeTitle,
+  items,
+  activeItemId,
+  onSelect,
 }: {
-  storyAssets: Array<{ id: string; storage_path: string; type: string }>;
-  completedStoryJobs: JobRecord[];
-  activeTitle: string;
+  items: StoryLibraryItem[];
+  activeItemId: string | null;
+  onSelect: (itemId: string) => void;
 }) {
-  const recentStories = storyAssets.slice(0, 4);
   return (
     <aside className="storyteller-library" aria-label="Story library">
       <div className="storyteller-panel-heading compact">
@@ -541,22 +627,31 @@ function StoryLibrary({
       <section>
         <p className="eyebrow">Recent stories</p>
         <div className="storyteller-recent-list">
-          <article className="active">
-            <span className="storyteller-thumb" />
-            <div>
-              <strong>{activeTitle}</strong>
-              <small>{completedStoryJobs.length ? `${countWords(fullJobOutputText(completedStoryJobs[0]) ?? '').toLocaleString()} words` : 'Draft'}</small>
-            </div>
-          </article>
-          {recentStories.map((asset) => (
-            <article key={asset.id}>
+          {items.length ? (
+            items.slice(0, 6).map((item) => (
+              <button
+                aria-pressed={item.id === activeItemId}
+                className={item.id === activeItemId ? 'active' : ''}
+                key={item.id}
+                type="button"
+                onClick={() => onSelect(item.id)}
+              >
+                <span className={`storyteller-thumb ${item.source === 'asset' ? 'muted' : ''}`} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.subtitle}</small>
+                </div>
+              </button>
+            ))
+          ) : (
+            <article>
               <span className="storyteller-thumb muted" />
               <div>
-                <strong>{storyAssetTitle(asset.storage_path)}</strong>
-                <small>{asset.type}</small>
+                <strong>No stories yet</strong>
+                <small>Generate or save a story</small>
               </div>
             </article>
-          ))}
+          )}
         </div>
       </section>
       <button className="storyteller-trash" type="button">Trash</button>
@@ -684,6 +779,80 @@ function includeMutationJob(jobs: JobRecord[], mutationJob: JobRecord | null): J
   return [mutationJob, ...jobs.filter((job) => job.id !== mutationJob.id)];
 }
 
+function buildStoryLibraryItems(savedDraft: SavedStoryDraft | null, jobs: JobRecord[], assets: StoryAssetSummary[]): StoryLibraryItem[] {
+  const draftItems: StoryLibraryItem[] = savedDraft?.content
+    ? [
+        {
+          id: 'draft:last',
+          source: 'draft',
+          title: savedDraft.title || 'Saved local draft',
+          subtitle: `${countWords(savedDraft.content).toLocaleString()} words • saved draft`,
+          content: savedDraft.content,
+          jobId: savedDraft.sourceJobId ?? null,
+          assetId: null,
+        },
+      ]
+    : [];
+
+  const jobItems = jobs.map((job) => ({
+    id: libraryJobId(job.id),
+    source: 'job' as const,
+    title: jobInputString(job, 'title') || 'Untitled story',
+    subtitle: `${countWords(fullJobOutputText(job) ?? '').toLocaleString()} words • ${jobInputString(job, 'action') ?? 'draft'}`,
+    content: fullJobOutputText(job),
+    jobId: job.id,
+    assetId: null,
+  }));
+
+  const assetItems = assets.map((asset) => ({
+    id: libraryAssetId(asset.id),
+    source: 'asset' as const,
+    title: storyAssetTitle(asset.storage_path),
+    subtitle: `${asset.type}${asset.created_at ? ` • ${shortDate(asset.created_at)}` : ''}`,
+    content: null,
+    jobId: null,
+    assetId: asset.id,
+  }));
+
+  return [...draftItems, ...jobItems, ...assetItems];
+}
+
+function readSavedStoryDraft(): SavedStoryDraft | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(storyDraftStorageKey);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<SavedStoryDraft>;
+    if (typeof parsed.content !== 'string' || !parsed.content.trim()) {
+      return null;
+    }
+    return {
+      title: typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title : 'Saved local draft',
+      premise: typeof parsed.premise === 'string' ? parsed.premise : '',
+      providerLabel: typeof parsed.providerLabel === 'string' ? parsed.providerLabel : undefined,
+      wordCount: typeof parsed.wordCount === 'number' ? parsed.wordCount : undefined,
+      chapterCount: typeof parsed.chapterCount === 'number' ? parsed.chapterCount : undefined,
+      sourceJobId: typeof parsed.sourceJobId === 'string' ? parsed.sourceJobId : null,
+      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : undefined,
+      content: parsed.content,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function libraryJobId(jobId: string): string {
+  return `job:${jobId}`;
+}
+
+function libraryAssetId(assetId: string): string {
+  return `asset:${assetId}`;
+}
+
 function jobInputString(job: JobRecord | null, key: string): string | null {
   const input = job?.input_payload;
   if (!input || typeof input !== 'object') {
@@ -701,8 +870,12 @@ function storyAssetTitle(storagePath: string | undefined): string {
   return filename.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') || 'Untitled Draft';
 }
 
-function providerDisplayName(providers: Array<{ id: string; label: string }>, selectedProviderId: string): string {
-  return providers.find((provider) => provider.id === selectedProviderId)?.label ?? 'Omnix LLM';
+function providerDisplayName(
+  providers: Array<{ id: string; label: string }>,
+  selectedProviderId: string,
+  fallbackLabel: string | null = null,
+): string {
+  return providers.find((provider) => provider.id === selectedProviderId)?.label ?? fallbackLabel ?? 'Omnix LLM';
 }
 
 function countWords(text: string): number {
@@ -888,11 +1061,13 @@ function sectionId(prefix: string, index: number, value: string): string {
 }
 
 function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'section';
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'section'
+  );
 }
 
 function normalizeHeading(value: string): string {
@@ -902,4 +1077,12 @@ function normalizeHeading(value: string): string {
 function sceneTitleFromParagraph(paragraph: string, index: number): string {
   const words = paragraph.replace(/[“”"']/g, '').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
   return words ? `${words}${paragraph.split(/\s+/).length > 5 ? '…' : ''}` : `Scene ${index + 1}`;
+}
+
+function shortDate(value: string): string {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+  return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
