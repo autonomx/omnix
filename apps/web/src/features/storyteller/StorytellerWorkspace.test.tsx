@@ -92,32 +92,34 @@ function assetPayload() {
   };
 }
 
+function stubStoryApi(jobs: unknown[] = [storyJob()]) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') {
+        return Response.json(providerPayload());
+      }
+      if (path === '/api/jobs') {
+        return Response.json({ jobs });
+      }
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
+      }
+      return new Response('not found', { status: 404 });
+    }),
+  );
+}
+
 afterEach(() => {
+  window.localStorage.clear();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('StorytellerWorkspace', () => {
   it('renders completed story output as the main manuscript workspace', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const path = requestPath(input);
-
-        if (path === '/api/providers') {
-          return Response.json(providerPayload());
-        }
-
-        if (path === '/api/jobs') {
-          return Response.json({ jobs: [storyJob()] });
-        }
-
-        if (path === '/api/assets') {
-          return Response.json(assetPayload());
-        }
-
-        return new Response('not found', { status: 404 });
-      }),
-    );
+    stubStoryApi([storyJob()]);
 
     renderStoryteller();
 
@@ -134,52 +136,30 @@ describe('StorytellerWorkspace', () => {
   });
 
   it('shows an empty manuscript state before the first story is generated', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const path = requestPath(input);
-
-        if (path === '/api/providers') {
-          return Response.json(providerPayload());
-        }
-
-        if (path === '/api/jobs') {
-          return Response.json({ jobs: [] });
-        }
-
-        if (path === '/api/assets') {
-          return Response.json({ assets: [] });
-        }
-
-        return new Response('not found', { status: 404 });
-      }),
-    );
+    stubStoryApi([]);
 
     renderStoryteller();
 
     expect(await screen.findByText('Start with a premise, choose a tone, then generate the first scene. Completed output will appear here as a manuscript instead of a job-card preview.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save story' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Markdown' })).toBeDisabled();
   });
 
   it('generates stories through the shared jobs API from the redesigned controls', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-
       if (path === '/api/providers') {
         return Response.json(providerPayload());
       }
-
       if (path === '/api/jobs' && init?.method === 'POST') {
         return Response.json(storyJob());
       }
-
       if (path === '/api/jobs') {
         return Response.json({ jobs: [] });
       }
-
       if (path === '/api/assets') {
         return Response.json(assetPayload());
       }
-
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -215,45 +195,62 @@ describe('StorytellerWorkspace', () => {
   });
 
   it('selects prior story versions into the manuscript', async () => {
-    const newer = storyJob({
-      id: 'job:newer',
-      input_payload: { title: 'Newer Orchard', action: 'expand' },
-      output_refs: [{ kind: 'text', content: 'Newer branches glittered over the city.' }],
-    });
-    const older = storyJob({
-      id: 'job:older',
-      input_payload: { title: 'Older Orchard', action: 'rewrite' },
-      output_refs: [{ kind: 'text', content: 'Older roots remembered every footstep.' }],
-    });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const path = requestPath(input);
-
-        if (path === '/api/providers') {
-          return Response.json(providerPayload());
-        }
-
-        if (path === '/api/jobs') {
-          return Response.json({ jobs: [newer, older] });
-        }
-
-        if (path === '/api/assets') {
-          return Response.json(assetPayload());
-        }
-
-        return new Response('not found', { status: 404 });
-      }),
-    );
+    const newer = storyJob({ id: 'job:newer', input_payload: { title: 'Newer Orchard', action: 'expand' }, output_refs: [{ kind: 'text', content: 'Newer branches glittered over the city.' }] });
+    const older = storyJob({ id: 'job:older', input_payload: { title: 'Older Orchard', action: 'rewrite' }, output_refs: [{ kind: 'text', content: 'Older roots remembered every footstep.' }] });
+    stubStoryApi([newer, older]);
 
     renderStoryteller();
 
     const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
     expect(await within(manuscript).findByText('Newer branches glittered over the city.')).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('button', { name: /Select v1: Rewrite paragraph • Older Orchard/ }));
-
     expect(await within(manuscript).findByText('Older roots remembered every footstep.')).toBeInTheDocument();
+  });
+
+  it('saves the selected story version to local browser storage', async () => {
+    const selected = storyJob({
+      id: 'job:selected',
+      input_payload: { title: 'Saved Orchard', action: 'rewrite' },
+      output_refs: [{ kind: 'text', content: 'Saved roots remembered every footstep.' }],
+    });
+    stubStoryApi([selected]);
+
+    renderStoryteller();
+
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    expect(await within(manuscript).findByText('Saved roots remembered every footstep.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save story' }));
+
+    expect(await screen.findByText('Saved “Saved Orchard” locally.')).toBeInTheDocument();
+    const saved = JSON.parse(window.localStorage.getItem('omnix:storyteller:last-draft') ?? '{}') as Record<string, unknown>;
+    expect(saved.title).toBe('Saved Orchard');
+    expect(saved.sourceJobId).toBe('job:selected');
+    expect(saved.content).toBe('Saved roots remembered every footstep.');
+  });
+
+  it('exports the selected story version as Markdown', async () => {
+    const createObjectUrl = vi.fn(() => 'blob:story-export');
+    const revokeObjectUrl = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const selected = storyJob({
+      id: 'job:exported',
+      input_payload: { title: 'Exported Orchard', action: 'expand' },
+      output_refs: [{ kind: 'text', content: 'Exported branches glittered over the city.' }],
+    });
+    stubStoryApi([selected]);
+
+    renderStoryteller();
+
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    expect(await within(manuscript).findByText('Exported branches glittered over the city.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Export Markdown' }));
+
+    expect(await screen.findByText('Exported exported-orchard.md.')).toBeInTheDocument();
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:story-export');
   });
 
   it('derives outline entries from generated chapter and scene headings', async () => {
@@ -265,32 +262,7 @@ describe('StorytellerWorkspace', () => {
       'Scene 1: The Name Seller',
       'Mira traded a silver thread for a forgotten lullaby.',
     ].join('\n\n');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const path = requestPath(input);
-
-        if (path === '/api/providers') {
-          return Response.json(providerPayload());
-        }
-
-        if (path === '/api/jobs') {
-          return Response.json({
-            jobs: [
-              storyJob({
-                output_refs: [{ kind: 'text', content: chapteredStory }],
-              }),
-            ],
-          });
-        }
-
-        if (path === '/api/assets') {
-          return Response.json(assetPayload());
-        }
-
-        return new Response('not found', { status: 404 });
-      }),
-    );
+    stubStoryApi([storyJob({ output_refs: [{ kind: 'text', content: chapteredStory }] })]);
 
     renderStoryteller();
 
@@ -310,36 +282,18 @@ describe('StorytellerWorkspace', () => {
     const baseText = 'The orchard rang like crystal at sunset.\n\nEach branch remembered a name.';
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-
       if (path === '/api/providers') {
         return Response.json(providerPayload());
       }
-
       if (path === '/api/jobs' && init?.method === 'POST') {
-        return Response.json(
-          storyJob({
-            id: 'job:continue',
-            input_payload: { title: 'The Glass Orchard', action: 'continue' },
-            output_refs: [{ kind: 'text', content: 'The path continued beneath the glass leaves.' }],
-          }),
-        );
+        return Response.json(storyJob({ id: 'job:continue', input_payload: { title: 'The Glass Orchard', action: 'continue' }, output_refs: [{ kind: 'text', content: 'The path continued beneath the glass leaves.' }] }));
       }
-
       if (path === '/api/jobs') {
-        return Response.json({
-          jobs: [
-            storyJob({
-              id: 'job:base',
-              output_refs: [{ kind: 'text', content: baseText }],
-            }),
-          ],
-        });
+        return Response.json({ jobs: [storyJob({ id: 'job:base', output_refs: [{ kind: 'text', content: baseText }] })] });
       }
-
       if (path === '/api/assets') {
         return Response.json(assetPayload());
       }
-
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);

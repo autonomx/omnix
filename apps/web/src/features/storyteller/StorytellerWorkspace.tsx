@@ -15,6 +15,7 @@ interface StorytellerFormValues {
 
 type StoryActionMode = 'draft' | 'continue' | 'rewrite' | 'expand' | 'dialogue' | 'summarize';
 type StoryQuickActionMode = Exclude<StoryActionMode, 'draft'>;
+type SaveFeedbackKind = 'saved' | 'exported' | 'error';
 
 interface StoryGenerationRequest {
   values: StorytellerFormValues;
@@ -43,6 +44,12 @@ interface StoryTextBlock {
   text: string;
 }
 
+interface SaveFeedback {
+  kind: SaveFeedbackKind;
+  message: string;
+}
+
+const storyDraftStorageKey = 'omnix:storyteller:last-draft';
 const toneOptions = ['Cozy', 'Hopeful', 'Gentle', 'Mystery'];
 const styleOptions = ['Lyrical & Descriptive', 'Fast-paced', 'Dialogue-heavy', 'Cinematic', 'Literary'];
 
@@ -60,6 +67,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const [writingStyle, setWritingStyle] = useState(styleOptions[0]);
   const [selectedChapter, setSelectedChapter] = useState(1);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
   const providersQuery = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
@@ -128,6 +136,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const activeStoryText = activeJob ? fullJobOutputText(activeJob) : null;
   const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
   const storyTitle = jobInputString(activeJob, 'title') || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
+  const premise = watchedPremise || jobInputString(activeJob, 'premise') || '';
   const providerLabel = providerDisplayName(storyProviders, watchedProvider || jobInputString(activeJob, 'provider_id') || '');
   const outline = useMemo(() => deriveStoryOutline(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
   const activeChapter = outline.find((chapter) => chapter.number === selectedChapter) ?? outline[0] ?? null;
@@ -135,6 +144,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+  const canPersistStory = Boolean(activeStoryText?.trim());
 
   useEffect(() => {
     if (selectedJobId && !completedStoryJobs.some((job) => job.id === selectedJobId)) {
@@ -149,6 +159,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   }, [outline, selectedChapter]);
 
   const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
+    setSaveFeedback(null);
     createJobMutation.mutate({
       values,
       action,
@@ -167,6 +178,69 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     target?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   };
 
+  const storyMarkdown = () => formatStoryMarkdown({
+    title: storyTitle,
+    premise,
+    providerLabel,
+    wordCount,
+    chapterCount,
+    sourceJobId: activeJob?.id ?? null,
+    text: activeStoryText ?? '',
+  });
+
+  const saveStoryDraft = () => {
+    if (!activeStoryText?.trim()) {
+      setSaveFeedback({ kind: 'error', message: 'Generate or select a story version before saving.' });
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        storyDraftStorageKey,
+        JSON.stringify({
+          title: storyTitle,
+          premise,
+          providerLabel,
+          wordCount,
+          chapterCount,
+          sourceJobId: activeJob?.id ?? null,
+          savedAt: new Date().toISOString(),
+          content: activeStoryText,
+        }),
+      );
+      setSaveFeedback({ kind: 'saved', message: `Saved “${storyTitle}” locally.` });
+    } catch (error) {
+      setSaveFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'Unable to save story locally.' });
+    }
+  };
+
+  const exportStoryMarkdown = () => {
+    if (!activeStoryText?.trim()) {
+      setSaveFeedback({ kind: 'error', message: 'Generate or select a story version before exporting.' });
+      return;
+    }
+    try {
+      const markdown = storyMarkdown();
+      const filename = `${slugify(storyTitle || 'story')}.md`;
+      if (typeof Blob === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+        setSaveFeedback({ kind: 'exported', message: `Prepared Markdown export for ${filename}.` });
+        return;
+      }
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setSaveFeedback({ kind: 'exported', message: `Exported ${filename}.` });
+    } catch (error) {
+      setSaveFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'Unable to export story.' });
+    }
+  };
+
   return (
     <WorkspacePanel>
       <div className="storyteller-workspace" aria-labelledby="module-title">
@@ -175,11 +249,15 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
         <main className="storyteller-stage">
           <StoryProjectHeader
             title={storyTitle}
-            premise={watchedPremise || jobInputString(activeJob, 'premise') || ''}
+            premise={premise}
             providerLabel={providerLabel}
             wordCount={wordCount}
             chapterCount={chapterCount}
             moduleRoute={module.route}
+            canPersistStory={canPersistStory}
+            saveFeedback={saveFeedback}
+            onSave={saveStoryDraft}
+            onExport={exportStoryMarkdown}
           />
 
           <div className="storyteller-compose-grid">
@@ -380,6 +458,10 @@ function StoryProjectHeader({
   wordCount,
   chapterCount,
   moduleRoute,
+  canPersistStory,
+  saveFeedback,
+  onSave,
+  onExport,
 }: {
   title: string;
   premise: string;
@@ -387,6 +469,10 @@ function StoryProjectHeader({
   wordCount: number;
   chapterCount: number;
   moduleRoute: string;
+  canPersistStory: boolean;
+  saveFeedback: SaveFeedback | null;
+  onSave: () => void;
+  onExport: () => void;
 }) {
   return (
     <header className="storyteller-project-header">
@@ -401,6 +487,11 @@ function StoryProjectHeader({
           <span>Mystery</span>
           <span>Slice of Life</span>
         </div>
+        {saveFeedback ? (
+          <p className={`storyteller-persist-feedback ${saveFeedback.kind}`} role="status">
+            {saveFeedback.message}
+          </p>
+        ) : null}
       </div>
       <div className="storyteller-project-stats">
         <div>
@@ -417,8 +508,8 @@ function StoryProjectHeader({
         </div>
       </div>
       <div className="storyteller-project-actions">
-        <button type="button">Save</button>
-        <button type="button">Export</button>
+        <button disabled={!canPersistStory} type="button" onClick={onSave}>Save story</button>
+        <button disabled={!canPersistStory} type="button" onClick={onExport}>Export Markdown</button>
       </div>
     </header>
   );
@@ -578,7 +669,6 @@ function progressPercent(progress: { current: number; total: number } | undefine
   if (!progress || progress.total <= 0) {
     return 0;
   }
-
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
@@ -652,6 +742,33 @@ function actionLabel(action: StoryActionMode): string {
     default:
       return 'Draft story';
   }
+}
+
+function formatStoryMarkdown({
+  title,
+  premise,
+  providerLabel,
+  wordCount,
+  chapterCount,
+  sourceJobId,
+  text,
+}: {
+  title: string;
+  premise: string;
+  providerLabel: string;
+  wordCount: number;
+  chapterCount: number;
+  sourceJobId: string | null;
+  text: string;
+}): string {
+  const metadata = [
+    `Provider: ${providerLabel}`,
+    `Words: ${wordCount}`,
+    `Chapters: ${chapterCount}`,
+    sourceJobId ? `Source job: ${sourceJobId}` : null,
+    premise ? `Premise: ${premise}` : null,
+  ].filter(Boolean);
+  return [`# ${title || 'Untitled story'}`, metadata.join('\n'), '---', text.trim(), ''].filter(Boolean).join('\n\n');
 }
 
 function deriveStoryOutline(text: string | null, fallbackTitle: string): StoryOutlineChapter[] {
