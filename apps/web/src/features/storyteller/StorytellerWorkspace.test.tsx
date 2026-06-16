@@ -249,11 +249,11 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
 
     const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
-    expect(within(manuscript).getByText('Newer branches glittered over the city.')).toBeInTheDocument();
+    expect(await within(manuscript).findByText('Newer branches glittered over the city.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Select v1: Rewrite paragraph • Older Orchard/ }));
 
-    expect(within(manuscript).getByText('Older roots remembered every footstep.')).toBeInTheDocument();
+    expect(await within(manuscript).findByText('Older roots remembered every footstep.')).toBeInTheDocument();
   });
 
   it('submits quick actions with active manuscript context', async () => {
