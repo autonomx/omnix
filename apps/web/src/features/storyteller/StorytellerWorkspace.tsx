@@ -135,6 +135,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
                   </Group>
                   <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
                   <Text size="sm">{job.resource_class}</Text>
+                  {jobOutputText(job) ? <Text size="sm">{jobOutputText(job)}</Text> : null}
                 </article>
               ))}
             </div>
@@ -174,4 +175,12 @@ function progressPercent(progress: { current: number; total: number } | undefine
   }
 
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
+}
+
+function jobOutputText(job: { output_refs?: Array<{ content?: unknown }>; logs?: Array<{ content?: unknown }> }): string | null {
+  const content = job.output_refs?.find((ref) => typeof ref.content === 'string')?.content ?? job.logs?.find((log) => typeof log.content === 'string')?.content;
+  if (typeof content !== 'string') {
+    return null;
+  }
+  return content.length > 260 ? `${content.slice(0, 260)}…` : content;
 }
