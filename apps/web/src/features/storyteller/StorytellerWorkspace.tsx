@@ -1,7 +1,7 @@
 import { Button, Progress } from '@mantine/core';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldErrors, type UseFormHandleSubmit, type UseFormRegister } from 'react-hook-form';
 import { omnixApiClient, type JobRecord, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
@@ -42,23 +42,8 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   } = useForm<StorytellerFormValues>({
     defaultValues: { providerId: '', title: '', premise: '' },
   });
-  const watchedTitle = watch('title');
-  const watchedPremise = watch('premise');
-  const watchedProvider = watch('providerId');
-  const storyProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
-  const queriedStoryJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'storyteller') ?? [];
-  const storyJobs = useMemo(() => includeMutationJob(queriedStoryJobs, createJobMutationRecord(createJobMutation.data)), [queriedStoryJobs, createJobMutation.data]);
-  const completedStoryJobs = storyJobs.filter((job) => job.status === 'completed' && fullJobOutputText(job));
-  const activeJob = completedStoryJobs[0] ?? null;
-  const activeStoryText = activeJob ? fullJobOutputText(activeJob) : null;
-  const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
-  const storyTitle = jobInputString(activeJob, 'title') || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
-  const providerLabel = providerDisplayName(storyProviders, watchedProvider);
-  const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
-  const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
-  const chapterCount = Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
 
-  const createJobMutation = useMutation({
+  const createJobMutation = useMutation<JobRecord, Error, StorytellerFormValues>({
     mutationFn: (values: StorytellerFormValues) =>
       omnixApiClient.createJob({
         module: 'storyteller',
@@ -86,6 +71,22 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
     },
   });
+
+  const watchedTitle = watch('title');
+  const watchedPremise = watch('premise');
+  const watchedProvider = watch('providerId');
+  const storyProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
+  const queriedStoryJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'storyteller') ?? [];
+  const storyJobs = useMemo(() => includeMutationJob(queriedStoryJobs, createJobMutation.data ?? null), [queriedStoryJobs, createJobMutation.data]);
+  const completedStoryJobs = storyJobs.filter((job) => job.status === 'completed' && fullJobOutputText(job));
+  const activeJob = completedStoryJobs[0] ?? null;
+  const activeStoryText = activeJob ? fullJobOutputText(activeJob) : null;
+  const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
+  const storyTitle = jobInputString(activeJob, 'title') || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
+  const providerLabel = providerDisplayName(storyProviders, watchedProvider);
+  const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
+  const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
+  const chapterCount = Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
@@ -156,9 +157,9 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
 
 interface StoryControlsProps {
   providers: Array<{ id: string; label: string }>;
-  register: ReturnType<typeof useForm<StorytellerFormValues>>['register'];
-  errors: ReturnType<typeof useForm<StorytellerFormValues>>['formState']['errors'];
-  createJobMutation: ReturnType<typeof useMutation<JobRecord, Error, StorytellerFormValues>>;
+  register: UseFormRegister<StorytellerFormValues>;
+  errors: FieldErrors<StorytellerFormValues>;
+  createJobMutation: UseMutationResult<JobRecord, Error, StorytellerFormValues>;
   submitStatus: string;
   selectedTone: string;
   setSelectedTone: (tone: string) => void;
@@ -166,7 +167,7 @@ interface StoryControlsProps {
   setWritingStyle: (style: string) => void;
   selectedChapter: number;
   setSelectedChapter: (chapter: number) => void;
-  handleSubmit: ReturnType<typeof useForm<StorytellerFormValues>>['handleSubmit'];
+  handleSubmit: UseFormHandleSubmit<StorytellerFormValues>;
   latestJob: JobRecord | null;
 }
 
@@ -507,10 +508,6 @@ function includeMutationJob(jobs: JobRecord[], mutationJob: JobRecord | null): J
     return jobs;
   }
   return [mutationJob, ...jobs.filter((job) => job.id !== mutationJob.id)];
-}
-
-function createJobMutationRecord(job: JobRecord | undefined): JobRecord | null {
-  return job ?? null;
 }
 
 function jobInputString(job: JobRecord | null, key: string): string | null {
