@@ -23,6 +23,26 @@ interface StoryGenerationRequest {
   sourceJobId: string | null;
 }
 
+interface StoryOutlineScene {
+  id: string;
+  label: string;
+  title: string;
+}
+
+interface StoryOutlineChapter {
+  id: string;
+  number: number;
+  label: string;
+  title: string;
+  scenes: StoryOutlineScene[];
+}
+
+interface StoryTextBlock {
+  id?: string;
+  kind: 'chapter' | 'scene' | 'paragraph';
+  text: string;
+}
+
 const toneOptions = ['Cozy', 'Hopeful', 'Gentle', 'Mystery'];
 const styleOptions = ['Lyrical & Descriptive', 'Fast-paced', 'Dialogue-heavy', 'Cinematic', 'Literary'];
 
@@ -109,9 +129,11 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
   const storyTitle = jobInputString(activeJob, 'title') || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
   const providerLabel = providerDisplayName(storyProviders, watchedProvider || jobInputString(activeJob, 'provider_id') || '');
+  const outline = useMemo(() => deriveStoryOutline(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
+  const activeChapter = outline.find((chapter) => chapter.number === selectedChapter) ?? outline[0] ?? null;
+  const chapterCount = outline.length || Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
   const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
-  const chapterCount = Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   useEffect(() => {
@@ -119,6 +141,12 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       setSelectedJobId(null);
     }
   }, [completedStoryJobs, selectedJobId]);
+
+  useEffect(() => {
+    if (outline.length && !outline.some((chapter) => chapter.number === selectedChapter)) {
+      setSelectedChapter(outline[0].number);
+    }
+  }, [outline, selectedChapter]);
 
   const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
     createJobMutation.mutate({
@@ -131,6 +159,12 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
 
   const submitQuickAction = (action: StoryQuickActionMode) => {
     void handleSubmit((values) => submitStoryRequest(values, action))();
+  };
+
+  const selectOutlineTarget = (chapterNumber: number, targetId: string) => {
+    setSelectedChapter(chapterNumber);
+    const target = document.getElementById(targetId) as (HTMLElement & { scrollIntoView?: (options?: ScrollIntoViewOptions) => void }) | null;
+    target?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
   };
 
   return (
@@ -151,17 +185,17 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           <div className="storyteller-compose-grid">
             <section className="storyteller-manuscript" aria-label="Story manuscript">
               <div className="storyteller-manuscript-meta">
-                <span>Chapter {selectedChapter}</span>
+                <span>{activeChapter?.label ?? `Chapter ${selectedChapter}`}</span>
                 <span>{readingMinutes} min read</span>
               </div>
-              <h2 id="module-title">{storyTitle}</h2>
+              <h2 id="module-title">{activeChapter?.title ?? storyTitle}</h2>
               <div className="storyteller-flourish" aria-hidden="true">
                 <span />
                 <strong>◇</strong>
                 <span />
               </div>
               {activeStoryText ? (
-                <StoryText text={activeStoryText} />
+                <StoryText outline={outline} text={activeStoryText} />
               ) : (
                 <div className="storyteller-empty-manuscript" role="status">
                   <p className="eyebrow">Feature module</p>
@@ -194,7 +228,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           <StoryVersions activeJobId={activeJob?.id ?? null} jobs={completedStoryJobs} onSelect={setSelectedJobId} />
         </main>
 
-        <StoryOutline activeTitle={storyTitle} selectedChapter={selectedChapter} setSelectedChapter={setSelectedChapter} />
+        <StoryOutline chapters={outline} selectedChapter={selectedChapter} onSelect={selectOutlineTarget} />
       </div>
     </WorkspacePanel>
   );
@@ -480,61 +514,58 @@ function StoryVersions({ activeJobId, jobs, onSelect }: { activeJobId: string | 
   );
 }
 
-function StoryOutline({
-  activeTitle,
-  selectedChapter,
-  setSelectedChapter,
-}: {
-  activeTitle: string;
-  selectedChapter: number;
-  setSelectedChapter: (chapter: number) => void;
-}) {
-  const chapters = [
-    ['Chapter 1', activeTitle, ['The Leaving', 'The Old Path', 'First Sight of Home']],
-    ['Chapter 2', 'The Gathering Leaves', ['Market Day', 'A Curious Letter', 'Evening Whispers']],
-    ['Chapter 3', 'Under the Briar Moon', ['The Hidden Door', 'What Was Forgotten', 'The Choice']],
-    ['Chapter 4', 'Threads of Tomorrow', ['New Roads', 'Quiet Promises', 'Dawn']],
-  ];
+function StoryOutline({ chapters, selectedChapter, onSelect }: { chapters: StoryOutlineChapter[]; selectedChapter: number; onSelect: (chapterNumber: number, targetId: string) => void }) {
   return (
     <aside className="storyteller-outline" aria-label="Story outline">
       <div className="storyteller-panel-heading compact">
         <p className="eyebrow">Outline</p>
         <button type="button">☰</button>
       </div>
-      {chapters.map(([chapterLabel, chapterTitle, scenes], chapterIndex) => {
-        const chapterNumber = chapterIndex + 1;
-        return (
-          <article className={selectedChapter === chapterNumber ? 'active' : ''} key={chapterLabel as string}>
-            <button type="button" onClick={() => setSelectedChapter(chapterNumber)}>
-              <strong>{chapterLabel}</strong>
-              <span>{chapterTitle}</span>
-            </button>
-            <ol>
-              {(scenes as string[]).map((scene, sceneIndex) => (
-                <li className={chapterIndex === 0 && sceneIndex === 0 ? 'active' : ''} key={scene}>
-                  <span>Scene {sceneIndex + 1}</span>
-                  <strong>{scene}</strong>
-                </li>
-              ))}
-            </ol>
-          </article>
-        );
-      })}
+      {chapters.map((chapter) => (
+        <article className={selectedChapter === chapter.number ? 'active' : ''} key={chapter.id}>
+          <button type="button" onClick={() => onSelect(chapter.number, chapter.id)}>
+            <strong>{chapter.label}</strong>
+            <span>{chapter.title}</span>
+          </button>
+          <ol>
+            {chapter.scenes.map((scene, sceneIndex) => (
+              <li className={selectedChapter === chapter.number && sceneIndex === 0 ? 'active' : ''} key={scene.id}>
+                <button type="button" onClick={() => onSelect(chapter.number, scene.id)}>
+                  <span>{scene.label}</span>
+                  <strong>{scene.title}</strong>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </article>
+      ))}
       <button className="storyteller-add-chapter" type="button">Add chapter</button>
     </aside>
   );
 }
 
-function StoryText({ text }: { text: string }) {
+function StoryText({ text, outline }: { text: string; outline: StoryOutlineChapter[] }) {
+  const blocks = useMemo(() => storyTextBlocks(text, outline), [text, outline]);
   return (
     <div className="storyteller-prose">
-      {text
-        .split(/\n{2,}/)
-        .map((paragraph) => paragraph.trim())
-        .filter(Boolean)
-        .map((paragraph, index) => (
-          <p key={`${paragraph.slice(0, 18)}-${index}`}>{paragraph}</p>
-        ))}
+      {blocks.map((block, index) => {
+        const key = `${block.kind}-${block.id ?? block.text.slice(0, 18)}-${index}`;
+        if (block.kind === 'chapter') {
+          return (
+            <h3 id={block.id} key={key} tabIndex={-1}>
+              {block.text}
+            </h3>
+          );
+        }
+        if (block.kind === 'scene') {
+          return (
+            <h4 id={block.id} key={key} tabIndex={-1}>
+              {block.text}
+            </h4>
+          );
+        }
+        return <p key={key}>{block.text}</p>;
+      })}
     </div>
   );
 }
@@ -621,4 +652,137 @@ function actionLabel(action: StoryActionMode): string {
     default:
       return 'Draft story';
   }
+}
+
+function deriveStoryOutline(text: string | null, fallbackTitle: string): StoryOutlineChapter[] {
+  if (!text?.trim()) {
+    return [fallbackChapter(fallbackTitle)];
+  }
+
+  const paragraphs = storyParagraphs(text);
+  const chapters: StoryOutlineChapter[] = [];
+  let currentChapter: StoryOutlineChapter | null = null;
+
+  paragraphs.forEach((paragraph, index) => {
+    const heading = headingInfo(paragraph);
+    if (heading?.kind === 'chapter') {
+      const number = chapters.length + 1;
+      currentChapter = {
+        id: sectionId('chapter', number, heading.title || `Chapter ${number}`),
+        number,
+        label: `Chapter ${number}`,
+        title: heading.title || `Chapter ${number}`,
+        scenes: [],
+      };
+      chapters.push(currentChapter);
+      return;
+    }
+
+    if (!currentChapter) {
+      currentChapter = {
+        id: sectionId('chapter', 1, fallbackTitle),
+        number: 1,
+        label: 'Chapter 1',
+        title: fallbackTitle || 'Untitled story',
+        scenes: [],
+      };
+      chapters.push(currentChapter);
+    }
+
+    if (heading?.kind === 'scene') {
+      const sceneNumber = currentChapter.scenes.length + 1;
+      currentChapter.scenes.push({
+        id: sectionId(`chapter-${currentChapter.number}-scene`, sceneNumber, heading.title),
+        label: `Scene ${sceneNumber}`,
+        title: heading.title,
+      });
+      return;
+    }
+
+    if (currentChapter.scenes.length === 0 && paragraph.length > 40) {
+      currentChapter.scenes.push({
+        id: sectionId(`chapter-${currentChapter.number}-scene`, 1, paragraph),
+        label: 'Scene 1',
+        title: sceneTitleFromParagraph(paragraph, index),
+      });
+    }
+  });
+
+  if (chapters.length === 0) {
+    return [fallbackChapter(fallbackTitle)];
+  }
+
+  return chapters.map((chapter) => ({
+    ...chapter,
+    scenes: chapter.scenes.length ? chapter.scenes : [{ id: `${chapter.id}-scene-1`, label: 'Scene 1', title: 'Opening passage' }],
+  }));
+}
+
+function storyTextBlocks(text: string, outline: StoryOutlineChapter[]): StoryTextBlock[] {
+  const chaptersByTitle = new Map(outline.map((chapter) => [normalizeHeading(chapter.title), chapter]));
+  const scenesByTitle = new Map(outline.flatMap((chapter) => chapter.scenes.map((scene) => [normalizeHeading(scene.title), scene] as const)));
+  return storyParagraphs(text).map((paragraph) => {
+    const heading = headingInfo(paragraph);
+    if (heading?.kind === 'chapter') {
+      const chapter = chaptersByTitle.get(normalizeHeading(heading.title));
+      return { id: chapter?.id, kind: 'chapter', text: heading.title || paragraph };
+    }
+    if (heading?.kind === 'scene') {
+      const scene = scenesByTitle.get(normalizeHeading(heading.title));
+      return { id: scene?.id, kind: 'scene', text: heading.title || paragraph };
+    }
+    return { kind: 'paragraph', text: paragraph };
+  });
+}
+
+function headingInfo(paragraph: string): { kind: 'chapter' | 'scene'; title: string } | null {
+  const markdown = paragraph.match(/^#{1,4}\s+(.+)$/);
+  const text = (markdown?.[1] ?? paragraph).trim();
+  const chapter = text.match(/^chapter\s+([\divxlcdm]+)\s*[:.\-–—]?\s*(.*)$/i);
+  if (chapter) {
+    return { kind: 'chapter', title: chapter[2]?.trim() || `Chapter ${chapter[1]}` };
+  }
+  const scene = text.match(/^scene\s+([\divxlcdm]+)\s*[:.\-–—]?\s*(.*)$/i);
+  if (scene) {
+    return { kind: 'scene', title: scene[2]?.trim() || `Scene ${scene[1]}` };
+  }
+  return null;
+}
+
+function storyParagraphs(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+function fallbackChapter(title: string): StoryOutlineChapter {
+  return {
+    id: sectionId('chapter', 1, title || 'Untitled story'),
+    number: 1,
+    label: 'Chapter 1',
+    title: title || 'Untitled story',
+    scenes: [{ id: sectionId('chapter-1-scene', 1, title || 'Opening passage'), label: 'Scene 1', title: 'Opening passage' }],
+  };
+}
+
+function sectionId(prefix: string, index: number, value: string): string {
+  return `${prefix}-${index}-${slugify(value || 'section')}`;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'section';
+}
+
+function normalizeHeading(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function sceneTitleFromParagraph(paragraph: string, index: number): string {
+  const words = paragraph.replace(/[“”"']/g, '').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
+  return words ? `${words}${paragraph.split(/\s+/).length > 5 ? '…' : ''}` : `Scene ${index + 1}`;
 }
