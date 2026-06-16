@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
 
 interface SttFormValues {
   providerId: string;
@@ -58,6 +59,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -78,7 +80,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <Title order={4}>Transcription</Title>
               <Text size="sm">Shared STT job queue</Text>
             </div>
-            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
@@ -112,16 +114,20 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
               Source path
               <input {...register('sourcePath')} placeholder="resources/data/input.wav" />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
-              Queue transcription
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+              {createJobMutation.isPending ? 'Queueing transcription…' : 'Queue transcription'}
             </Button>
           </form>
 
-          {createJobMutation.data ? (
-            <div className="feature-job-link" role="status">
-              STT job queued: {createJobMutation.data.id}
-            </div>
-          ) : null}
+          <FeatureSubmitFeedback
+            error={createJobMutation.error}
+            errorPrefix="STT request"
+            isError={createJobMutation.isError}
+            isPending={createJobMutation.isPending}
+            jobId={createJobMutation.data?.id}
+            pendingMessage="Queueing STT job…"
+            successPrefix="STT job queued"
+          />
         </section>
 
         <section className="feature-panel">
