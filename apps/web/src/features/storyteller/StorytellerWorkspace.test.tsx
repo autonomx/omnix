@@ -295,11 +295,12 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
 
     const outline = await screen.findByRole('complementary', { name: 'Story outline' });
-    expect(within(outline).getByRole('button', { name: /Chapter 1 The Glass Orchard/ })).toBeInTheDocument();
+    expect(await within(outline).findByRole('button', { name: /Chapter 1 The Glass Orchard/ })).toBeInTheDocument();
     expect(within(outline).getByRole('button', { name: /Scene 1 The Crystal Row/ })).toBeInTheDocument();
-    expect(within(outline).getByRole('button', { name: /Chapter 2 The Memory Market/ })).toBeInTheDocument();
+    const chapterTwoButton = await within(outline).findByRole('button', { name: /Chapter 2 The Memory Market/ });
+    expect(chapterTwoButton).toBeInTheDocument();
 
-    fireEvent.click(within(outline).getByRole('button', { name: /Chapter 2 The Memory Market/ }));
+    fireEvent.click(chapterTwoButton);
 
     const manuscript = screen.getByRole('region', { name: 'Story manuscript' });
     expect(await within(manuscript).findByRole('heading', { name: 'The Memory Market' })).toBeInTheDocument();
