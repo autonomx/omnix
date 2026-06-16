@@ -64,7 +64,9 @@ function storyJob(overrides: Record<string, unknown> = {}) {
       premise: 'A city grows fruit made of memory.',
       provider_id: 'lmstudio',
       action: 'draft',
-      ...(typeof overrides.input_payload === 'object' && overrides.input_payload ? (overrides.input_payload as Record<string, unknown>) : {}),
+      ...(typeof overrides.input_payload === 'object' && overrides.input_payload
+        ? (overrides.input_payload as Record<string, unknown>)
+        : {}),
     },
     output_refs: [
       {
@@ -77,7 +79,7 @@ function storyJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function assetPayload() {
+function assetPayload(extraAssets: unknown[] = []) {
   return {
     assets: [
       {
@@ -88,8 +90,21 @@ function assetPayload() {
         storage_path: 'artifacts/the-glass-orchard.md',
         created_at: '2026-06-14T00:00:00Z',
       },
+      ...extraAssets,
     ],
   };
+}
+
+function savedAssetResponse() {
+  const asset = {
+    id: 'story:saved-orchard:abc123',
+    module: 'storyteller',
+    type: 'story',
+    mime_type: 'text/markdown',
+    storage_path: 'resources/data/assets/stories/saved-orchard.md',
+    created_at: '2026-06-14T00:00:03Z',
+  };
+  return { asset, content: 'Saved roots remembered every footstep.' };
 }
 
 function assetContentPayload() {
@@ -161,21 +176,11 @@ describe('StorytellerWorkspace', () => {
   it('generates stories through the shared jobs API from the redesigned controls', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/providers') {
-        return Response.json(providerPayload());
-      }
-      if (path === '/api/jobs' && init?.method === 'POST') {
-        return Response.json(storyJob());
-      }
-      if (path === '/api/jobs') {
-        return Response.json({ jobs: [] });
-      }
-      if (path === '/api/assets') {
-        return Response.json(assetPayload());
-      }
-      if (path === '/api/assets/asset%3Astory/content') {
-        return Response.json(assetContentPayload());
-      }
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/jobs' && init?.method === 'POST') return Response.json(storyJob());
+      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -195,7 +200,12 @@ describe('StorytellerWorkspace', () => {
       const createCall = fetchMock.mock.calls.find(
         ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
       );
-      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown>; module?: string; type?: string; resource_class?: string };
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as {
+        input_payload?: Record<string, unknown>;
+        module?: string;
+        type?: string;
+        resource_class?: string;
+      };
       expect(body.module).toBe('storyteller');
       expect(body.type).toBe('story.generate');
       expect(body.resource_class).toBe('gpu:llm');
@@ -211,8 +221,16 @@ describe('StorytellerWorkspace', () => {
   });
 
   it('selects prior story versions into the manuscript', async () => {
-    const newer = storyJob({ id: 'job:newer', input_payload: { title: 'Newer Orchard', action: 'expand' }, output_refs: [{ kind: 'text', content: 'Newer branches glittered over the city.' }] });
-    const older = storyJob({ id: 'job:older', input_payload: { title: 'Older Orchard', action: 'rewrite' }, output_refs: [{ kind: 'text', content: 'Older roots remembered every footstep.' }] });
+    const newer = storyJob({
+      id: 'job:newer',
+      input_payload: { title: 'Newer Orchard', action: 'expand' },
+      output_refs: [{ kind: 'text', content: 'Newer branches glittered over the city.' }],
+    });
+    const older = storyJob({
+      id: 'job:older',
+      input_payload: { title: 'Older Orchard', action: 'rewrite' },
+      output_refs: [{ kind: 'text', content: 'Older roots remembered every footstep.' }],
+    });
     stubStoryApi([newer, older]);
 
     renderStoryteller();
@@ -258,7 +276,42 @@ describe('StorytellerWorkspace', () => {
     expect((await screen.findAllByRole('heading', { name: /the glass orchard/i })).length).toBeGreaterThan(0);
   });
 
-  it('saves the selected story version to local browser storage', async () => {
+  it('saves the selected story version as a shared asset', async () => {
+    const selected = storyJob({
+      id: 'job:selected',
+      input_payload: { title: 'Saved Orchard', action: 'rewrite' },
+      output_refs: [{ kind: 'text', content: 'Saved roots remembered every footstep.' }],
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/jobs') return Response.json({ jobs: [selected] });
+      if (path === '/api/assets' && init?.method !== 'POST') return Response.json(assetPayload());
+      if (path === '/api/assets/story' && init?.method === 'POST') return Response.json(savedAssetResponse());
+      if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderStoryteller();
+
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    expect(await within(manuscript).findByText('Saved roots remembered every footstep.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save story' }));
+
+    expect(await screen.findByText('Saved “Saved Orchard” as a shared story asset.')).toBeInTheDocument();
+    const saveCall = fetchMock.mock.calls.find(
+      ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/assets/story' && init?.method === 'POST',
+    );
+    const body = JSON.parse(String(saveCall?.[1]?.body ?? '{}')) as Record<string, unknown>;
+    expect(body.title).toBe('Saved Orchard');
+    expect(body.content).toBe('Saved roots remembered every footstep.');
+    expect(body.source_job_id).toBe('job:selected');
+    const saved = JSON.parse(window.localStorage.getItem('omnix:storyteller:last-draft') ?? '{}') as Record<string, unknown>;
+    expect(saved.title).toBe('Saved Orchard');
+  });
+
+  it('falls back to local browser storage when backend save fails', async () => {
     const selected = storyJob({
       id: 'job:selected',
       input_payload: { title: 'Saved Orchard', action: 'rewrite' },
@@ -333,21 +386,19 @@ describe('StorytellerWorkspace', () => {
     const baseText = 'The orchard rang like crystal at sunset.\n\nEach branch remembered a name.';
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
-      if (path === '/api/providers') {
-        return Response.json(providerPayload());
-      }
+      if (path === '/api/providers') return Response.json(providerPayload());
       if (path === '/api/jobs' && init?.method === 'POST') {
-        return Response.json(storyJob({ id: 'job:continue', input_payload: { title: 'The Glass Orchard', action: 'continue' }, output_refs: [{ kind: 'text', content: 'The path continued beneath the glass leaves.' }] }));
+        return Response.json(storyJob({
+          id: 'job:continue',
+          input_payload: { title: 'The Glass Orchard', action: 'continue' },
+          output_refs: [{ kind: 'text', content: 'The path continued beneath the glass leaves.' }],
+        }));
       }
       if (path === '/api/jobs') {
         return Response.json({ jobs: [storyJob({ id: 'job:base', output_refs: [{ kind: 'text', content: baseText }] })] });
       }
-      if (path === '/api/assets') {
-        return Response.json(assetPayload());
-      }
-      if (path === '/api/assets/asset%3Astory/content') {
-        return Response.json(assetContentPayload());
-      }
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
