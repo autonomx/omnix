@@ -32,6 +32,30 @@ function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
 }
 
+function providerPayload() {
+  return {
+    providers: [
+      {
+        id: 'openai',
+        label: 'OpenAI compatible',
+        family: 'llm',
+        source: 'settings',
+        status: 'configured',
+        capabilities: ['chat'],
+      },
+    ],
+    models: [
+      {
+        id: 'gpt-mini',
+        label: 'GPT mini',
+        provider_id: 'openai',
+        location: 'remote',
+        capabilities: ['chat'],
+      },
+    ],
+  };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -61,27 +85,7 @@ describe('ChatbotWorkspace', () => {
       const path = requestPath(input);
 
       if (path === '/api/providers') {
-        return Response.json({
-          providers: [
-            {
-              id: 'openai',
-              label: 'OpenAI compatible',
-              family: 'llm',
-              source: 'settings',
-              status: 'configured',
-              capabilities: ['chat'],
-            },
-          ],
-          models: [
-            {
-              id: 'gpt-mini',
-              label: 'GPT mini',
-              provider_id: 'openai',
-              location: 'remote',
-              capabilities: ['chat'],
-            },
-          ],
-        });
+        return Response.json(providerPayload());
       }
 
       if (path === '/api/chat/sessions' && init?.method === 'POST') {
@@ -142,6 +146,7 @@ describe('ChatbotWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     expect(await screen.findByText('Generation job queued: job:1')).toBeInTheDocument();
+    expect(await screen.findByText('Hello Omnix')).toBeInTheDocument();
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
@@ -156,5 +161,33 @@ describe('ChatbotWorkspace', () => {
       expect(messageCall?.[1]).toEqual(expect.objectContaining({ method: 'POST' }));
       expect(messageCall?.[1]?.body).toContain('"model_id":"gpt-mini"');
     });
+  });
+
+  it('surfaces gateway failures instead of silently doing nothing', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') {
+        return Response.json(providerPayload());
+      }
+
+      if (path === '/api/chat/sessions' && init?.method === 'POST') {
+        return new Response('gateway offline', { status: 503 });
+      }
+
+      if (path === '/api/chat/sessions') {
+        return Response.json({ sessions: [] });
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Is this wired?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Chat request failed with status 503');
   });
 });
