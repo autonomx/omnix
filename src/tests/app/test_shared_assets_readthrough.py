@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import os
 
+from fastapi.testclient import TestClient
+
 from app.assets import AssetRecord, AssetType, SharedAssetStore
+from app.gateway.main import create_gateway_app
 
 
 def test_shared_asset_store_reads_legacy_voice_clone_profiles(tmp_path, monkeypatch) -> None:
@@ -173,6 +176,60 @@ def test_shared_asset_store_reads_legacy_document_artifacts(tmp_path, monkeypatc
     assert assets["artifact:artifact_docs-bundle.zip"].compat["legacy_relative_path"] == "bundle.zip"
 
     assert not store.manifest_path.exists()
+
+
+def test_gateway_reads_shared_text_asset_content(tmp_path) -> None:
+    story_path = tmp_path / "stories" / "adventure.md"
+    story_path.parent.mkdir()
+    story_path.write_text("# Adventure\n\nThe road bent toward starlight.", encoding="utf-8")
+    store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
+    store.upsert_asset(
+        AssetRecord(
+            id="asset:story",
+            module="storyteller",
+            type=AssetType.STORY,
+            mime_type="text/markdown",
+            storage_path=str(story_path),
+            metadata={"source": "test"},
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+
+    client = TestClient(create_gateway_app(asset_store_factory=lambda: store))
+
+    response = client.get("/api/assets/asset:story/content")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["asset"]["id"] == "asset:story"
+    assert payload["content"] == "# Adventure\n\nThe road bent toward starlight."
+    assert payload["encoding"] == "utf-8"
+    assert payload["size_bytes"] == story_path.stat().st_size
+    assert payload["truncated"] is False
+
+
+def test_gateway_rejects_non_text_asset_content(tmp_path) -> None:
+    audio_path = tmp_path / "narration.wav"
+    audio_path.write_bytes(b"RIFF")
+    store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
+    store.upsert_asset(
+        AssetRecord(
+            id="asset:audio",
+            module="voice",
+            type=AssetType.AUDIO,
+            mime_type="audio/wav",
+            storage_path=str(audio_path),
+            metadata={"source": "test"},
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+
+    client = TestClient(create_gateway_app(asset_store_factory=lambda: store))
+
+    response = client.get("/api/assets/asset:audio/content")
+
+    assert response.status_code == 415
+    assert response.json()["detail"] == "asset_content_not_text"
 
 
 def test_manifest_asset_overrides_matching_legacy_document_artifact(tmp_path, monkeypatch) -> None:
