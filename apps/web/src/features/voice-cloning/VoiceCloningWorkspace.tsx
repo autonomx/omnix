@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 
 interface VoiceCloningFormValues {
   providerId: string;
@@ -27,7 +28,12 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
-  const { register, handleSubmit, reset } = useForm<VoiceCloningFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<VoiceCloningFormValues>({
     defaultValues: { providerId: '', sampleAssetId: '', profileName: '', referenceText: '' },
   });
   const providers = useMemo(() => voiceCloneCapableProviders(providersQuery.data), [providersQuery.data]);
@@ -59,6 +65,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -79,7 +86,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
               <Title order={4}>Voice profile</Title>
               <Text size="sm">Shared voice-cloning job queue</Text>
             </div>
-            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
@@ -107,22 +114,27 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
             </label>
             <label>
               Profile name
-              <input {...register('profileName', { required: true })} placeholder="Narrator profile" />
+              <input aria-invalid={Boolean(errors.profileName)} {...register('profileName', { required: true })} placeholder="Narrator profile" />
             </label>
             <label className="feature-form-wide">
               Reference text
               <textarea rows={4} {...register('referenceText')} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
-              Queue voice profile
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+              {createJobMutation.isPending ? 'Queueing voice profile…' : 'Queue voice profile'}
             </Button>
           </form>
 
-          {createJobMutation.data ? (
-            <div className="feature-job-link" role="status">
-              Voice profile job queued: {createJobMutation.data.id}
-            </div>
-          ) : null}
+          <FeatureValidationMessage show={Boolean(errors.profileName)} message="Enter a profile name before queueing voice cloning." />
+          <FeatureSubmitFeedback
+            error={createJobMutation.error}
+            errorPrefix="Voice profile request"
+            isError={createJobMutation.isError}
+            isPending={createJobMutation.isPending}
+            jobId={createJobMutation.data?.id}
+            pendingMessage="Queueing voice profile job…"
+            successPrefix="Voice profile job queued"
+          />
 
           <OmnixAudioControls label="voice profile preview" />
         </section>
