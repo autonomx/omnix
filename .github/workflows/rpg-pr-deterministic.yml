@@ -110,6 +110,18 @@ jobs:
           name: shared-assets-readthrough-pytest-output
           path: shared-assets-readthrough-pytest-output.txt
 
+      - name: Story asset save regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/app/test_gateway_text_asset_save.py -q --tb=short 2>&1 | tee story-asset-save-pytest-output.txt
+
+      - name: Upload story asset save diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-asset-save-pytest-output
+          path: story-asset-save-pytest-output.txt
+
       - name: Settings preservation regression
         run: |
           set -o pipefail
