@@ -31,6 +31,22 @@ export interface AssetContentResponse {
   truncated: boolean;
 }
 
+export interface SaveStoryAssetRequest {
+  title: string;
+  content: string;
+  premise?: string;
+  provider_label?: string;
+  word_count?: number;
+  chapter_count?: number;
+  source_job_id?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SavedStoryAssetResponse {
+  asset: AssetListResponse['assets'][number];
+  content: string;
+}
+
 export interface ApiClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -136,6 +152,10 @@ export class OmnixApiClient {
 
   async getAssetContent(assetId: string): Promise<AssetContentResponse> {
     return this.get<AssetContentResponse>(`/api/assets/${encodeURIComponent(assetId)}/content`);
+  }
+
+  async saveStoryAsset(request: SaveStoryAssetRequest): Promise<SavedStoryAssetResponse> {
+    return this.post<SaveStoryAssetRequest, SavedStoryAssetResponse>('/api/assets/story', request);
   }
 
   async previewLegacyNonImageAssetImport(): Promise<AssetLegacyImportDryRun> {
