@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 
 interface PodcastFormValues {
   providerId: string;
@@ -28,7 +29,12 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
-  const { register, handleSubmit, reset } = useForm<PodcastFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<PodcastFormValues>({
     defaultValues: { providerId: '', ttsProviderId: '', title: '', brief: '', speakers: 'Host, Guest' },
   });
   const llmProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
@@ -73,6 +79,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -93,7 +100,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <Title order={4}>Episode request</Title>
               <Text size="sm">Shared podcast job queue</Text>
             </div>
-            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
@@ -129,18 +136,23 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
             </label>
             <label className="feature-form-wide">
               Brief
-              <textarea rows={5} {...register('brief', { required: true })} />
+              <textarea rows={5} aria-invalid={Boolean(errors.brief)} {...register('brief', { required: true })} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
-              Queue episode
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+              {createJobMutation.isPending ? 'Queueing episode…' : 'Queue episode'}
             </Button>
           </form>
 
-          {createJobMutation.data ? (
-            <div className="feature-job-link" role="status">
-              Podcast job queued: {createJobMutation.data.id}
-            </div>
-          ) : null}
+          <FeatureValidationMessage show={Boolean(errors.brief)} message="Enter an episode brief before queueing a podcast." />
+          <FeatureSubmitFeedback
+            error={createJobMutation.error}
+            errorPrefix="Podcast request"
+            isError={createJobMutation.isError}
+            isPending={createJobMutation.isPending}
+            jobId={createJobMutation.data?.id}
+            pendingMessage="Queueing podcast job…"
+            successPrefix="Podcast job queued"
+          />
 
           <OmnixAudioControls label="latest podcast mix" />
         </section>

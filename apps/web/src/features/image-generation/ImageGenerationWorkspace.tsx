@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 
 interface ImageGenerationFormValues {
   providerId: string;
@@ -27,7 +28,12 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
-  const { register, handleSubmit, reset } = useForm<ImageGenerationFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ImageGenerationFormValues>({
     defaultValues: { providerId: '', prompt: '', width: '768', height: '768' },
   });
   const imageProviders = useMemo(() => imageCapableProviders(providersQuery.data), [providersQuery.data]);
@@ -56,6 +62,7 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -76,7 +83,7 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
               <Title order={4}>Image request</Title>
               <Text size="sm">Shared image job queue</Text>
             </div>
-            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
@@ -101,18 +108,23 @@ export function ImageGenerationWorkspace({ module }: { module: OmnixModuleDefini
             </label>
             <label className="feature-form-wide">
               Prompt
-              <textarea rows={5} {...register('prompt', { required: true })} />
+              <textarea rows={5} aria-invalid={Boolean(errors.prompt)} {...register('prompt', { required: true })} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
-              Queue image
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+              {createJobMutation.isPending ? 'Queueing image…' : 'Queue image'}
             </Button>
           </form>
 
-          {createJobMutation.data ? (
-            <div className="feature-job-link" role="status">
-              Image job queued: {createJobMutation.data.id}
-            </div>
-          ) : null}
+          <FeatureValidationMessage show={Boolean(errors.prompt)} message="Enter a prompt before queueing image generation." />
+          <FeatureSubmitFeedback
+            error={createJobMutation.error}
+            errorPrefix="Image request"
+            isError={createJobMutation.isError}
+            isPending={createJobMutation.isPending}
+            jobId={createJobMutation.data?.id}
+            pendingMessage="Queueing image job…"
+            successPrefix="Image job queued"
+          />
         </section>
 
         <section className="feature-panel">

@@ -1,9 +1,10 @@
 import { Button, Group, Progress, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import type { OmnixModuleDefinition } from '../../app/modules';
 import { omnixApiClient } from '../../api/client';
+import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 
 interface RpgFormValues {
   sessionId: string;
@@ -28,7 +29,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     queryKey: ['platform', 'reports'],
     queryFn: () => omnixApiClient.listReports(),
   });
-  const { register, handleSubmit, reset } = useForm<RpgFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<RpgFormValues>({
     defaultValues: { sessionId: '', command: '' },
   });
   const sessions = inventoryQuery.data?.sessions ?? [];
@@ -60,6 +66,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -80,7 +87,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <Title order={4}>Turn request</Title>
               <Text size="sm">Replay-preserving RPG handoff</Text>
             </div>
-            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
@@ -100,18 +107,23 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             </label>
             <label className="feature-form-wide">
               Command
-              <textarea rows={5} {...register('command', { required: true })} />
+              <textarea rows={5} aria-invalid={Boolean(errors.command)} {...register('command', { required: true })} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
-              Queue RPG turn
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+              {createJobMutation.isPending ? 'Queueing RPG turn…' : 'Queue RPG turn'}
             </Button>
           </form>
 
-          {createJobMutation.data ? (
-            <div className="feature-job-link" role="status">
-              RPG turn job queued: {createJobMutation.data.id}
-            </div>
-          ) : null}
+          <FeatureValidationMessage show={Boolean(errors.command)} message="Enter a command before queueing an RPG turn." />
+          <FeatureSubmitFeedback
+            error={createJobMutation.error}
+            errorPrefix="RPG turn request"
+            isError={createJobMutation.isError}
+            isPending={createJobMutation.isPending}
+            jobId={createJobMutation.data?.id}
+            pendingMessage="Queueing RPG turn job…"
+            successPrefix="RPG turn job queued"
+          />
         </section>
 
         <section className="feature-panel">
