@@ -31,6 +31,9 @@ from .residency import (
     plan_model_residency,
 )
 from .store import SQLiteJobStore, default_job_store
+from .inline_feature_jobs import install_inline_feature_job_execution
+
+install_inline_feature_job_execution(SQLiteJobStore)
 
 __all__ = [
     "CancelJobRequest",
