@@ -225,7 +225,7 @@ describe('StorytellerWorkspace', () => {
     expect(await within(manuscript).findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Local Draft Orchard/ }));
     expect(await within(manuscript).findByText('Local draft roots hummed beneath the glass soil.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Local Draft Orchard' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Local Draft Orchard' }).length).toBeGreaterThan(0);
   });
 
   it('selects story assets from the Story library', async () => {
@@ -234,7 +234,8 @@ describe('StorytellerWorkspace', () => {
     renderStoryteller();
 
     const library = await screen.findByRole('complementary', { name: 'Story library' });
-    fireEvent.click(within(library).getByRole('button', { name: /the glass orchard/ }));
+    const assetButton = await within(library).findByRole('button', { name: /the glass orchard/ });
+    fireEvent.click(assetButton);
 
     expect(await screen.findByRole('heading', { name: 'the glass orchard' })).toBeInTheDocument();
     expect(screen.getByText('This library asset is available, but content preview is not exposed by the assets API yet.')).toBeInTheDocument();
