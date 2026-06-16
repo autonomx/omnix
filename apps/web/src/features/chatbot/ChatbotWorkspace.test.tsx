@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe('ChatbotWorkspace', () => {
-  it('uses provider/model selectors and queues a chat generation job', async () => {
+  it('uses provider/model selectors and renders the assistant response', async () => {
     let session: {
       id: string;
       title: string;
@@ -103,14 +103,21 @@ describe('ChatbotWorkspace', () => {
       if (path === '/api/chat/sessions/chat%3A1/messages') {
         session = {
           ...session,
-          message_count: 1,
+          message_count: 2,
           messages: [
             {
               id: 'msg:1',
               role: 'user',
               content: 'Hello Omnix',
               created_at: '2026-06-14T00:00:01Z',
-              metadata: { generation_status: 'queued' },
+              metadata: { generation_status: 'completed' },
+            },
+            {
+              id: 'msg:2',
+              role: 'assistant',
+              content: 'Provider reply from the selected model.',
+              created_at: '2026-06-14T00:00:02Z',
+              metadata: { generation_status: 'completed' },
             },
           ],
         };
@@ -143,9 +150,10 @@ describe('ChatbotWorkspace', () => {
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openai' } });
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-mini' } });
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Hello Omnix' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
-    expect(await screen.findByText('Generation job queued: job:1')).toBeInTheDocument();
+    expect(await screen.findByText('Generation completed: job:1')).toBeInTheDocument();
+    expect(await screen.findByText('Provider reply from the selected model.')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('user'));
     expect(transcriptMessage).toBeTruthy();
 
@@ -187,7 +195,7 @@ describe('ChatbotWorkspace', () => {
     renderChatbot();
 
     fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Is this wired?' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Chat request failed with status 503');
   });
