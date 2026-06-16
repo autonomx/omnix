@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 
 interface StorytellerFormValues {
   providerId: string;
@@ -26,7 +27,12 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
-  const { register, handleSubmit, reset } = useForm<StorytellerFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<StorytellerFormValues>({
     defaultValues: { providerId: '', title: '', premise: '' },
   });
   const storyProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
@@ -56,6 +62,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -76,7 +83,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
               <Title order={4}>Story request</Title>
               <Text size="sm">Shared story job queue</Text>
             </div>
-            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
@@ -97,18 +104,23 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
             </label>
             <label className="feature-form-wide">
               Premise
-              <textarea rows={6} {...register('premise', { required: true })} />
+              <textarea rows={6} aria-invalid={Boolean(errors.premise)} {...register('premise', { required: true })} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
-              Queue story
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+              {createJobMutation.isPending ? 'Queueing story…' : 'Queue story'}
             </Button>
           </form>
 
-          {createJobMutation.data ? (
-            <div className="feature-job-link" role="status">
-              Story job queued: {createJobMutation.data.id}
-            </div>
-          ) : null}
+          <FeatureValidationMessage show={Boolean(errors.premise)} message="Enter a premise before queueing a story." />
+          <FeatureSubmitFeedback
+            error={createJobMutation.error}
+            errorPrefix="Story request"
+            isError={createJobMutation.isError}
+            isPending={createJobMutation.isPending}
+            jobId={createJobMutation.data?.id}
+            pendingMessage="Queueing story job…"
+            successPrefix="Story job queued"
+          />
         </section>
 
         <section className="feature-panel">
