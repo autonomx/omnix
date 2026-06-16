@@ -9,7 +9,6 @@ from app.jobs import JobRecord
 
 
 ChatMessageRole = Literal["system", "user", "assistant"]
-ChatGenerationStatus = Literal["queued", "running", "completed", "failed"]
 
 
 class ChatMessage(BaseModel):
@@ -55,4 +54,4 @@ class SendChatMessageResponse(BaseModel):
     session: ChatSession
     user_message: ChatMessage
     job: JobRecord
-    generation_status: ChatGenerationStatus = "completed"
+    generation_status: Literal["queued"] = "queued"
