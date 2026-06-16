@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException
@@ -20,6 +21,7 @@ from app.assets import (
     AssetLegacyImportDryRun,
     AssetListResponse,
     AssetMigrationPreview,
+    AssetRecord,
     SharedAssetStore,
     default_asset_store,
 )
@@ -131,6 +133,15 @@ DEFAULT_GATEWAY_PORT = 5050
 EVENT_STREAM_BATCH_LIMIT = 100
 EVENT_STREAM_POLL_SECONDS = 1.0
 EVENT_STREAM_HEARTBEAT_SECONDS = 15.0
+TEXT_ASSET_MAX_BYTES = 2_000_000
+TEXT_ASSET_MIME_TYPES = {
+    "application/json",
+    "application/x-subrip",
+    "text/html",
+    "text/markdown",
+    "text/plain",
+    "text/vtt",
+}
 
 
 class GatewayHealth(BaseModel):
@@ -161,6 +172,14 @@ class CompatibilityHandoffPayload(BaseModel):
         "contracts are migrated."
     )
     handoff_targets: list[dict[str, str]] = Field(default_factory=list)
+
+
+class AssetContentResponse(BaseModel):
+    asset: AssetRecord
+    content: str
+    encoding: Literal["utf-8"] = "utf-8"
+    size_bytes: int
+    truncated: Literal[False] = False
 
 
 def _compatibility_handoff() -> CompatibilityHandoffPayload:
@@ -225,6 +244,41 @@ def _parse_event_id(value: str | None, fallback: int = 0) -> int:
         return int(value)
     except ValueError:
         return fallback
+
+
+def _text_asset_supported(asset: AssetRecord) -> bool:
+    mime_type = asset.mime_type.lower().split(";", 1)[0]
+    return mime_type.startswith("text/") or mime_type in TEXT_ASSET_MIME_TYPES
+
+
+def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | None:
+    return next((asset for asset in asset_store.list_assets().assets if asset.id == asset_id), None)
+
+
+def _read_text_asset(asset: AssetRecord) -> AssetContentResponse:
+    if not _text_asset_supported(asset):
+        raise HTTPException(status_code=415, detail="asset_content_not_text")
+
+    path = Path(asset.storage_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="asset_file_not_found")
+
+    try:
+        size_bytes = path.stat().st_size
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
+
+    if size_bytes > TEXT_ASSET_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="asset_content_too_large")
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=415, detail="asset_content_not_utf8") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
+
+    return AssetContentResponse(asset=asset, content=content, size_bytes=size_bytes)
 
 
 async def _live_job_event_stream(job_store: SQLiteJobStore, after_id: int = 0):
@@ -519,6 +573,13 @@ def create_gateway_app(
     @gateway.get("/api/assets", response_model=AssetListResponse, tags=["assets"])
     async def assets() -> AssetListResponse:
         return get_asset_store().list_assets()
+
+    @gateway.get("/api/assets/{asset_id}/content", response_model=AssetContentResponse, include_in_schema=False)
+    async def asset_content(asset_id: str) -> AssetContentResponse:
+        asset = _asset_by_id(get_asset_store(), asset_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="asset_not_found")
+        return _read_text_asset(asset)
 
     @gateway.post(
         "/api/assets/migrations/image/dry-run",
