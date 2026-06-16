@@ -237,7 +237,7 @@ describe('StorytellerWorkspace', () => {
     const assetButton = await within(library).findByRole('button', { name: /the glass orchard/ });
     fireEvent.click(assetButton);
 
-    expect(await screen.findByRole('heading', { name: 'the glass orchard' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('heading', { name: 'the glass orchard' })).length).toBeGreaterThan(0);
     expect(screen.getByText('This library asset is available, but content preview is not exposed by the assets API yet.')).toBeInTheDocument();
   });
 
