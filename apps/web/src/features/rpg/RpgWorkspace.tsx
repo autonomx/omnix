@@ -346,6 +346,10 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             </div>
 
             <form className="rpg-action-composer" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
+              <div className="rpg-action-composer-heading">
+                <h3>Turn request</h3>
+                <p>Queue replay-preserving RPG commands into the deterministic turn pipeline.</p>
+              </div>
               <label>
                 <span>Session</span>
                 <select {...register('sessionId')}>
@@ -370,7 +374,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 />
               </label>
               <Button className="rpg-submit-button" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
-                {createJobMutation.isPending ? 'Queueing…' : 'Submit turn'}
+                {createJobMutation.isPending ? 'Queueing…' : 'Queue RPG turn'}
               </Button>
             </form>
             <FeatureValidationMessage show={Boolean(errors.command)} message="Enter a command before queueing an RPG turn." />
@@ -569,6 +573,15 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <small>{rpgAssets.length ? `${rpgAssets.length} indexed` : 'No RPG assets indexed'}</small>
               </div>
             </div>
+            {rpgAssets.map((asset) => (
+              <article className="rpg-report-row" key={String(asset.id)}>
+                <span aria-hidden="true">◈</span>
+                <div>
+                  <h3>{String(asset.type)} / {String(asset.module)}</h3>
+                  <small>{String(asset.storage_path ?? asset.id)}</small>
+                </div>
+              </article>
+            ))}
             <button className="rpg-primary-button" type="button">
               Create checkpoint
             </button>
