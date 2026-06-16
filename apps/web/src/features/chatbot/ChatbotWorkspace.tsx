@@ -78,8 +78,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   });
 
   const activeSession = sendMutation.data?.session ?? sessionQuery.data;
-  const submitStatus = sendMutation.isPending ? 'generating' : sendMutation.isError ? 'error' : sendMutation.data?.generation_status ?? 'ready';
-  const generationComplete = sendMutation.data?.generation_status === 'completed';
+  const generationComplete = Boolean(sendMutation.data?.session.messages?.some((message) => message.role === 'assistant'));
+  const submitStatus = sendMutation.isPending ? 'generating' : sendMutation.isError ? 'error' : generationComplete ? 'completed' : sendMutation.data?.generation_status ?? 'ready';
 
   return (
     <WorkspacePanel>
