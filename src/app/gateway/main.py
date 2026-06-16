@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.assets import (
+    AssetLegacyImportDryRun,
     AssetListResponse,
     AssetMigrationPreview,
     SharedAssetStore,
@@ -40,9 +41,13 @@ from app.jobs import (
     FailJobRequest,
     JobListResponse,
     JobRecord,
+    ModelResidencyDiagnostics,
+    ModelResidencyRecord,
     ResourceClass,
+    SQLiteModelResidencyStore,
     SQLiteJobStore,
     default_job_store,
+    default_model_residency_store,
 )
 from app.platform import (
     DiagnosticsPayload,
@@ -98,6 +103,10 @@ from app.providers.facade import (
     ProviderFacade,
     ProviderFacadePayload,
     default_provider_facade,
+)
+from app.providers.cache_status import (
+    ProviderModelRefreshRequest,
+    create_provider_model_refresh_job_request,
 )
 from app.replay import (
     CheckpointEnvelope,
@@ -253,6 +262,7 @@ def create_gateway_app(
     asset_store_factory: Callable[[], SharedAssetStore] | None = None,
     chat_store_factory: Callable[[], ChatSessionStore] | None = None,
     replay_adapter_factory: Callable[[], RpgReplayPersistenceAdapter] | None = None,
+    model_residency_store_factory: Callable[[], SQLiteModelResidencyStore] | None = None,
 ) -> FastAPI:
     """Create the thin gateway app without importing model-heavy services."""
     get_job_store = job_store_factory or default_job_store
@@ -260,6 +270,7 @@ def create_gateway_app(
     get_asset_store = asset_store_factory or default_asset_store
     get_chat_store = chat_store_factory or default_chat_store
     get_replay_adapter = replay_adapter_factory or default_rpg_replay_adapter
+    get_model_residency_store = model_residency_store_factory or default_model_residency_store
     gateway = FastAPI(
         title="Omnix Web Gateway",
         version="0.1.0",
@@ -343,6 +354,14 @@ def create_gateway_app(
     @gateway.get("/api/models", response_model=ProviderFacadePayload, tags=["providers"])
     async def models() -> ProviderFacadePayload:
         return get_provider_facade().payload()
+
+    @gateway.post("/api/providers/refresh", response_model=JobRecord, tags=["providers"])
+    async def refresh_providers(request: ProviderModelRefreshRequest) -> JobRecord:
+        return get_job_store().create_job(create_provider_model_refresh_job_request(request))
+
+    @gateway.post("/api/models/refresh", response_model=JobRecord, tags=["providers"])
+    async def refresh_models(request: ProviderModelRefreshRequest) -> JobRecord:
+        return get_job_store().create_job(create_provider_model_refresh_job_request(request))
 
     @gateway.get("/api/settings", response_model=SettingsPayload, tags=["settings"])
     async def settings() -> SettingsPayload:
@@ -479,7 +498,23 @@ def create_gateway_app(
 
     @gateway.get("/api/diagnostics", response_model=DiagnosticsPayload, tags=["diagnostics"])
     async def diagnostics() -> DiagnosticsPayload:
-        return get_diagnostics_payload()
+        return get_diagnostics_payload(model_residency_records=get_model_residency_store().list_records())
+
+    @gateway.get("/api/model-residency", response_model=ModelResidencyDiagnostics, tags=["models"])
+    async def model_residency() -> ModelResidencyDiagnostics:
+        return get_model_residency_store().diagnostics()
+
+    @gateway.post("/api/model-residency", response_model=ModelResidencyDiagnostics, tags=["models"])
+    async def report_model_residency(record: ModelResidencyRecord) -> ModelResidencyDiagnostics:
+        store = get_model_residency_store()
+        store.upsert_record(record)
+        return store.diagnostics()
+
+    @gateway.delete("/api/model-residency/{model_id}", response_model=ModelResidencyDiagnostics, tags=["models"])
+    async def delete_model_residency(model_id: str) -> ModelResidencyDiagnostics:
+        store = get_model_residency_store()
+        store.delete_record(model_id)
+        return store.diagnostics()
 
     @gateway.get("/api/assets", response_model=AssetListResponse, tags=["assets"])
     async def assets() -> AssetListResponse:
@@ -500,6 +535,14 @@ def create_gateway_app(
     )
     async def image_asset_migration_import() -> AssetMigrationPreview:
         return get_asset_store().import_image_manifest()
+
+    @gateway.post(
+        "/api/assets/migrations/legacy-non-image/dry-run",
+        response_model=AssetLegacyImportDryRun,
+        tags=["assets"],
+    )
+    async def legacy_non_image_asset_migration_dry_run() -> AssetLegacyImportDryRun:
+        return get_asset_store().preview_legacy_non_image_import()
 
     @gateway.post("/api/prompts/render", response_model=RenderedPrompt, tags=["prompts"])
     async def render_prompt(request: PromptRenderRequest) -> RenderedPrompt:

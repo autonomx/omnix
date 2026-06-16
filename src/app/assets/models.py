@@ -46,3 +46,20 @@ class AssetMigrationPreview(BaseModel):
     would_import: int
     missing_files: list[dict[str, Any]] = Field(default_factory=list)
     assets: list[AssetRecord] = Field(default_factory=list)
+
+
+class AssetLegacyRootScan(BaseModel):
+    family: str
+    path: str
+    exists: bool
+
+
+class AssetLegacyImportDryRun(BaseModel):
+    source: str
+    would_import: int
+    category_counts: dict[str, int] = Field(default_factory=dict)
+    roots_scanned: list[AssetLegacyRootScan] = Field(default_factory=list)
+    collision_asset_ids: list[str] = Field(default_factory=list)
+    skipped_files: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    assets: list[AssetRecord] = Field(default_factory=list)

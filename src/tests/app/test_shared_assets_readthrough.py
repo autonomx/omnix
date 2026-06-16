@@ -198,3 +198,53 @@ def test_manifest_asset_overrides_matching_legacy_document_artifact(tmp_path, mo
 
     assert assets["artifact:stories-adventure.md"].storage_path == "shared/stories/adventure.md"
     assert assets["artifact:stories-adventure.md"].metadata == {"source": "shared-manifest"}
+
+
+def test_legacy_non_image_dry_run_reports_collisions_without_mutating(tmp_path, monkeypatch) -> None:
+    import app.shared as shared
+
+    tts_dir = tmp_path / "tts"
+    story_dir = tmp_path / "stories"
+    voice_dir = tmp_path / "voice_clones"
+    tts_dir.mkdir()
+    story_dir.mkdir()
+    voice_dir.mkdir()
+    (tts_dir / "narration.wav").write_bytes(b"RIFF")
+    (tts_dir / "notes.txt").write_text("not audio", encoding="utf-8")
+    (story_dir / "adventure.md").write_text("# tale", encoding="utf-8")
+    (story_dir / "cover.png").write_bytes(b"PNG")
+    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(voice_dir))
+    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(voice_dir / "voice_clones.json"))
+    monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", str(tts_dir))
+    monkeypatch.setenv("OMNIX_LEGACY_DOCUMENT_DIRS", str(story_dir))
+
+    store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
+    store.upsert_asset(
+        AssetRecord(
+            id="audio:tts-narration.wav",
+            module="voice",
+            type=AssetType.AUDIO,
+            mime_type="audio/wav",
+            storage_path="shared/audio/narration.wav",
+            metadata={"source": "shared-manifest"},
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+    )
+    manifest_before = store.manifest_path.read_text(encoding="utf-8")
+
+    preview = store.preview_legacy_non_image_import()
+
+    assert preview.would_import == 1
+    assert preview.category_counts == {"audio": 1, "story": 1}
+    assert preview.collision_asset_ids == ["audio:tts-narration.wav"]
+    assert [asset.id for asset in preview.assets] == ["artifact:stories-adventure.md"]
+    assert {item["path"] for item in preview.skipped_files} == {
+        str(tts_dir / "notes.txt"),
+        str(story_dir / "cover.png"),
+    }
+    assert any(root.family == "audio" and root.path == str(tts_dir) and root.exists for root in preview.roots_scanned)
+    assert any(
+        root.family == "documents" and root.path == str(story_dir) and root.exists
+        for root in preview.roots_scanned
+    )
+    assert store.manifest_path.read_text(encoding="utf-8") == manifest_before

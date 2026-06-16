@@ -1,6 +1,90 @@
 {
   "components": {
     "schemas": {
+      "AssetLegacyImportDryRun": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/AssetRecord"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "category_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Category Counts",
+            "type": "object"
+          },
+          "collision_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Collision Asset Ids",
+            "type": "array"
+          },
+          "roots_scanned": {
+            "items": {
+              "$ref": "#/components/schemas/AssetLegacyRootScan"
+            },
+            "title": "Roots Scanned",
+            "type": "array"
+          },
+          "skipped_files": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Skipped Files",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "would_import": {
+            "title": "Would Import",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "would_import"
+        ],
+        "title": "AssetLegacyImportDryRun",
+        "type": "object"
+      },
+      "AssetLegacyRootScan": {
+        "properties": {
+          "exists": {
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "path",
+          "exists"
+        ],
+        "title": "AssetLegacyRootScan",
+        "type": "object"
+      },
       "AssetListResponse": {
         "properties": {
           "assets": {
@@ -702,9 +786,15 @@
             "title": "Logs",
             "type": "array"
           },
+          "model_residency": {
+            "$ref": "#/components/schemas/ModelResidencyDiagnostics"
+          },
           "ok": {
             "title": "Ok",
             "type": "boolean"
+          },
+          "provider_model_cache": {
+            "$ref": "#/components/schemas/ProviderModelCachePayload"
           },
           "status": {
             "title": "Status",
@@ -776,6 +866,51 @@
           }
         },
         "title": "GatewayHealth",
+        "type": "object"
+      },
+      "GpuResidencyPolicy": {
+        "properties": {
+          "allow_co_residency": {
+            "default": false,
+            "title": "Allow Co Residency",
+            "type": "boolean"
+          },
+          "allow_matching_compatibility_group": {
+            "default": false,
+            "title": "Allow Matching Compatibility Group",
+            "type": "boolean"
+          },
+          "compatible_model_pairs": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Compatible Model Pairs",
+            "type": "array"
+          },
+          "total_vram_mb": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Vram Mb"
+          }
+        },
+        "title": "GpuResidencyPolicy",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1298,6 +1433,151 @@
         "title": "LegacySuccessResponse",
         "type": "object"
       },
+      "ModelResidencyDiagnostics": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/GpuResidencyPolicy"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ModelResidencyRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "policy"
+        ],
+        "title": "ModelResidencyDiagnostics",
+        "type": "object"
+      },
+      "ModelResidencyRecord": {
+        "properties": {
+          "compatibility_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compatibility Group"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "estimated_vram_mb": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Vram Mb"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_name": {
+            "default": "",
+            "title": "Model Name",
+            "type": "string"
+          },
+          "module": {
+            "title": "Module",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "resource_class": {
+            "$ref": "#/components/schemas/ResourceClass"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelResidencyStatus",
+            "default": "unloaded"
+          },
+          "worker_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Endpoint"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          }
+        },
+        "required": [
+          "model_id",
+          "provider_id",
+          "module",
+          "resource_class"
+        ],
+        "title": "ModelResidencyRecord",
+        "type": "object"
+      },
+      "ModelResidencyStatus": {
+        "enum": [
+          "unloaded",
+          "loading",
+          "loaded",
+          "unloading",
+          "error"
+        ],
+        "title": "ModelResidencyStatus",
+        "type": "string"
+      },
       "ModelSummary": {
         "properties": {
           "capabilities": {
@@ -1492,6 +1772,129 @@
           "models"
         ],
         "title": "ProviderFacadePayload",
+        "type": "object"
+      },
+      "ProviderModelCacheEntry": {
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model_id": {
+            "default": "",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "configured",
+              "missing_path",
+              "not_configured",
+              "unreachable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider_id",
+          "status",
+          "source"
+        ],
+        "title": "ProviderModelCacheEntry",
+        "type": "object"
+      },
+      "ProviderModelCachePayload": {
+        "properties": {
+          "diagnostics": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Diagnostics",
+            "type": "array"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderModelCacheEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ProviderModelCachePayload",
+        "type": "object"
+      },
+      "ProviderModelRefreshRequest": {
+        "properties": {
+          "priority": {
+            "default": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "scope": {
+            "default": "all",
+            "enum": [
+              "providers",
+              "models",
+              "all"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "ProviderModelRefreshRequest",
         "type": "object"
       },
       "ProviderSummary": {
@@ -2249,6 +2652,27 @@
         ]
       }
     },
+    "/api/assets/migrations/legacy-non-image/dry-run": {
+      "post": {
+        "operationId": "legacy_non_image_asset_migration_dry_run_api_assets_migrations_legacy_non_image_dry_run_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetLegacyImportDryRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy Non Image Asset Migration Dry Run",
+        "tags": [
+          "assets"
+        ]
+      }
+    },
     "/api/chat/sessions": {
       "get": {
         "operationId": "chat_sessions_api_chat_sessions_get",
@@ -2816,6 +3240,108 @@
         ]
       }
     },
+    "/api/model-residency": {
+      "get": {
+        "operationId": "model_residency_api_model_residency_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelResidencyDiagnostics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Residency",
+        "tags": [
+          "models"
+        ]
+      },
+      "post": {
+        "operationId": "report_model_residency_api_model_residency_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelResidencyRecord"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelResidencyDiagnostics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Model Residency",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/model-residency/{model_id}": {
+      "delete": {
+        "operationId": "delete_model_residency_api_model_residency__model_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelResidencyDiagnostics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Model Residency",
+        "tags": [
+          "models"
+        ]
+      }
+    },
     "/api/models": {
       "get": {
         "operationId": "models_api_models_get",
@@ -2832,6 +3358,47 @@
           }
         },
         "summary": "Models",
+        "tags": [
+          "providers"
+        ]
+      }
+    },
+    "/api/models/refresh": {
+      "post": {
+        "operationId": "refresh_models_api_models_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderModelRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Models",
         "tags": [
           "providers"
         ]
@@ -2894,6 +3461,47 @@
           }
         },
         "summary": "Providers",
+        "tags": [
+          "providers"
+        ]
+      }
+    },
+    "/api/providers/refresh": {
+      "post": {
+        "operationId": "refresh_providers_api_providers_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderModelRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Providers",
         "tags": [
           "providers"
         ]

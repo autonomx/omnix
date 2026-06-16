@@ -29,6 +29,12 @@ const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.faile
 const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
 const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], ['platform', 'jobs']];
 const artifactEventQueryKeys: QueryKey[] = [['platform', 'assets'], ['platform', 'reports']];
+const providerModelEventQueryKeys: QueryKey[] = [
+  ['platform', 'providers'],
+  ['platform', 'models'],
+  ['platform', 'jobs'],
+  ['platform', 'diagnostics'],
+];
 
 export function isPlatformModule(moduleId: OmnixModuleId): boolean {
   return platformModuleIds.has(moduleId);
@@ -59,71 +65,113 @@ export function PlatformModuleWorkspace({ module }: { module: OmnixModuleDefinit
 }
 
 function ProvidersView() {
+  const queryClient = useQueryClient();
+  useJobEventRefresh(providerModelEventQueryKeys);
   const query = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
   });
+  const refreshMutation = useMutation({
+    mutationFn: () => omnixApiClient.refreshProviders({ scope: 'providers', reason: 'web.providers.refresh', priority: 0 }),
+    onSuccess: async () => {
+      for (const queryKey of providerModelEventQueryKeys) {
+        await queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
 
   return (
-    <QueryState query={query} empty={!query.data?.providers.length} emptyText="No providers returned by gateway.">
-      {(data) => (
-        <div className="platform-grid">
-          {data.providers.map((provider) => (
-            <section className="platform-section" key={provider.id}>
-              <Group justify="space-between" align="start">
-                <div>
-                  <Title order={4}>{provider.label}</Title>
-                  <Text size="sm">{provider.source}</Text>
-                </div>
-                <OmnixStatusPill>{provider.status}</OmnixStatusPill>
-              </Group>
-              <DetailList
-                rows={[
-                  ['Family', provider.family],
-                  ['Capabilities', provider.capabilities.join(', ') || 'none'],
-                  ['Latency', metadataValue(provider.metadata, 'latency_ms')],
-                  ['Errors', metadataValue(provider.metadata, 'last_error')],
-                ]}
-              />
-            </section>
-          ))}
-        </div>
-      )}
-    </QueryState>
+    <>
+      <section className="platform-section">
+        <Group justify="space-between" align="center">
+          <Title order={4}>Registry refresh</Title>
+          <Button size="xs" variant="light" disabled={refreshMutation.isPending} onClick={() => refreshMutation.mutate()}>
+            Refresh
+          </Button>
+        </Group>
+        <DetailList rows={[['Last request', refreshMutation.isError ? refreshMutation.error.message : refreshMutation.isSuccess ? 'queued' : 'idle']]} />
+      </section>
+      <QueryState query={query} empty={!query.data?.providers.length} emptyText="No providers returned by gateway.">
+        {(data) => (
+          <div className="platform-grid">
+            {data.providers.map((provider) => (
+              <section className="platform-section" key={provider.id}>
+                <Group justify="space-between" align="start">
+                  <div>
+                    <Title order={4}>{provider.label}</Title>
+                    <Text size="sm">{provider.source}</Text>
+                  </div>
+                  <OmnixStatusPill>{provider.status}</OmnixStatusPill>
+                </Group>
+                <DetailList
+                  rows={[
+                    ['Family', provider.family],
+                    ['Capabilities', provider.capabilities.join(', ') || 'none'],
+                    ['Latency', metadataValue(provider.metadata, 'latency_ms')],
+                    ['Errors', metadataValue(provider.metadata, 'last_error')],
+                  ]}
+                />
+              </section>
+            ))}
+          </div>
+        )}
+      </QueryState>
+    </>
   );
 }
 
 function ModelsView() {
+  const queryClient = useQueryClient();
+  useJobEventRefresh(providerModelEventQueryKeys);
   const query = useQuery({
     queryKey: ['platform', 'models'],
     queryFn: () => omnixApiClient.listModels(),
   });
+  const refreshMutation = useMutation({
+    mutationFn: () => omnixApiClient.refreshModels({ scope: 'models', reason: 'web.models.refresh', priority: 0 }),
+    onSuccess: async () => {
+      for (const queryKey of providerModelEventQueryKeys) {
+        await queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
 
   return (
-    <QueryState query={query} empty={!query.data?.models.length} emptyText="No models returned by gateway.">
-      {(data) => (
-        <div className="platform-grid">
-          {data.models.map((model) => (
-            <section className="platform-section" key={model.id}>
-              <Group justify="space-between" align="start">
-                <div>
-                  <Title order={4}>{model.label}</Title>
-                  <Text size="sm">{model.provider_id}</Text>
-                </div>
-                <OmnixStatusPill>{model.location}</OmnixStatusPill>
-              </Group>
-              <DetailList
-                rows={[
-                  ['Capabilities', model.capabilities.join(', ') || 'none'],
-                  ['VRAM hint', model.vram_hint_mb ? `${model.vram_hint_mb} MB` : 'unknown'],
-                  ['Default for', metadataValue(model.metadata, 'default_for')],
-                ]}
-              />
-            </section>
-          ))}
-        </div>
-      )}
-    </QueryState>
+    <>
+      <section className="platform-section">
+        <Group justify="space-between" align="center">
+          <Title order={4}>Model refresh</Title>
+          <Button size="xs" variant="light" disabled={refreshMutation.isPending} onClick={() => refreshMutation.mutate()}>
+            Refresh
+          </Button>
+        </Group>
+        <DetailList rows={[['Last request', refreshMutation.isError ? refreshMutation.error.message : refreshMutation.isSuccess ? 'queued' : 'idle']]} />
+      </section>
+      <QueryState query={query} empty={!query.data?.models.length} emptyText="No models returned by gateway.">
+        {(data) => (
+          <div className="platform-grid">
+            {data.models.map((model) => (
+              <section className="platform-section" key={model.id}>
+                <Group justify="space-between" align="start">
+                  <div>
+                    <Title order={4}>{model.label}</Title>
+                    <Text size="sm">{model.provider_id}</Text>
+                  </div>
+                  <OmnixStatusPill>{model.location}</OmnixStatusPill>
+                </Group>
+                <DetailList
+                  rows={[
+                    ['Capabilities', model.capabilities.join(', ') || 'none'],
+                    ['VRAM hint', model.vram_hint_mb ? `${model.vram_hint_mb} MB` : 'unknown'],
+                    ['Default for', metadataValue(model.metadata, 'default_for')],
+                  ]}
+                />
+              </section>
+            ))}
+          </div>
+        )}
+      </QueryState>
+    </>
   );
 }
 
@@ -305,6 +353,12 @@ function DiagnosticsView() {
                   { label: 'Workers', value: data.workers.status },
                   { label: 'Event stream', value: eventStatusText(eventStatus) },
                   { label: 'Diagnostics payload', value: data.event_stream?.status ?? 'unknown' },
+                  { label: 'Model residency', value: data.model_residency?.status ?? 'unknown' },
+                  {
+                    label: 'Co-residency',
+                    value: data.model_residency?.policy?.allow_co_residency ? 'enabled' : 'conservative',
+                  },
+                  { label: 'Provider cache', value: data.provider_model_cache?.status ?? 'unknown' },
                 ]}
               />
             </section>

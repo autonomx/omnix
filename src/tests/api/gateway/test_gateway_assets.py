@@ -11,11 +11,18 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
-def test_asset_store_previews_image_manifest_import(tmp_path: Path) -> None:
+def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
+    import app.shared as shared
 
     existing = tmp_path / "image.png"
     existing.write_bytes(b"png")
+    empty_legacy = tmp_path / "empty_legacy"
+    empty_legacy.mkdir()
+    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(empty_legacy))
+    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(empty_legacy / "voice_clones.json"))
+    monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", str(empty_legacy))
+    monkeypatch.setenv("OMNIX_LEGACY_DOCUMENT_DIRS", str(empty_legacy))
     store = SharedAssetStore(tmp_path / "assets.json")
 
     preview = store.import_image_manifest_dry_run(
@@ -45,12 +52,19 @@ def test_asset_store_previews_image_manifest_import(tmp_path: Path) -> None:
     assert store.list_assets().assets == []
 
 
-def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path: Path) -> None:
+def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
+    import app.shared as shared
 
     existing = tmp_path / "scene.png"
     existing.write_bytes(b"png")
     missing = tmp_path / "missing.png"
+    empty_legacy = tmp_path / "empty_legacy"
+    empty_legacy.mkdir()
+    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(empty_legacy))
+    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(empty_legacy / "voice_clones.json"))
+    monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", str(empty_legacy))
+    monkeypatch.setenv("OMNIX_LEGACY_DOCUMENT_DIRS", str(empty_legacy))
     store = SharedAssetStore(tmp_path / "assets.json")
 
     imported = store.import_image_manifest(
@@ -89,7 +103,7 @@ def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path:
 
 
 def test_gateway_assets_endpoint_uses_shared_store() -> None:
-    from app.assets import AssetListResponse, AssetMigrationPreview
+    from app.assets import AssetLegacyImportDryRun, AssetListResponse, AssetMigrationPreview
     from app.gateway.main import create_gateway_app
 
     class FakeAssetStore:
@@ -101,6 +115,9 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
 
         def import_image_manifest(self) -> AssetMigrationPreview:
             return AssetMigrationPreview(source="fake", would_import=0)
+
+        def preview_legacy_non_image_import(self) -> AssetLegacyImportDryRun:
+            return AssetLegacyImportDryRun(source="fake legacy", would_import=0)
 
     client = TestClient(
         create_gateway_app(asset_store_factory=lambda: FakeAssetStore()),
@@ -114,3 +131,7 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
     dry_run = client.post("/api/assets/migrations/image/dry-run")
     assert dry_run.status_code == 200
     assert dry_run.json()["source"] == "fake"
+
+    legacy_dry_run = client.post("/api/assets/migrations/legacy-non-image/dry-run")
+    assert legacy_dry_run.status_code == 200
+    assert legacy_dry_run.json()["source"] == "fake legacy"

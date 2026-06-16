@@ -2,6 +2,7 @@ import type { components, paths } from './generated/types';
 
 export type GatewayApiPaths = paths;
 export type GatewayApiPath = keyof GatewayApiPaths & string;
+export type AssetLegacyImportDryRun = components['schemas']['AssetLegacyImportDryRun'];
 export type AssetListResponse = components['schemas']['AssetListResponse'];
 export type CancelJobRequest = components['schemas']['CancelJobRequest'];
 export type ChatSession = components['schemas']['ChatSession'];
@@ -11,8 +12,11 @@ export type CreateJobRequest = components['schemas']['CreateJobRequest'];
 export type DiagnosticsPayload = components['schemas']['DiagnosticsPayload'];
 export type JobListResponse = components['schemas']['JobListResponse'];
 export type JobRecord = components['schemas']['JobRecord'];
+export type ModelResidencyDiagnostics = components['schemas']['ModelResidencyDiagnostics'];
+export type ModelResidencyRecord = components['schemas']['ModelResidencyRecord'];
 export type PersistenceInventory = components['schemas']['PersistenceInventory'];
 export type ProviderFacadePayload = components['schemas']['ProviderFacadePayload'];
+export type ProviderModelRefreshRequest = components['schemas']['ProviderModelRefreshRequest'];
 export type ReportListResponse = components['schemas']['ReportListResponse'];
 export type SendChatMessageRequest = components['schemas']['SendChatMessageRequest'];
 export type SendChatMessageResponse = components['schemas']['SendChatMessageResponse'];
@@ -84,6 +88,28 @@ export class OmnixApiClient {
     return this.get<ProviderFacadePayload>('/api/models');
   }
 
+  async refreshProviders(request: ProviderModelRefreshRequest = { scope: 'all', priority: 0 }): Promise<JobRecord> {
+    return this.post<ProviderModelRefreshRequest, JobRecord>('/api/providers/refresh', request);
+  }
+
+  async refreshModels(request: ProviderModelRefreshRequest = { scope: 'models', priority: 0 }): Promise<JobRecord> {
+    return this.post<ProviderModelRefreshRequest, JobRecord>('/api/models/refresh', request);
+  }
+
+  async getModelResidency(): Promise<ModelResidencyDiagnostics> {
+    return this.get<ModelResidencyDiagnostics>('/api/model-residency');
+  }
+
+  async reportModelResidency(request: ModelResidencyRecord): Promise<ModelResidencyDiagnostics> {
+    return this.post<ModelResidencyRecord, ModelResidencyDiagnostics>('/api/model-residency', request);
+  }
+
+  async deleteModelResidency(modelId: string): Promise<ModelResidencyDiagnostics> {
+    return this.request<ModelResidencyDiagnostics>(`/api/model-residency/${encodeURIComponent(modelId)}`, {
+      method: 'DELETE',
+    });
+  }
+
   async listJobs(): Promise<JobListResponse> {
     return this.get<JobListResponse>('/api/jobs');
   }
@@ -98,6 +124,12 @@ export class OmnixApiClient {
 
   async listAssets(): Promise<AssetListResponse> {
     return this.get<AssetListResponse>('/api/assets');
+  }
+
+  async previewLegacyNonImageAssetImport(): Promise<AssetLegacyImportDryRun> {
+    return this.request<AssetLegacyImportDryRun>('/api/assets/migrations/legacy-non-image/dry-run', {
+      method: 'POST',
+    });
   }
 
   async listReports(): Promise<ReportListResponse> {

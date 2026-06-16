@@ -33,7 +33,13 @@ describe('generated gateway API types', () => {
     const expectedRpgPlayerEncounterPath = '/api/rpg/player/encounter' satisfies keyof GatewayApiPaths;
     const expectedJobsPath = '/api/jobs' satisfies keyof GatewayApiPaths;
     const expectedProvidersPath = '/api/providers' satisfies keyof GatewayApiPaths;
+    const expectedProvidersRefreshPath = '/api/providers/refresh' satisfies keyof GatewayApiPaths;
+    const expectedModelsRefreshPath = '/api/models/refresh' satisfies keyof GatewayApiPaths;
+    const expectedModelResidencyPath = '/api/model-residency' satisfies keyof GatewayApiPaths;
+    const expectedModelResidencyDeletePath = '/api/model-residency/{model_id}' satisfies keyof GatewayApiPaths;
     const expectedAssetsPath = '/api/assets' satisfies keyof GatewayApiPaths;
+    const expectedLegacyAssetDryRunPath =
+      '/api/assets/migrations/legacy-non-image/dry-run' satisfies keyof GatewayApiPaths;
     const expectedPromptsPath = '/api/prompts/render' satisfies keyof GatewayApiPaths;
     const expectedReplayPath = '/api/replay/primitives' satisfies keyof GatewayApiPaths;
     const expectedSettingsPath = '/api/settings' satisfies keyof GatewayApiPaths;
@@ -68,7 +74,12 @@ describe('generated gateway API types', () => {
     expect(expectedRpgPlayerEncounterPath).toBe('/api/rpg/player/encounter');
     expect(expectedJobsPath).toBe('/api/jobs');
     expect(expectedProvidersPath).toBe('/api/providers');
+    expect(expectedProvidersRefreshPath).toBe('/api/providers/refresh');
+    expect(expectedModelsRefreshPath).toBe('/api/models/refresh');
+    expect(expectedModelResidencyPath).toBe('/api/model-residency');
+    expect(expectedModelResidencyDeletePath).toBe('/api/model-residency/{model_id}');
     expect(expectedAssetsPath).toBe('/api/assets');
+    expect(expectedLegacyAssetDryRunPath).toBe('/api/assets/migrations/legacy-non-image/dry-run');
     expect(expectedPromptsPath).toBe('/api/prompts/render');
     expect(expectedReplayPath).toBe('/api/replay/primitives');
     expect(expectedSettingsPath).toBe('/api/settings');

@@ -173,9 +173,18 @@ class SQLiteJobStore:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._row_to_job(row) if row else None
 
-    def claim_next(self, request: ClaimJobRequest) -> ClaimJobResponse:
+    def claim_next(
+        self,
+        request: ClaimJobRequest,
+        *,
+        residency: list[Any] | None = None,
+        residency_policy: Any | None = None,
+    ) -> ClaimJobResponse:
+        from .residency import ResidencyDecisionAction, gpu_residency_request_from_job, plan_model_residency
+
         now = datetime.now(timezone.utc)
         allowed = {resource.value for resource in request.resource_classes}
+        residency_records = residency
         with self._connect() as conn:
             self._release_expired_leases(conn, now)
             active_jobs = [
@@ -200,7 +209,19 @@ class SQLiteJobStore:
                 job = self._row_to_job(row)
                 if allowed and job.resource_class.value not in allowed:
                     continue
-                if job.resource_class.value.startswith("gpu:") and active_gpu:
+                residency_decision = None
+                if residency_records is not None:
+                    residency_request = gpu_residency_request_from_job(job)
+                    if residency_request is not None:
+                        residency_decision = plan_model_residency(residency_request, residency_records, residency_policy)
+                        if residency_decision.action != ResidencyDecisionAction.CAN_RUN:
+                            continue
+                can_share_active_gpu = bool(
+                    residency_decision is not None
+                    and residency_policy is not None
+                    and getattr(residency_policy, "allow_co_residency", False)
+                )
+                if job.resource_class.value.startswith("gpu:") and active_gpu and not can_share_active_gpu:
                     continue
                 if job.resource_class == ResourceClass.CPU and active_cpu >= request.cpu_limit:
                     continue

@@ -30,6 +30,26 @@ def _deep_copy(value: Any) -> Any:
     return json.loads(json.dumps(value))
 
 
+def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    merged = _deep_copy(base)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = _deep_copy(value)
+    return merged
+
+
+def _merge_settings_section(settings: dict[str, Any], key: str, incoming: Any, default: dict[str, Any] | None = None) -> None:
+    existing = _safe_dict(settings.get(key))
+    fallback = _deep_copy(default or {})
+    settings[key] = _deep_merge(_deep_merge(fallback, existing), _safe_dict(incoming))
+
+
+def _without_api_key(value: dict[str, Any]) -> dict[str, Any]:
+    return {key: item for key, item in value.items() if key != "api_key"}
+
+
 def _masked_api_key(api_key: str) -> str:
     if not api_key:
         return ""
@@ -87,24 +107,42 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
     if "global_system_prompt" in data:
         settings["global_system_prompt"] = data["global_system_prompt"]
     if "lmstudio" in data:
-        settings.setdefault("lmstudio", {}).update(_safe_dict(data["lmstudio"]))
+        _merge_settings_section(settings, "lmstudio", data["lmstudio"], DEFAULT_SETTINGS["lmstudio"])
 
     if "openrouter" in data:
         incoming = _safe_dict(data["openrouter"])
         api_key = str(incoming.get("api_key") or "")
         if api_key and not api_key.startswith("***"):
             secrets.setdefault("api_keys", {})["openrouter"] = api_key
-        settings.setdefault("openrouter", {}).update({key: value for key, value in incoming.items() if key != "api_key"})
+        _merge_settings_section(
+            settings,
+            "openrouter",
+            {key: value for key, value in incoming.items() if key != "api_key"},
+            _without_api_key(DEFAULT_SETTINGS["openrouter"]),
+        )
 
     if "cerebras" in data:
         incoming = _safe_dict(data["cerebras"])
         api_key = str(incoming.get("api_key") or "")
         if api_key and not api_key.startswith("***"):
             secrets.setdefault("api_keys", {})["cerebras"] = api_key
-        settings.setdefault("cerebras", {}).update({key: value for key, value in incoming.items() if key != "api_key"})
+        _merge_settings_section(
+            settings,
+            "cerebras",
+            {key: value for key, value in incoming.items() if key != "api_key"},
+            _without_api_key(DEFAULT_SETTINGS["cerebras"]),
+        )
 
     if "llamacpp" in data:
-        settings.setdefault("llamacpp", _deep_copy(DEFAULT_SETTINGS["llamacpp"])).update(_safe_dict(data["llamacpp"]))
+        _merge_settings_section(settings, "llamacpp", data["llamacpp"], DEFAULT_SETTINGS["llamacpp"])
+
+    for key in ["audio_provider_tts", "audio_provider_stt", "tts_worker_url", "stt_worker_url", "image_worker_url"]:
+        if key in data:
+            settings[key] = data[key]
+
+    for key in ["faster-qwen3-tts", "parakeet", "image", "rpg_visual"]:
+        if key in data:
+            _merge_settings_section(settings, key, data[key], _safe_dict(DEFAULT_SETTINGS.get(key)))
 
     save_secrets(secrets)
     save_settings(settings)

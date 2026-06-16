@@ -199,6 +199,115 @@ describe('PlatformModuleWorkspace', () => {
     expect(screen.getByText('8192 MB')).toBeInTheDocument();
   });
 
+  it('enqueues provider refresh jobs from the providers module', async () => {
+    const fetchMock = mockGateway({
+      '/api/providers': {
+        providers: [
+          {
+            id: 'openai',
+            label: 'OpenAI compatible',
+            family: 'llm',
+            source: 'settings',
+            status: 'configured',
+            capabilities: ['chat', 'model_discovery'],
+            metadata: {},
+          },
+        ],
+        models: [],
+      },
+      '/api/providers/refresh': {
+        id: 'job-refresh',
+        type: 'providers.models.refresh',
+        module: 'platform',
+        status: 'queued',
+        resource_class: 'cpu',
+        created_at: '2026-06-14T00:00:00Z',
+        updated_at: '2026-06-14T00:00:00Z',
+        priority: 0,
+      },
+    });
+
+    renderPlatform('providers');
+
+    expect(await screen.findByRole('heading', { name: 'OpenAI compatible' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/providers/refresh',
+        expect.objectContaining({
+          body: JSON.stringify({ scope: 'providers', reason: 'web.providers.refresh', priority: 0 }),
+          method: 'POST',
+        }),
+      );
+    });
+    expect(await screen.findByText('queued')).toBeInTheDocument();
+  });
+
+  it('refreshes providers and models when shared refresh job events arrive', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
+      const providersCallCount = fetchMock.mock.calls.filter(([callInput]) => {
+        const callPath = typeof callInput === 'string' ? new URL(callInput, 'http://localhost').pathname : new URL(callInput.toString()).pathname;
+        return callPath === '/api/providers';
+      }).length;
+      const modelsCallCount = fetchMock.mock.calls.filter(([callInput]) => {
+        const callPath = typeof callInput === 'string' ? new URL(callInput, 'http://localhost').pathname : new URL(callInput.toString()).pathname;
+        return callPath === '/api/models';
+      }).length;
+
+      if (path === '/api/providers') {
+        return Response.json({
+          providers: [
+            {
+              id: 'openai',
+              label: providersCallCount <= 1 ? 'OpenAI compatible' : 'OpenAI compatible refreshed',
+              family: 'llm',
+              source: 'settings',
+              status: 'configured',
+              capabilities: ['chat', 'model_discovery'],
+              metadata: {},
+            },
+          ],
+          models: [],
+        });
+      }
+
+      if (path === '/api/models') {
+        return Response.json({
+          providers: [],
+          models: [
+            {
+              id: 'local-mistral',
+              label: modelsCallCount <= 1 ? 'Local Mistral' : 'Local Mistral refreshed',
+              provider_id: 'local',
+              location: 'local',
+              capabilities: ['chat'],
+              metadata: {},
+            },
+          ],
+        });
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPlatform('providers');
+    expect(await screen.findByRole('heading', { name: 'OpenAI compatible' })).toBeInTheDocument();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    MockEventSource.instances[0].emitMessage('job.completed', '{"job_id":"refresh-job"}');
+    expect(await screen.findByRole('heading', { name: 'OpenAI compatible refreshed' })).toBeInTheDocument();
+
+    renderPlatform('models');
+    expect(await screen.findByRole('heading', { name: 'Local Mistral' })).toBeInTheDocument();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    MockEventSource.instances[0].emitMessage('job.completed', '{"job_id":"refresh-job"}');
+    expect(await screen.findByRole('heading', { name: 'Local Mistral refreshed' })).toBeInTheDocument();
+  });
+
   it('renders jobs with progress and cancellation through the shared queue API', async () => {
     const fetchMock = mockGateway({
       '/api/jobs': jobPayload('running', 'Synthesizing'),

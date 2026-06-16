@@ -34,12 +34,31 @@ def _base_settings() -> dict[str, Any]:
         "lmstudio": {"base_url": "http://localhost:1234", "direct": False},
         "openrouter": {"model": "openai/gpt-4o-mini", "context_size": 128000, "thinking_budget": 0},
         "cerebras": {"model": "llama-3.3-70b-versatile"},
-        "llamacpp": {"base_url": "http://localhost:8080", "model": "", "download_location": "server"},
+        "llamacpp": {
+            "base_url": "http://localhost:8080",
+            "model": "legacy.gguf",
+            "download_location": "server",
+            "auto_start": False,
+        },
         "audio_provider_tts": "faster-qwen3-tts",
         "audio_provider_stt": "parakeet",
         "parakeet": {"base_url": "http://localhost:8000"},
-        "image": {"enabled": False, "mock": {"enabled": True}, "flux_klein": {}},
-        "rpg_visual": {"enabled": False, "provider": "mock", "flux_klein": {}},
+        "faster-qwen3-tts": {"model_dir": "models/tts", "device": "cuda", "temperature": 0.9},
+        "tts_worker_url": "http://localhost:8101",
+        "stt_worker_url": "http://localhost:8102",
+        "image_worker_url": "http://localhost:8103",
+        "image": {
+            "enabled": False,
+            "provider": "flux_klein",
+            "chat": {"auto_generate_images": False, "style": "cinematic"},
+            "mock": {"enabled": True},
+            "flux_klein": {"local_dir": "models/image", "download_dir": "image", "width": 768},
+        },
+        "rpg_visual": {
+            "enabled": False,
+            "provider": "mock",
+            "flux_klein": {"local_dir": "models/rpg-image", "download_dir": "image", "portrait_width": 512},
+        },
     }
 
 
@@ -89,3 +108,65 @@ def test_non_provider_settings_do_not_invalidate_provider_cache(tmp_path, monkey
     assert _read_json(settings_file)["global_system_prompt"] == "updated prompt"
     assert _read_json(secrets_file)["api_keys"]["openrouter"] == "or-secret-1234"
     assert shared._PROVIDER_CACHE == {"key": "cached-provider", "instance": cached_instance}
+
+
+def test_worker_and_audio_settings_round_trip_without_secret_mutation(tmp_path, monkeypatch) -> None:
+    import app.shared as shared
+
+    settings_file, secrets_file = _isolate_settings_files(tmp_path, monkeypatch)
+    _write_json(settings_file, _base_settings())
+    _write_json(secrets_file, {"api_keys": {"openrouter": "or-secret-1234"}})
+    cached_instance = object()
+    shared._PROVIDER_CACHE["key"] = "cached-provider"
+    shared._PROVIDER_CACHE["instance"] = cached_instance
+
+    save_settings_payload(
+        {
+            "audio_provider_tts": "faster-qwen3-tts",
+            "audio_provider_stt": "parakeet",
+            "tts_worker_url": "http://127.0.0.1:9201",
+            "stt_worker_url": "http://127.0.0.1:9202",
+            "image_worker_url": "http://127.0.0.1:9203",
+            "faster-qwen3-tts": {"model_dir": "D:/models/qwen-tts", "temperature": 0.7},
+            "parakeet": {"base_url": "http://127.0.0.1:9204"},
+        }
+    )
+
+    settings = _read_json(settings_file)
+    assert settings["tts_worker_url"] == "http://127.0.0.1:9201"
+    assert settings["stt_worker_url"] == "http://127.0.0.1:9202"
+    assert settings["image_worker_url"] == "http://127.0.0.1:9203"
+    assert settings["faster-qwen3-tts"]["model_dir"] == "D:/models/qwen-tts"
+    assert settings["faster-qwen3-tts"]["temperature"] == 0.7
+    assert settings["faster-qwen3-tts"]["device"] == "cuda"
+    assert settings["parakeet"]["base_url"] == "http://127.0.0.1:9204"
+    assert _read_json(secrets_file)["api_keys"]["openrouter"] == "or-secret-1234"
+    assert shared._PROVIDER_CACHE == {"key": "cached-provider", "instance": cached_instance}
+
+
+def test_nested_model_and_visual_settings_merge_without_dropping_existing_options(tmp_path, monkeypatch) -> None:
+    settings_file, secrets_file = _isolate_settings_files(tmp_path, monkeypatch)
+    _write_json(settings_file, _base_settings())
+    _write_json(secrets_file, {"api_keys": {"openrouter": "or-secret-1234"}})
+
+    save_settings_payload(
+        {
+            "llamacpp": {"download_location": "custom-llm", "auto_start": True},
+            "image": {"flux_klein": {"local_dir": "D:/models/flux-klein", "width": 1024}},
+            "rpg_visual": {"enabled": True, "flux_klein": {"local_dir": "D:/models/rpg-flux"}},
+        }
+    )
+
+    settings = _read_json(settings_file)
+    assert settings["llamacpp"]["download_location"] == "custom-llm"
+    assert settings["llamacpp"]["auto_start"] is True
+    assert settings["llamacpp"]["model"] == "legacy.gguf"
+    assert settings["image"]["flux_klein"]["local_dir"] == "D:/models/flux-klein"
+    assert settings["image"]["flux_klein"]["width"] == 1024
+    assert settings["image"]["flux_klein"]["download_dir"] == "image"
+    assert settings["image"]["chat"] == {"auto_generate_images": False, "style": "cinematic"}
+    assert settings["rpg_visual"]["enabled"] is True
+    assert settings["rpg_visual"]["provider"] == "mock"
+    assert settings["rpg_visual"]["flux_klein"]["local_dir"] == "D:/models/rpg-flux"
+    assert settings["rpg_visual"]["flux_klein"]["portrait_width"] == 512
+    assert "api_key" not in settings["openrouter"]

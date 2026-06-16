@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/migrations/legacy-non-image/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Legacy Non Image Asset Migration Dry Run */
+        post: operations["legacy_non_image_asset_migration_dry_run_api_assets_migrations_legacy_non_image_dry_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions": {
         parameters: {
             query?: never;
@@ -278,6 +295,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/model-residency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Model Residency */
+        get: operations["model_residency_api_model_residency_get"];
+        put?: never;
+        /** Report Model Residency */
+        post: operations["report_model_residency_api_model_residency_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-residency/{model_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Model Residency */
+        delete: operations["delete_model_residency_api_model_residency__model_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models": {
         parameters: {
             query?: never;
@@ -289,6 +341,23 @@ export interface paths {
         get: operations["models_api_models_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Models */
+        post: operations["refresh_models_api_models_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -323,6 +392,23 @@ export interface paths {
         get: operations["providers_api_providers_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Providers */
+        post: operations["refresh_providers_api_providers_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -915,6 +1001,38 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssetLegacyImportDryRun */
+        AssetLegacyImportDryRun: {
+            /** Assets */
+            assets?: components["schemas"]["AssetRecord"][];
+            /** Category Counts */
+            category_counts?: {
+                [key: string]: number;
+            };
+            /** Collision Asset Ids */
+            collision_asset_ids?: string[];
+            /** Roots Scanned */
+            roots_scanned?: components["schemas"]["AssetLegacyRootScan"][];
+            /** Skipped Files */
+            skipped_files?: {
+                [key: string]: unknown;
+            }[];
+            /** Source */
+            source: string;
+            /** Warnings */
+            warnings?: string[];
+            /** Would Import */
+            would_import: number;
+        };
+        /** AssetLegacyRootScan */
+        AssetLegacyRootScan: {
+            /** Exists */
+            exists: boolean;
+            /** Family */
+            family: string;
+            /** Path */
+            path: string;
+        };
         /** AssetListResponse */
         AssetListResponse: {
             /** Assets */
@@ -1195,8 +1313,10 @@ export interface components {
             logs?: {
                 [key: string]: string;
             }[];
+            model_residency?: components["schemas"]["ModelResidencyDiagnostics"];
             /** Ok */
             ok: boolean;
+            provider_model_cache?: components["schemas"]["ProviderModelCachePayload"];
             /** Status */
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
@@ -1244,6 +1364,26 @@ export interface components {
              * @constant
              */
             status: "ready";
+        };
+        /** GpuResidencyPolicy */
+        GpuResidencyPolicy: {
+            /**
+             * Allow Co Residency
+             * @default false
+             */
+            allow_co_residency: boolean;
+            /**
+             * Allow Matching Compatibility Group
+             * @default false
+             */
+            allow_matching_compatibility_group: boolean;
+            /** Compatible Model Pairs */
+            compatible_model_pairs?: [
+                string,
+                string
+            ][];
+            /** Total Vram Mb */
+            total_vram_mb?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1464,6 +1604,50 @@ export interface components {
              */
             success: boolean;
         };
+        /** ModelResidencyDiagnostics */
+        ModelResidencyDiagnostics: {
+            policy: components["schemas"]["GpuResidencyPolicy"];
+            /** Records */
+            records?: components["schemas"]["ModelResidencyRecord"][];
+            /** Status */
+            status: string;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** ModelResidencyRecord */
+        ModelResidencyRecord: {
+            /** Compatibility Group */
+            compatibility_group?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Estimated Vram Mb */
+            estimated_vram_mb?: number | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Model Id */
+            model_id: string;
+            /**
+             * Model Name
+             * @default
+             */
+            model_name: string;
+            /** Module */
+            module: string;
+            /** Provider Id */
+            provider_id: string;
+            resource_class: components["schemas"]["ResourceClass"];
+            /** @default unloaded */
+            status: components["schemas"]["ModelResidencyStatus"];
+            /** Worker Endpoint */
+            worker_endpoint?: string | null;
+            /** Worker Id */
+            worker_id?: string | null;
+        };
+        /**
+         * ModelResidencyStatus
+         * @enum {string}
+         */
+        ModelResidencyStatus: "unloaded" | "loading" | "loaded" | "unloading" | "error";
         /** ModelSummary */
         ModelSummary: {
             /** Capabilities */
@@ -1548,6 +1732,58 @@ export interface components {
             models: components["schemas"]["ModelSummary"][];
             /** Providers */
             providers: components["schemas"]["ProviderSummary"][];
+        };
+        /** ProviderModelCacheEntry */
+        ProviderModelCacheEntry: {
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: string;
+            }[];
+            /** Id */
+            id: string;
+            /**
+             * Model Id
+             * @default
+             */
+            model_id: string;
+            /** Path */
+            path?: string | null;
+            /** Provider Id */
+            provider_id: string;
+            /** Source */
+            source: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "configured" | "missing_path" | "not_configured" | "unreachable";
+        };
+        /** ProviderModelCachePayload */
+        ProviderModelCachePayload: {
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: string;
+            }[];
+            /** Entries */
+            entries?: components["schemas"]["ProviderModelCacheEntry"][];
+            /** Status */
+            status: string;
+        };
+        /** ProviderModelRefreshRequest */
+        ProviderModelRefreshRequest: {
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Scope
+             * @default all
+             * @enum {string}
+             */
+            scope: "providers" | "models" | "all";
         };
         /** ProviderSummary */
         ProviderSummary: {
@@ -1979,6 +2215,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetMigrationPreview"];
+                };
+            };
+        };
+    };
+    legacy_non_image_asset_migration_dry_run_api_assets_migrations_legacy_non_image_dry_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetLegacyImportDryRun"];
                 };
             };
         };
@@ -2416,6 +2672,90 @@ export interface operations {
             };
         };
     };
+    model_residency_api_model_residency_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelResidencyDiagnostics"];
+                };
+            };
+        };
+    };
+    report_model_residency_api_model_residency_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelResidencyRecord"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelResidencyDiagnostics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_model_residency_api_model_residency__model_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelResidencyDiagnostics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     models_api_models_get: {
         parameters: {
             query?: never;
@@ -2432,6 +2772,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderFacadePayload"];
+                };
+            };
+        };
+    };
+    refresh_models_api_models_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderModelRefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2485,6 +2858,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderFacadePayload"];
+                };
+            };
+        };
+    };
+    refresh_providers_api_providers_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderModelRefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
