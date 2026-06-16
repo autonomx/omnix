@@ -211,6 +211,7 @@ describe('StorytellerWorkspace', () => {
       expect(body.resource_class).toBe('gpu:llm');
       expect(body.input_payload?.prompt_template_id).toBe('storyteller.draft.v1');
       expect(body.input_payload?.action).toBe('draft');
+      expect(body.input_payload?.interaction_mode).toBe('writing');
       expect(body.input_payload?.source_text).toBeNull();
       expect(body.input_payload?.source_job_id).toBeNull();
       expect(body.input_payload?.tone).toBe('Cozy');
@@ -417,8 +418,86 @@ describe('StorytellerWorkspace', () => {
       const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
       expect(body.input_payload?.action).toBe('continue');
       expect(body.input_payload?.prompt_template_id).toBe('storyteller.continue.v1');
+      expect(body.input_payload?.interaction_mode).toBe('writing');
       expect(body.input_payload?.source_text).toBe(baseText);
       expect(body.input_payload?.source_job_id).toBe('job:base');
+    });
+  });
+
+  it('submits typed Story Mode responses with active story context', async () => {
+    const baseText = 'The orchard rang like crystal at sunset.\n\nA secret door opened below the oldest glass tree.';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return Response.json(storyJob({
+          id: 'job:story-mode',
+          input_payload: { title: 'The Glass Orchard', action: 'continue', interaction_mode: 'story' },
+          output_refs: [{ kind: 'text', content: 'Mira stepped through the secret door and heard the orchard answer.' }],
+        }));
+      }
+      if (path === '/api/jobs') {
+        return Response.json({ jobs: [storyJob({ id: 'job:base', output_refs: [{ kind: 'text', content: baseText }] })] });
+      }
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderStoryteller();
+
+    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
+    expect(await screen.findByRole('region', { name: 'Story mode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Investigate the strange clue' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Story mode response'), {
+      target: { value: 'I light a lantern and step through the secret door.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with my response' }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
+      );
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
+      expect(body.input_payload?.action).toBe('continue');
+      expect(body.input_payload?.interaction_mode).toBe('story');
+      expect(body.input_payload?.user_response).toBe('I light a lantern and step through the secret door.');
+      expect(String(body.input_payload?.source_text)).toContain('Player response: I light a lantern and step through the secret door.');
+      expect(body.input_payload?.source_job_id).toBe('job:base');
+    });
+  });
+
+  it('submits suggested Story Mode choices as player moves', async () => {
+    const baseText = 'A secret door opened below the oldest glass tree.';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/jobs' && init?.method === 'POST') return Response.json(storyJob({ id: 'job:choice' }));
+      if (path === '/api/jobs') {
+        return Response.json({ jobs: [storyJob({ id: 'job:base', output_refs: [{ kind: 'text', content: baseText }] })] });
+      }
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/assets/asset%3Astory/content') return Response.json(assetContentPayload());
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderStoryteller();
+
+    expect(await screen.findByText(baseText)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Story Mode/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Investigate the strange clue' }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
+      );
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
+      expect(body.input_payload?.interaction_mode).toBe('story');
+      expect(body.input_payload?.user_response).toBe('Investigate the strange clue');
+      expect(body.input_payload?.suggested_choice).toBe('Investigate the strange clue');
     });
   });
 });
