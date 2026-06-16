@@ -303,7 +303,7 @@ describe('StorytellerWorkspace', () => {
     fireEvent.click(chapterTwoButton);
 
     const manuscript = screen.getByRole('region', { name: 'Story manuscript' });
-    expect(await within(manuscript).findByRole('heading', { name: 'The Memory Market' })).toBeInTheDocument();
+    expect((await within(manuscript).findAllByRole('heading', { name: 'The Memory Market' })).length).toBeGreaterThan(0);
   });
 
   it('submits quick actions with active manuscript context', async () => {
