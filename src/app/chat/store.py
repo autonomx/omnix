@@ -6,6 +6,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from app.runtime_paths import resources_data_root
 
@@ -23,6 +24,23 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _provider_key(value: str | None) -> str | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    return text.split(":", 1)[1] if text.startswith("llm:") else text
+
+
+def _model_key(value: str | None) -> str | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    parts = text.split(":", 2)
+    if len(parts) == 3 and parts[0] == "llm":
+        return parts[2] or None
+    return text
+
+
 def default_chat_store_path() -> Path:
     override = os.environ.get("OMNIX_CHAT_STORE_PATH")
     if override:
@@ -31,11 +49,7 @@ def default_chat_store_path() -> Path:
 
 
 class ChatSessionStore:
-    """Small JSON-backed chat history store.
-
-    The store owns conversation history only. It does not invoke providers;
-    generation is represented as shared jobs so worker routing can attach later.
-    """
+    """Small JSON-backed chat history store."""
 
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path is not None else default_chat_store_path()
@@ -94,18 +108,74 @@ class ChatSessionStore:
                 role="user",
                 content=request.content.strip(),
                 created_at=now,
-                metadata={"generation_status": "queued"},
+                metadata={"generation_status": "running"},
             )
+            provider_id = request.provider_id or session.provider_id
+            model_id = request.model_id or session.model_id
+            answer = self._generate_reply(session, message, provider_id=provider_id, model_id=model_id)
+            assistant_message = ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="assistant",
+                content=answer["content"],
+                created_at=_utcnow(),
+                metadata=answer["metadata"],
+            )
+            message.metadata["generation_status"] = "completed"
             session.messages.append(message)
-            session.provider_id = request.provider_id or session.provider_id
-            session.model_id = request.model_id or session.model_id
+            session.messages.append(assistant_message)
+            session.provider_id = provider_id
+            session.model_id = model_id
             session.message_count = len(session.messages)
-            session.updated_at = now
+            if session.title.strip().lower() in {"new chat", "new chat..."}:
+                session.title = message.content[:48] or "New chat"
+            session.updated_at = assistant_message.created_at
             sessions[index] = session
             self._save_sessions(sessions)
             return session, message
 
         return None
+
+    def _generate_reply(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+    ) -> dict[str, Any]:
+        from app import shared
+        from app.providers import ChatMessage as ProviderMessage
+
+        provider_name = _provider_key(provider_id)
+        provider = shared.get_provider(provider_name)
+        if provider is None:
+            raise RuntimeError("Chat provider is not available")
+
+        messages: list[ProviderMessage] = []
+        if not any(message.role == "system" for message in session.messages):
+            messages.append(ProviderMessage(role="system", content=shared.get_global_system_prompt()))
+        for message in session.messages:
+            messages.append(ProviderMessage(role=message.role, content=message.content))
+        messages.append(ProviderMessage(role="user", content=user_message.content))
+
+        model_name = _model_key(model_id)
+        response = provider.chat_completion(messages=messages, model=model_name, stream=False)
+        content = (getattr(response, "content", "") or "").strip()
+        if not content:
+            raise RuntimeError("Chat response was empty")
+        metadata: dict[str, Any] = {
+            "generation_status": "completed",
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "resolved_model": getattr(response, "model", None) or model_name,
+        }
+        usage = getattr(response, "usage", None)
+        if usage:
+            metadata["usage"] = usage
+        thinking = getattr(response, "thinking", None) or getattr(response, "reasoning", None)
+        if thinking:
+            metadata["thinking"] = thinking
+        return {"content": content, "metadata": metadata}
 
     def _load_sessions(self) -> list[ChatSession]:
         if not self.path.exists():
