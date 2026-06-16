@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixAudioControls, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 
 interface VoiceFormValues {
   text: string;
@@ -27,7 +28,12 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     queryKey: ['platform', 'assets'],
     queryFn: () => omnixApiClient.listAssets(),
   });
-  const { register, handleSubmit, reset } = useForm<VoiceFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<VoiceFormValues>({
     defaultValues: { text: '', speaker: '', voiceId: '', providerId: '' },
   });
   const ttsProviders = useMemo(() => ttsCapableProviders(providersQuery.data), [providersQuery.data]);
@@ -56,6 +62,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     },
   });
+  const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
     <WorkspacePanel>
@@ -76,7 +83,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <Title order={4}>Synthesis</Title>
               <Text size="sm">Shared voice job queue</Text>
             </div>
-            <OmnixStatusPill>{createJobMutation.data?.status ?? 'ready'}</OmnixStatusPill>
+            <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
           </Group>
 
           <form className="feature-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
@@ -101,18 +108,23 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             </label>
             <label className="feature-form-wide">
               Text
-              <textarea rows={5} {...register('text', { required: true })} />
+              <textarea rows={5} aria-invalid={Boolean(errors.text)} {...register('text', { required: true })} />
             </label>
-            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending}>
-              Queue synthesis
+            <Button className="feature-form-action" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
+              {createJobMutation.isPending ? 'Queueing synthesis…' : 'Queue synthesis'}
             </Button>
           </form>
 
-          {createJobMutation.data ? (
-            <div className="feature-job-link" role="status">
-              TTS job queued: {createJobMutation.data.id}
-            </div>
-          ) : null}
+          <FeatureValidationMessage show={Boolean(errors.text)} message="Enter text before queueing speech synthesis." />
+          <FeatureSubmitFeedback
+            error={createJobMutation.error}
+            errorPrefix="TTS request"
+            isError={createJobMutation.isError}
+            isPending={createJobMutation.isPending}
+            jobId={createJobMutation.data?.id}
+            pendingMessage="Queueing TTS job…"
+            successPrefix="TTS job queued"
+          />
 
           <OmnixAudioControls label="latest voice preview" />
         </section>
