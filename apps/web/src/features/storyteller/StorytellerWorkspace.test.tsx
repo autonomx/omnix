@@ -63,6 +63,8 @@ function storyJob(overrides: Record<string, unknown> = {}) {
       title: 'The Glass Orchard',
       premise: 'A city grows fruit made of memory.',
       provider_id: 'lmstudio',
+      action: 'draft',
+      ...(typeof overrides.input_payload === 'object' && overrides.input_payload ? (overrides.input_payload as Record<string, unknown>) : {}),
     },
     output_refs: [
       {
@@ -191,21 +193,122 @@ describe('StorytellerWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Generate story' }));
 
     expect(await screen.findByText('Story generated: job:story')).toBeInTheDocument();
-    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    expect((await screen.findAllByText('The orchard rang like crystal at sunset.')).length).toBeGreaterThan(0);
 
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(
         ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
       );
-      const body = String(createCall?.[1]?.body ?? '');
-      expect(body).toContain('"module":"storyteller"');
-      expect(body).toContain('"type":"story.generate"');
-      expect(body).toContain('"resource_class":"gpu:llm"');
-      expect(body).toContain('"prompt_template_id":"storyteller.draft.v1"');
-      expect(body).toContain('"tone":"Cozy"');
-      expect(body).toContain('"writing_style":"Lyrical & Descriptive"');
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown>; module?: string; type?: string; resource_class?: string };
+      expect(body.module).toBe('storyteller');
+      expect(body.type).toBe('story.generate');
+      expect(body.resource_class).toBe('gpu:llm');
+      expect(body.input_payload?.prompt_template_id).toBe('storyteller.draft.v1');
+      expect(body.input_payload?.action).toBe('draft');
+      expect(body.input_payload?.source_text).toBeNull();
+      expect(body.input_payload?.source_job_id).toBeNull();
+      expect(body.input_payload?.tone).toBe('Cozy');
+      expect(body.input_payload?.writing_style).toBe('Lyrical & Descriptive');
     });
 
     expect(screen.getAllByText('story.generate').length).toBeGreaterThan(0);
+  });
+
+  it('selects prior story versions into the manuscript', async () => {
+    const newer = storyJob({
+      id: 'job:newer',
+      input_payload: { title: 'Newer Orchard', action: 'expand' },
+      output_refs: [{ kind: 'text', content: 'Newer branches glittered over the city.' }],
+    });
+    const older = storyJob({
+      id: 'job:older',
+      input_payload: { title: 'Older Orchard', action: 'rewrite' },
+      output_refs: [{ kind: 'text', content: 'Older roots remembered every footstep.' }],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = requestPath(input);
+
+        if (path === '/api/providers') {
+          return Response.json(providerPayload());
+        }
+
+        if (path === '/api/jobs') {
+          return Response.json({ jobs: [newer, older] });
+        }
+
+        if (path === '/api/assets') {
+          return Response.json(assetPayload());
+        }
+
+        return new Response('not found', { status: 404 });
+      }),
+    );
+
+    renderStoryteller();
+
+    const manuscript = await screen.findByRole('region', { name: 'Story manuscript' });
+    expect(await within(manuscript).findByText('Newer branches glittered over the city.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Select v1: Rewrite paragraph • Older Orchard/ }));
+
+    expect(await within(manuscript).findByText('Older roots remembered every footstep.')).toBeInTheDocument();
+  });
+
+  it('submits quick actions with active manuscript context', async () => {
+    const baseText = 'The orchard rang like crystal at sunset.\n\nEach branch remembered a name.';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') {
+        return Response.json(providerPayload());
+      }
+
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return Response.json(
+          storyJob({
+            id: 'job:continue',
+            input_payload: { title: 'The Glass Orchard', action: 'continue' },
+            output_refs: [{ kind: 'text', content: 'The path continued beneath the glass leaves.' }],
+          }),
+        );
+      }
+
+      if (path === '/api/jobs') {
+        return Response.json({
+          jobs: [
+            storyJob({
+              id: 'job:base',
+              output_refs: [{ kind: 'text', content: baseText }],
+            }),
+          ],
+        });
+      }
+
+      if (path === '/api/assets') {
+        return Response.json(assetPayload());
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderStoryteller();
+
+    expect(await screen.findByText('The orchard rang like crystal at sunset.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Premise/), { target: { value: 'A city grows fruit made of memory.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Continue Story/ }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
+      );
+      const body = JSON.parse(String(createCall?.[1]?.body ?? '{}')) as { input_payload?: Record<string, unknown> };
+      expect(body.input_payload?.action).toBe('continue');
+      expect(body.input_payload?.prompt_template_id).toBe('storyteller.continue.v1');
+      expect(body.input_payload?.source_text).toBe(baseText);
+      expect(body.input_payload?.source_job_id).toBe('job:base');
+    });
   });
 });

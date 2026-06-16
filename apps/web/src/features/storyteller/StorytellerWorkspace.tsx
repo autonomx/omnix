@@ -1,6 +1,6 @@
 import { Button, Progress } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, type FieldErrors, type UseFormHandleSubmit, type UseFormRegister } from 'react-hook-form';
 import { omnixApiClient, type JobRecord, type ProviderFacadePayload } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
@@ -13,14 +13,33 @@ interface StorytellerFormValues {
   premise: string;
 }
 
+type StoryActionMode = 'draft' | 'continue' | 'rewrite' | 'expand' | 'dialogue' | 'summarize';
+type StoryQuickActionMode = Exclude<StoryActionMode, 'draft'>;
+
+interface StoryGenerationRequest {
+  values: StorytellerFormValues;
+  action: StoryActionMode;
+  sourceText: string | null;
+  sourceJobId: string | null;
+}
+
 const toneOptions = ['Cozy', 'Hopeful', 'Gentle', 'Mystery'];
 const styleOptions = ['Lyrical & Descriptive', 'Fast-paced', 'Dialogue-heavy', 'Cinematic', 'Literary'];
+
+const quickActions: Array<{ mode: StoryQuickActionMode; label: string; description: string }> = [
+  { mode: 'continue', label: 'Continue Story', description: 'AI continues from here' },
+  { mode: 'rewrite', label: 'Rewrite Paragraph', description: 'Improve clarity & flow' },
+  { mode: 'expand', label: 'Expand Scene', description: 'Add depth & detail' },
+  { mode: 'dialogue', label: 'Dialogue Polish', description: 'Enhance dialogue' },
+  { mode: 'summarize', label: 'Summarize', description: 'Condense this section' },
+];
 
 export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const [selectedTone, setSelectedTone] = useState('Cozy');
   const [writingStyle, setWritingStyle] = useState(styleOptions[0]);
   const [selectedChapter, setSelectedChapter] = useState(1);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const providersQuery = useQuery({
     queryKey: ['platform', 'providers'],
     queryFn: () => omnixApiClient.listProviders(),
@@ -43,8 +62,8 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
     defaultValues: { providerId: '', title: '', premise: '' },
   });
 
-  const createJobMutation = useMutation<JobRecord, Error, StorytellerFormValues>({
-    mutationFn: (values: StorytellerFormValues) =>
+  const createJobMutation = useMutation<JobRecord, Error, StoryGenerationRequest>({
+    mutationFn: ({ values, action, sourceText, sourceJobId }: StoryGenerationRequest) =>
       omnixApiClient.createJob({
         module: 'storyteller',
         type: 'story.generate',
@@ -54,19 +73,25 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
           title: values.title || null,
           premise: values.premise,
           provider_id: values.providerId || null,
-          prompt_template_id: 'storyteller.draft.v1',
+          prompt_template_id: promptTemplateForAction(action),
+          action,
+          source_text: sourceText,
+          source_job_id: sourceJobId,
           tone: selectedTone,
           writing_style: writingStyle,
           chapter: selectedChapter,
         },
         stages: [
-          { id: 'outline', label: 'Build outline', resource_class: 'gpu:llm', status: 'queued' },
-          { id: 'draft', label: 'Draft story', resource_class: 'gpu:llm', status: 'queued' },
+          { id: 'outline', label: action === 'draft' ? 'Build outline' : `Plan ${actionLabel(action)}`, resource_class: 'gpu:llm', status: 'queued' },
+          { id: 'draft', label: action === 'draft' ? 'Draft story' : actionLabel(action), resource_class: 'gpu:llm', status: 'queued' },
           { id: 'store-story', label: 'Store story asset', resource_class: 'cpu', status: 'queued' },
         ],
       }),
-    onSuccess: async (_job, values) => {
-      reset({ providerId: values.providerId, title: values.title, premise: values.premise });
+    onSuccess: async (job, request) => {
+      reset({ providerId: request.values.providerId, title: request.values.title, premise: request.values.premise });
+      if (job.status === 'completed' && fullJobOutputText(job)) {
+        setSelectedJobId(job.id);
+      }
       await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] });
     },
@@ -79,15 +104,34 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const queriedStoryJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'storyteller') ?? [];
   const storyJobs = useMemo(() => includeMutationJob(queriedStoryJobs, createJobMutation.data ?? null), [queriedStoryJobs, createJobMutation.data]);
   const completedStoryJobs = storyJobs.filter((job) => job.status === 'completed' && fullJobOutputText(job));
-  const activeJob = completedStoryJobs[0] ?? null;
+  const activeJob = completedStoryJobs.find((job) => job.id === selectedJobId) ?? completedStoryJobs[0] ?? null;
   const activeStoryText = activeJob ? fullJobOutputText(activeJob) : null;
   const storyAssets = assetsQuery.data?.assets.filter((asset) => asset.type === 'story' || asset.type === 'export') ?? [];
   const storyTitle = jobInputString(activeJob, 'title') || watchedTitle || storyAssetTitle(storyAssets[0]?.storage_path) || 'Untitled story';
-  const providerLabel = providerDisplayName(storyProviders, watchedProvider);
+  const providerLabel = providerDisplayName(storyProviders, watchedProvider || jobInputString(activeJob, 'provider_id') || '');
   const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');
   const readingMinutes = Math.max(1, Math.ceil(wordCount / 220));
   const chapterCount = Math.max(1, Math.min(12, completedStoryJobs.length || selectedChapter));
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+
+  useEffect(() => {
+    if (selectedJobId && !completedStoryJobs.some((job) => job.id === selectedJobId)) {
+      setSelectedJobId(null);
+    }
+  }, [completedStoryJobs, selectedJobId]);
+
+  const submitStoryRequest = (values: StorytellerFormValues, action: StoryActionMode) => {
+    createJobMutation.mutate({
+      values,
+      action,
+      sourceText: activeStoryText,
+      sourceJobId: activeJob?.id ?? null,
+    });
+  };
+
+  const submitQuickAction = (action: StoryQuickActionMode) => {
+    void handleSubmit((values) => submitStoryRequest(values, action))();
+  };
 
   return (
     <WorkspacePanel>
@@ -97,7 +141,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
         <main className="storyteller-stage">
           <StoryProjectHeader
             title={storyTitle}
-            premise={watchedPremise}
+            premise={watchedPremise || jobInputString(activeJob, 'premise') || ''}
             providerLabel={providerLabel}
             wordCount={wordCount}
             chapterCount={chapterCount}
@@ -140,13 +184,14 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
               setWritingStyle={setWritingStyle}
               selectedChapter={selectedChapter}
               setSelectedChapter={setSelectedChapter}
-              handleSubmit={handleSubmit}
+              onGenerate={(values) => submitStoryRequest(values, 'draft')}
               latestJob={storyJobs[0] ?? null}
+              handleSubmit={handleSubmit}
             />
           </div>
 
-          <StoryActionBar />
-          <StoryVersions jobs={completedStoryJobs} />
+          <StoryActionBar disabled={createJobMutation.isPending} onAction={submitQuickAction} />
+          <StoryVersions activeJobId={activeJob?.id ?? null} jobs={completedStoryJobs} onSelect={setSelectedJobId} />
         </main>
 
         <StoryOutline activeTitle={storyTitle} selectedChapter={selectedChapter} setSelectedChapter={setSelectedChapter} />
@@ -159,7 +204,7 @@ interface StoryControlsProps {
   providers: Array<{ id: string; label: string }>;
   register: UseFormRegister<StorytellerFormValues>;
   errors: FieldErrors<StorytellerFormValues>;
-  createJobMutation: UseMutationResult<JobRecord, Error, StorytellerFormValues>;
+  createJobMutation: UseMutationResult<JobRecord, Error, StoryGenerationRequest>;
   submitStatus: string;
   selectedTone: string;
   setSelectedTone: (tone: string) => void;
@@ -167,6 +212,7 @@ interface StoryControlsProps {
   setWritingStyle: (style: string) => void;
   selectedChapter: number;
   setSelectedChapter: (chapter: number) => void;
+  onGenerate: (values: StorytellerFormValues) => void;
   handleSubmit: UseFormHandleSubmit<StorytellerFormValues>;
   latestJob: JobRecord | null;
 }
@@ -183,6 +229,7 @@ function StoryControls({
   setWritingStyle,
   selectedChapter,
   setSelectedChapter,
+  onGenerate,
   handleSubmit,
   latestJob,
 }: StoryControlsProps) {
@@ -196,7 +243,7 @@ function StoryControls({
         <OmnixStatusPill>{submitStatus}</OmnixStatusPill>
       </div>
 
-      <form className="storyteller-form" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
+      <form className="storyteller-form" onSubmit={handleSubmit(onGenerate)}>
         <label>
           Provider
           <select {...register('providerId')}>
@@ -392,36 +439,42 @@ function StoryLibrary({
   );
 }
 
-function StoryActionBar() {
-  const actions = [
-    ['Continue Story', 'AI continues from here'],
-    ['Rewrite Paragraph', 'Improve clarity & flow'],
-    ['Expand Scene', 'Add depth & detail'],
-    ['Dialogue Polish', 'Enhance dialogue'],
-    ['Summarize', 'Condense this section'],
-  ];
+function StoryActionBar({ disabled, onAction }: { disabled: boolean; onAction: (action: StoryQuickActionMode) => void }) {
   return (
     <section className="storyteller-action-bar" aria-label="Story actions">
-      {actions.map(([label, description]) => (
-        <button key={label} type="button">
-          <strong>{label}</strong>
-          <span>{description}</span>
+      {quickActions.map((action) => (
+        <button disabled={disabled} key={action.mode} type="button" onClick={() => onAction(action.mode)}>
+          <strong>{action.label}</strong>
+          <span>{action.description}</span>
         </button>
       ))}
     </section>
   );
 }
 
-function StoryVersions({ jobs }: { jobs: JobRecord[] }) {
+function StoryVersions({ activeJobId, jobs, onSelect }: { activeJobId: string | null; jobs: JobRecord[]; onSelect: (jobId: string) => void }) {
+  const versionJobs = jobs.slice(0, 5);
   return (
     <section className="storyteller-versions" aria-label="Recent story versions">
       <p className="eyebrow">Recent versions</p>
-      {(jobs.length ? jobs.slice(0, 5) : [null, null, null]).map((job, index) => (
-        <button className={index === 0 ? 'active' : ''} key={job?.id ?? `placeholder-${index}`} type="button">
-          <strong>v{jobs.length ? jobs.length - index : index + 1}</strong>
-          <span>{job ? relativeVersionLabel(index) : index === 0 ? 'Just now' : 'Draft'}</span>
-        </button>
-      ))}
+      {(versionJobs.length ? versionJobs : [null, null, null]).map((job, index) => {
+        const version = `v${versionJobs.length ? versionJobs.length - index : index + 1}`;
+        const title = storyVersionTitle(job, index);
+        return (
+          <button
+            aria-label={job ? `Select ${version}: ${title}` : `Placeholder ${version}`}
+            aria-pressed={Boolean(job && job.id === activeJobId)}
+            className={job && job.id === activeJobId ? 'active' : ''}
+            disabled={!job}
+            key={job?.id ?? `placeholder-${index}`}
+            type="button"
+            onClick={() => job && onSelect(job.id)}
+          >
+            <strong>{version}</strong>
+            <span>{job ? title : index === 0 ? 'Just now' : 'Draft'}</span>
+          </button>
+        );
+      })}
       <button type="button">View all</button>
     </section>
   );
@@ -539,12 +592,33 @@ function truncate(text: string, length: number): string {
   return text.length > length ? `${text.slice(0, length)}…` : text;
 }
 
-function relativeVersionLabel(index: number): string {
-  if (index === 0) {
-    return 'Just now';
+function storyVersionTitle(job: JobRecord | null, index: number): string {
+  if (!job) {
+    return index === 0 ? 'Just now' : 'Draft';
   }
-  if (index === 1) {
-    return '10 min ago';
+  const action = jobInputString(job, 'action');
+  const title = jobInputString(job, 'title') || 'Untitled story';
+  return action && action !== 'draft' ? `${actionLabel(action as StoryActionMode)} • ${title}` : title;
+}
+
+function promptTemplateForAction(action: StoryActionMode): string {
+  return `storyteller.${action}.v1`;
+}
+
+function actionLabel(action: StoryActionMode): string {
+  switch (action) {
+    case 'continue':
+      return 'Continue story';
+    case 'rewrite':
+      return 'Rewrite paragraph';
+    case 'expand':
+      return 'Expand scene';
+    case 'dialogue':
+      return 'Dialogue polish';
+    case 'summarize':
+      return 'Summarize';
+    case 'draft':
+    default:
+      return 'Draft story';
   }
-  return `v${index + 1}`;
 }
