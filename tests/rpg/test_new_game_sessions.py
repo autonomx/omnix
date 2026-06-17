@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.platform import rpg_session_compat
 from app.rpg.session import new_game
 
 
@@ -43,6 +44,21 @@ def test_create_new_game_session_builds_level_one_campaign(monkeypatch) -> None:
     assert {item["id"] for item in state["player"]["inventory"]} >= {"ration", "torch", "iron_dagger", "simple_bow", "journal"}
     assert state["current_location"] == "Rusty Flagon Tavern"
     assert state["turn_count"] == 0
+
+
+def test_create_new_game_session_uses_selected_starting_location(monkeypatch) -> None:
+    captured = _capture_saved_session(monkeypatch)
+
+    result = new_game.create_new_game_session(
+        new_game.RpgNewGameRequest(seed=67890, starting_location="old_quarry")
+    )
+
+    assert result["ok"] is True
+    state = captured["session"]["state"]
+    assert state["current_location"] == "Old Quarry"
+    assert state["world"]["time"] == "Day 1 • 16:20"
+    assert "Inspect the fissure" in state["quick_actions"]
+    assert state["timeline"][1]["kind"] == "mystery"
 
 
 def test_list_rpg_presets_exposes_glimmerdeep_demo() -> None:
@@ -91,3 +107,48 @@ def test_start_rpg_preset_rejects_unknown_id(monkeypatch) -> None:
 
     assert result == {"ok": False, "error": "unknown_rpg_preset", "preset_id": "missing"}
     assert "session" not in captured
+
+
+def test_rename_rpg_session_updates_manifest_title(monkeypatch) -> None:
+    saved_sessions: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        new_game,
+        "load_session",
+        lambda session_id: {"manifest": {"id": session_id, "session_id": session_id, "title": "Old Name"}, "state": {}},
+    )
+
+    def fake_save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
+        saved_sessions.append(session)
+        return session
+
+    monkeypatch.setattr(new_game, "save_session", fake_save_session)
+
+    result = new_game.rename_rpg_session("rpg_test", "New Name")
+
+    assert result["ok"] is True
+    assert result["session_id"] == "rpg_test"
+    assert saved_sessions[0]["manifest"]["title"] == "New Name"
+    assert "updated_at" in saved_sessions[0]["manifest"]
+
+
+def test_delete_rpg_session_archives_session(monkeypatch) -> None:
+    monkeypatch.setattr(new_game, "archive_session", lambda session_id: {"ok": True, "session_id": session_id, "archived": True})
+
+    assert new_game.delete_rpg_session("rpg_test") == {"ok": True, "session_id": "rpg_test", "archived": True}
+
+
+def test_session_compat_supports_rename_and_delete(monkeypatch) -> None:
+    monkeypatch.setattr(new_game, "rename_rpg_session", lambda session_id, name: {"ok": True, "session_id": session_id, "name": name})
+    monkeypatch.setattr(new_game, "delete_rpg_session", lambda session_id: {"ok": True, "session_id": session_id, "archived": True})
+
+    assert rpg_session_compat.get_rpg_session_payload({"action": "rename", "session_id": "rpg_test", "name": "Renamed"}) == {
+        "ok": True,
+        "session_id": "rpg_test",
+        "name": "Renamed",
+    }
+    assert rpg_session_compat.get_rpg_session_payload({"action": "delete", "session_id": "rpg_test"}) == {
+        "ok": True,
+        "session_id": "rpg_test",
+        "archived": True,
+    }
