@@ -2,13 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
+import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
 import { RpgPlayerRail } from './RpgPlayerRail';
 import { RpgStoryScene } from './RpgStoryScene';
+import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
@@ -104,19 +105,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
   return (
     <WorkspacePanel className="rpg-workstation">
-      <header className="rpg-workstation-header">
-        <div>
-          <p className="eyebrow">Feature module</p>
-          <h2 id="module-title">{module.label} mode</h2>
-          <p>{module.summary}</p>
-        </div>
-        <div className="rpg-header-pills" aria-label="RPG runtime status">
-          <OmnixStatusPill>Engine: {submitStatus}</OmnixStatusPill>
-          <OmnixStatusPill>Session: {selectedSessionSummary.title}</OmnixStatusPill>
-          <OmnixStatusPill>Replay-preserving</OmnixStatusPill>
-          <code>{module.route}</code>
-        </div>
-      </header>
+      <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
 
       <div className="rpg-dashboard-grid">
         <RpgPlayerRail
