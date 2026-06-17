@@ -48,6 +48,61 @@ export interface SavedStoryAssetResponse {
   content: string;
 }
 
+export interface RpgPlayerOptions {
+  name?: string;
+  pronouns?: string;
+  background?: string;
+  build?: 'balanced_adventurer' | 'warrior' | 'ranger' | 'silver_tongue';
+  portrait_seed?: number | null;
+}
+
+export interface RpgFeatureOptions {
+  autosave?: boolean;
+  validator?: boolean;
+  background_soft_audit?: boolean;
+  llm_narration?: boolean;
+  image_generation?: boolean;
+  tts?: boolean;
+  stt?: boolean;
+}
+
+export interface RpgNewGameRequest {
+  campaign_template?: string;
+  starting_location?: string;
+  player?: RpgPlayerOptions;
+  difficulty?: 'story' | 'normal' | 'harsh';
+  world_activity?: 'quiet' | 'standard' | 'living_world';
+  companions_enabled?: boolean;
+  permadeath?: boolean;
+  seed?: number | null;
+  features?: RpgFeatureOptions;
+}
+
+export interface RpgPresetSummary {
+  preset_id: string;
+  name: string;
+  description: string;
+  kind: string;
+  level?: number;
+  location?: string;
+  clone_on_start?: boolean;
+}
+
+export interface RpgSessionListResponse {
+  ok: boolean;
+  sessions: Record<string, unknown>[];
+  presets?: RpgPresetSummary[];
+}
+
+export interface RpgLaunchResponse {
+  ok: boolean;
+  session_id?: string;
+  status?: string;
+  session?: Record<string, unknown>;
+  game?: Record<string, unknown>;
+  error?: string;
+}
+
 export interface ApiClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -186,6 +241,31 @@ export class OmnixApiClient {
 
   async getReplayPersistenceInventory(): Promise<PersistenceInventory> {
     return this.get<PersistenceInventory>('/api/replay/persistence/inventory');
+  }
+
+  async listRpgSessions(): Promise<RpgSessionListResponse> {
+    return this.post<Record<string, never>, RpgSessionListResponse>('/api/rpg/session/list', {});
+  }
+
+  async createRpgNewGame(request: RpgNewGameRequest = {}): Promise<RpgLaunchResponse> {
+    return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+      action: 'new_game',
+      request,
+    });
+  }
+
+  async startRpgPreset(presetId: string): Promise<RpgLaunchResponse> {
+    return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+      action: 'start_preset',
+      preset_id: presetId,
+    });
+  }
+
+  async continueRpgSession(sessionId: string): Promise<RpgLaunchResponse> {
+    return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+      action: 'continue',
+      session_id: sessionId,
+    });
   }
 
   async createReplayCheckpoint(request: Record<string, unknown>): Promise<CheckpointEnvelope> {
