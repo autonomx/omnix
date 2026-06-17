@@ -1,10 +1,11 @@
-import { Button, Progress, Text } from '@mantine/core';
+import { Progress, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { RpgActionComposer } from './RpgActionComposer';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
 import { createRpgWorkspaceState } from './rpgUiState';
@@ -266,35 +267,16 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 ))}
               </ul>
             </div>
-            <form className="rpg-action-composer" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
-              <div className="rpg-action-composer-heading">
-                <h3>Turn request</h3>
-                <p>Queue replay-preserving RPG commands into the deterministic turn pipeline.</p>
-              </div>
-              <label>
-                <span>Session</span>
-                <select {...register('sessionId')}>
-                  <option value="">New or current session</option>
-                  {sessionSummaries.map((session) => (
-                    <option key={session.id} value={session.id}>
-                      {session.title === session.id ? session.id : `${session.title} — ${session.id}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="rpg-command-field">
-                <span>Command</span>
-                <textarea
-                  rows={3}
-                  aria-invalid={Boolean(errors.command)}
-                  placeholder="What do you want to do?"
-                  {...register('command', { required: true })}
-                />
-              </label>
-              <Button className="rpg-submit-button" type="submit" disabled={createJobMutation.isPending} loading={createJobMutation.isPending}>
-                {createJobMutation.isPending ? 'Queueing…' : 'Queue RPG turn'}
-              </Button>
-            </form>
+            <RpgActionComposer
+              commandRegistration={register('command', { required: true })}
+              hasCommandError={Boolean(errors.command)}
+              isPending={createJobMutation.isPending}
+              onQuickAction={(command) => setValue('command', command, { shouldDirty: true, shouldValidate: true })}
+              onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
+              quickActions={quickActions}
+              sessionRegistration={register('sessionId')}
+              sessionSummaries={sessionSummaries}
+            />
             <FeatureValidationMessage show={Boolean(errors.command)} message="Enter a command before queueing an RPG turn." />
             <FeatureSubmitFeedback
               error={createJobMutation.error}
@@ -305,18 +287,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               pendingMessage="Queueing RPG turn job…"
               successPrefix="RPG turn job queued"
             />
-            <div className="rpg-quick-actions" aria-label="Quick RPG actions">
-              {quickActions.map((action) => (
-                <button
-                  key={action.label}
-                  type="button"
-                  onClick={() => setValue('command', action.command, { shouldDirty: true, shouldValidate: true })}
-                >
-                  <span aria-hidden="true">{action.icon}</span>
-                  {action.label}
-                </button>
-              ))}
-            </div>
           </section>
 
           <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
