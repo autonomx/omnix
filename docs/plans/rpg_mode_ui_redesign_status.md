@@ -32,7 +32,7 @@ This note supersedes the earlier planning-only RPG mode UI inventory work. The a
 | Loadout actions | #561 | Merged | Added item, ability, and hotbar detail panels with command insertion affordances. |
 | Responsive polish | #562 | Merged | Added collapsible rails, improved narrow-screen behavior, overflow containment, and reduced-motion safeguards. |
 | Regression coverage | #563 | Merged | Added workspace-level regression coverage for replay-safe live controls and rail accessibility. |
-| Loading and empty states | #564 | In progress | Adds live data status surfaces, empty artifact affordances, and loading/error/empty-state regression coverage. |
+| Loading and empty states | #564 | Merged | Added live data status surfaces, empty artifact affordances, and loading/error/empty-state regression coverage. |
 
 ## Current component map
 
@@ -105,8 +105,7 @@ Existing component and adapter coverage is strong. Remaining gates after the loa
 
 ## Recommended next PR sequence
 
-1. `p564-rpg-loading-empty-states` — add richer loading and empty-state surfaces after live query behavior is validated.
-2. `p565-rpg-report-artifact-links` — tighten direct report/checkpoint artifact linking once backend artifact routing is confirmed.
+1. `p565-rpg-report-artifact-links` — tighten direct report/checkpoint artifact linking once backend artifact routing is confirmed.
 
 ## Notes
 
