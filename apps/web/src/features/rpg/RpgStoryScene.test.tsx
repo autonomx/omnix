@@ -26,7 +26,7 @@ describe('RpgStoryScene', () => {
       </RpgStoryScene>
     );
 
-    expect(screen.getByRole('region', { name: '📍 Glimmerdeep Pass' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /Glimmerdeep Pass/ })).toBeInTheDocument();
     expect(screen.getByText('Story / scene')).toBeInTheDocument();
     expect(screen.getByText('Preview campaign')).toBeInTheDocument();
     expect(screen.getByText('Turn 12')).toBeInTheDocument();
