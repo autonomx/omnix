@@ -9,6 +9,7 @@ describe('rpg UI state', () => {
     expect(state.jobCards).toHaveLength(3);
     expect(state.jobCards[0]).toMatchObject({ source: 'preview', title: 'rpg.turn' });
     expect(state.selectedSessionSummary).toMatchObject({ source: 'preview', title: 'Preview campaign' });
+    expect(state.heroSummary).toMatchObject({ source: 'preview', name: 'Alyndra' });
     expect(state.journalDetail.title).toBe('Arrived at Glimmerdeep Pass');
   });
 
@@ -109,6 +110,61 @@ describe('rpg UI state', () => {
     expect(state.rpgAssets).toHaveLength(1);
     expect(state.rpgReports).toHaveLength(1);
     expect(state.jobCards[0]).toMatchObject({ id: 'job:rpg', progress: 25, source: 'live', title: 'rpg.turn' });
+  });
+
+  it('derives player rail content from live session state when available', () => {
+    const inventory = {
+      sessions: [
+        {
+          session_id: 'player-live',
+          title: 'Player state campaign',
+          updated_at: '2026-06-16T00:00:00Z',
+          state: {
+            player: {
+              name: 'Mira Vale',
+              level: 4,
+              class: 'Scout',
+              background: 'Caravan outrider',
+              hp: { current: 42, max: 50 },
+              stamina: { current: 31, max: 40 },
+              mana: { current: 8, max: 20 },
+              xp: 350,
+              xp_to_next: 500,
+              currency: { gold: 17, silver: 5, copper: 2 },
+              reputation: { label: 'Trusted', score: 18 },
+              equipment: [{ name: 'Shortbow', slot: 'weapon' }],
+              inventory: { items: [{ name: 'Ration', quantity: 3 }] },
+            },
+            party: [{ name: 'Bran', role: 'Innkeeper', level: 2, hp: 18, max_hp: 22 }],
+            quests: [{ title: 'Find the Quarry Trail', objective: 'Ask Bran about the old quarry road.', status: 'active' }],
+          },
+        },
+      ],
+      diagnostics: [],
+    } as PersistenceInventory;
+
+    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'player-live' });
+
+    expect(state.heroSummary).toMatchObject({
+      source: 'live',
+      avatar: 'M',
+      name: 'Mira Vale',
+      subtitle: 'Level 4 • Scout',
+      origin: 'Caravan outrider',
+      xpLabel: '350 / 500',
+      xpPercent: 70,
+      gold: '17g 5s 2c',
+      renown: 'Trusted',
+    });
+    expect(state.heroStats).toEqual([
+      { label: 'HP', value: '42 / 50', percent: 84, tone: 'danger' },
+      { label: 'Stamina', value: '31 / 40', percent: 78, tone: 'success' },
+      { label: 'Mana', value: '8 / 20', percent: 40, tone: 'mana' },
+    ]);
+    expect(state.equippedGear[0]).toMatchObject({ name: 'Shortbow', slot: 'Weapon' });
+    expect(state.partyMembers[0]).toMatchObject({ avatar: 'B', name: 'Bran', role: 'Lv. 2 Innkeeper', hp: '18 / 22', percent: 82 });
+    expect(state.activeQuests[0]).toMatchObject({ title: 'Find the Quarry Trail', detail: 'Ask Bran about the old quarry road.' });
+    expect(state.inventoryItems[0]).toMatchObject({ label: 'Ration', count: '3' });
   });
 
   it('keeps a user-selected RPG session active when multiple sessions exist', () => {
