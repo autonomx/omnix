@@ -154,6 +154,14 @@ export interface RpgWorkspaceStateSources {
   selectedSessionId?: string;
 }
 
+interface TimelineEvent {
+  time: string;
+  title: string;
+  detail: string;
+  actor?: string;
+  kind?: string;
+}
+
 export const previewHeroSummary: RpgHeroSummaryPreview = {
   avatar: 'A',
   name: 'Alyndra',
@@ -287,13 +295,14 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
   const selectedSessionSummary =
     sessionSummaries.find((session) => session.id === sources.selectedSessionId) ?? sessionSummaries[0] ?? previewSessionSummary;
   const selectedSession = selectedSessionSummary.source === 'live' ? findSessionById(sessions, selectedSessionSummary.id) : undefined;
-  const rpgJobs = sources.jobs?.jobs.filter((job) => job.module === 'rpg') ?? [];
-  const rpgAssets = sources.assets?.assets.filter((asset) => asset.type === 'rpg_checkpoint' || asset.module === 'rpg') ?? [];
+  const rpgJobs = sources.jobs?.jobs?.filter((job) => job.module === 'rpg') ?? [];
+  const rpgAssets = sources.assets?.assets?.filter((asset) => asset.type === 'rpg_checkpoint' || asset.module === 'rpg') ?? [];
   const rpgReports = sources.reports?.reports?.filter((report) => report.kind.includes('rpg') || report.id.includes('rpg')) ?? [];
   const jobCards = rpgJobs.length ? rpgJobs.map(toJobCard) : previewJobs;
-  const recentEvents = buildRecentEvents(selectedSessionSummary);
-  const journalEntries = buildJournalEntries(selectedSessionSummary);
-  const journalDetail = buildJournalDetail(selectedSessionSummary);
+  const timeline = buildTimelineEvents(selectedSession);
+  const recentEvents = buildRecentEvents(selectedSessionSummary, timeline);
+  const journalEntries = buildJournalEntries(selectedSessionSummary, timeline);
+  const journalDetail = buildJournalDetail(selectedSessionSummary, timeline);
   const worldStateRows = buildWorldStateRows(selectedSessionSummary, selectedSession);
   const checkpointSummary = buildCheckpointSummary(rpgAssets, selectedSessionSummary);
 
@@ -344,22 +353,41 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
   const metadata = recordValue(session.metadata);
   const state = recordValue(session.state);
   const payload = recordValue(session.payload);
+  const latestTimeline = buildTimelineEvents(session)[0];
   const id = safeSessionId(session, index);
-  const updatedRaw = firstString(session.updated_at, session.updatedAt, session.modified_at, session.created_at, metadata?.updated_at);
+  const updatedRaw = firstString(
+    session.updated_at,
+    session.updatedAt,
+    session.modified_at,
+    session.created_at,
+    metadata?.updated_at,
+    latestTimeline?.time
+  );
   const turnCount = firstNumber(session.turn_count, session.turns, session.current_turn, metadata?.turn_count, state?.turn_count);
   const checkpointLabel = firstString(session.checkpoint_id, session.checkpoint, session.checkpoint_path, session.storage_path, payload?.checkpoint_id) ?? 'Checkpoint indexed';
+  const title = firstString(session.title, session.name, session.label, session.session_id, session.id) ?? id;
+  const location =
+    firstString(session.location, session.current_location, session.currentLocation, metadata?.location, metadata?.current_location, state?.location, payload?.location) ??
+    previewSessionSummary.location;
+  const summary =
+    firstString(
+      latestTimeline?.detail,
+      session.summary,
+      session.description,
+      session.last_event,
+      metadata?.summary,
+      metadata?.last_event,
+      state?.summary,
+      payload?.summary
+    ) ?? 'Live replay-persistence session indexed by the backend.';
 
   return {
     id,
-    title: firstString(session.title, session.name, session.label, session.session_id, session.id) ?? id,
-    location:
-      firstString(session.location, session.current_location, session.currentLocation, metadata?.location, metadata?.current_location, state?.location, payload?.location) ??
-      previewSessionSummary.location,
-    summary:
-      firstString(session.summary, session.description, session.last_event, metadata?.summary, metadata?.last_event, state?.summary, payload?.summary) ??
-      'Live replay-persistence session indexed by the backend.',
+    title,
+    location,
+    summary,
     updatedAt: compactTimestamp(updatedRaw) ?? 'Updated time unknown',
-    turnLabel: typeof turnCount === 'number' ? `Turn ${turnCount}` : 'Turn count unknown',
+    turnLabel: typeof turnCount === 'number' ? `Turn ${turnCount}` : latestTimeline?.time !== undefined ? latestTimeline.time : 'Turn count unknown',
     checkpointLabel,
     sortRank: timestampRank(updatedRaw),
     source: 'live',
@@ -492,9 +520,13 @@ function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemP
   });
 }
 
-function buildRecentEvents(selectedSession: RpgSessionSummaryPreview): string[] {
+function buildRecentEvents(selectedSession: RpgSessionSummaryPreview, timeline: TimelineEvent[]): string[] {
   if (selectedSession.source === 'preview') {
     return previewRecentEvents;
+  }
+
+  if (timeline.length) {
+    return timeline.slice(0, 4).map((event) => formatTimelineEvent(event));
   }
 
   return [
@@ -504,9 +536,13 @@ function buildRecentEvents(selectedSession: RpgSessionSummaryPreview): string[] 
   ];
 }
 
-function buildJournalEntries(selectedSession: RpgSessionSummaryPreview): RpgJournalEntryPreview[] {
+function buildJournalEntries(selectedSession: RpgSessionSummaryPreview, timeline: TimelineEvent[]): RpgJournalEntryPreview[] {
   if (selectedSession.source === 'preview') {
     return previewJournalEntries;
+  }
+
+  if (timeline.length) {
+    return timeline.slice(0, 6).map((event) => ({ time: event.time, title: event.title, detail: event.detail }));
   }
 
   return [
@@ -528,9 +564,24 @@ function buildJournalEntries(selectedSession: RpgSessionSummaryPreview): RpgJour
   ];
 }
 
-function buildJournalDetail(selectedSession: RpgSessionSummaryPreview): RpgJournalDetailPreview {
+function buildJournalDetail(selectedSession: RpgSessionSummaryPreview, timeline: TimelineEvent[]): RpgJournalDetailPreview {
   if (selectedSession.source === 'preview') {
     return previewJournalDetail;
+  }
+
+  const latest = timeline[0];
+  if (latest) {
+    return {
+      title: latest.title,
+      detail: latest.detail,
+      bullets: [
+        `Session id: ${selectedSession.id}`,
+        `Location: ${selectedSession.location}`,
+        `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`,
+        `Checkpoint: ${selectedSession.checkpointLabel}`,
+      ],
+      tags: ['Live session', latest.kind ? titleCase(latest.kind) : 'Timeline', 'Replay-safe'],
+    };
   }
 
   return {
@@ -569,7 +620,8 @@ function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session:
   ) ?? selectedSession.updatedAt;
   const weather = firstString(world?.weather, world?.conditions, world?.weather_label, ...roots.map((root) => root.weather ?? root.conditions));
   const temperatureNumber = firstNumber(world?.temperature, world?.temp, ...roots.map((root) => root.temperature ?? root.temp));
-  const temperature = firstString(world?.temperature_label, world?.temperature, world?.temp, ...roots.map((root) => root.temperature_label)) ??
+  const temperature =
+    firstString(world?.temperature_label, world?.temperature, world?.temp, ...roots.map((root) => root.temperature_label)) ??
     (temperatureNumber !== undefined ? `${formatNumber(temperatureNumber)}°C` : undefined);
   const reputationLabel =
     firstString(player?.renown, player?.reputation_label, reputation?.label, reputation?.standing, reputation?.name) ??
@@ -675,6 +727,78 @@ function toJobCard(job: RpgJob): RpgJobCardPreview {
 
 function toStat(label: string, metric: { current: number; max: number }, tone: RpgStatPreview['tone']): RpgStatPreview {
   return { label, value: metricLabel(metric.current, metric.max), percent: metricPercent(metric.current, metric.max), tone };
+}
+
+function buildTimelineEvents(session: RpgSession | undefined): TimelineEvent[] {
+  const roots = getSessionRecords(session);
+  if (!roots.length) {
+    return [];
+  }
+
+  const timelineArrays = roots.flatMap((root) => [
+    root.timeline,
+    root.recent_events,
+    root.events,
+    root.event_log,
+    root.turn_history,
+    root.turns,
+    root.history,
+    root.dialogue_log,
+    root.dialogue,
+    root.logs,
+    recordValue(root.journal)?.entries,
+  ]);
+  const items = firstArray(...timelineArrays);
+  if (!items.length) {
+    return [];
+  }
+
+  return items
+    .map(toTimelineEvent)
+    .filter((event): event is TimelineEvent => Boolean(event))
+    .slice(0, 8);
+}
+
+function toTimelineEvent(item: unknown, index: number): TimelineEvent | undefined {
+  if (typeof item === 'string' && item.trim()) {
+    return { time: `Event ${index + 1}`, title: item.trim(), detail: item.trim(), kind: 'event' };
+  }
+
+  const record = recordValue(item);
+  if (!record) {
+    return undefined;
+  }
+
+  const actor = firstString(record.actor, record.speaker, record.character, record.npc, record.source);
+  const command = firstString(record.command, record.action, record.player_action, record.playerAction, record.input);
+  const narration = firstString(record.narration, record.response, record.output, record.summary, record.result, record.text, record.message, record.description);
+  const detail = narration ?? command ?? firstString(record.detail, record.title, record.label, record.event) ?? 'RPG event indexed from live session.';
+  const title =
+    firstString(record.title, record.label, record.event, record.kind, record.type) ??
+    (command ? 'Player command' : actor ? `${actor} speaks` : `Session event ${index + 1}`);
+  const time = firstString(record.time, record.timestamp, record.created_at, record.updated_at, record.turn_label) ?? turnLabelFor(record, index);
+  const kind = firstString(record.kind, record.type, record.category, command ? 'command' : undefined);
+
+  return {
+    time: compactTimestamp(time) ?? time,
+    title,
+    detail,
+    actor,
+    kind,
+  };
+}
+
+function formatTimelineEvent(event: TimelineEvent): string {
+  if (event.actor && !event.detail.startsWith(`${event.actor}:`)) {
+    return `${event.actor}: ${event.detail}`;
+  }
+
+  return event.detail;
+}
+
+function turnLabelFor(record: Record<string, unknown>, index: number): string {
+  const turn = firstNumber(record.turn, record.turn_count, record.index, record.sequence);
+  return turn !== undefined ? `Turn ${turn}` : `Event ${index + 1}`;
 }
 
 function getPlayerRecord(session: RpgSession | undefined): Record<string, unknown> | undefined {
