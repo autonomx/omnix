@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException
 
+from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
 from app.rpg.session.new_game import (
     RpgNewGameRequest,
     RpgRenameSessionRequest,
@@ -35,8 +36,8 @@ def register_rpg_session_routes(app: FastAPI) -> None:
 
     These routes are intentionally synchronous and should not call LLM, image, TTS,
     or queued-turn workers. They expose the stable REST contract used by the RPG
-    launcher while the older /api/rpg/session/* compatibility surface remains
-    available for existing callers.
+    launcher and loadout affordances while the older /api/rpg/session/*
+    compatibility surface remains available for existing callers.
     """
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
@@ -79,6 +80,10 @@ def register_rpg_session_routes(app: FastAPI) -> None:
     @app.post("/api/rpg/sessions/{session_id}/delete", tags=["rpg-session"])
     async def rpg_delete_session(session_id: str) -> dict[str, Any]:
         return _raise_for_error(delete_rpg_session(session_id), not_found_errors={"session_not_found"})
+
+    @app.post("/api/rpg/sessions/{session_id}/loadout-action", tags=["rpg-session"])
+    async def rpg_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
+        return _raise_for_error(apply_loadout_action(session_id, request), not_found_errors={"session_not_found"})
 
 
 def install_rpg_session_route_hook() -> None:
