@@ -8,11 +8,30 @@ describe('rpg UI state', () => {
 
     expect(state.jobCards).toHaveLength(3);
     expect(state.jobCards[0]).toMatchObject({ source: 'preview', title: 'rpg.turn' });
+    expect(state.selectedSessionSummary).toMatchObject({ source: 'preview', title: 'Preview campaign' });
+    expect(state.journalDetail.title).toBe('Arrived at Glimmerdeep Pass');
   });
 
   it('normalizes live RPG sessions, jobs, assets, and reports for the workspace', () => {
     const inventory = {
-      sessions: [{ session_id: 'session:live', updated_at: '2026-06-16T00:00:00Z' }],
+      sessions: [
+        {
+          session_id: 'session:older',
+          updated_at: '2026-06-15T00:00:00Z',
+          title: 'Older session',
+          location: 'Old Road',
+          turn_count: 3,
+        },
+        {
+          session_id: 'session:live',
+          updated_at: '2026-06-16T00:00:00Z',
+          title: 'Live campaign',
+          location: 'Rusty Flagon Tavern',
+          summary: 'Bran is waiting near the bar with news about the quarry.',
+          turn_count: 12,
+          checkpoint_path: 'checkpoints/live.json',
+        },
+      ],
       diagnostics: [],
     } as PersistenceInventory;
     const jobs = {
@@ -70,11 +89,46 @@ describe('rpg UI state', () => {
 
     const state = createRpgWorkspaceState({ inventory, jobs, assets, reports });
 
-    expect(state.sessions).toHaveLength(1);
+    expect(state.sessions).toHaveLength(2);
+    expect(state.sessionSummaries[0]).toMatchObject({
+      id: 'session:live',
+      title: 'Live campaign',
+      location: 'Rusty Flagon Tavern',
+      turnLabel: 'Turn 12',
+      updatedAt: '2026-06-16 00:00 UTC',
+    });
+    expect(state.selectedSessionSummary.id).toBe('session:live');
+    expect(state.recentEvents[0]).toBe('Loaded Live campaign.');
+    expect(state.journalDetail).toMatchObject({
+      title: 'Live session: Live campaign',
+      tags: ['Live session', 'Replay-safe', 'Indexed'],
+    });
+    expect(state.worldStateRows[0]).toMatchObject({ label: 'Updated', value: '2026-06-16 00:00 UTC' });
+    expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'checkpoints/session.json' });
     expect(state.rpgJobs).toHaveLength(1);
     expect(state.rpgAssets).toHaveLength(1);
     expect(state.rpgReports).toHaveLength(1);
     expect(state.jobCards[0]).toMatchObject({ id: 'job:rpg', progress: 25, source: 'live', title: 'rpg.turn' });
+  });
+
+  it('keeps a user-selected RPG session active when multiple sessions exist', () => {
+    const inventory = {
+      sessions: [
+        { session_id: 'newer', title: 'Newer', updated_at: '2026-06-16T00:00:00Z' },
+        { session_id: 'chosen', title: 'Chosen', location: 'Market Ward', updated_at: '2026-06-14T00:00:00Z', current_turn: '8' },
+      ],
+      diagnostics: [],
+    } as PersistenceInventory;
+
+    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'chosen' });
+
+    expect(state.selectedSessionSummary).toMatchObject({
+      id: 'chosen',
+      title: 'Chosen',
+      location: 'Market Ward',
+      turnLabel: 'Turn 8',
+    });
+    expect(state.journalEntries[0]).toMatchObject({ title: 'Selected Chosen' });
   });
 
   it('derives safe session labels and bounded progress percentages', () => {
