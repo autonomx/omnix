@@ -216,6 +216,48 @@ describe('rpg UI state', () => {
     expect(state.encounter).toMatchObject({ icon: '⚔', source: 'live', title: 'Bandit ambush', detail: 'Combatants: Road bandit, Lookout' });
   });
 
+  it('derives narrative events and journal entries from live session timeline records', () => {
+    const inventory = {
+      sessions: [
+        {
+          session_id: 'story-live',
+          title: 'Narrative campaign',
+          location: 'Rusty Flagon Tavern',
+          updated_at: '2026-06-16T01:00:00Z',
+          turn_count: 9,
+          state: {
+            recent_events: [
+              {
+                turn: 9,
+                type: 'dialogue',
+                actor: 'Bran',
+                text: 'The quarry road has been quiet since midnight.',
+              },
+              {
+                turn: 8,
+                type: 'discovery',
+                title: 'Found a torn crest',
+                summary: 'A muddy crest from the old quarry company was found beside the tavern door.',
+              },
+            ],
+          },
+        },
+      ],
+      diagnostics: [],
+    } as PersistenceInventory;
+
+    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'story-live' });
+
+    expect(state.selectedSessionSummary.summary).toBe('The quarry road has been quiet since midnight.');
+    expect(state.recentEvents).toEqual([
+      'Bran: The quarry road has been quiet since midnight.',
+      'A muddy crest from the old quarry company was found beside the tavern door.',
+    ]);
+    expect(state.journalEntries[0]).toMatchObject({ time: 'Turn 9', title: 'dialogue', detail: 'The quarry road has been quiet since midnight.' });
+    expect(state.journalDetail).toMatchObject({ title: 'dialogue', detail: 'The quarry road has been quiet since midnight.' });
+    expect(state.journalDetail.tags).toEqual(['Live session', 'Dialogue', 'Replay-safe']);
+  });
+
   it('keeps a user-selected RPG session active when multiple sessions exist', () => {
     const inventory = {
       sessions: [
