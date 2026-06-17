@@ -119,6 +119,18 @@ export interface RpgSessionMutationResponse {
   error?: string;
 }
 
+export interface RpgLoadoutActionRequest {
+  action: 'inspect' | 'use' | 'equip' | 'drop' | 'use_ability' | 'hotbar';
+  item_name?: string;
+  ability_name?: string;
+  hotbar_slot?: string | number;
+  target?: string;
+}
+
+export interface RpgLoadoutActionResponse extends RpgLaunchResponse {
+  event?: Record<string, unknown>;
+}
+
 export interface ApiClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -353,6 +365,21 @@ export class OmnixApiClient {
       return this.post<Record<string, unknown>, RpgSessionMutationResponse>('/api/rpg/session/get', {
         action: 'delete',
         session_id: sessionId,
+      });
+    }
+  }
+
+  async applyRpgLoadoutAction(sessionId: string, request: RpgLoadoutActionRequest): Promise<RpgLoadoutActionResponse> {
+    try {
+      return await this.post<RpgLoadoutActionRequest, RpgLoadoutActionResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/loadout-action`, request);
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLoadoutActionResponse>('/api/rpg/session/get', {
+        action: 'loadout_action',
+        session_id: sessionId,
+        loadout: request,
       });
     }
   }
