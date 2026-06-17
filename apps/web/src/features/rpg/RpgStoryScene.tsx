@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
 import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview } from './rpgUiState';
+import './RpgVisualAssets.css';
+
+const SCENE_ART_SRC = '/rpg/glimmerdeep-pass-scene.svg';
 
 interface RpgStorySceneProps {
   children: ReactNode;
@@ -21,7 +24,9 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
             <span>{selectedSessionSummary.updatedAt}</span>
           </div>
         </div>
-        <div className="rpg-scene-art" aria-label={`${selectedSessionSummary.location} scene preview`} />
+        <div className="rpg-scene-art rpg-scene-art-has-image" aria-label={`${selectedSessionSummary.location} scene preview`}>
+          <img src={SCENE_ART_SRC} alt="" aria-hidden="true" />
+        </div>
       </div>
       <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
       <div className="rpg-dialogue-stack">
