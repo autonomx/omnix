@@ -179,27 +179,30 @@ def _advance_turn(state: dict[str, Any]) -> None:
     state["turn_count"] = int(state.get("turn_count") or 0) + 1
 
 
-def _ensure_ability_progression(state: dict[str, Any]) -> None:
+def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, Any] | None = None) -> None:
     if state.get("ability_tree") and state.get("ability_state"):
         return
     player = _player(state)
     identity = _safe_dict(state.get("character_identity"))
     metadata = _safe_dict(state.get("metadata"))
+    setup = _safe_dict(setup_payload)
+    setup_player = _safe_dict(setup.get("player"))
     build = str(player.get("build") or "ranger")
     level = int(player.get("level") or 1)
     payload = {
-        "campaign_template": metadata.get("campaign_template") or identity.get("genre") or "classic_fantasy",
-        "genre": metadata.get("genre") or identity.get("genre") or "classic_fantasy",
-        "tone": metadata.get("tone") or identity.get("tone") or "heroic adventure",
+        "campaign_template": metadata.get("campaign_template") or setup.get("campaign_template") or identity.get("genre") or "classic_fantasy",
+        "genre": metadata.get("genre") or identity.get("genre") or setup.get("genre") or "classic_fantasy",
+        "tone": metadata.get("tone") or identity.get("tone") or setup.get("tone") or "heroic adventure",
         "player": {
             "name": player.get("name") or "Hero",
-            "background": player.get("background") or identity.get("background") or "Wanderer",
+            "background": player.get("background") or identity.get("background") or setup_player.get("background") or setup.get("background") or "Wanderer",
             "build": build,
         },
-        "primary_capability": identity.get("primary_capability"),
-        "secondary_capabilities": identity.get("secondary_capabilities") or [],
-        "power_source": identity.get("power_source"),
-        "generated_class_name": player.get("class") or identity.get("generated_class_name"),
+        "primary_capability": identity.get("primary_capability") or setup.get("primary_capability"),
+        "secondary_capabilities": identity.get("secondary_capabilities") or setup.get("secondary_capabilities") or [],
+        "power_source": identity.get("power_source") or setup.get("power_source"),
+        "generated_class_name": player.get("class") or identity.get("generated_class_name") or setup.get("generated_class_name"),
+        "generated_class_summary": identity.get("generated_class_summary") or setup.get("generated_class_summary"),
     }
     progression = build_progression_package(payload, build_id=build, level=level, seed=metadata.get("seed") if isinstance(metadata.get("seed"), int) else None)
     state.setdefault("character_identity", progression["character_identity"])
@@ -293,7 +296,7 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
             _advance_turn(state)
         event = _append_event(state, title=title, detail=detail, kind=kind)
     elif action in {"use_ability", "hotbar"}:
-        _ensure_ability_progression(state)
+        _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
         result = apply_ability_to_state(state, ability_name=request.ability_name, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
         if not result.ok:
             return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}

@@ -66,10 +66,21 @@ export interface RpgFeatureOptions {
   stt?: boolean;
 }
 
+export type RpgCapability = 'combat' | 'recon' | 'influence' | 'technical' | 'survival' | 'knowledge' | 'support' | 'custom';
+export type RpgPowerSource = 'mundane' | 'martial' | 'magic' | 'technology' | 'psionic' | 'divine' | 'occult' | 'mutation' | 'mythic' | 'social_power' | 'scrap' | 'custom';
+
 export interface RpgNewGameRequest {
   campaign_template?: string;
+  genre?: string | null;
+  tone?: string;
+  background?: string | null;
   starting_location?: string;
   player?: RpgPlayerOptions;
+  primary_capability?: RpgCapability | null;
+  secondary_capabilities?: RpgCapability[];
+  power_source?: RpgPowerSource | null;
+  generated_class_name?: string | null;
+  generated_class_summary?: string | null;
   difficulty?: 'story' | 'normal' | 'harsh';
   world_activity?: 'quiet' | 'standard' | 'living_world';
   economy_pressure?: 'relaxed' | 'normal' | 'strict';

@@ -138,7 +138,8 @@
   gap: 0.75rem;
 }
 
-.rpg-launcher-form-grid label,
+.rpg-launcher-form-grid > label,
+.rpg-launcher-choice-panel,
 .rpg-launcher-toggle-grid label {
   display: grid;
   gap: 0.35rem;
@@ -147,14 +148,38 @@
   font-weight: 700;
 }
 
-.rpg-launcher-form-grid input,
-.rpg-launcher-form-grid select {
+.rpg-launcher-form-grid > label input,
+.rpg-launcher-form-grid > label select {
   width: 100%;
   border: 1px solid rgba(168, 139, 250, 0.24);
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.88);
   color: #f8fafc;
   padding: 0.65rem 0.75rem;
+}
+
+.rpg-launcher-choice-panel {
+  grid-column: span 2;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(168, 139, 250, 0.18);
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.36);
+}
+
+.rpg-launcher-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 0.65rem;
+}
+
+.rpg-launcher-choice-grid label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 28px;
+  color: rgba(237, 233, 254, 0.86);
+  font-weight: 600;
 }
 
 .rpg-launcher-toggle-grid {
@@ -252,8 +277,13 @@
   .rpg-session-launcher,
   .rpg-launcher-form-grid,
   .rpg-launcher-home-grid,
-  .rpg-launcher-toggle-grid {
+  .rpg-launcher-toggle-grid,
+  .rpg-launcher-choice-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rpg-launcher-choice-panel {
+    grid-column: span 1;
   }
 
   .rpg-launcher-panel-heading,

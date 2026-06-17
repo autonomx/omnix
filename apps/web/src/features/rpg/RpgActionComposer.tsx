@@ -3,7 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { ChangeEvent, FormEventHandler } from 'react';
 import { useMemo, useState } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
-import { omnixApiClient, type RpgLaunchResponse, type RpgNewGameRequest } from '../../api/client';
+import {
+  omnixApiClient,
+  type RpgCapability,
+  type RpgLaunchResponse,
+  type RpgNewGameRequest,
+  type RpgPowerSource,
+} from '../../api/client';
 import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
 import './RpgSessionLauncher.css';
 
@@ -24,6 +30,17 @@ type RpgDifficulty = 'story' | 'normal' | 'harsh';
 type RpgWorldActivity = 'quiet' | 'standard' | 'living_world';
 type RpgEconomyPressure = 'relaxed' | 'normal' | 'strict';
 type RpgCombatLethality = 'safe' | 'normal' | 'deadly';
+type RpgGenre =
+  | 'classic_fantasy'
+  | 'dark_fantasy'
+  | 'cyberpunk'
+  | 'detective_noir'
+  | 'political_intrigue'
+  | 'post_apocalyptic'
+  | 'space_opera'
+  | 'modern_occult'
+  | 'survival_horror'
+  | 'sandbox';
 
 const BUILD_OPTIONS: { value: RpgPlayerBuild; label: string; detail: string }[] = [
   { value: 'balanced_adventurer', label: 'Balanced Adventurer', detail: 'Even stats and flexible starter gear.' },
@@ -41,12 +58,51 @@ const CAMPAIGN_TEMPLATES = [
   { value: 'sandbox', label: 'Sandbox' },
 ];
 
+const GENRE_OPTIONS: { value: RpgGenre; label: string }[] = [
+  { value: 'classic_fantasy', label: 'Classic Fantasy' },
+  { value: 'dark_fantasy', label: 'Dark Fantasy' },
+  { value: 'cyberpunk', label: 'Cyberpunk' },
+  { value: 'detective_noir', label: 'Detective Noir' },
+  { value: 'political_intrigue', label: 'Political Intrigue' },
+  { value: 'post_apocalyptic', label: 'Post-Apocalyptic' },
+  { value: 'space_opera', label: 'Space Opera' },
+  { value: 'modern_occult', label: 'Modern Occult' },
+  { value: 'survival_horror', label: 'Survival Horror' },
+  { value: 'sandbox', label: 'Sandbox' },
+];
+
 const STARTING_LOCATIONS = [
   { value: 'rusty_flagon_tavern', label: 'Rusty Flagon Tavern' },
   { value: 'market_district', label: 'Market District' },
   { value: 'northern_road', label: 'Northern Road' },
   { value: 'glimmerdeep_pass', label: 'Glimmerdeep Pass' },
   { value: 'old_quarry', label: 'Old Quarry' },
+];
+
+const CAPABILITY_OPTIONS: { value: RpgCapability; label: string }[] = [
+  { value: 'combat', label: 'Combat' },
+  { value: 'recon', label: 'Recon' },
+  { value: 'influence', label: 'Influence' },
+  { value: 'technical', label: 'Technical' },
+  { value: 'survival', label: 'Survival' },
+  { value: 'knowledge', label: 'Knowledge' },
+  { value: 'support', label: 'Support' },
+  { value: 'custom', label: 'Custom' },
+];
+
+const POWER_SOURCE_OPTIONS: { value: RpgPowerSource; label: string }[] = [
+  { value: 'mundane', label: 'Mundane' },
+  { value: 'martial', label: 'Martial' },
+  { value: 'magic', label: 'Magic' },
+  { value: 'technology', label: 'Technology' },
+  { value: 'psionic', label: 'Psionic' },
+  { value: 'divine', label: 'Divine' },
+  { value: 'occult', label: 'Occult' },
+  { value: 'mutation', label: 'Mutation' },
+  { value: 'mythic', label: 'Mythic' },
+  { value: 'social_power', label: 'Social Power' },
+  { value: 'scrap', label: 'Scrap' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 function safeRecord(value: unknown): Record<string, unknown> {
@@ -102,10 +158,15 @@ export function RpgActionComposer({
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [launcherView, setLauncherView] = useState<LauncherView>('closed');
   const [campaignTemplate, setCampaignTemplate] = useState('classic_fantasy');
+  const [genre, setGenre] = useState<RpgGenre>('classic_fantasy');
+  const [tone, setTone] = useState('heroic adventure');
   const [playerName, setPlayerName] = useState('Alyndra');
   const [playerPronouns, setPlayerPronouns] = useState('she/her');
   const [playerBackground, setPlayerBackground] = useState('Wanderer');
   const [playerBuild, setPlayerBuild] = useState<RpgPlayerBuild>('balanced_adventurer');
+  const [primaryCapability, setPrimaryCapability] = useState<RpgCapability>('recon');
+  const [secondaryCapabilities, setSecondaryCapabilities] = useState<RpgCapability[]>(['survival', 'combat']);
+  const [powerSource, setPowerSource] = useState<RpgPowerSource>('mundane');
   const [startingLocation, setStartingLocation] = useState('rusty_flagon_tavern');
   const [difficulty, setDifficulty] = useState<RpgDifficulty>('normal');
   const [worldActivity, setWorldActivity] = useState<RpgWorldActivity>('standard');
@@ -150,6 +211,22 @@ export function RpgActionComposer({
     void sessionRegistration.onChange(event);
   };
 
+  const handlePrimaryCapabilityChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextCapability = event.currentTarget.value as RpgCapability;
+    setPrimaryCapability(nextCapability);
+    setSecondaryCapabilities((current) => current.filter((capability) => capability !== nextCapability));
+  };
+
+  const handleSecondaryCapabilityChange = (capability: RpgCapability, checked: boolean) => {
+    setSecondaryCapabilities((current) => {
+      const withoutCapability = current.filter((value) => value !== capability && value !== primaryCapability);
+      if (!checked) {
+        return withoutCapability;
+      }
+      return [...withoutCapability, capability].slice(0, 3);
+    });
+  };
+
   const closeLauncher = () => setLauncherView('closed');
 
   const finishLaunch = async (response: RpgLaunchResponse, fallbackSessionId: string | undefined, readyLabel: string) => {
@@ -173,6 +250,9 @@ export function RpgActionComposer({
 
   const buildNewGameRequest = (): RpgNewGameRequest => ({
     campaign_template: campaignTemplate,
+    genre,
+    tone: tone.trim() || 'heroic adventure',
+    background: playerBackground.trim() || 'Wanderer',
     starting_location: startingLocation,
     player: {
       name: playerName.trim() || 'Alyndra',
@@ -180,6 +260,9 @@ export function RpgActionComposer({
       background: playerBackground.trim() || 'Wanderer',
       build: playerBuild,
     },
+    primary_capability: primaryCapability,
+    secondary_capabilities: secondaryCapabilities.filter((capability) => capability !== primaryCapability),
+    power_source: powerSource,
     difficulty,
     world_activity: worldActivity,
     economy_pressure: economyPressure,
@@ -373,6 +456,18 @@ export function RpgActionComposer({
                     </select>
                   </label>
                   <label>
+                    <span>Genre</span>
+                    <select value={genre} onChange={(event) => setGenre(event.currentTarget.value as RpgGenre)}>
+                      {GENRE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Tone</span>
+                    <input value={tone} onChange={(event) => setTone(event.currentTarget.value)} />
+                  </label>
+                  <label>
                     <span>Character name</span>
                     <input value={playerName} onChange={(event) => setPlayerName(event.currentTarget.value)} />
                   </label>
@@ -392,6 +487,37 @@ export function RpgActionComposer({
                       ))}
                     </select>
                   </label>
+                  <label>
+                    <span>Primary capability</span>
+                    <select value={primaryCapability} onChange={handlePrimaryCapabilityChange}>
+                      {CAPABILITY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Power source</span>
+                    <select value={powerSource} onChange={(event) => setPowerSource(event.currentTarget.value as RpgPowerSource)}>
+                      {POWER_SOURCE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rpg-launcher-choice-panel" role="group" aria-label="Secondary capabilities">
+                    <span>Secondary capabilities</span>
+                    <div className="rpg-launcher-choice-grid">
+                      {CAPABILITY_OPTIONS.filter((option) => option.value !== primaryCapability).map((option) => (
+                        <label key={option.value}>
+                          <input
+                            type="checkbox"
+                            checked={secondaryCapabilities.includes(option.value)}
+                            onChange={(event) => handleSecondaryCapabilityChange(option.value, event.currentTarget.checked)}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                   <label>
                     <span>Starting location</span>
                     <select value={startingLocation} onChange={(event) => setStartingLocation(event.currentTarget.value)}>

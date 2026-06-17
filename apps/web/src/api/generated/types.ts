@@ -738,6 +738,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/new-game": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg New Game */
+        post: operations["rpg_new_game_api_rpg_new_game_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/player/codex": {
         parameters: {
             query?: never;
@@ -823,6 +840,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rpg/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Presets */
+        get: operations["rpg_presets_api_rpg_presets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/presets/{preset_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Start Preset */
+        post: operations["rpg_start_preset_api_rpg_presets__preset_id__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rpg/session/get": {
         parameters: {
             query?: never;
@@ -851,6 +902,108 @@ export interface paths {
         put?: never;
         /** Rpg Session List */
         post: operations["rpg_session_list_api_rpg_session_list_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Sessions */
+        get: operations["rpg_sessions_api_rpg_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rpg Read Session */
+        get: operations["rpg_read_session_api_rpg_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Continue Session */
+        post: operations["rpg_continue_session_api_rpg_sessions__session_id__continue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Delete Session */
+        post: operations["rpg_delete_session_api_rpg_sessions__session_id__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/loadout-action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Loadout Action */
+        post: operations["rpg_loadout_action_api_rpg_sessions__session_id__loadout_action_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rpg/sessions/{session_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rpg Rename Session */
+        post: operations["rpg_rename_session_api_rpg_sessions__session_id__rename_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1910,6 +2063,161 @@ export interface components {
              * @default none
              */
             policy: string;
+        };
+        /** RpgFeatureOptions */
+        RpgFeatureOptions: {
+            /**
+             * Autosave
+             * @default true
+             */
+            autosave: boolean;
+            /**
+             * Background Soft Audit
+             * @default true
+             */
+            background_soft_audit: boolean;
+            /**
+             * Image Generation
+             * @default false
+             */
+            image_generation: boolean;
+            /**
+             * Llm Narration
+             * @default true
+             */
+            llm_narration: boolean;
+            /**
+             * Stt
+             * @default false
+             */
+            stt: boolean;
+            /**
+             * Tts
+             * @default false
+             */
+            tts: boolean;
+            /**
+             * Validator
+             * @default true
+             */
+            validator: boolean;
+        };
+        /** RpgLoadoutActionRequest */
+        RpgLoadoutActionRequest: {
+            /** Ability Name */
+            ability_name?: string | null;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "inspect" | "use" | "equip" | "drop" | "use_ability" | "hotbar";
+            /** Hotbar Slot */
+            hotbar_slot?: string | number | null;
+            /** Item Name */
+            item_name?: string | null;
+            /** Target */
+            target?: string | null;
+        };
+        /** RpgNewGameRequest */
+        RpgNewGameRequest: {
+            /** Background */
+            background?: string | null;
+            /**
+             * Campaign Template
+             * @default classic_fantasy
+             */
+            campaign_template: string;
+            /**
+             * Combat Lethality
+             * @default normal
+             * @enum {string}
+             */
+            combat_lethality: "safe" | "normal" | "deadly";
+            /**
+             * Companions Enabled
+             * @default true
+             */
+            companions_enabled: boolean;
+            /**
+             * Difficulty
+             * @default normal
+             * @enum {string}
+             */
+            difficulty: "story" | "normal" | "harsh";
+            /**
+             * Economy Pressure
+             * @default normal
+             * @enum {string}
+             */
+            economy_pressure: "relaxed" | "normal" | "strict";
+            features?: components["schemas"]["RpgFeatureOptions"];
+            /** Generated Class Name */
+            generated_class_name?: string | null;
+            /** Generated Class Summary */
+            generated_class_summary?: string | null;
+            /** Genre */
+            genre?: string | null;
+            /**
+             * Permadeath
+             * @default false
+             */
+            permadeath: boolean;
+            player?: components["schemas"]["RpgPlayerOptions"];
+            /** Power Source */
+            power_source?: string | null;
+            /** Primary Capability */
+            primary_capability?: string | null;
+            /** Secondary Capabilities */
+            secondary_capabilities?: string[];
+            /** Seed */
+            seed?: number | null;
+            /**
+             * Starting Location
+             * @default rusty_flagon_tavern
+             */
+            starting_location: string;
+            /**
+             * Tone
+             * @default heroic adventure
+             */
+            tone: string;
+            /**
+             * World Activity
+             * @default standard
+             * @enum {string}
+             */
+            world_activity: "quiet" | "standard" | "living_world";
+        };
+        /** RpgPlayerOptions */
+        RpgPlayerOptions: {
+            /**
+             * Background
+             * @default Wanderer
+             */
+            background: string;
+            /**
+             * Build
+             * @default balanced_adventurer
+             * @enum {string}
+             */
+            build: "balanced_adventurer" | "warrior" | "ranger" | "silver_tongue";
+            /**
+             * Name
+             * @default Alyndra
+             */
+            name: string;
+            /** Portrait Seed */
+            portrait_seed?: number | null;
+            /**
+             * Pronouns
+             * @default she/her
+             */
+            pronouns: string;
+        };
+        /** RpgRenameSessionRequest */
+        RpgRenameSessionRequest: {
+            /** Name */
+            name: string;
         };
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: {
@@ -3526,6 +3834,41 @@ export interface operations {
             };
         };
     };
+    rpg_new_game_api_rpg_new_game_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgNewGameRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_player_codex_api_rpg_player_codex_post: {
         parameters: {
             query?: never;
@@ -3711,6 +4054,61 @@ export interface operations {
             };
         };
     };
+    rpg_presets_api_rpg_presets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    rpg_start_preset_api_rpg_presets__preset_id__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rpg_session_get_api_rpg_session_get_post: {
         parameters: {
             query?: never;
@@ -3766,6 +4164,201 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    rpg_sessions_api_rpg_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    rpg_read_session_api_rpg_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_continue_session_api_rpg_sessions__session_id__continue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_delete_session_api_rpg_sessions__session_id__delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_loadout_action_api_rpg_sessions__session_id__loadout_action_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgLoadoutActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rpg_rename_session_api_rpg_sessions__session_id__rename_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RpgRenameSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

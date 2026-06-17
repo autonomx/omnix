@@ -76,6 +76,36 @@ def test_hotbar_action_spends_resource_and_writes_event(monkeypatch) -> None:
     assert state["runtime"]["effects"][0]["source"] == "Frost Arrow"
 
 
+def test_legacy_ability_backfill_uses_saved_setup_identity(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    session = _session()
+    session["setup_payload"] = {
+        "genre": "political_intrigue",
+        "tone": "courtroom pressure",
+        "player": {"background": "disgraced envoy"},
+        "primary_capability": "influence",
+        "secondary_capabilities": ["knowledge", "recon"],
+        "power_source": "social_power",
+        "generated_class_name": "Court Schemer",
+        "generated_class_summary": "A saved operator of favors and leverage.",
+    }
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: session)
+    monkeypatch.setattr(loadout, "save_session", lambda updated, *, compact=False: saved.append(updated) or updated)
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="hotbar", hotbar_slot="1"))
+
+    assert result["ok"] is True
+    identity = saved[0]["state"]["character_identity"]
+    assert identity["genre"] == "political_intrigue"
+    assert identity["tone"] == "courtroom pressure"
+    assert identity["background"] == "disgraced envoy"
+    assert identity["primary_capability"] == "influence"
+    assert identity["secondary_capabilities"] == ["knowledge", "recon"]
+    assert identity["power_source"] == "social_power"
+    assert identity["generated_class_name"] == "Court Schemer"
+    assert saved[0]["state"]["ability_tree"]["primary_capability"] == "influence"
+
+
 def test_drop_protected_journal_is_rejected(monkeypatch) -> None:
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
 

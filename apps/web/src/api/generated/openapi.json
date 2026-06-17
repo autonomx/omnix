@@ -2160,6 +2160,332 @@
         "title": "RetryState",
         "type": "object"
       },
+      "RpgFeatureOptions": {
+        "properties": {
+          "autosave": {
+            "default": true,
+            "title": "Autosave",
+            "type": "boolean"
+          },
+          "background_soft_audit": {
+            "default": true,
+            "title": "Background Soft Audit",
+            "type": "boolean"
+          },
+          "image_generation": {
+            "default": false,
+            "title": "Image Generation",
+            "type": "boolean"
+          },
+          "llm_narration": {
+            "default": true,
+            "title": "Llm Narration",
+            "type": "boolean"
+          },
+          "stt": {
+            "default": false,
+            "title": "Stt",
+            "type": "boolean"
+          },
+          "tts": {
+            "default": false,
+            "title": "Tts",
+            "type": "boolean"
+          },
+          "validator": {
+            "default": true,
+            "title": "Validator",
+            "type": "boolean"
+          }
+        },
+        "title": "RpgFeatureOptions",
+        "type": "object"
+      },
+      "RpgLoadoutActionRequest": {
+        "properties": {
+          "ability_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ability Name"
+          },
+          "action": {
+            "enum": [
+              "inspect",
+              "use",
+              "equip",
+              "drop",
+              "use_ability",
+              "hotbar"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "hotbar_slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hotbar Slot"
+          },
+          "item_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Name"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "RpgLoadoutActionRequest",
+        "type": "object"
+      },
+      "RpgNewGameRequest": {
+        "properties": {
+          "background": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Background"
+          },
+          "campaign_template": {
+            "default": "classic_fantasy",
+            "title": "Campaign Template",
+            "type": "string"
+          },
+          "combat_lethality": {
+            "default": "normal",
+            "enum": [
+              "safe",
+              "normal",
+              "deadly"
+            ],
+            "title": "Combat Lethality",
+            "type": "string"
+          },
+          "companions_enabled": {
+            "default": true,
+            "title": "Companions Enabled",
+            "type": "boolean"
+          },
+          "difficulty": {
+            "default": "normal",
+            "enum": [
+              "story",
+              "normal",
+              "harsh"
+            ],
+            "title": "Difficulty",
+            "type": "string"
+          },
+          "economy_pressure": {
+            "default": "normal",
+            "enum": [
+              "relaxed",
+              "normal",
+              "strict"
+            ],
+            "title": "Economy Pressure",
+            "type": "string"
+          },
+          "features": {
+            "$ref": "#/components/schemas/RpgFeatureOptions"
+          },
+          "generated_class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated Class Name"
+          },
+          "generated_class_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated Class Summary"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "permadeath": {
+            "default": false,
+            "title": "Permadeath",
+            "type": "boolean"
+          },
+          "player": {
+            "$ref": "#/components/schemas/RpgPlayerOptions"
+          },
+          "power_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Source"
+          },
+          "primary_capability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Capability"
+          },
+          "secondary_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Secondary Capabilities",
+            "type": "array"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "starting_location": {
+            "default": "rusty_flagon_tavern",
+            "title": "Starting Location",
+            "type": "string"
+          },
+          "tone": {
+            "default": "heroic adventure",
+            "title": "Tone",
+            "type": "string"
+          },
+          "world_activity": {
+            "default": "standard",
+            "enum": [
+              "quiet",
+              "standard",
+              "living_world"
+            ],
+            "title": "World Activity",
+            "type": "string"
+          }
+        },
+        "title": "RpgNewGameRequest",
+        "type": "object"
+      },
+      "RpgPlayerOptions": {
+        "properties": {
+          "background": {
+            "default": "Wanderer",
+            "title": "Background",
+            "type": "string"
+          },
+          "build": {
+            "default": "balanced_adventurer",
+            "enum": [
+              "balanced_adventurer",
+              "warrior",
+              "ranger",
+              "silver_tongue"
+            ],
+            "title": "Build",
+            "type": "string"
+          },
+          "name": {
+            "default": "Alyndra",
+            "title": "Name",
+            "type": "string"
+          },
+          "portrait_seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portrait Seed"
+          },
+          "pronouns": {
+            "default": "she/her",
+            "title": "Pronouns",
+            "type": "string"
+          }
+        },
+        "title": "RpgPlayerOptions",
+        "type": "object"
+      },
+      "RpgRenameSessionRequest": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RpgRenameSessionRequest",
+        "type": "object"
+      },
       "RuntimeStatusPayload": {
         "properties": {
           "compatibility": {
@@ -4262,6 +4588,49 @@
         ]
       }
     },
+    "/api/rpg/new-game": {
+      "post": {
+        "operationId": "rpg_new_game_api_rpg_new_game_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgNewGameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg New Game Api Rpg New Game Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg New Game",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
     "/api/rpg/player/codex": {
       "post": {
         "operationId": "rpg_player_codex_api_rpg_player_codex_post",
@@ -4487,6 +4856,73 @@
         ]
       }
     },
+    "/api/rpg/presets": {
+      "get": {
+        "operationId": "rpg_presets_api_rpg_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Presets Api Rpg Presets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rpg Presets",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/presets/{preset_id}/start": {
+      "post": {
+        "operationId": "rpg_start_preset_api_rpg_presets__preset_id__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preset_id",
+            "required": true,
+            "schema": {
+              "title": "Preset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Start Preset Api Rpg Presets  Preset Id  Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Start Preset",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
     "/api/rpg/session/get": {
       "post": {
         "operationId": "rpg_session_get_api_rpg_session_get_post",
@@ -4552,6 +4988,269 @@
         "summary": "Rpg Session List",
         "tags": [
           "rpg-session-compat"
+        ]
+      }
+    },
+    "/api/rpg/sessions": {
+      "get": {
+        "operationId": "rpg_sessions_api_rpg_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Sessions Api Rpg Sessions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rpg Sessions",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}": {
+      "get": {
+        "operationId": "rpg_read_session_api_rpg_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Read Session Api Rpg Sessions  Session Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Read Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/continue": {
+      "post": {
+        "operationId": "rpg_continue_session_api_rpg_sessions__session_id__continue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Continue Session Api Rpg Sessions  Session Id  Continue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Continue Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/delete": {
+      "post": {
+        "operationId": "rpg_delete_session_api_rpg_sessions__session_id__delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Delete Session Api Rpg Sessions  Session Id  Delete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Delete Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/loadout-action": {
+      "post": {
+        "operationId": "rpg_loadout_action_api_rpg_sessions__session_id__loadout_action_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgLoadoutActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Loadout Action Api Rpg Sessions  Session Id  Loadout Action Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Loadout Action",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/rename": {
+      "post": {
+        "operationId": "rpg_rename_session_api_rpg_sessions__session_id__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpgRenameSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Rename Session Api Rpg Sessions  Session Id  Rename Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Rename Session",
+        "tags": [
+          "rpg-session"
         ]
       }
     },

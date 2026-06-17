@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from app.platform import rpg_session_compat
 from app.rpg.session import new_game
 
@@ -44,6 +46,133 @@ def test_create_new_game_session_builds_level_one_campaign(monkeypatch) -> None:
     assert {item["id"] for item in state["player"]["inventory"]} >= {"ration", "torch", "iron_dagger", "simple_bow", "journal"}
     assert state["current_location"] == "Rusty Flagon Tavern"
     assert state["turn_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("identity_request", "expected_identity"),
+    [
+        (
+            {
+                "genre": "classic_fantasy",
+                "tone": "scholarly high fantasy",
+                "player": new_game.RpgPlayerOptions(name="Ilyra", background="academy exile", build="balanced_adventurer"),
+                "primary_capability": "knowledge",
+                "secondary_capabilities": ["recon", "support"],
+                "power_source": "magic",
+            },
+            {
+                "genre": "classic_fantasy",
+                "tone": "scholarly high fantasy",
+                "background": "academy exile",
+                "primary_capability": "knowledge",
+                "secondary_capabilities": ["recon", "support"],
+                "power_source": "magic",
+                "generated_class_name": "Runebinder",
+            },
+        ),
+        (
+            {
+                "genre": "cyberpunk",
+                "tone": "street-level neon noir",
+                "player": new_game.RpgPlayerOptions(name="Nyx", background="corporate defector", build="balanced_adventurer"),
+                "primary_capability": "technical",
+                "secondary_capabilities": ["knowledge", "recon"],
+                "power_source": "technology",
+            },
+            {
+                "genre": "cyberpunk",
+                "tone": "street-level neon noir",
+                "background": "corporate defector",
+                "primary_capability": "technical",
+                "secondary_capabilities": ["knowledge", "recon"],
+                "power_source": "technology",
+                "generated_class_name": "Netrunner",
+            },
+        ),
+        (
+            {
+                "genre": "detective_noir",
+                "tone": "rain-soaked procedural",
+                "player": new_game.RpgPlayerOptions(name="Mara Voss", background="former detective", build="silver_tongue"),
+                "primary_capability": "recon",
+                "secondary_capabilities": ["knowledge", "influence"],
+                "power_source": "mundane",
+            },
+            {
+                "genre": "detective_noir",
+                "tone": "rain-soaked procedural",
+                "background": "former detective",
+                "primary_capability": "recon",
+                "secondary_capabilities": ["knowledge", "influence"],
+                "power_source": "mundane",
+                "generated_class_name": "Private Eye",
+            },
+        ),
+        (
+            {
+                "genre": "political_intrigue",
+                "tone": "courtroom pressure",
+                "player": new_game.RpgPlayerOptions(name="Sera", background="disgraced envoy", build="silver_tongue"),
+                "primary_capability": "influence",
+                "secondary_capabilities": ["knowledge", "recon"],
+                "power_source": "social_power",
+            },
+            {
+                "genre": "political_intrigue",
+                "tone": "courtroom pressure",
+                "background": "disgraced envoy",
+                "primary_capability": "influence",
+                "secondary_capabilities": ["knowledge", "recon"],
+                "power_source": "social_power",
+                "generated_class_name": "Court Schemer",
+            },
+        ),
+    ],
+)
+def test_create_new_game_session_persists_capability_identity(monkeypatch, identity_request, expected_identity) -> None:
+    captured = _capture_saved_session(monkeypatch)
+
+    result = new_game.create_new_game_session(new_game.RpgNewGameRequest(seed=24680, **identity_request))
+
+    assert result["ok"] is True
+    session = captured["session"]
+    state = session["state"]
+    setup_payload = session["setup_payload"]
+    identity = state["character_identity"]
+    for key, value in expected_identity.items():
+        assert identity[key] == value
+        assert setup_payload[key] == value
+    assert setup_payload["player"]["background"] == expected_identity["background"]
+    assert state["metadata"]["primary_capability"] == expected_identity["primary_capability"]
+    assert state["metadata"]["power_source"] == expected_identity["power_source"]
+    assert state["player"]["class"] == expected_identity["generated_class_name"]
+    assert state["ability_tree"]["genre"] == expected_identity["genre"]
+    assert state["ability_tree"]["primary_capability"] == expected_identity["primary_capability"]
+
+
+def test_continue_rpg_session_returns_saved_identity_without_regeneration(monkeypatch) -> None:
+    identity = {
+        "genre": "cyberpunk",
+        "tone": "street-level neon noir",
+        "background": "corporate defector",
+        "primary_capability": "technical",
+        "secondary_capabilities": ["knowledge", "recon"],
+        "power_source": "technology",
+        "generated_class_name": "Ghostwalker",
+        "generated_class_summary": "A saved covert systems intruder.",
+    }
+    saved_session = {
+        "manifest": {"id": "rpg_saved", "session_id": "rpg_saved"},
+        "state": {"character_identity": dict(identity)},
+        "setup_payload": dict(identity),
+    }
+    monkeypatch.setattr(new_game, "load_session", lambda session_id: saved_session)
+
+    result = new_game.continue_rpg_session("rpg_saved")
+
+    assert result["ok"] is True
+    assert result["game"]["character_identity"] == identity
+    assert result["session"]["setup_payload"] == identity
 
 
 def test_create_new_game_session_uses_selected_starting_location(monkeypatch) -> None:

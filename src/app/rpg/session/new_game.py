@@ -50,6 +50,7 @@ class RpgNewGameRequest(BaseModel):
     campaign_template: str = "classic_fantasy"
     genre: str | None = None
     tone: str = "heroic adventure"
+    background: str | None = None
     starting_location: str = "rusty_flagon_tavern"
     player: RpgPlayerOptions = Field(default_factory=RpgPlayerOptions)
     primary_capability: str | None = None
@@ -250,6 +251,10 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "campaign_template": request.campaign_template,
             "genre": identity["genre"],
             "tone": identity["tone"],
+            "primary_capability": identity["primary_capability"],
+            "secondary_capabilities": identity["secondary_capabilities"],
+            "power_source": identity["power_source"],
+            "generated_class_name": identity["generated_class_name"],
             "difficulty": request.difficulty,
             "world_activity": request.world_activity,
             "economy_pressure": request.economy_pressure,
@@ -301,6 +306,22 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "quick_actions": location.get("quick_actions", ["Look around", "Talk to someone nearby", "Check supplies", "Travel onward"]),
         "features": {**features, "companions_enabled": request.companions_enabled, "permadeath": request.permadeath},
     }
+
+
+def _setup_payload_with_identity(request: RpgNewGameRequest, identity: dict[str, Any]) -> dict[str, Any]:
+    payload = request.model_dump(mode="json")
+    player = dict(payload.get("player") or {})
+    player["background"] = identity["background"]
+    payload["player"] = player
+    payload["genre"] = identity["genre"]
+    payload["tone"] = identity["tone"]
+    payload["background"] = identity["background"]
+    payload["primary_capability"] = identity["primary_capability"]
+    payload["secondary_capabilities"] = list(identity["secondary_capabilities"])
+    payload["power_source"] = identity["power_source"]
+    payload["generated_class_name"] = identity["generated_class_name"]
+    payload["generated_class_summary"] = identity["generated_class_summary"]
+    return payload
 
 
 def _demo_state(session_id: str, now: str) -> dict[str, Any]:
@@ -406,10 +427,11 @@ def create_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
     session_id = _new_session_id("rpg")
     state = _new_game_state(request, session_id, now)
     seed = int(request.seed or state.get("metadata", {}).get("seed") or 0)
+    setup_payload = _setup_payload_with_identity(request, state["character_identity"])
     session = {
         "manifest": _base_manifest(session_id, state["title"], now, source_template_id=request.campaign_template, kind="new_game"),
         "state": state,
-        "setup_payload": request.model_dump(mode="json"),
+        "setup_payload": setup_payload,
         "simulation_state": _simulation_state_stub(seed),
         "runtime_state": {"active_job_id": None, "last_error": None, "created_from": "new_game"},
     }
