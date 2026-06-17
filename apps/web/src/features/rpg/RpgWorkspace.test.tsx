@@ -32,6 +32,29 @@ function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
 }
 
+const emptyWorkspaceResponses = {
+  inventory: {
+    sessions: [{ session_id: 'rpg-session-1', updated_at: '2026-06-14T00:00:00Z' }],
+    diagnostics: [],
+  },
+  jobs: { jobs: [] },
+  assets: {
+    assets: [
+      {
+        id: 'asset:checkpoint',
+        module: 'rpg',
+        type: 'rpg_checkpoint',
+        mime_type: 'application/json',
+        storage_path: 'checkpoints/session.json',
+        created_at: '2026-06-14T00:00:00Z',
+      },
+    ],
+  },
+  reports: {
+    reports: [{ id: 'rpg/autoplay.json', kind: 'rpg_autoplay', path: 'reports/rpg/autoplay.json', size_bytes: 32 }],
+  },
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -42,10 +65,7 @@ describe('RpgWorkspace', () => {
       const path = requestPath(input);
 
       if (path === '/api/replay/persistence/inventory') {
-        return Response.json({
-          sessions: [{ session_id: 'rpg-session-1', updated_at: '2026-06-14T00:00:00Z' }],
-          diagnostics: [],
-        });
+        return Response.json(emptyWorkspaceResponses.inventory);
       }
 
       if (path === '/api/jobs' && init?.method === 'POST') {
@@ -62,28 +82,15 @@ describe('RpgWorkspace', () => {
       }
 
       if (path === '/api/jobs') {
-        return Response.json({ jobs: [] });
+        return Response.json(emptyWorkspaceResponses.jobs);
       }
 
       if (path === '/api/assets') {
-        return Response.json({
-          assets: [
-            {
-              id: 'asset:checkpoint',
-              module: 'rpg',
-              type: 'rpg_checkpoint',
-              mime_type: 'application/json',
-              storage_path: 'checkpoints/session.json',
-              created_at: '2026-06-14T00:00:00Z',
-            },
-          ],
-        });
+        return Response.json(emptyWorkspaceResponses.assets);
       }
 
       if (path === '/api/reports') {
-        return Response.json({
-          reports: [{ id: 'rpg/autoplay.json', kind: 'rpg_autoplay', path: 'reports/rpg/autoplay.json', size_bytes: 32 }],
-        });
+        return Response.json(emptyWorkspaceResponses.reports);
       }
 
       return new Response('not found', { status: 404 });
@@ -111,5 +118,129 @@ describe('RpgWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"determinism_policy":"replay_preserving"');
       expect(createCall?.[1]?.body).toContain('"session_id":"rpg-session-1"');
     });
+  });
+
+  it('wires checkpoint and autoplay controls through replay-safe APIs', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Response.json({
+          sessions: [
+            {
+              session_id: 'rpg-session-2',
+              title: 'North Road Campaign',
+              location: 'North Road',
+              summary: 'The party waits near the northern milestone.',
+              turn_count: 8,
+              checkpoint_id: 'checkpoint:last',
+              updated_at: '2026-06-14T00:05:00Z',
+            },
+          ],
+          diagnostics: [],
+        });
+      }
+
+      if (path === '/api/replay/checkpoints' && init?.method === 'POST') {
+        return Response.json({ checkpoint_id: 'checkpoint:manual', metadata: {}, payload: {} });
+      }
+
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return Response.json({
+          id: 'job:autoplay',
+          module: 'rpg',
+          type: 'rpg.autoplay',
+          status: 'queued',
+          resource_class: 'gpu:llm',
+          created_at: '2026-06-14T00:05:01Z',
+          updated_at: '2026-06-14T00:05:01Z',
+          priority: 0,
+        });
+      }
+
+      if (path === '/api/jobs') {
+        return Response.json(emptyWorkspaceResponses.jobs);
+      }
+
+      if (path === '/api/assets') {
+        return Response.json({ assets: [] });
+      }
+
+      if (path === '/api/reports') {
+        return Response.json({ reports: [] });
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    expect(await screen.findByText('North Road')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create checkpoint' }));
+    expect(await screen.findByText('Checkpoint created: checkpoint:manual')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start autoplay' }));
+
+    await waitFor(() => {
+      const checkpointCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/replay/checkpoints' && init?.method === 'POST',
+      );
+      const autoplayCall = fetchMock.mock.calls.find(
+        ([input, init]) => requestPath(input as RequestInfo | URL) === '/api/jobs' && init?.method === 'POST',
+      );
+
+      expect(String(checkpointCall?.[1]?.body)).toContain('"source":"rpg-workspace"');
+      expect(String(checkpointCall?.[1]?.body)).toContain('"session_id":"rpg-session-2"');
+      expect(String(autoplayCall?.[1]?.body)).toContain('"type":"rpg.autoplay"');
+      expect(String(autoplayCall?.[1]?.body)).toContain('"determinism_policy":"replay_preserving"');
+      expect(String(autoplayCall?.[1]?.body)).toContain('"session_id":"rpg-session-2"');
+    });
+  });
+
+  it('preserves accessible controls when the player and world rails are collapsed', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Response.json(emptyWorkspaceResponses.inventory);
+      }
+
+      if (path === '/api/jobs') {
+        return Response.json(emptyWorkspaceResponses.jobs);
+      }
+
+      if (path === '/api/assets') {
+        return Response.json(emptyWorkspaceResponses.assets);
+      }
+
+      if (path === '/api/reports') {
+        return Response.json(emptyWorkspaceResponses.reports);
+      }
+
+      return new Response(init?.method ?? 'not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    expect(await screen.findByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide player rail' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide world rail' }));
+
+    expect(screen.queryByRole('complementary', { name: 'Player, party, and quests' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'World, jobs, and reports' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show player rail' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Show world rail' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show player rail' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show world rail' }));
+
+    expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
   });
 });

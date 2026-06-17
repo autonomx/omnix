@@ -1,6 +1,6 @@
 # RPG Mode UI Redesign Status
 
-This note supersedes the earlier planning-only RPG mode UI inventory work. The approved direction is now implemented as a production-oriented RPG workstation shell, with remaining work focused on final regression coverage and production validation.
+This note supersedes the earlier planning-only RPG mode UI inventory work. The approved direction is now implemented as a production-oriented RPG workstation shell, with remaining work focused on production validation, loading states, and backend-driven affordance expansion.
 
 ## Source of truth
 
@@ -30,7 +30,8 @@ This note supersedes the earlier planning-only RPG mode UI inventory work. The a
 | Live controls | #559 | Merged | Wired report, checkpoint, autoplay, and job-card controls. |
 | Combat surface | #560 | Merged | Added tactical combat panels and replay-safe combat command affordances. |
 | Loadout actions | #561 | Merged | Added item, ability, and hotbar detail panels with command insertion affordances. |
-| Responsive polish | #562 | In progress | Adds collapsible rails, improved narrow-screen behavior, overflow containment, and reduced-motion safeguards. |
+| Responsive polish | #562 | Merged | Added collapsible rails, improved narrow-screen behavior, overflow containment, and reduced-motion safeguards. |
+| Regression coverage | #563 | In progress | Adds workspace-level regression coverage for replay-safe live controls and rail accessibility. |
 
 ## Current component map
 
@@ -79,14 +80,14 @@ Inventory, abilities, and hotbar now provide detail panels and replay-safe comma
 
 ### 4. Responsive and production polish
 
-The layout is componentized and this slice adds the first production polish pass:
+The layout is componentized and has its first production polish pass:
 
 - Collapsible left/right rails.
 - Narrow-screen stacking and keyboard-safe focus order.
 - Reduced-motion behavior for progress/status effects.
 - Long log overflow handling and scroll containment.
 
-Remaining polish after this slice:
+Remaining polish:
 
 - Skeleton/loading surfaces for slow live queries.
 - Optional visual regression screenshots if supported locally.
@@ -94,19 +95,18 @@ Remaining polish after this slice:
 
 ### 5. Regression coverage and docs
 
-Existing component and adapter coverage is strong for the slices completed so far. Remaining gates:
+Existing component and adapter coverage is strong. This regression slice adds workspace-level coverage for live controls and rail accessibility. Remaining gates after this slice:
 
-- Workspace-level integration coverage for live sessions plus turn submission.
-- Jobs/report/checkpoint control tests.
-- Combat fixture render tests.
-- Accessibility smoke tests for tab panels and rail controls.
+- Loading/error/empty-state regression coverage for slow or failing live queries.
+- Stop-autoplay coverage once active job cancellation behavior is validated with real backend data.
+- Visual regression screenshots if supported locally.
 - Final screenshot or design reference attachment once local visual validation is available.
 
 ## Recommended next PR sequence
 
-1. `p562-rpg-responsive-polish` — add collapsible rails, narrow-screen stacking, reduced motion, and overflow handling.
-2. `p563-rpg-ui-regression` — add final workspace integration/accessibility regression gates.
-3. `p564-rpg-loading-empty-states` — add richer loading and empty-state surfaces after live query behavior is validated.
+1. `p563-rpg-ui-regression` — add final workspace integration/accessibility regression gates.
+2. `p564-rpg-loading-empty-states` — add richer loading and empty-state surfaces after live query behavior is validated.
+3. `p565-rpg-report-artifact-links` — tighten direct report/checkpoint artifact linking once backend artifact routing is confirmed.
 
 ## Notes
 
