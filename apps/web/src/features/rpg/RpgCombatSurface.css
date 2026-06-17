@@ -1,0 +1,151 @@
+.rpg-combat-surface {
+  gap: 0.9rem;
+}
+
+.rpg-combat-surface h3 {
+  color: #f7f4ff;
+  margin: 0.2rem 0 0;
+}
+
+.rpg-combat-status {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(151, 114, 255, 0.16);
+  border-radius: 999px;
+  color: #c9c1e8;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.36rem 0.64rem;
+}
+
+.rpg-combat-status-active {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(251, 113, 133, 0.36);
+  color: #fecdd3;
+}
+
+.rpg-combat-overview,
+.rpg-combat-grid,
+.rpg-combat-actions {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.rpg-combat-overview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rpg-combat-overview article,
+.rpg-initiative-strip,
+.rpg-combatant-card,
+.rpg-combat-deltas {
+  background: rgba(7, 6, 13, 0.42);
+  border: 1px solid rgba(151, 114, 255, 0.12);
+  border-radius: 0.72rem;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.72rem;
+}
+
+.rpg-combat-overview span,
+.rpg-combatant-card small,
+.rpg-combat-deltas li,
+.rpg-initiative-strip p {
+  color: #aaa5bc;
+}
+
+.rpg-combat-overview strong,
+.rpg-combatant-card strong,
+.rpg-combat-deltas strong,
+.rpg-initiative-strip strong {
+  color: #f7f4ff;
+}
+
+.rpg-initiative-strip {
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.rpg-initiative-strip ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rpg-initiative-strip li {
+  background: rgba(124, 58, 237, 0.14);
+  border: 1px solid rgba(151, 114, 255, 0.18);
+  border-radius: 999px;
+  color: #efe9ff;
+  font-size: 0.78rem;
+  padding: 0.28rem 0.52rem;
+}
+
+.rpg-combat-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rpg-combatant-card {
+  border-color: rgba(151, 114, 255, 0.12);
+}
+
+.rpg-combatant-enemy {
+  border-color: rgba(251, 113, 133, 0.24);
+}
+
+.rpg-combatant-ally {
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+.rpg-combat-actions {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.rpg-combat-action-button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(151, 114, 255, 0.18);
+  border-radius: 0.7rem;
+  color: #f7f4ff;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 2.65rem;
+}
+
+.rpg-combat-action-button:not(:disabled):hover {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(151, 114, 255, 0.42);
+}
+
+.rpg-combat-action-button:disabled {
+  color: #7e7891;
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.rpg-combat-action-button:focus-visible {
+  border-color: rgba(151, 114, 255, 0.72);
+  box-shadow: 0 0 0 0.18rem rgba(124, 58, 237, 0.18);
+  outline: none;
+}
+
+.rpg-combat-deltas ul {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
+}
+
+@media (max-width: 980px) {
+  .rpg-combat-overview,
+  .rpg-combat-grid,
+  .rpg-combat-actions,
+  .rpg-initiative-strip {
+    grid-template-columns: 1fr;
+  }
+}
