@@ -1,4 +1,5 @@
 import type { RpgCombatSurfacePreview } from './rpgCombatState';
+import './RpgCombatSurface.css';
 
 interface RpgCombatSurfaceProps {
   combat: RpgCombatSurfacePreview;
