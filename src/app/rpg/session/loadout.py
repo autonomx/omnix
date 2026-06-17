@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from app.rpg.session.ability_system import apply_ability_to_state
+from app.rpg.session.ability_system import apply_ability_to_state, build_progression_package
 from app.rpg.session.service import load_session, save_session
 
 LoadoutActionKind = Literal["inspect", "use", "equip", "drop", "use_ability", "hotbar"]
@@ -179,6 +179,35 @@ def _advance_turn(state: dict[str, Any]) -> None:
     state["turn_count"] = int(state.get("turn_count") or 0) + 1
 
 
+def _ensure_ability_progression(state: dict[str, Any]) -> None:
+    if state.get("ability_tree") and state.get("ability_state"):
+        return
+    player = _player(state)
+    identity = _safe_dict(state.get("character_identity"))
+    metadata = _safe_dict(state.get("metadata"))
+    build = str(player.get("build") or "ranger")
+    level = int(player.get("level") or 1)
+    payload = {
+        "campaign_template": metadata.get("campaign_template") or identity.get("genre") or "classic_fantasy",
+        "genre": metadata.get("genre") or identity.get("genre") or "classic_fantasy",
+        "tone": metadata.get("tone") or identity.get("tone") or "heroic adventure",
+        "player": {
+            "name": player.get("name") or "Hero",
+            "background": player.get("background") or identity.get("background") or "Wanderer",
+            "build": build,
+        },
+        "primary_capability": identity.get("primary_capability"),
+        "secondary_capabilities": identity.get("secondary_capabilities") or [],
+        "power_source": identity.get("power_source"),
+        "generated_class_name": player.get("class") or identity.get("generated_class_name"),
+    }
+    progression = build_progression_package(payload, build_id=build, level=level, seed=metadata.get("seed") if isinstance(metadata.get("seed"), int) else None)
+    state.setdefault("character_identity", progression["character_identity"])
+    state["ability_tree"] = progression["ability_tree"]
+    state["ability_state"] = progression["ability_state"]
+    state["hotbar"] = progression["hotbar"]
+
+
 def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dict[str, Any]], index: int, item: dict[str, Any]) -> tuple[str, str]:
     name = _title(item.get("name") or item.get("label") or item.get("id")) or "item"
     lower = _norm(name)
@@ -238,7 +267,6 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
         inventory, index, item = _find_item(player, request.item_name)
         if item is None or index < 0:
             return {"ok": False, "error": "item_not_found", "session_id": session_id, "item_name": request.item_name}
-
         name = _title(item.get("name") or item.get("label") or item.get("id")) or "item"
         if action == "inspect":
             detail = f"You inspect {name}. It is carried in inventory and can be used, equipped, or dropped if the situation allows."
@@ -263,9 +291,9 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
             title = f"Dropped {name}"
             kind = "inventory"
             _advance_turn(state)
-
         event = _append_event(state, title=title, detail=detail, kind=kind)
     elif action in {"use_ability", "hotbar"}:
+        _ensure_ability_progression(state)
         result = apply_ability_to_state(state, ability_name=request.ability_name, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
         if not result.ok:
             return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}
@@ -281,11 +309,4 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
     updated["manifest"] = manifest
 
     saved = save_session(updated, compact=False)
-    return {
-        "ok": True,
-        "session_id": session_id,
-        "status": "ready",
-        "event": event,
-        "session": saved,
-        "game": saved.get("state", {}),
-    }
+    return {"ok": True, "session_id": session_id, "status": "ready", "event": event, "session": saved, "game": saved.get("state", {})}
