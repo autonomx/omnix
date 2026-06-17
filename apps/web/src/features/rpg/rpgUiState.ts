@@ -82,6 +82,13 @@ export interface RpgNpcRelationshipPreview {
   score: number;
 }
 
+export interface RpgEncounterPreview {
+  icon: string;
+  title: string;
+  detail: string;
+  source: 'live' | 'preview';
+}
+
 export interface RpgJobCardPreview {
   id: string;
   title: string;
@@ -128,6 +135,7 @@ export interface RpgWorkspaceState {
   hotbarAbilities: RpgHotbarAbilityPreview[];
   worldStateRows: RpgWorldStateRowPreview[];
   npcRelationships: RpgNpcRelationshipPreview[];
+  encounter: RpgEncounterPreview;
   sessionSummaries: RpgSessionSummaryPreview[];
   selectedSessionSummary: RpgSessionSummaryPreview;
   checkpointSummary: RpgCheckpointSummaryPreview;
@@ -245,6 +253,13 @@ export const npcRelationships: RpgNpcRelationshipPreview[] = [
   { name: 'Captain Bryn', stance: 'Neutral', score: 10 },
 ];
 
+export const previewEncounter: RpgEncounterPreview = {
+  icon: '⚔',
+  title: 'No active combat',
+  detail: 'All quiet for now.',
+  source: 'preview',
+};
+
 export const previewJobs: RpgJobCardPreview[] = [
   { id: 'preview-turn', title: 'rpg.turn', status: 'Running', progress: 68, detail: 'Load / Apply turn / Narrate / Checkpoint', source: 'preview' },
   { id: 'preview-narration', title: 'narration.generate', status: 'Running', progress: 42, detail: 'Generating presentation text', source: 'preview' },
@@ -258,8 +273,8 @@ export const previewSessionSummary: RpgSessionSummaryPreview = {
   summary:
     'The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both sides, and an ancient stone archway stands ahead, half-buried in drifts.',
   updatedAt: 'Day 18 • 09:42',
-  turnLabel: 'Turn 18',
-  checkpointLabel: 'Preview checkpoint',
+  turnLabel: 'Turn 12',
+  checkpointLabel: 'Saved 2m ago',
   sortRank: 0,
   source: 'preview',
 };
@@ -279,7 +294,7 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
   const recentEvents = buildRecentEvents(selectedSessionSummary);
   const journalEntries = buildJournalEntries(selectedSessionSummary);
   const journalDetail = buildJournalDetail(selectedSessionSummary);
-  const worldStateRows = buildWorldStateRows(selectedSessionSummary);
+  const worldStateRows = buildWorldStateRows(selectedSessionSummary, selectedSession);
   const checkpointSummary = buildCheckpointSummary(rpgAssets, selectedSessionSummary);
 
   return {
@@ -295,7 +310,8 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     inventoryItems: buildInventoryItems(selectedSession),
     hotbarAbilities,
     worldStateRows,
-    npcRelationships,
+    npcRelationships: buildNpcRelationships(selectedSession),
+    encounter: buildEncounter(selectedSession),
     sessionSummaries,
     selectedSessionSummary,
     checkpointSummary,
@@ -530,17 +546,102 @@ function buildJournalDetail(selectedSession: RpgSessionSummaryPreview): RpgJourn
   };
 }
 
-function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview): RpgWorldStateRowPreview[] {
-  if (selectedSession.source === 'preview') {
+function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session: RpgSession | undefined): RpgWorldStateRowPreview[] {
+  if (selectedSession.source === 'preview' || !session) {
     return previewWorldStateRows;
   }
 
+  const roots = getSessionRecords(session);
+  const world = firstRecord(
+    ...roots.flatMap((root) => [root.world, root.world_state, root.environment, root.location_state, root.locationContext, recordValue(root.state)?.world])
+  );
+  const clock = firstRecord(...roots.flatMap((root) => [root.clock, root.time, root.calendar, world?.clock, world?.time]));
+  const player = getPlayerRecord(session);
+  const reputation = recordValue(player?.reputation);
+  const time = firstString(
+    world?.time,
+    world?.time_label,
+    world?.day_time,
+    clock?.label,
+    clock?.time,
+    clock?.day,
+    ...roots.map((root) => root.time_label ?? root.time)
+  ) ?? selectedSession.updatedAt;
+  const weather = firstString(world?.weather, world?.conditions, world?.weather_label, ...roots.map((root) => root.weather ?? root.conditions));
+  const temperatureNumber = firstNumber(world?.temperature, world?.temp, ...roots.map((root) => root.temperature ?? root.temp));
+  const temperature = firstString(world?.temperature_label, world?.temperature, world?.temp, ...roots.map((root) => root.temperature_label)) ??
+    (temperatureNumber !== undefined ? `${formatNumber(temperatureNumber)}°C` : undefined);
+  const reputationLabel =
+    firstString(player?.renown, player?.reputation_label, reputation?.label, reputation?.standing, reputation?.name) ??
+    (firstNumber(player?.renown, player?.reputation_score, reputation?.score) !== undefined
+      ? `Renown ${formatNumber(firstNumber(player?.renown, player?.reputation_score, reputation?.score) ?? 0)}`
+      : undefined);
+
   return [
-    { icon: '☀', label: 'Updated', value: selectedSession.updatedAt },
-    { icon: '⌁', label: 'Session', value: selectedSession.title },
-    { icon: '◆', label: 'Turn', value: selectedSession.turnLabel },
-    { icon: '▣', label: 'Mode', value: 'Replay-preserving' },
+    { icon: '☀', label: 'Time', value: time },
+    { icon: '≋', label: 'Weather', value: weather ?? 'Weather unknown' },
+    { icon: '❄', label: 'Temperature', value: temperature ?? 'Unknown' },
+    { icon: '✦', label: 'Reputation', value: reputationLabel ?? 'Reputation unknown' },
   ];
+}
+
+function buildNpcRelationships(session: RpgSession | undefined): RpgNpcRelationshipPreview[] {
+  const roots = getSessionRecords(session);
+  const candidates = roots.flatMap((root) => [
+    root.npc_relationships,
+    root.relationships,
+    root.social_state,
+    root.social,
+    recordValue(root.npcs)?.relationships,
+    recordValue(root.memory)?.npc_relationships,
+  ]);
+  const relationshipArray = firstArray(...candidates);
+  const relationshipRecord = relationshipArray.length ? undefined : firstRecord(...candidates);
+  const relationshipItems = relationshipArray.length
+    ? relationshipArray
+    : relationshipRecord
+      ? Object.entries(relationshipRecord).map(([name, value]) => ({ ...(recordValue(value) ?? { score: value }), name }))
+      : [];
+
+  if (!relationshipItems.length) {
+    return npcRelationships;
+  }
+
+  return relationshipItems.slice(0, 5).map((relationship, index) => {
+    const record = recordValue(relationship) ?? { name: relationship };
+    const name = firstString(record.name, record.npc, record.character, record.id, record.label) ?? `NPC ${index + 1}`;
+    const score = relationshipScore(firstNumber(record.score, record.affinity, record.trust, record.value, record.relationship, record.standing_score));
+    const stance = firstString(record.stance, record.status, record.relationship_label, record.label) ?? stanceForScore(score);
+    return { name, stance, score };
+  });
+}
+
+function buildEncounter(session: RpgSession | undefined): RpgEncounterPreview {
+  const roots = getSessionRecords(session);
+  const encounter = firstRecord(
+    ...roots.flatMap((root) => [root.encounter, root.encounter_state, root.current_encounter, root.combat, root.combat_state, recordValue(root.state)?.combat])
+  );
+  if (!encounter) {
+    return previewEncounter;
+  }
+
+  const status = firstString(encounter.status, encounter.state, encounter.phase, encounter.mode);
+  const enemies = firstArray(encounter.enemies, encounter.opponents, encounter.hostiles, encounter.combatants)
+    .map((enemy, index) => firstString(recordValue(enemy)?.name, recordValue(enemy)?.id, enemy) ?? `Combatant ${index + 1}`)
+    .slice(0, 3);
+  const statusText = String(status ?? '').toLowerCase();
+  const active = Boolean(status && !['none', 'idle', 'inactive', 'resolved', 'complete', 'completed'].some((token) => statusText.includes(token)));
+  const title = firstString(encounter.title, encounter.name, encounter.label) ?? (active ? 'Active encounter' : 'Encounter indexed');
+  const detail =
+    firstString(encounter.summary, encounter.detail, encounter.description, encounter.objective) ??
+    (enemies.length ? `Combatants: ${enemies.join(', ')}` : status ? `Status: ${status}` : 'Encounter state indexed from live session.');
+
+  return {
+    icon: active ? '⚔' : '◇',
+    title,
+    detail,
+    source: 'live',
+  };
 }
 
 function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionSummaryPreview): RpgCheckpointSummaryPreview {
@@ -656,6 +757,26 @@ function metricPercent(current: number, max: number): number {
   }
 
   return Math.max(0, Math.min(100, Math.round((current / max) * 100)));
+}
+
+function relationshipScore(value: number | undefined): number {
+  if (value === undefined) {
+    return 50;
+  }
+
+  if (value > 0 && value <= 1) {
+    return Math.round(value * 100);
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function stanceForScore(score: number): string {
+  if (score >= 75) return 'Ally';
+  if (score >= 55) return 'Friendly';
+  if (score >= 35) return 'Neutral';
+  if (score >= 15) return 'Wary';
+  return 'Hostile';
 }
 
 function firstString(...values: unknown[]): string | undefined {

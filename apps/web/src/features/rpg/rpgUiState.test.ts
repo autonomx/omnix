@@ -11,6 +11,7 @@ describe('rpg UI state', () => {
     expect(state.selectedSessionSummary).toMatchObject({ source: 'preview', title: 'Preview campaign' });
     expect(state.heroSummary).toMatchObject({ source: 'preview', name: 'Alyndra' });
     expect(state.journalDetail.title).toBe('Arrived at Glimmerdeep Pass');
+    expect(state.encounter).toMatchObject({ source: 'preview', title: 'No active combat' });
   });
 
   it('normalizes live RPG sessions, jobs, assets, and reports for the workspace', () => {
@@ -104,7 +105,7 @@ describe('rpg UI state', () => {
       title: 'Live session: Live campaign',
       tags: ['Live session', 'Replay-safe', 'Indexed'],
     });
-    expect(state.worldStateRows[0]).toMatchObject({ label: 'Updated', value: '2026-06-16 00:00 UTC' });
+    expect(state.worldStateRows[0]).toMatchObject({ label: 'Time', value: '2026-06-16 00:00 UTC' });
     expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'checkpoints/session.json' });
     expect(state.rpgJobs).toHaveLength(1);
     expect(state.rpgAssets).toHaveLength(1);
@@ -165,6 +166,54 @@ describe('rpg UI state', () => {
     expect(state.partyMembers[0]).toMatchObject({ avatar: 'B', name: 'Bran', role: 'Lv. 2 Innkeeper', hp: '18 / 22', percent: 82 });
     expect(state.activeQuests[0]).toMatchObject({ title: 'Find the Quarry Trail', detail: 'Ask Bran about the old quarry road.' });
     expect(state.inventoryItems[0]).toMatchObject({ label: 'Ration', count: '3' });
+  });
+
+  it('derives world rail, encounter, and NPC relationship state from live sessions', () => {
+    const inventory = {
+      sessions: [
+        {
+          session_id: 'world-live',
+          title: 'World rail campaign',
+          location: 'Old Quarry Road',
+          updated_at: '2026-06-16T00:00:00Z',
+          state: {
+            world: {
+              time: 'Day 3 • Dusk',
+              weather: 'Rain, fog',
+              temperature: 4,
+            },
+            player: {
+              name: 'Mira Vale',
+              reputation: { label: 'Trusted', score: 61 },
+            },
+            relationships: [
+              { name: 'Bran', stance: 'Ally', score: 82 },
+              { name: 'Captain Aldric', trust: 0.45 },
+            ],
+            encounter: {
+              status: 'active',
+              title: 'Bandit ambush',
+              enemies: [{ name: 'Road bandit' }, { name: 'Lookout' }],
+            },
+          },
+        },
+      ],
+      diagnostics: [],
+    } as PersistenceInventory;
+
+    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'world-live' });
+
+    expect(state.worldStateRows).toEqual([
+      { icon: '☀', label: 'Time', value: 'Day 3 • Dusk' },
+      { icon: '≋', label: 'Weather', value: 'Rain, fog' },
+      { icon: '❄', label: 'Temperature', value: '4°C' },
+      { icon: '✦', label: 'Reputation', value: 'Trusted' },
+    ]);
+    expect(state.npcRelationships).toEqual([
+      { name: 'Bran', stance: 'Ally', score: 82 },
+      { name: 'Captain Aldric', stance: 'Neutral', score: 45 },
+    ]);
+    expect(state.encounter).toMatchObject({ icon: '⚔', source: 'live', title: 'Bandit ambush', detail: 'Combatants: Road bandit, Lookout' });
   });
 
   it('keeps a user-selected RPG session active when multiple sessions exist', () => {
