@@ -53,6 +53,11 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface ApiRequestOptions {
+  timeoutMessage?: string;
+  timeoutMs?: number;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly body: string;
@@ -62,6 +67,16 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
     this.body = body;
+  }
+}
+
+export class ApiTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number, message?: string) {
+    super(message ?? `Omnix API request timed out after ${Math.round(timeoutMs / 1000)}s.`);
+    this.name = 'ApiTimeoutError';
+    this.timeoutMs = timeoutMs;
   }
 }
 
@@ -78,12 +93,12 @@ export class OmnixApiClient {
     return this.request<T>(path, { method: 'GET' });
   }
 
-  async post<TRequest, TResponse>(path: `/api/${string}`, body: TRequest): Promise<TResponse> {
+  async post<TRequest, TResponse>(path: `/api/${string}`, body: TRequest, options: ApiRequestOptions = {}): Promise<TResponse> {
     return this.request<TResponse>(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, options);
   }
 
   async listChatSessions(): Promise<ChatSessionListResponse> {
@@ -139,8 +154,8 @@ export class OmnixApiClient {
     return this.get<JobListResponse>('/api/jobs');
   }
 
-  async createJob(request: CreateJobRequest): Promise<JobRecord> {
-    return this.post<CreateJobRequest, JobRecord>('/api/jobs', request);
+  async createJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {
+    return this.post<CreateJobRequest, JobRecord>('/api/jobs', request, options);
   }
 
   async cancelJob(jobId: string, reason: string): Promise<JobRecord> {
@@ -189,19 +204,44 @@ export class OmnixApiClient {
     return this.get<DiagnosticsPayload>('/api/diagnostics');
   }
 
-  private async request<T>(path: `/api/${string}`, init: RequestInit): Promise<T> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, init);
-    const text = await response.text();
+  private async request<T>(path: `/api/${string}`, init: RequestInit, options: ApiRequestOptions = {}): Promise<T> {
+    let didTimeout = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const controller = options.timeoutMs ? new AbortController() : undefined;
 
-    if (!response.ok) {
-      throw new ApiError(response.status, text);
+    if (controller && options.timeoutMs) {
+      timeoutId = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, options.timeoutMs);
     }
 
-    if (!text) {
-      return undefined as T;
-    }
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        ...init,
+        signal: controller?.signal ?? init.signal,
+      });
+      const text = await response.text();
 
-    return JSON.parse(text) as T;
+      if (!response.ok) {
+        throw new ApiError(response.status, text);
+      }
+
+      if (!text) {
+        return undefined as T;
+      }
+
+      return JSON.parse(text) as T;
+    } catch (error) {
+      if (didTimeout && options.timeoutMs) {
+        throw new ApiTimeoutError(options.timeoutMs, options.timeoutMessage);
+      }
+      throw error;
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 }
 

@@ -1,11 +1,19 @@
 """Inline local-first execution for feature jobs submitted directly by the web UI."""
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+import threading
+from pathlib import Path
 from typing import Any, Callable
 
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
 
 INLINE_FEATURE_JOB_TYPES = {"story.generate", "podcast.generate", "rpg.turn"}
+BACKGROUND_INLINE_FEATURE_JOB_TYPES = {"rpg.turn"}
+INLINE_FEATURE_JOB_EXECUTOR_ENV = "OMNIX_INLINE_FEATURE_JOB_EXECUTOR"
+THREAD_EXECUTOR = "thread"
 
 
 def install_inline_feature_job_execution(sqlite_job_store_cls: Any) -> None:
@@ -25,10 +33,75 @@ def install_inline_feature_job_execution(sqlite_job_store_cls: Any) -> None:
         job = original_create_job(self, request)
         if job.type not in INLINE_FEATURE_JOB_TYPES:
             return job
+        if job.type in BACKGROUND_INLINE_FEATURE_JOB_TYPES:
+            _start_background_feature_job(self, job)
+            return job
         return _execute_feature_job(self, job)
 
     sqlite_job_store_cls.create_job = create_job_with_inline_execution
     sqlite_job_store_cls._omnix_inline_feature_jobs_installed = True
+
+
+def _start_background_feature_job(job_store: Any, job: JobRecord) -> None:
+    if _background_executor_mode() == THREAD_EXECUTOR:
+        _start_background_feature_job_thread(job_store, job)
+        return
+
+    db_path = getattr(job_store, "db_path", None)
+    if db_path is None:
+        _start_background_feature_job_thread(job_store, job)
+        return
+
+    try:
+        _start_background_feature_job_process(str(db_path), job.id)
+    except Exception as exc:  # pragma: no cover - defensive launch failure path
+        job_store.fail_job(
+            job.id,
+            FailJobRequest(
+                code="inline_job_worker_launch_failed",
+                message=str(exc) or "Inline feature job worker could not be started",
+                retryable=True,
+                details={"job_type": job.type, "module": job.module},
+            ),
+        )
+
+
+def _start_background_feature_job_thread(job_store: Any, job: JobRecord) -> None:
+    thread = threading.Thread(
+        target=_execute_feature_job,
+        args=(job_store, job),
+        name=f"omnix-inline-{job.type}-{job.id.removeprefix('job:')[:8]}",
+        daemon=True,
+    )
+    thread.start()
+
+
+def _start_background_feature_job_process(db_path: str, job_id: str) -> None:
+    src_root = Path(__file__).resolve().parents[2]
+    repo_root = src_root.parent
+    env = os.environ.copy()
+    env["PYTHONPATH"] = _prepend_pythonpath(str(src_root), env.get("PYTHONPATH"))
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    subprocess.Popen(
+        [sys.executable, "-m", "app.jobs.inline_feature_job_worker", db_path, job_id],
+        cwd=str(repo_root),
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creationflags,
+    )
+
+
+def execute_feature_job_by_id(db_path: str, job_id: str) -> JobRecord:
+    from .store import SQLiteJobStore
+
+    job_store = SQLiteJobStore(db_path)
+    job = job_store.get_job(job_id)
+    if job is None:
+        raise RuntimeError(f"Inline feature job not found: {job_id}")
+    return _execute_feature_job(job_store, job)
 
 
 def _execute_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
@@ -238,3 +311,16 @@ def _require_text(value: object, message: str) -> str:
     if not text:
         raise ValueError(message)
     return text
+
+
+def _background_executor_mode() -> str:
+    return os.environ.get(INLINE_FEATURE_JOB_EXECUTOR_ENV, "").strip().lower()
+
+
+def _prepend_pythonpath(path: str, current: str | None) -> str:
+    if not current:
+        return path
+    entries = current.split(os.pathsep)
+    if path in entries:
+        return current
+    return os.pathsep.join([path, current])

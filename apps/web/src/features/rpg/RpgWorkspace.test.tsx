@@ -56,6 +56,7 @@ const emptyWorkspaceResponses = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -118,6 +119,56 @@ describe('RpgWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"determinism_policy":"replay_preserving"');
       expect(createCall?.[1]?.body).toContain('"session_id":"rpg-session-1"');
     });
+  });
+
+  it('surfaces a timeout when the RPG turn queue request is not acknowledged', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Promise.resolve(Response.json(emptyWorkspaceResponses.inventory));
+      }
+
+      if (path === '/api/jobs' && init?.method === 'POST') {
+        return new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        });
+      }
+
+      if (path === '/api/jobs') {
+        return Promise.resolve(Response.json(emptyWorkspaceResponses.jobs));
+      }
+
+      if (path === '/api/assets') {
+        return Promise.resolve(Response.json(emptyWorkspaceResponses.assets));
+      }
+
+      if (path === '/api/reports') {
+        return Promise.resolve(Response.json(emptyWorkspaceResponses.reports));
+      }
+
+      return Promise.resolve(new Response('not found', { status: 404 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    expect(await screen.findByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+
+    vi.useFakeTimers();
+    fireEvent.change(screen.getByLabelText('Command'), { target: { value: 'Look around the tavern.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Queueing RPG turn job…')).toBeInTheDocument();
+    });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await vi.waitFor(() => {
+      expect(screen.getByText(/Gateway did not acknowledge the RPG turn queue request within 10s/)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Queue RPG turn' })).toBeEnabled();
   });
 
   it('wires checkpoint and autoplay controls through replay-safe APIs', async () => {

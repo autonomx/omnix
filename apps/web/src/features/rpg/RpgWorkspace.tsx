@@ -25,6 +25,7 @@ interface RpgFormValues {
 }
 
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
+const RPG_TURN_QUEUE_TIMEOUT_MS = 10_000;
 
 function formatQueryError(error: unknown) {
   if (error instanceof Error) {
@@ -208,23 +209,30 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   };
   const createJobMutation = useMutation({
     mutationFn: (values: RpgFormValues) =>
-      omnixApiClient.createJob({
-        module: 'rpg',
-        type: 'rpg.turn',
-        resource_class: 'gpu:llm',
-        priority: 0,
-        input_ref: values.sessionId ? { session_id: values.sessionId } : null,
-        input_payload: {
-          command: values.command,
-          determinism_policy: 'replay_preserving',
+      omnixApiClient.createJob(
+        {
+          module: 'rpg',
+          type: 'rpg.turn',
+          resource_class: 'gpu:llm',
+          priority: 0,
+          input_ref: values.sessionId ? { session_id: values.sessionId } : null,
+          input_payload: {
+            command: values.command,
+            determinism_policy: 'replay_preserving',
+          },
+          stages: [
+            { id: 'load-session', label: 'Load session', resource_class: 'cpu', status: 'queued' },
+            { id: 'apply-turn', label: 'Apply deterministic turn', resource_class: 'cpu', status: 'queued' },
+            { id: 'narrate', label: 'Generate narration', resource_class: 'gpu:llm', status: 'queued' },
+            { id: 'checkpoint', label: 'Write checkpoint', resource_class: 'cpu', status: 'queued' },
+          ],
         },
-        stages: [
-          { id: 'load-session', label: 'Load session', resource_class: 'cpu', status: 'queued' },
-          { id: 'apply-turn', label: 'Apply deterministic turn', resource_class: 'cpu', status: 'queued' },
-          { id: 'narrate', label: 'Generate narration', resource_class: 'gpu:llm', status: 'queued' },
-          { id: 'checkpoint', label: 'Write checkpoint', resource_class: 'cpu', status: 'queued' },
-        ],
-      }),
+        {
+          timeoutMs: RPG_TURN_QUEUE_TIMEOUT_MS,
+          timeoutMessage:
+            'Gateway did not acknowledge the RPG turn queue request within 10s. The turn may still be running; refresh RPG jobs or restart the gateway if this repeats.',
+        },
+      ),
     onSuccess: async (_job, values) => {
       reset({ sessionId: values.sessionId, command: '' });
       await invalidateRpgWorkspaceQueries();
