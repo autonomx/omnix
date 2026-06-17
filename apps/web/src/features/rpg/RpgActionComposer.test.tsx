@@ -1,7 +1,9 @@
+import { MantineProvider } from '@mantine/core';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactElement } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
+import { omnixTheme } from '../../design/theme';
 import { RpgActionComposer } from './RpgActionComposer';
 import { previewSessionSummary, quickActions } from './rpgUiState';
 
@@ -14,12 +16,20 @@ function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFo
   };
 }
 
+function renderWithTheme(element: ReactElement) {
+  return render(
+    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
+      {element}
+    </MantineProvider>
+  );
+}
+
 describe('RpgActionComposer', () => {
   it('renders replay-preserving turn controls and quick actions', () => {
     const onQuickAction = vi.fn();
     const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault());
 
-    render(
+    renderWithTheme(
       <RpgActionComposer
         commandRegistration={registration('command')}
         hasCommandError={false}
@@ -43,7 +53,7 @@ describe('RpgActionComposer', () => {
   });
 
   it('renders pending and invalid states for queued turn submission', () => {
-    render(
+    renderWithTheme(
       <RpgActionComposer
         commandRegistration={registration('command')}
         hasCommandError
