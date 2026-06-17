@@ -1,4 +1,5 @@
 import { Button } from '@mantine/core';
+import { useQueryClient } from '@tanstack/react-query';
 import type { FormEventHandler } from 'react';
 import { useState } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
@@ -27,9 +28,19 @@ export function RpgActionComposer({
   sessionRegistration,
   sessionSummaries,
 }: RpgActionComposerProps) {
+  const queryClient = useQueryClient();
   const [launchStatus, setLaunchStatus] = useState<string>();
   const [launchError, setLaunchError] = useState<string>();
   const [isLaunching, setIsLaunching] = useState(false);
+
+  const refreshRpgWorkspace = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform', 'reports'] }),
+    ]);
+  };
 
   const launchSession = async (kind: 'new_game' | 'demo') => {
     setIsLaunching(true);
@@ -62,8 +73,8 @@ export function RpgActionComposer({
         throw new Error(response.error ?? 'RPG session launch failed.');
       }
 
-      setLaunchStatus(`Session ready: ${response.session_id ?? 'created'}. Refreshing workspace…`);
-      window.setTimeout(() => window.location.reload(), 350);
+      await refreshRpgWorkspace();
+      setLaunchStatus(`Session ready: ${response.session_id ?? 'created'}. Workspace refreshed.`);
     } catch (error) {
       setLaunchError(error instanceof Error ? error.message : 'RPG session launch failed.');
     } finally {
