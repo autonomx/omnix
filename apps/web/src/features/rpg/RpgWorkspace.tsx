@@ -7,6 +7,7 @@ import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
+import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
 import { RpgPlayerRail } from './RpgPlayerRail';
@@ -24,6 +25,14 @@ interface RpgFormValues {
 }
 
 const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
+
+function formatQueryError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Request failed before the RPG workspace could read this source.';
+}
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -89,6 +98,97 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
+  const hasLiveSessions = (inventoryQuery.data?.sessions?.length ?? 0) > 0;
+  const liveDataStatusCards: RpgLiveDataStatusCard[] = [
+    {
+      id: 'sessions',
+      label: 'Sessions',
+      state: inventoryQuery.isError
+        ? 'error'
+        : inventoryQuery.isPending && !inventoryQuery.data
+          ? 'loading'
+          : inventoryQuery.isFetching && inventoryQuery.data
+            ? 'refreshing'
+            : hasLiveSessions
+              ? 'ready'
+              : 'empty',
+      detail: inventoryQuery.isError
+        ? formatQueryError(inventoryQuery.error)
+        : inventoryQuery.isPending && !inventoryQuery.data
+          ? 'Loading replay persistence inventory and campaign sessions.'
+          : inventoryQuery.isFetching && inventoryQuery.data
+            ? 'Refreshing the selected session and checkpoint metadata.'
+            : hasLiveSessions
+              ? `${inventoryQuery.data?.sessions?.length ?? 0} saved session${(inventoryQuery.data?.sessions?.length ?? 0) === 1 ? '' : 's'} available.`
+              : 'No saved RPG sessions found. Preview fallback remains active until a campaign is created.',
+    },
+    {
+      id: 'jobs',
+      label: 'Jobs',
+      state: jobsQuery.isError
+        ? 'error'
+        : jobsQuery.isPending && !jobsQuery.data
+          ? 'loading'
+          : jobsQuery.isFetching && jobsQuery.data
+            ? 'refreshing'
+            : rpgJobs.length
+              ? 'ready'
+              : 'empty',
+      detail: jobsQuery.isError
+        ? formatQueryError(jobsQuery.error)
+        : jobsQuery.isPending && !jobsQuery.data
+          ? 'Loading shared job queue state for RPG turns and autoplay.'
+          : jobsQuery.isFetching && jobsQuery.data
+            ? 'Polling background RPG jobs.'
+            : rpgJobs.length
+              ? `${rpgJobs.length} RPG job${rpgJobs.length === 1 ? '' : 's'} visible in the workspace.`
+              : 'No live RPG jobs. Preview job cards keep the rail layout stable.',
+    },
+    {
+      id: 'checkpoints',
+      label: 'Checkpoints',
+      state: assetsQuery.isError
+        ? 'error'
+        : assetsQuery.isPending && !assetsQuery.data
+          ? 'loading'
+          : assetsQuery.isFetching && assetsQuery.data
+            ? 'refreshing'
+            : rpgAssets.length
+              ? 'ready'
+              : 'empty',
+      detail: assetsQuery.isError
+        ? formatQueryError(assetsQuery.error)
+        : assetsQuery.isPending && !assetsQuery.data
+          ? 'Loading RPG checkpoint and report assets.'
+          : assetsQuery.isFetching && assetsQuery.data
+            ? 'Refreshing asset metadata for checkpoint/report links.'
+            : rpgAssets.length
+              ? `${rpgAssets.length} RPG asset${rpgAssets.length === 1 ? '' : 's'} found for checkpoints or reports.`
+              : 'No RPG checkpoint/report assets found yet.',
+    },
+    {
+      id: 'reports',
+      label: 'Reports',
+      state: reportsQuery.isError
+        ? 'error'
+        : reportsQuery.isPending && !reportsQuery.data
+          ? 'loading'
+          : reportsQuery.isFetching && reportsQuery.data
+            ? 'refreshing'
+            : rpgReports.length
+              ? 'ready'
+              : 'empty',
+      detail: reportsQuery.isError
+        ? formatQueryError(reportsQuery.error)
+        : reportsQuery.isPending && !reportsQuery.data
+          ? 'Loading generated report index.'
+          : reportsQuery.isFetching && reportsQuery.data
+            ? 'Refreshing RPG report availability.'
+            : rpgReports.length
+              ? `${rpgReports.length} RPG report${rpgReports.length === 1 ? '' : 's'} ready to open.`
+              : 'No RPG reports found. Run autoplay or export a report to populate this source.',
+    },
+  ];
   const dashboardClassName = [
     'rpg-dashboard-grid',
     isPlayerRailCollapsed ? 'rpg-dashboard-grid-left-collapsed' : '',
@@ -220,6 +320,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           {isWorldRailCollapsed ? 'Show world rail' : 'Hide world rail'}
         </button>
       </div>
+
+      <RpgLiveDataStatus cards={liveDataStatusCards} />
 
       <div className={dashboardClassName}>
         {isPlayerRailCollapsed ? null : (
