@@ -5,107 +5,13 @@ import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { createRpgWorkspaceState, safeSessionId } from './rpgUiState';
 import './RpgWorkspace.css';
 
 interface RpgFormValues {
   sessionId: string;
   command: string;
 }
-
-interface PreviewJobCard {
-  id: string;
-  title: string;
-  status: string;
-  progress: number;
-  detail: string;
-  source: 'live' | 'preview';
-}
-
-const heroStats = [
-  { label: 'HP', value: '86 / 110', percent: 78, tone: 'danger' },
-  { label: 'Stamina', value: '72 / 100', percent: 72, tone: 'success' },
-  { label: 'Mana', value: '64 / 120', percent: 53, tone: 'mana' },
-];
-
-const equippedGear = [
-  { icon: '🏹', name: 'Longbow of the Boreal Wind', slot: 'Weapon' },
-  { icon: '🛡️', name: 'Shadow Leather Armor +2', slot: 'Armor' },
-  { icon: '🦉', name: 'Cloak of the Owl', slot: 'Cloak' },
-  { icon: '💍', name: 'Band of Keen Senses', slot: 'Ring' },
-];
-
-const partyMembers = [
-  { avatar: 'T', name: 'Thorin Ironfist', role: 'Lv. 14 Warrior', hp: '112 / 140', percent: 80 },
-  { avatar: 'E', name: 'Elandra', role: 'Lv. 13 Mage', hp: '78 / 90', percent: 87 },
-  { avatar: 'K', name: 'Kael', role: 'Lv. 12 Rogue', hp: '68 / 85', percent: 80 },
-];
-
-const activeQuests = [
-  { icon: '◆', title: 'The Frostbound Relic', detail: 'Find the relic in Glimmerdeep.' },
-  { icon: '▲', title: 'Secrets in the Snow', detail: 'Investigate the old watchtower.' },
-  { icon: '⬟', title: 'Bounty: Icefang Alpha', detail: 'Track down the alpha beast.' },
-];
-
-const quickActions = [
-  { label: 'Talk', icon: '☯', command: 'Talk to Thorin about the tracks near the archway.' },
-  { label: 'Travel', icon: '🧭', command: 'Travel deeper into Glimmerdeep Pass toward the watchtower.' },
-  { label: 'Investigate', icon: '⌕', command: 'Investigate the clawed tracks and torn Northern Watch banner.' },
-  { label: 'Rest', icon: '♨', command: 'Make a short camp and let the party recover.' },
-  { label: 'Inventory', icon: '▣', command: 'Open inventory and check supplies before moving on.' },
-  { label: 'Attack', icon: '⚔', command: 'Prepare an ambush in case Icefang scouts are nearby.' },
-];
-
-const recentEvents = [
-  'You arrived at Glimmerdeep Pass.',
-  'Thorin Ironfist: “Best keep our eyes open. This place gives me the chills.”',
-  'You gained 120 XP.',
-];
-
-const journalEntries = [
-  { time: 'Day 18 • 09:42', title: 'Arrived at Glimmerdeep Pass', detail: 'Reached the ancient archway.' },
-  { time: 'Day 18 • 08:15', title: 'Left Frostpine Hollow', detail: 'Followed the northern trail.' },
-  { time: 'Day 17 • 21:30', title: 'Long Rest at Frostpine', detail: 'Recovered after the Icefang fight.' },
-];
-
-const inventoryItems = [
-  { icon: '🧪', count: '12', label: 'Healing potion' },
-  { icon: '💧', count: '7', label: 'Mana tonic' },
-  { icon: '🥩', count: '5', label: 'Trail rations' },
-  { icon: '🔮', count: '3', label: 'Focus crystal' },
-  { icon: '🪢', count: '2', label: 'Rope coil' },
-  { icon: '🔥', count: '9', label: 'Torch' },
-  { icon: '🍃', count: '4', label: 'Keenleaf' },
-  { icon: '📜', count: '6', label: 'Scroll' },
-];
-
-const hotbarAbilities = [
-  { key: '1', icon: '✦', label: 'Aimed Shot' },
-  { key: '2', icon: '↯', label: 'Frost Arrow' },
-  { key: '3', icon: '☘', label: 'Camouflage' },
-  { key: '4', icon: '✹', label: 'Radiant Flare' },
-  { key: '5', icon: '⟡', label: 'Volley' },
-  { key: '6', icon: '⇥', label: 'Dash' },
-];
-
-const worldStateRows = [
-  { icon: '☀', label: 'Time', value: 'Day 18 • 09:42' },
-  { icon: '≋', label: 'Weather', value: 'Cold, Windy' },
-  { icon: '❄', label: 'Temperature', value: '-12°C' },
-  { icon: '✦', label: 'Reputation', value: 'Honored (35)' },
-];
-
-const npcRelationships = [
-  { name: 'Thorin Ironfist', stance: 'Ally', score: 78 },
-  { name: 'Elandra', stance: 'Ally', score: 64 },
-  { name: 'Kael', stance: 'Ally', score: 52 },
-  { name: 'Captain Bryn', stance: 'Neutral', score: 10 },
-];
-
-const previewJobs: PreviewJobCard[] = [
-  { id: 'preview-turn', title: 'rpg.turn', status: 'Running', progress: 68, detail: 'Load / Apply turn / Narrate / Checkpoint', source: 'preview' },
-  { id: 'preview-narration', title: 'narration.generate', status: 'Running', progress: 42, detail: 'Generating presentation text', source: 'preview' },
-  { id: 'preview-world', title: 'world.state.update', status: 'Queued', progress: 0, detail: 'Waiting for turn output', source: 'preview' },
-];
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -134,11 +40,29 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   } = useForm<RpgFormValues>({
     defaultValues: { sessionId: '', command: '' },
   });
-  const sessions = inventoryQuery.data?.sessions ?? [];
-  const rpgJobs = jobsQuery.data?.jobs.filter((job) => job.module === 'rpg') ?? [];
-  const rpgAssets =
-    assetsQuery.data?.assets.filter((asset) => asset.type === 'rpg_checkpoint' || asset.module === 'rpg') ?? [];
-  const rpgReports = reportsQuery.data?.reports?.filter((report) => report.kind.includes('rpg') || report.id.includes('rpg')) ?? [];
+  const {
+    heroStats,
+    equippedGear,
+    partyMembers,
+    activeQuests,
+    quickActions,
+    recentEvents,
+    journalEntries,
+    inventoryItems,
+    hotbarAbilities,
+    worldStateRows,
+    npcRelationships,
+    sessions,
+    rpgJobs,
+    rpgAssets,
+    rpgReports,
+    jobCards,
+  } = createRpgWorkspaceState({
+    inventory: inventoryQuery.data,
+    jobs: jobsQuery.data,
+    assets: assetsQuery.data,
+    reports: reportsQuery.data,
+  });
   const createJobMutation = useMutation({
     mutationFn: (values: RpgFormValues) =>
       omnixApiClient.createJob({
@@ -164,16 +88,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     },
   });
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
-  const jobCards: PreviewJobCard[] = rpgJobs.length
-    ? rpgJobs.map((job) => ({
-        id: String(job.id),
-        title: String(job.type),
-        status: String(job.status),
-        progress: progressPercent(job.progress),
-        detail: job.stages?.map((stage) => stage.label).join(' / ') || String(job.resource_class),
-        source: 'live' as const,
-      }))
-    : previewJobs;
 
   return (
     <WorkspacePanel className="rpg-workstation">
@@ -577,7 +491,9 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <article className="rpg-report-row" key={String(asset.id)}>
                 <span aria-hidden="true">◈</span>
                 <div>
-                  <h3>{String(asset.type)} / {String(asset.module)}</h3>
+                  <h3>
+                    {String(asset.type)} / {String(asset.module)}
+                  </h3>
                   <small>{String(asset.storage_path ?? asset.id)}</small>
                 </div>
               </article>
@@ -590,17 +506,4 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       </div>
     </WorkspacePanel>
   );
-}
-
-function safeSessionId(session: Record<string, unknown>, index: number): string {
-  const candidate = session.session_id ?? session.id ?? session.name ?? `session:${index + 1}`;
-  return String(candidate);
-}
-
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
