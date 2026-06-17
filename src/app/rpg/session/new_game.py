@@ -115,6 +115,7 @@ STARTING_LOCATIONS: dict[str, dict[str, Any]] = {
             {"turn": 0, "time": "Day 1 • 08:00", "title": "Services available", "detail": "Bran is available for rooms, food, and rumors.", "kind": "service"},
             {"turn": 0, "time": "Day 1 • 08:00", "title": "Merchant nearby", "detail": "Elara is available for trade.", "kind": "economy"},
         ],
+        "quick_actions": ["Talk to Bran", "Check the notice board", "Buy supplies", "Rent a room", "Leave for the market"],
     },
     "market_district": {
         "title": "Market District",
@@ -123,7 +124,27 @@ STARTING_LOCATIONS: dict[str, dict[str, Any]] = {
         "time_label": "Day 1 • 09:00",
         "weather": "Cloudy",
         "summary": "Market stalls crowd the square, and voices rise over the smell of bread, rain, and horse leather.",
-        "timeline": [{"turn": 0, "time": "Day 1 • 09:00", "title": "New campaign started", "detail": "You arrived at the Market District.", "kind": "new_game"}],
+        "timeline": [
+            {"turn": 0, "time": "Day 1 • 09:00", "title": "New campaign started", "detail": "You arrived at the Market District.", "kind": "new_game"},
+            {"turn": 0, "time": "Day 1 • 09:00", "title": "Open market", "detail": "Merchants are setting out supplies, tools, and caravan notices.", "kind": "economy"},
+        ],
+        "quick_actions": ["Browse the stalls", "Talk to a merchant", "Look for rumors", "Check caravan notices", "Travel to the tavern"],
+    },
+    "northern_road": {
+        "title": "Northern Road",
+        "region": "Trade Road",
+        "location": "Northern Road",
+        "time_label": "Day 1 • 10:15",
+        "weather": "Overcast",
+        "summary": (
+            "The Northern Road cuts between wet pines and wagon-rutted mud. A broken milestone leans beside the ditch, "
+            "and fresh hoofprints lead toward the pass while older tracks vanish into the brush."
+        ),
+        "timeline": [
+            {"turn": 0, "time": "Day 1 • 10:15", "title": "New campaign started", "detail": "You started on the Northern Road.", "kind": "new_game"},
+            {"turn": 0, "time": "Day 1 • 10:15", "title": "Road signs", "detail": "Fresh hoofprints and a damaged milestone point toward recent trouble.", "kind": "discovery"},
+        ],
+        "quick_actions": ["Inspect the hoofprints", "Follow the road north", "Search the brush", "Check supplies", "Return to town"],
     },
     "glimmerdeep_pass": {
         "title": "Glimmerdeep Pass",
@@ -133,7 +154,27 @@ STARTING_LOCATIONS: dict[str, dict[str, Any]] = {
         "weather": "Cold, Windy",
         "temperature": -12,
         "summary": "The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both sides, and an ancient stone archway stands ahead, half-buried in drifts.",
-        "timeline": [{"turn": 0, "time": "Day 1 • 09:42", "title": "New campaign started", "detail": "You arrived at Glimmerdeep Pass.", "kind": "new_game"}],
+        "timeline": [
+            {"turn": 0, "time": "Day 1 • 09:42", "title": "New campaign started", "detail": "You arrived at Glimmerdeep Pass.", "kind": "new_game"},
+            {"turn": 0, "time": "Day 1 • 09:42", "title": "Ancient archway", "detail": "A half-buried stone archway blocks part of the pass.", "kind": "discovery"},
+        ],
+        "quick_actions": ["Inspect the archway", "Look for tracks", "Listen to the wind", "Check your gear", "Travel back down the pass"],
+    },
+    "old_quarry": {
+        "title": "Old Quarry",
+        "region": "Abandoned Works",
+        "location": "Old Quarry",
+        "time_label": "Day 1 • 16:20",
+        "weather": "Grey and still",
+        "summary": (
+            "The old quarry yawns open beneath a rim of cracked stone. Rusted pulleys creak in the breeze, and pale light "
+            "glows from a fissure that should have gone dark years ago."
+        ),
+        "timeline": [
+            {"turn": 0, "time": "Day 1 • 16:20", "title": "New campaign started", "detail": "You arrived at the Old Quarry.", "kind": "new_game"},
+            {"turn": 0, "time": "Day 1 • 16:20", "title": "Strange lights", "detail": "A pale glow seeps from a deep quarry fissure.", "kind": "mystery"},
+        ],
+        "quick_actions": ["Inspect the fissure", "Search the quarry floor", "Check the old pulley", "Light a torch", "Return to the road"],
     },
 }
 
@@ -232,7 +273,7 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "encounter": {"status": "inactive", "title": "No active combat", "summary": "All quiet for now."},
         "timeline": location["timeline"],
         "journal": {"entries": location["timeline"]},
-        "quick_actions": ["Talk to Bran", "Check the notice board", "Buy supplies", "Rent a room", "Leave for the market"],
+        "quick_actions": location.get("quick_actions", ["Look around", "Talk to someone nearby", "Check supplies", "Travel onward"]),
         "features": {**features, "companions_enabled": request.companions_enabled, "permadeath": request.permadeath},
     }
 
