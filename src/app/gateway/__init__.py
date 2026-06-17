@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from .rpg_session_routes import install_rpg_session_route_hook
+
 __all__ = ["app", "create_gateway_app"]
+
+install_rpg_session_route_hook()
 
 
 def __getattr__(name: str) -> Any:
