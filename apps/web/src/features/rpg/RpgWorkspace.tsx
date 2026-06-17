@@ -56,6 +56,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     hotbarAbilities,
     worldStateRows,
     npcRelationships,
+    encounter,
     sessionSummaries,
     selectedSessionSummary,
     checkpointSummary,
@@ -419,11 +420,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 </div>
               ))}
             </div>
-            <div className="rpg-encounter-card">
+            <div className="rpg-encounter-card" aria-label={`${encounter.title} encounter state`}>
               <p className="eyebrow">Encounter</p>
-              <span aria-hidden="true">⚔</span>
-              <strong>No active combat</strong>
-              <p>All quiet for now.</p>
+              <span aria-hidden="true">{encounter.icon}</span>
+              <strong>{encounter.title}</strong>
+              <p>{encounter.detail}</p>
+              <small>{encounter.source === 'live' ? 'Live encounter state' : 'Preview encounter state'}</small>
             </div>
           </section>
 
