@@ -1,0 +1,223 @@
+.rpg-layout-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+  margin: -0.25rem 0 0.85rem;
+}
+
+.rpg-layout-controls .rpg-secondary-button[aria-pressed="true"] {
+  background: rgba(21, 186, 196, 0.14);
+  border-color: rgba(45, 212, 191, 0.34);
+  color: #ccfbf1;
+}
+
+.rpg-dashboard-grid-left-collapsed {
+  grid-template-columns: minmax(0, 2.15fr) minmax(18rem, 1fr);
+}
+
+.rpg-dashboard-grid-right-collapsed {
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(0, 2.15fr);
+}
+
+.rpg-dashboard-grid-left-collapsed.rpg-dashboard-grid-right-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.rpg-left-rail,
+.rpg-right-rail {
+  align-content: start;
+  max-height: calc(100vh - 11rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.1rem;
+  scrollbar-gutter: stable;
+}
+
+.rpg-center-stage {
+  align-content: start;
+}
+
+.rpg-card,
+.rpg-event-strip,
+.rpg-journal-detail,
+.rpg-loadout-detail,
+.rpg-combat-deltas {
+  overflow-wrap: anywhere;
+}
+
+.rpg-tabs {
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.rpg-tabs button {
+  white-space: nowrap;
+}
+
+.rpg-journal-list,
+.rpg-dialogue-stack,
+.rpg-event-strip ul,
+.rpg-loadout-layout,
+.rpg-combat-grid {
+  min-width: 0;
+}
+
+.rpg-journal-list {
+  max-height: 24rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rpg-dialogue-stack,
+.rpg-event-strip ul {
+  max-height: 30rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.rpg-loadout-detail,
+.rpg-combat-deltas {
+  align-content: start;
+}
+
+.rpg-inventory-grid,
+.rpg-hotbar,
+.rpg-quick-actions,
+.rpg-combat-actions {
+  min-width: 0;
+}
+
+.rpg-item-slot,
+.rpg-hotbar button,
+.rpg-quick-actions button,
+.rpg-combat-action-button,
+.rpg-mini-button,
+.rpg-loadout-row-button,
+.rpg-secondary-button,
+.rpg-primary-button {
+  touch-action: manipulation;
+}
+
+.rpg-list-row strong,
+.rpg-list-row span,
+.rpg-party-row strong,
+.rpg-party-row span,
+.rpg-quest-row strong,
+.rpg-quest-row span,
+.rpg-relationship-row strong,
+.rpg-report-row strong,
+.rpg-report-row small,
+.rpg-job-row strong,
+.rpg-job-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1380px) {
+  .rpg-dashboard-grid-left-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rpg-dashboard-grid-right-collapsed {
+    grid-template-columns: minmax(15rem, 0.85fr) minmax(28rem, 1.8fr);
+  }
+
+  .rpg-dashboard-grid-left-collapsed.rpg-dashboard-grid-right-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1180px) {
+  .rpg-workstation {
+    padding: 0.85rem;
+  }
+
+  .rpg-layout-controls {
+    justify-content: flex-start;
+  }
+
+  .rpg-dashboard-grid,
+  .rpg-dashboard-grid-left-collapsed,
+  .rpg-dashboard-grid-right-collapsed,
+  .rpg-dashboard-grid-left-collapsed.rpg-dashboard-grid-right-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rpg-left-rail,
+  .rpg-right-rail {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .rpg-right-rail {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .rpg-workstation {
+    padding: 0.65rem;
+  }
+
+  .rpg-layout-controls .rpg-secondary-button,
+  .rpg-primary-button,
+  .rpg-secondary-button {
+    width: 100%;
+  }
+
+  .rpg-resource-grid,
+  .rpg-combat-overview,
+  .rpg-combat-grid,
+  .rpg-combat-actions,
+  .rpg-hotbar,
+  .rpg-hotbar-command-grid,
+  .rpg-loadout-actions,
+  .rpg-quick-actions,
+  .rpg-inventory-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rpg-party-row,
+  .rpg-relationship-row {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rpg-party-row .rpg-party-health,
+  .rpg-party-row small,
+  .rpg-relationship-row .rpg-party-health,
+  .rpg-relationship-row small:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .rpg-world-state-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rpg-world-state-row strong {
+    grid-column: 1 / -1;
+    justify-self: start;
+    text-align: left;
+  }
+
+  .rpg-scene-art,
+  .rpg-map-preview {
+    min-height: 8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rpg-workstation *,
+  .rpg-workstation *::before,
+  .rpg-workstation *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
