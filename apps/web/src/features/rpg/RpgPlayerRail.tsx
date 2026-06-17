@@ -5,6 +5,7 @@ import type {
   RpgQuestPreview,
   RpgStatPreview,
 } from './rpgUiState';
+import './RpgVisualAssets.css';
 
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
@@ -23,7 +24,7 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
       <section className="rpg-card rpg-hero-card">
         <p className="eyebrow">Your hero</p>
         <div className="rpg-hero-summary">
-          <div className="rpg-avatar rpg-hero-avatar" aria-hidden="true">
+          <div className="rpg-avatar rpg-hero-avatar rpg-hero-avatar-art" aria-hidden="true">
             {heroSummary.avatar}
           </div>
           <div>
