@@ -18,6 +18,7 @@ interface RpgReportAssetPreview {
 interface RpgWorldRailProps {
   autoplayRunning: boolean;
   autoplayStatusLabel: string;
+  className?: string;
   checkpointControlStatus?: string;
   checkpointSummary: RpgCheckpointSummaryPreview;
   encounter: RpgEncounterPreview;
@@ -40,6 +41,7 @@ interface RpgWorldRailProps {
 export function RpgWorldRail({
   autoplayRunning,
   autoplayStatusLabel,
+  className,
   checkpointControlStatus,
   checkpointSummary,
   encounter,
@@ -58,8 +60,10 @@ export function RpgWorldRail({
   selectedSessionSummary,
   worldStateRows,
 }: RpgWorldRailProps) {
+  const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
+
   return (
-    <aside className="rpg-right-rail" aria-label="World, jobs, and reports">
+    <aside className={railClassName} aria-label="World, jobs, and reports">
       <section className="rpg-card rpg-map-card">
         <div className="rpg-section-heading">
           <p className="eyebrow">World & location</p>

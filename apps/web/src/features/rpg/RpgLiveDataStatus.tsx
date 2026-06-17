@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export type RpgLiveDataStatusState = 'loading' | 'refreshing' | 'empty' | 'error' | 'ready';
 
 export interface RpgLiveDataStatusCard {
@@ -36,13 +38,28 @@ function summarize(cards: RpgLiveDataStatusCard[]) {
 }
 
 export function RpgLiveDataStatus({ cards }: { cards: RpgLiveDataStatusCard[] }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const detailsId = 'rpg-live-data-status-details';
+  const className = isExpanded ? 'rpg-card rpg-live-data-status' : 'rpg-card rpg-live-data-status rpg-live-data-status-collapsed';
+
   return (
-    <section className="rpg-card rpg-live-data-status" aria-label="RPG live data status">
+    <section className={className} aria-label="RPG live data status">
       <div className="rpg-section-heading">
         <p className="eyebrow">Live data status</p>
-        <span>{summarize(cards)}</span>
+        <div className="rpg-live-data-summary">
+          <span>{summarize(cards)}</span>
+          <button
+            className="rpg-secondary-button rpg-live-data-toggle"
+            type="button"
+            aria-controls={detailsId}
+            aria-expanded={isExpanded}
+            onClick={() => setIsExpanded((value) => !value)}
+          >
+            {isExpanded ? 'Collapse live data' : 'Expand live data'}
+          </button>
+        </div>
       </div>
-      <div className="rpg-data-status-grid">
+      <div id={detailsId} className="rpg-data-status-grid" hidden={!isExpanded}>
         {cards.map((card) => (
           <article
             aria-label={`${card.label} status`}

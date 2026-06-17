@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { omnixTheme } from '../../design/theme';
@@ -15,7 +15,7 @@ function renderWithTheme(element: ReactElement) {
 }
 
 describe('RpgWorkspaceHeader', () => {
-  it('renders module context and runtime status anchors', () => {
+  it('collapses module context by default while keeping runtime anchors visible', () => {
     renderWithTheme(
       <RpgWorkspaceHeader
         module={{
@@ -30,10 +30,16 @@ describe('RpgWorkspaceHeader', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'RPG mode' })).toBeInTheDocument();
-    expect(screen.getByText('Run deterministic RPG campaigns.')).toBeInTheDocument();
+    expect(screen.getByText('Run deterministic RPG campaigns.')).not.toBeVisible();
     expect(screen.getByLabelText('RPG runtime status')).toHaveTextContent('Engine: ready');
     expect(screen.getByLabelText('RPG runtime status')).toHaveTextContent('Session: Preview campaign');
     expect(screen.getByText('Replay-preserving')).toBeInTheDocument();
     expect(screen.getByText('/rpg')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand header' })).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand header' }));
+
+    expect(screen.getByText('Run deterministic RPG campaigns.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Collapse header' })).toHaveAttribute('aria-expanded', 'true');
   });
 });

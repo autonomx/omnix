@@ -2,9 +2,21 @@ import { Badge, Box, Group, Paper, Progress, Stack, Text, Title } from '@mantine
 import { useState, type ReactNode } from 'react';
 import type { OmnixModuleId } from '../app/modules';
 
-export function OmnixShellLayout({ sidebar, topbar, children }: { sidebar: ReactNode; topbar: ReactNode; children: ReactNode }) {
+export function OmnixShellLayout({
+  children,
+  isSidebarVisible = true,
+  sidebar,
+  topbar,
+}: {
+  children: ReactNode;
+  isSidebarVisible?: boolean;
+  sidebar: ReactNode;
+  topbar: ReactNode;
+}) {
+  const shellClassName = isSidebarVisible ? 'omnix-shell' : 'omnix-shell sidebar-hidden';
+
   return (
-    <Box className="omnix-shell">
+    <Box className={shellClassName}>
       {sidebar}
       <main className="omnix-main">
         {topbar}
@@ -14,11 +26,14 @@ export function OmnixShellLayout({ sidebar, topbar, children }: { sidebar: React
   );
 }
 
-export function OmnixSidebar({ children }: { children: ReactNode }) {
+export function OmnixSidebar({ children, hidden = false }: { children: ReactNode; hidden?: boolean }) {
   const [expanded, setExpanded] = useState(true);
+  const sidebarClassName = [expanded ? 'omnix-sidebar expanded' : 'omnix-sidebar collapsed', hidden ? 'hidden' : '']
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <aside className={expanded ? 'omnix-sidebar expanded' : 'omnix-sidebar collapsed'} aria-label="Omnix navigation">
+    <aside id="omnix-sidebar" className={sidebarClassName} aria-hidden={hidden} aria-label="Omnix navigation">
       <button
         className="omnix-sidebar-toggle"
         type="button"
@@ -75,10 +90,14 @@ export function OmnixNavItem({ active, moduleId, children }: { active: boolean; 
 }
 
 export function OmnixTopBar({
+  isSidebarVisible = true,
+  onToggleSidebar,
   title,
   status = 'Local-first',
   children,
 }: {
+  isSidebarVisible?: boolean;
+  onToggleSidebar?: () => void;
   title: string;
   status?: string;
   children?: ReactNode;
@@ -86,7 +105,15 @@ export function OmnixTopBar({
   return (
     <header className="omnix-topbar">
       <div className="omnix-topbar-brand">
-        <span className="omnix-logo-core" aria-hidden="true" />
+        <button
+          className="omnix-logo-core omnix-logo-toggle"
+          type="button"
+          aria-controls="omnix-sidebar"
+          aria-expanded={isSidebarVisible}
+          aria-label={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'}
+          title={isSidebarVisible ? 'Hide Omnix sidebar' : 'Show Omnix sidebar'}
+          onClick={onToggleSidebar}
+        />
         <div>
           <Title order={1}>Omnix</Title>
           <Text size="sm">Local AI workstation</Text>

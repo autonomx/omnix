@@ -17,10 +17,43 @@
   margin-bottom: 0.85rem;
 }
 
+.rpg-live-data-status-collapsed {
+  gap: 0;
+  padding: 0.72rem 0.85rem;
+}
+
+.rpg-live-data-status .rpg-section-heading {
+  align-items: center;
+}
+
+.rpg-live-data-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.rpg-live-data-summary > span {
+  color: #bfb7dc;
+  font-size: 0.8rem;
+}
+
+.rpg-live-data-toggle {
+  min-height: 2.1rem;
+  padding: 0.48rem 0.68rem;
+  white-space: nowrap;
+}
+
 .rpg-data-status-grid {
   display: grid;
   gap: 0.65rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rpg-data-status-grid[hidden] {
+  display: none;
 }
 
 .rpg-data-status-card {
@@ -157,6 +190,15 @@
   scrollbar-gutter: stable;
 }
 
+.rpg-left-rail.rpg-rail-full-size,
+.rpg-right-rail.rpg-rail-full-size {
+  max-height: none;
+  overflow: visible;
+  overscroll-behavior: auto;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
 .rpg-center-stage {
   align-content: start;
 }
@@ -246,6 +288,11 @@
   text-overflow: ellipsis;
 }
 
+.rpg-party-member-copy strong,
+.rpg-party-member-copy span {
+  white-space: nowrap;
+}
+
 @media (max-width: 1380px) {
   .rpg-dashboard-grid-left-collapsed {
     grid-template-columns: minmax(0, 1fr);
@@ -266,6 +313,10 @@
   }
 
   .rpg-layout-controls {
+    justify-content: flex-start;
+  }
+
+  .rpg-live-data-summary {
     justify-content: flex-start;
   }
 
@@ -312,9 +363,12 @@
   .rpg-hotbar,
   .rpg-hotbar-command-grid,
   .rpg-loadout-actions,
-  .rpg-quick-actions,
-  .rpg-inventory-grid {
+  .rpg-quick-actions {
     grid-template-columns: 1fr;
+  }
+
+  .rpg-inventory-grid {
+    grid-template-columns: repeat(auto-fill, minmax(3rem, 3rem));
   }
 
   .rpg-party-row,
@@ -323,8 +377,12 @@
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .rpg-party-row .rpg-party-health,
-  .rpg-party-row small,
+  .rpg-party-row {
+    grid-template-areas:
+      "avatar member"
+      "status status";
+  }
+
   .rpg-relationship-row .rpg-party-health,
   .rpg-relationship-row small:last-child {
     grid-column: 1 / -1;

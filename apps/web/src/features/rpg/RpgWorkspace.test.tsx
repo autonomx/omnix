@@ -225,8 +225,20 @@ describe('RpgWorkspace', () => {
 
     renderRpg();
 
+    expect(screen.getByRole('button', { name: 'Expand header' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Hide player rail' })).toBeInTheDocument();
     expect(await screen.findByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Full-size player rail' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Full-size world rail' })).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full-size player rail' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Full-size world rail' }));
+
+    expect(screen.getByRole('button', { name: 'Contain player rail' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Contain world rail' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toHaveClass('rpg-rail-full-size');
+    expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toHaveClass('rpg-rail-full-size');
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide player rail' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hide world rail' }));
@@ -271,6 +283,11 @@ describe('RpgWorkspace', () => {
     renderRpg();
 
     expect(await screen.findByRole('region', { name: 'RPG live data status' })).toBeInTheDocument();
+    expect(await screen.findByText('1 source need attention')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand live data' }));
+
     expect(await screen.findByText('Omnix API request failed with status 500')).toBeInTheDocument();
     expect(screen.getByLabelText('Sessions status')).toHaveTextContent('Empty');
     expect(screen.getByLabelText('Jobs status')).toHaveTextContent('Error');

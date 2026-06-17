@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { RpgLiveDataStatus } from './RpgLiveDataStatus';
 
@@ -17,6 +17,12 @@ describe('RpgLiveDataStatus', () => {
 
     expect(screen.getByRole('region', { name: 'RPG live data status' })).toBeInTheDocument();
     expect(screen.getByText('1 source need attention')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByLabelText('Sessions status')).not.toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand live data' }));
+
+    expect(screen.getByRole('button', { name: 'Collapse live data' })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByLabelText('Sessions status')).toHaveTextContent('Loading');
     expect(screen.getByLabelText('Jobs status')).toHaveTextContent('Error');
     expect(screen.getByLabelText('Checkpoints status')).toHaveTextContent('Empty');
@@ -34,5 +40,6 @@ describe('RpgLiveDataStatus', () => {
     );
 
     expect(screen.getByText('All live sources ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand live data' })).toBeInTheDocument();
   });
 });

@@ -9,6 +9,7 @@ import {
   useNavigate,
   useRouterState,
 } from '@tanstack/react-router';
+import { useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
@@ -31,13 +32,15 @@ function moduleFromPath(pathname: string): OmnixModuleDefinition {
 function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const activeModule = moduleFromPath(pathname);
   const modeModules = modeModuleIds.map((moduleId) => moduleById[moduleId]);
 
   return (
     <OmnixShellLayout
+      isSidebarVisible={isSidebarVisible}
       sidebar={
-        <OmnixSidebar>
+        <OmnixSidebar hidden={!isSidebarVisible}>
           <OmnixBrand />
           <nav className="omnix-nav">
             {omnixModules.map((module) => (
@@ -57,7 +60,11 @@ function OmnixShell() {
         </OmnixSidebar>
       }
       topbar={
-        <OmnixTopBar title={activeModule.label}>
+        <OmnixTopBar
+          isSidebarVisible={isSidebarVisible}
+          onToggleSidebar={() => setIsSidebarVisible((value) => !value)}
+          title={activeModule.label}
+        >
           {modeModules.map((module) => (
             <button
               key={module.id}

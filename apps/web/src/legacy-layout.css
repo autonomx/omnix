@@ -8,6 +8,14 @@
   min-height: 100vh;
 }
 
+.omnix-shell.sidebar-hidden .omnix-sidebar {
+  border: 0;
+  display: none;
+  flex-basis: 0;
+  padding: 0;
+  width: 0;
+}
+
 .omnix-sidebar {
   align-items: stretch;
   display: flex;

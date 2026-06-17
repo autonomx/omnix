@@ -8,15 +8,18 @@ import type {
 
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
+  className?: string;
   equippedGear: RpgGearPreview[];
   heroStats: RpgStatPreview[];
   heroSummary: RpgHeroSummaryPreview;
   partyMembers: RpgPartyMemberPreview[];
 }
 
-export function RpgPlayerRail({ activeQuests, equippedGear, heroStats, heroSummary, partyMembers }: RpgPlayerRailProps) {
+export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, partyMembers }: RpgPlayerRailProps) {
+  const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
+
   return (
-    <aside className="rpg-left-rail" aria-label="Player, party, and quests">
+    <aside className={railClassName} aria-label="Player, party, and quests">
       <section className="rpg-card rpg-hero-card">
         <p className="eyebrow">Your hero</p>
         <div className="rpg-hero-summary">
@@ -89,14 +92,16 @@ export function RpgPlayerRail({ activeQuests, equippedGear, heroStats, heroSumma
               <span className="rpg-avatar rpg-avatar-small" aria-hidden="true">
                 {member.avatar}
               </span>
-              <div>
+              <div className="rpg-party-member-copy">
                 <strong>{member.name}</strong>
                 <span>{member.role}</span>
               </div>
-              <span className="rpg-party-health">
-                <span style={{ width: `${member.percent}%` }} />
-              </span>
-              <small>{member.hp}</small>
+              <div className="rpg-party-member-status">
+                <span className="rpg-party-health">
+                  <span style={{ width: `${member.percent}%` }} />
+                </span>
+                <small>{member.hp}</small>
+              </div>
             </article>
           ))}
         </div>

@@ -38,6 +38,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
   const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
+  const [isPlayerRailFullSize, setIsPlayerRailFullSize] = useState(false);
+  const [isWorldRailFullSize, setIsWorldRailFullSize] = useState(false);
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
     queryFn: () => omnixApiClient.getReplayPersistenceInventory(),
@@ -314,10 +316,28 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         <button
           className="rpg-secondary-button"
           type="button"
+          aria-pressed={isPlayerRailFullSize}
+          disabled={isPlayerRailCollapsed}
+          onClick={() => setIsPlayerRailFullSize((value) => !value)}
+        >
+          {isPlayerRailFullSize ? 'Contain player rail' : 'Full-size player rail'}
+        </button>
+        <button
+          className="rpg-secondary-button"
+          type="button"
           aria-pressed={isWorldRailCollapsed}
           onClick={() => setIsWorldRailCollapsed((value) => !value)}
         >
           {isWorldRailCollapsed ? 'Show world rail' : 'Hide world rail'}
+        </button>
+        <button
+          className="rpg-secondary-button"
+          type="button"
+          aria-pressed={isWorldRailFullSize}
+          disabled={isWorldRailCollapsed}
+          onClick={() => setIsWorldRailFullSize((value) => !value)}
+        >
+          {isWorldRailFullSize ? 'Contain world rail' : 'Full-size world rail'}
         </button>
       </div>
 
@@ -327,6 +347,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         {isPlayerRailCollapsed ? null : (
           <RpgPlayerRail
             activeQuests={activeQuests}
+            className={isPlayerRailFullSize ? 'rpg-rail-full-size' : undefined}
             equippedGear={equippedGear}
             heroStats={heroStats}
             heroSummary={heroSummary}
@@ -369,6 +390,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           <RpgWorldRail
             autoplayRunning={Boolean(activeAutoplayJob)}
             autoplayStatusLabel={autoplayStatusLabel}
+            className={isWorldRailFullSize ? 'rpg-rail-full-size' : undefined}
             checkpointControlStatus={checkpointControlStatus}
             checkpointSummary={checkpointSummary}
             encounter={encounter}

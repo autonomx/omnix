@@ -26,13 +26,13 @@ export function RpgActionComposer({
 }: RpgActionComposerProps) {
   return (
     <>
-      <form className="rpg-action-composer" onSubmit={onSubmit}>
+      <form className="rpg-action-composer" aria-labelledby="rpg-turn-request-title" onSubmit={onSubmit}>
         <div className="rpg-action-composer-heading">
-          <h3>Turn request</h3>
+          <h3 id="rpg-turn-request-title">Turn request</h3>
           <p>Queue replay-preserving RPG commands into the deterministic turn pipeline.</p>
         </div>
-        <label>
-          <span>Session</span>
+        <label className="rpg-session-field" title="Session">
+          <span className="rpg-field-label">Session</span>
           <select {...sessionRegistration}>
             <option value="">New or current session</option>
             {sessionSummaries.map((session) => (
@@ -43,11 +43,17 @@ export function RpgActionComposer({
           </select>
         </label>
         <label className="rpg-command-field">
-          <span>Command</span>
-          <textarea rows={3} aria-invalid={hasCommandError} placeholder="What do you want to do?" {...commandRegistration} />
+          <span className="rpg-field-label">Command</span>
+          <textarea rows={1} aria-invalid={hasCommandError} placeholder="What do you want to do?" {...commandRegistration} />
         </label>
-        <Button className="rpg-submit-button" type="submit" disabled={isPending} loading={isPending}>
-          {isPending ? 'Queueing…' : 'Queue RPG turn'}
+        <Button
+          aria-label={isPending ? 'Queueing RPG turn' : 'Queue RPG turn'}
+          className="rpg-submit-button"
+          type="submit"
+          disabled={isPending}
+          loading={isPending}
+        >
+          {isPending ? 'Queueing...' : 'Submit'}
         </Button>
       </form>
       <div className="rpg-quick-actions" aria-label="Quick RPG actions">
