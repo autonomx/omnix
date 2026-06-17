@@ -169,17 +169,27 @@ export function RpgWorldRail({
             {checkpointControlStatus ? <small>{checkpointControlStatus}</small> : null}
           </div>
         </div>
-        {rpgAssets.map((asset) => (
-          <article className="rpg-report-row" key={String(asset.id)}>
-            <span aria-hidden="true">◈</span>
+        {rpgAssets.length ? (
+          rpgAssets.map((asset) => (
+            <article className="rpg-report-row" key={String(asset.id)}>
+              <span aria-hidden="true">◈</span>
+              <div>
+                <h3>
+                  {String(asset.type)} / {String(asset.module)}
+                </h3>
+                <small>{String(asset.storage_path ?? asset.id)}</small>
+              </div>
+            </article>
+          ))
+        ) : (
+          <article className="rpg-report-row rpg-empty-state" aria-label="No RPG artifacts">
+            <span aria-hidden="true">◇</span>
             <div>
-              <h3>
-                {String(asset.type)} / {String(asset.module)}
-              </h3>
-              <small>{String(asset.storage_path ?? asset.id)}</small>
+              <strong>No checkpoint/report artifacts yet</strong>
+              <small>Create a checkpoint or run autoplay to produce artifact links.</small>
             </div>
           </article>
-        ))}
+        )}
         <button className="rpg-primary-button" type="button" onClick={onCreateCheckpoint} disabled={isCreatingCheckpoint}>
           {isCreatingCheckpoint ? 'Creating checkpoint…' : 'Create checkpoint'}
         </button>

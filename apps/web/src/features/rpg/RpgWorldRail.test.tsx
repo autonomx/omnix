@@ -100,6 +100,7 @@ describe('RpgWorldRail', () => {
     expect(onToggleAutoplay).toHaveBeenCalledTimes(1);
     expect(onCreateCheckpoint).toHaveBeenCalledTimes(1);
     expect(screen.getByText('Ready to save')).toBeInTheDocument();
+    expect(screen.getByLabelText('No RPG artifacts')).toHaveTextContent('No checkpoint/report artifacts yet');
   });
 
   it('renders pending and running live-control states', () => {

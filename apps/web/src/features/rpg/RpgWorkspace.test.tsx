@@ -243,4 +243,39 @@ describe('RpgWorkspace', () => {
     expect(screen.getByRole('complementary', { name: 'Player, party, and quests' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'World, jobs, and reports' })).toBeInTheDocument();
   });
+
+  it('surfaces live data empty and error states while keeping preview fallback usable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/replay/persistence/inventory') {
+        return Response.json({ sessions: [], diagnostics: [] });
+      }
+
+      if (path === '/api/jobs') {
+        return new Response('job queue unavailable', { status: 500 });
+      }
+
+      if (path === '/api/assets') {
+        return Response.json({ assets: [] });
+      }
+
+      if (path === '/api/reports') {
+        return Response.json({ reports: [] });
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderRpg();
+
+    expect(await screen.findByRole('region', { name: 'RPG live data status' })).toBeInTheDocument();
+    expect(await screen.findByText('Omnix API request failed with status 500')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sessions status')).toHaveTextContent('Empty');
+    expect(screen.getByLabelText('Jobs status')).toHaveTextContent('Error');
+    expect(screen.getByLabelText('Checkpoints status')).toHaveTextContent('Empty');
+    expect(screen.getByLabelText('Reports status')).toHaveTextContent('Empty');
+    expect(screen.getByRole('heading', { name: 'Turn request' })).toBeInTheDocument();
+  });
 });
