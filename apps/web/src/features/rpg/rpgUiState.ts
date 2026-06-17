@@ -1,5 +1,17 @@
 import type { AssetListResponse, JobListResponse, PersistenceInventory, ReportListResponse } from '../../api/client';
 
+export interface RpgHeroSummaryPreview {
+  avatar: string;
+  name: string;
+  subtitle: string;
+  origin: string;
+  xpLabel: string;
+  xpPercent: number;
+  gold: string;
+  renown: string;
+  source: 'live' | 'preview';
+}
+
 export interface RpgStatPreview {
   label: string;
   value: string;
@@ -103,6 +115,7 @@ type RpgAsset = AssetListResponse['assets'][number];
 type RpgReport = NonNullable<ReportListResponse['reports']>[number];
 
 export interface RpgWorkspaceState {
+  heroSummary: RpgHeroSummaryPreview;
   heroStats: RpgStatPreview[];
   equippedGear: RpgGearPreview[];
   partyMembers: RpgPartyMemberPreview[];
@@ -132,6 +145,18 @@ export interface RpgWorkspaceStateSources {
   reports?: ReportListResponse;
   selectedSessionId?: string;
 }
+
+export const previewHeroSummary: RpgHeroSummaryPreview = {
+  avatar: 'A',
+  name: 'Alyndra',
+  subtitle: 'Level 14 • Ranger',
+  origin: 'Wanderer of the North',
+  xpLabel: '7,450 / 12,000',
+  xpPercent: 62,
+  gold: '1,248',
+  renown: 'Honored (35)',
+  source: 'preview',
+};
 
 export const heroStats: RpgStatPreview[] = [
   { label: 'HP', value: '86 / 110', percent: 78, tone: 'danger' },
@@ -246,6 +271,7 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     .sort((left, right) => right.sortRank - left.sortRank || left.title.localeCompare(right.title));
   const selectedSessionSummary =
     sessionSummaries.find((session) => session.id === sources.selectedSessionId) ?? sessionSummaries[0] ?? previewSessionSummary;
+  const selectedSession = selectedSessionSummary.source === 'live' ? findSessionById(sessions, selectedSessionSummary.id) : undefined;
   const rpgJobs = sources.jobs?.jobs.filter((job) => job.module === 'rpg') ?? [];
   const rpgAssets = sources.assets?.assets.filter((asset) => asset.type === 'rpg_checkpoint' || asset.module === 'rpg') ?? [];
   const rpgReports = sources.reports?.reports?.filter((report) => report.kind.includes('rpg') || report.id.includes('rpg')) ?? [];
@@ -257,15 +283,16 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
   const checkpointSummary = buildCheckpointSummary(rpgAssets, selectedSessionSummary);
 
   return {
-    heroStats,
-    equippedGear,
-    partyMembers,
-    activeQuests,
+    heroSummary: buildHeroSummary(selectedSession),
+    heroStats: buildHeroStats(selectedSession),
+    equippedGear: buildEquippedGear(selectedSession),
+    partyMembers: buildPartyMembers(selectedSession),
+    activeQuests: buildActiveQuests(selectedSession),
     quickActions,
     recentEvents,
     journalEntries,
     journalDetail,
-    inventoryItems,
+    inventoryItems: buildInventoryItems(selectedSession),
     hotbarAbilities,
     worldStateRows,
     npcRelationships,
@@ -293,6 +320,10 @@ export function progressPercent(progress: { current: number; total: number } | u
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
+function findSessionById(sessions: RpgSession[], id: string): RpgSession | undefined {
+  return sessions.find((session, index) => safeSessionId(session, index) === id);
+}
+
 function toSessionSummary(session: RpgSession, index: number): RpgSessionSummaryPreview {
   const metadata = recordValue(session.metadata);
   const state = recordValue(session.state);
@@ -317,6 +348,132 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
     sortRank: timestampRank(updatedRaw),
     source: 'live',
   };
+}
+
+function buildHeroSummary(session: RpgSession | undefined): RpgHeroSummaryPreview {
+  const player = getPlayerRecord(session);
+  if (!player) {
+    return previewHeroSummary;
+  }
+
+  const stats = recordValue(player.stats);
+  const resources = recordValue(player.resources);
+  const reputation = recordValue(player.reputation);
+  const name = firstString(player.name, player.character_name, player.characterName, player.hero_name, player.id) ?? previewHeroSummary.name;
+  const level = firstNumber(player.level, stats?.level);
+  const role = firstString(player.class, player.role, player.archetype, player.job) ?? 'Adventurer';
+  const origin = firstString(player.background, player.origin, player.title, player.description) ?? 'Live RPG character';
+  const xpMetric = readMetric([player, stats, resources], ['xp', 'experience'], ['xp_max', 'max_xp', 'xp_to_next', 'next_level_xp', 'experience_max']);
+  const xpCurrent = firstNumber(player.xp, player.experience, stats?.xp, resources?.xp);
+  const xpLabel = xpMetric ? metricLabel(xpMetric.current, xpMetric.max) : xpCurrent !== undefined ? formatNumber(xpCurrent) : previewHeroSummary.xpLabel;
+  const xpPercent = xpMetric ? metricPercent(xpMetric.current, xpMetric.max) : previewHeroSummary.xpPercent;
+  const gold = formatCurrency(player.currency, player.gold, player.money, resources?.gold, resources?.currency);
+  const renown =
+    firstString(player.renown, player.reputation, player.reputation_label, reputation?.label, reputation?.standing, reputation?.name) ??
+    (firstNumber(player.renown, player.reputation_score, reputation?.score) !== undefined
+      ? `Renown ${formatNumber(firstNumber(player.renown, player.reputation_score, reputation?.score) ?? 0)}`
+      : previewHeroSummary.renown);
+
+  return {
+    avatar: initialFor(name),
+    name,
+    subtitle: [level !== undefined ? `Level ${level}` : undefined, role].filter(Boolean).join(' • '),
+    origin,
+    xpLabel,
+    xpPercent,
+    gold,
+    renown,
+    source: 'live',
+  };
+}
+
+function buildHeroStats(session: RpgSession | undefined): RpgStatPreview[] {
+  const player = getPlayerRecord(session);
+  if (!player) {
+    return heroStats;
+  }
+
+  const stats = recordValue(player.stats);
+  const resources = recordValue(player.resources);
+  const sources = [player, stats, resources];
+  const hp = readMetric(sources, ['hp', 'health', 'hit_points'], ['max_hp', 'max_health', 'health_max', 'hp_max', 'max_hit_points']);
+  const stamina = readMetric(sources, ['stamina', 'energy'], ['max_stamina', 'stamina_max', 'max_energy', 'energy_max']);
+  const mana = readMetric(sources, ['mana', 'mp'], ['max_mana', 'mana_max', 'max_mp', 'mp_max']);
+
+  return [
+    hp ? toStat('HP', hp, 'danger') : heroStats[0],
+    stamina ? toStat('Stamina', stamina, 'success') : heroStats[1],
+    mana ? toStat('Mana', mana, 'mana') : heroStats[2],
+  ];
+}
+
+function buildEquippedGear(session: RpgSession | undefined): RpgGearPreview[] {
+  const player = getPlayerRecord(session);
+  const equipment = firstArray(player?.equipment, player?.equipped, player?.gear, recordValue(player?.inventory)?.equipped);
+  if (!equipment.length) {
+    return equippedGear;
+  }
+
+  return equipment.slice(0, 5).map((item, index) => {
+    const record = recordValue(item) ?? { name: item };
+    const slot = firstString(record.slot, record.type, record.category) ?? `Slot ${index + 1}`;
+    const name = firstString(record.name, record.label, record.id) ?? `Equipped item ${index + 1}`;
+    return { icon: iconForEquipment(slot, name), name, slot: titleCase(slot) };
+  });
+}
+
+function buildPartyMembers(session: RpgSession | undefined): RpgPartyMemberPreview[] {
+  const roots = getSessionRecords(session);
+  const party = firstArray(...roots.flatMap((root) => [root.party, root.companions, root.party_members]));
+  if (!party.length) {
+    return partyMembers;
+  }
+
+  return party.slice(0, 4).map((member, index) => {
+    const record = recordValue(member) ?? { name: member };
+    const name = firstString(record.name, record.id, record.label) ?? `Companion ${index + 1}`;
+    const level = firstNumber(record.level, record.lv);
+    const role = firstString(record.role, record.class, record.archetype, record.type) ?? 'Companion';
+    const hp = readMetric([record, recordValue(record.stats), recordValue(record.resources)], ['hp', 'health'], ['max_hp', 'max_health', 'health_max']);
+    return {
+      avatar: initialFor(name),
+      name,
+      role: [level !== undefined ? `Lv. ${level}` : undefined, role].filter(Boolean).join(' '),
+      hp: hp ? metricLabel(hp.current, hp.max) : 'HP unknown',
+      percent: hp ? metricPercent(hp.current, hp.max) : 50,
+    };
+  });
+}
+
+function buildActiveQuests(session: RpgSession | undefined): RpgQuestPreview[] {
+  const roots = getSessionRecords(session);
+  const quests = firstArray(...roots.flatMap((root) => [root.quests, root.active_quests, root.objectives, recordValue(root.journal)?.quests]));
+  if (!quests.length) {
+    return activeQuests;
+  }
+
+  return quests.slice(0, 4).map((quest, index) => {
+    const record = recordValue(quest) ?? { title: quest };
+    const title = firstString(record.title, record.name, record.id) ?? `Quest ${index + 1}`;
+    const detail = firstString(record.detail, record.description, record.objective, record.next_step, record.summary) ?? 'Objective indexed in live session state.';
+    return { icon: questIcon(record.status), title, detail };
+  });
+}
+
+function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemPreview[] {
+  const player = getPlayerRecord(session);
+  const roots = getSessionRecords(session);
+  const inventory = firstArray(player?.inventory, recordValue(player?.inventory)?.items, ...roots.map((root) => recordValue(root.inventory)?.items ?? root.items));
+  if (!inventory.length) {
+    return inventoryItems;
+  }
+
+  return inventory.slice(0, 8).map((item, index) => {
+    const record = recordValue(item) ?? { name: item };
+    const label = firstString(record.name, record.label, record.id) ?? `Item ${index + 1}`;
+    const count = firstNumber(record.count, record.quantity, record.qty, record.amount);
+    return { icon: iconForInventory(label), count: count !== undefined ? formatNumber(count) : '1', label };
+  });
 }
 
 function buildRecentEvents(selectedSession: RpgSessionSummaryPreview): string[] {
@@ -415,6 +572,92 @@ function toJobCard(job: RpgJob): RpgJobCardPreview {
   };
 }
 
+function toStat(label: string, metric: { current: number; max: number }, tone: RpgStatPreview['tone']): RpgStatPreview {
+  return { label, value: metricLabel(metric.current, metric.max), percent: metricPercent(metric.current, metric.max), tone };
+}
+
+function getPlayerRecord(session: RpgSession | undefined): Record<string, unknown> | undefined {
+  if (!session) {
+    return undefined;
+  }
+
+  const roots = getSessionRecords(session);
+  return firstRecord(
+    ...roots.flatMap((root) => [root.player, root.hero, root.character, root.player_state, root.character_state, recordValue(root.state)?.player])
+  );
+}
+
+function getSessionRecords(session: RpgSession | undefined): Record<string, unknown>[] {
+  if (!session) {
+    return [];
+  }
+
+  const sessionRecord = session as Record<string, unknown>;
+  return [sessionRecord, recordValue(sessionRecord.metadata), recordValue(sessionRecord.state), recordValue(sessionRecord.payload)].filter(
+    (record): record is Record<string, unknown> => Boolean(record)
+  );
+}
+
+function readMetric(
+  records: Array<Record<string, unknown> | undefined>,
+  currentKeys: string[],
+  maxKeys: string[]
+): { current: number; max: number } | undefined {
+  for (const record of records) {
+    if (!record) {
+      continue;
+    }
+
+    const nestedMetric = firstRecord(...currentKeys.map((key) => recordValue(record[key])));
+    const nestedCurrent = firstNumber(nestedMetric?.current, nestedMetric?.value, nestedMetric?.amount);
+    const nestedMax = firstNumber(nestedMetric?.max, nestedMetric?.total, nestedMetric?.maximum);
+    if (nestedCurrent !== undefined && nestedMax !== undefined) {
+      return { current: nestedCurrent, max: nestedMax };
+    }
+
+    const current = firstNumber(...currentKeys.flatMap((key) => [record[key], record[`current_${key}`], record[`current${titleCase(key)}`]]));
+    const max = firstNumber(...maxKeys.flatMap((key) => [record[key], record[`maximum_${key}`]]));
+    if (current !== undefined && max !== undefined) {
+      return { current, max };
+    }
+  }
+
+  return undefined;
+}
+
+function formatCurrency(...values: unknown[]): string {
+  const currencyRecord = firstRecord(...values.map((value) => recordValue(value)));
+  if (currencyRecord) {
+    const gold = firstNumber(currencyRecord.gold, currencyRecord.gp, currencyRecord.coins);
+    const silver = firstNumber(currencyRecord.silver, currencyRecord.sp);
+    const copper = firstNumber(currencyRecord.copper, currencyRecord.cp);
+    if (gold !== undefined || silver !== undefined || copper !== undefined) {
+      return [gold !== undefined ? `${formatNumber(gold)}g` : undefined, silver !== undefined ? `${formatNumber(silver)}s` : undefined, copper !== undefined ? `${formatNumber(copper)}c` : undefined]
+        .filter(Boolean)
+        .join(' ');
+    }
+  }
+
+  const numeric = firstNumber(...values);
+  if (numeric !== undefined) {
+    return formatNumber(numeric);
+  }
+
+  return firstString(...values) ?? previewHeroSummary.gold;
+}
+
+function metricLabel(current: number, max: number): string {
+  return `${formatNumber(current)} / ${formatNumber(max)}`;
+}
+
+function metricPercent(current: number, max: number): number {
+  if (max <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, Math.round((current / max) * 100)));
+}
+
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) {
@@ -432,7 +675,7 @@ function firstNumber(...values: unknown[]): number | undefined {
     }
 
     if (typeof value === 'string' && value.trim()) {
-      const parsed = Number(value);
+      const parsed = Number(value.replace(/,/g, ''));
       if (Number.isFinite(parsed)) {
         return parsed;
       }
@@ -440,6 +683,20 @@ function firstNumber(...values: unknown[]): number | undefined {
   }
 
   return undefined;
+}
+
+function firstRecord(...values: unknown[]): Record<string, unknown> | undefined {
+  return values.map(recordValue).find(Boolean);
+}
+
+function firstArray(...values: unknown[]): unknown[] {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+
+  return [];
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
@@ -472,4 +729,49 @@ function timestampRank(value: string | undefined): number {
 
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function initialFor(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || 'A';
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/[_-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function iconForEquipment(slot: string, name: string): string {
+  const text = `${slot} ${name}`.toLowerCase();
+  if (text.includes('bow')) return '🏹';
+  if (text.includes('armor') || text.includes('shield')) return '🛡️';
+  if (text.includes('ring')) return '💍';
+  if (text.includes('cloak')) return '🦉';
+  if (text.includes('sword') || text.includes('blade')) return '⚔';
+  return '◇';
+}
+
+function iconForInventory(label: string): string {
+  const text = label.toLowerCase();
+  if (text.includes('potion') || text.includes('heal')) return '🧪';
+  if (text.includes('mana')) return '💧';
+  if (text.includes('ration') || text.includes('food')) return '🥩';
+  if (text.includes('rope')) return '🪢';
+  if (text.includes('torch') || text.includes('fire')) return '🔥';
+  if (text.includes('scroll') || text.includes('letter')) return '📜';
+  return '▣';
+}
+
+function questIcon(status: unknown): string {
+  const text = String(status ?? '').toLowerCase();
+  if (text.includes('complete')) return '✓';
+  if (text.includes('failed')) return '×';
+  if (text.includes('urgent')) return '▲';
+  return '◆';
 }

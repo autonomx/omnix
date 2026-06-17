@@ -43,6 +43,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
   const selectedSessionId = watch('sessionId');
   const {
+    heroSummary,
     heroStats,
     equippedGear,
     partyMembers,
@@ -117,12 +118,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <p className="eyebrow">Your hero</p>
             <div className="rpg-hero-summary">
               <div className="rpg-avatar rpg-hero-avatar" aria-hidden="true">
-                A
+                {heroSummary.avatar}
               </div>
               <div>
-                <h3>Alyndra</h3>
-                <p>Level 14 • Ranger</p>
-                <p>Wanderer of the North</p>
+                <h3>{heroSummary.name}</h3>
+                <p>{heroSummary.subtitle}</p>
+                <p>{heroSummary.origin}</p>
               </div>
             </div>
             <div className="rpg-stat-stack">
@@ -138,19 +139,19 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             </div>
             <div className="rpg-xp-row">
               <span>XP</span>
-              <span className="rpg-meter rpg-meter-xp" aria-label="XP 7,450 of 12,000">
-                <span style={{ width: '62%' }} />
+              <span className="rpg-meter rpg-meter-xp" aria-label={`XP ${heroSummary.xpLabel}`}>
+                <span style={{ width: `${heroSummary.xpPercent}%` }} />
               </span>
-              <strong>7,450 / 12,000</strong>
+              <strong>{heroSummary.xpLabel}</strong>
             </div>
             <div className="rpg-resource-grid">
               <div>
                 <span>Gold</span>
-                <strong>1,248</strong>
+                <strong>{heroSummary.gold}</strong>
               </div>
               <div>
                 <span>Renown</span>
-                <strong>Honored (35)</strong>
+                <strong>{heroSummary.renown}</strong>
               </div>
             </div>
           </section>
@@ -177,7 +178,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           <section className="rpg-card">
             <div className="rpg-section-heading">
               <p className="eyebrow">Party</p>
-              <span>3 / 4</span>
+              <span>{partyMembers.length} / 4</span>
             </div>
             <div className="rpg-list-stack">
               {partyMembers.map((member) => (
@@ -237,9 +238,9 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
             <div className="rpg-dialogue-stack">
               <article>
-                <span className="rpg-avatar rpg-avatar-small">A</span>
+                <span className="rpg-avatar rpg-avatar-small">{heroSummary.avatar}</span>
                 <div>
-                  <strong>Alyndra (You)</strong>
+                  <strong>{heroSummary.name} (You)</strong>
                   <p>“I scan the current scene for useful details before committing to the next deterministic turn.”</p>
                 </div>
               </article>
