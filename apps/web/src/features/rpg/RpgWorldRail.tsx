@@ -7,6 +7,9 @@ import type {
   RpgSessionSummaryPreview,
   RpgWorldStateRowPreview,
 } from './rpgUiState';
+import './RpgVisualAssets.css';
+
+const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
 
 interface RpgReportAssetPreview {
   id: unknown;
@@ -69,7 +72,8 @@ export function RpgWorldRail({
           <p className="eyebrow">World & location</p>
           <button type="button">Change location</button>
         </div>
-        <div className="rpg-map-preview" aria-label={`${selectedSessionSummary.location} travel map`}>
+        <div className="rpg-map-preview rpg-map-preview-has-image" aria-label={`${selectedSessionSummary.location} travel map`}>
+          <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
           <span className="rpg-map-pin" aria-hidden="true" />
           <div className="rpg-map-controls" aria-hidden="true">
             <span>+</span>
