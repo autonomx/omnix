@@ -7,6 +7,8 @@ import type {
 } from './rpgUiState';
 import './RpgVisualAssets.css';
 
+const HERO_ART_SRC = '/rpg/hero-alyndra.svg';
+
 interface RpgPlayerRailProps {
   activeQuests: RpgQuestPreview[];
   className?: string;
@@ -25,7 +27,7 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
         <p className="eyebrow">Your hero</p>
         <div className="rpg-hero-summary">
           <div className="rpg-avatar rpg-hero-avatar rpg-hero-avatar-art" aria-hidden="true">
-            {heroSummary.avatar}
+            <img src={HERO_ART_SRC} alt="" loading="lazy" />
           </div>
           <div>
             <h3>{heroSummary.name}</h3>
