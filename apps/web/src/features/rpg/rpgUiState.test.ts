@@ -228,13 +228,13 @@ describe('rpg UI state', () => {
           state: {
             recent_events: [
               {
-                turn: 9,
+                time: 'Day 3 • 09:00',
                 type: 'dialogue',
                 actor: 'Bran',
                 text: 'The quarry road has been quiet since midnight.',
               },
               {
-                turn: 8,
+                time: 'Day 3 • 08:45',
                 type: 'discovery',
                 title: 'Found a torn crest',
                 summary: 'A muddy crest from the old quarry company was found beside the tavern door.',
@@ -253,7 +253,7 @@ describe('rpg UI state', () => {
       'Bran: The quarry road has been quiet since midnight.',
       'A muddy crest from the old quarry company was found beside the tavern door.',
     ]);
-    expect(state.journalEntries[0]).toMatchObject({ time: 'Turn 9', title: 'dialogue', detail: 'The quarry road has been quiet since midnight.' });
+    expect(state.journalEntries[0]).toMatchObject({ time: 'Day 3 • 09:00', title: 'dialogue', detail: 'The quarry road has been quiet since midnight.' });
     expect(state.journalDetail).toMatchObject({ title: 'dialogue', detail: 'The quarry road has been quiet since midnight.' });
     expect(state.journalDetail.tags).toEqual(['Live session', 'Dialogue', 'Replay-safe']);
   });
