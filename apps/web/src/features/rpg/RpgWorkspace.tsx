@@ -228,7 +228,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
           <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
 
-          <RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} />
+          <RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={selectCommand} />
         </main>
 
         <RpgWorldRail
