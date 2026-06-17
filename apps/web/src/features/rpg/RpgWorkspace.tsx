@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { omnixApiClient } from '../../api/client';
+import { omnixApiClient, type RpgLoadoutActionRequest } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
@@ -261,6 +261,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       await invalidateRpgWorkspaceQueries();
     },
   });
+  const loadoutActionMutation = useMutation({
+    mutationFn: ({ sessionId, request }: { sessionId: string; request: RpgLoadoutActionRequest }) => omnixApiClient.applyRpgLoadoutAction(sessionId, request),
+    onSuccess: async () => {
+      await invalidateRpgWorkspaceQueries();
+    },
+  });
   const autoplayMutation = useMutation({
     mutationFn: () => {
       if (activeAutoplayJob) {
@@ -307,6 +313,13 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         : 'Off';
   const isRefreshingRpgQueries = inventoryQuery.isFetching || jobsQuery.isFetching || assetsQuery.isFetching || reportsQuery.isFetching;
   const selectCommand = (command: string) => setValue('command', command, { shouldDirty: true, shouldValidate: true });
+  const applyLoadoutAction = (request: RpgLoadoutActionRequest) => {
+    if (!selectedLiveSessionId) {
+      selectCommand('Select or create a live RPG session before using inventory or abilities.');
+      return;
+    }
+    loadoutActionMutation.mutate({ sessionId: selectedLiveSessionId, request });
+  };
 
   return (
     <WorkspacePanel className="rpg-workstation">
@@ -391,7 +404,22 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
           <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
 
-          <RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={selectCommand} />
+          <RpgLoadoutTabs
+            hotbarAbilities={hotbarAbilities}
+            inventoryItems={inventoryItems}
+            isApplyingLoadoutAction={loadoutActionMutation.isPending}
+            onApplyLoadoutAction={applyLoadoutAction}
+            onSelectCommand={selectCommand}
+            selectedSessionId={selectedLiveSessionId}
+          />
+          <FeatureSubmitFeedback
+            error={loadoutActionMutation.error}
+            errorPrefix="RPG loadout action"
+            isError={loadoutActionMutation.isError}
+            isPending={loadoutActionMutation.isPending}
+            pendingMessage="Applying deterministic loadout action…"
+            successPrefix="RPG loadout action applied"
+          />
         </main>
 
         {isWorldRailCollapsed ? null : (
