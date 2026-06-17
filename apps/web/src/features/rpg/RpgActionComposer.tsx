@@ -18,16 +18,27 @@ interface RpgActionComposerProps {
   sessionSummaries: RpgSessionSummaryPreview[];
 }
 
-type LauncherView = 'home' | 'new_game' | 'load_game' | 'settings';
+type LauncherView = 'closed' | 'home' | 'new_game' | 'load_game' | 'settings';
 type RpgPlayerBuild = 'balanced_adventurer' | 'warrior' | 'ranger' | 'silver_tongue';
 type RpgDifficulty = 'story' | 'normal' | 'harsh';
 type RpgWorldActivity = 'quiet' | 'standard' | 'living_world';
+type RpgEconomyPressure = 'relaxed' | 'normal' | 'strict';
+type RpgCombatLethality = 'safe' | 'normal' | 'deadly';
 
 const BUILD_OPTIONS: { value: RpgPlayerBuild; label: string; detail: string }[] = [
   { value: 'balanced_adventurer', label: 'Balanced Adventurer', detail: 'Even stats and flexible starter gear.' },
   { value: 'warrior', label: 'Warrior', detail: 'High strength and constitution.' },
   { value: 'ranger', label: 'Ranger', detail: 'High dexterity and wilderness awareness.' },
   { value: 'silver_tongue', label: 'Silver Tongue', detail: 'High charisma for social routes.' },
+];
+
+const CAMPAIGN_TEMPLATES = [
+  { value: 'classic_fantasy', label: 'Classic Fantasy' },
+  { value: 'tavern_mystery', label: 'Tavern Mystery' },
+  { value: 'bandit_road', label: 'Bandit Road' },
+  { value: 'wilderness_survival', label: 'Wilderness Survival' },
+  { value: 'dungeon_delve', label: 'Dungeon Delve' },
+  { value: 'sandbox', label: 'Sandbox' },
 ];
 
 const STARTING_LOCATIONS = [
@@ -89,7 +100,8 @@ export function RpgActionComposer({
   const [launchError, setLaunchError] = useState<string>();
   const [isLaunching, setIsLaunching] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState('');
-  const [launcherView, setLauncherView] = useState<LauncherView>('home');
+  const [launcherView, setLauncherView] = useState<LauncherView>('closed');
+  const [campaignTemplate, setCampaignTemplate] = useState('classic_fantasy');
   const [playerName, setPlayerName] = useState('Alyndra');
   const [playerPronouns, setPlayerPronouns] = useState('she/her');
   const [playerBackground, setPlayerBackground] = useState('Wanderer');
@@ -97,8 +109,12 @@ export function RpgActionComposer({
   const [startingLocation, setStartingLocation] = useState('rusty_flagon_tavern');
   const [difficulty, setDifficulty] = useState<RpgDifficulty>('normal');
   const [worldActivity, setWorldActivity] = useState<RpgWorldActivity>('standard');
+  const [economyPressure, setEconomyPressure] = useState<RpgEconomyPressure>('normal');
+  const [combatLethality, setCombatLethality] = useState<RpgCombatLethality>('normal');
   const [seed, setSeed] = useState('');
+  const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   const [companionsEnabled, setCompanionsEnabled] = useState(true);
+  const [permadeathEnabled, setPermadeathEnabled] = useState(false);
   const [validatorEnabled, setValidatorEnabled] = useState(true);
   const [backgroundSoftAuditEnabled, setBackgroundSoftAuditEnabled] = useState(true);
   const [llmNarrationEnabled, setLlmNarrationEnabled] = useState(true);
@@ -134,6 +150,8 @@ export function RpgActionComposer({
     void sessionRegistration.onChange(event);
   };
 
+  const closeLauncher = () => setLauncherView('closed');
+
   const finishLaunch = async (response: RpgLaunchResponse, fallbackSessionId: string | undefined, readyLabel: string) => {
     if (!response.ok) {
       throw new Error(response.error ?? 'RPG session launch failed.');
@@ -145,7 +163,7 @@ export function RpgActionComposer({
     }
 
     await refreshRpgWorkspace();
-    setLauncherView('home');
+    closeLauncher();
     setLaunchStatus(
       sessionId
         ? `${readyLabel}: ${sessionId}. The next command will use this session.`
@@ -154,7 +172,7 @@ export function RpgActionComposer({
   };
 
   const buildNewGameRequest = (): RpgNewGameRequest => ({
-    campaign_template: 'classic_fantasy',
+    campaign_template: campaignTemplate,
     starting_location: startingLocation,
     player: {
       name: playerName.trim() || 'Alyndra',
@@ -164,11 +182,13 @@ export function RpgActionComposer({
     },
     difficulty,
     world_activity: worldActivity,
+    economy_pressure: economyPressure,
+    combat_lethality: combatLethality,
     companions_enabled: companionsEnabled,
-    permadeath: false,
+    permadeath: permadeathEnabled,
     seed: parseSeed(seed),
     features: {
-      autosave: true,
+      autosave: autosaveEnabled,
       validator: validatorEnabled,
       background_soft_audit: backgroundSoftAuditEnabled,
       llm_narration: llmNarrationEnabled,
@@ -270,220 +290,241 @@ export function RpgActionComposer({
   };
 
   const selectedSessionHasOption = !selectedSessionId || sessionSummaries.some((session) => session.id === selectedSessionId);
+  const launcherTitle =
+    launcherView === 'new_game'
+      ? 'New Game setup'
+      : launcherView === 'load_game'
+        ? 'Load Game'
+        : launcherView === 'settings'
+          ? 'RPG Settings'
+          : 'Campaign Menu';
 
   return (
     <>
       <section className="rpg-session-launcher" aria-label="RPG session launcher">
-        <div>
-          <p className="eyebrow">Campaign launcher</p>
-          <h3>Start, resume, or demo an RPG session</h3>
-          <p>Continue a saved run, configure a fresh Level 1 campaign, or clone the polished Glimmerdeep Pass showcase.</p>
-        </div>
-        <div className="rpg-session-launcher-actions">
-          <Button
-            variant="light"
-            type="button"
-            disabled={isLaunching || isPending || !mostRecentLiveSession}
-            loading={isLaunching && launchStatus?.startsWith('Loading session')}
-            onClick={() => mostRecentLiveSession && void continueSession(mostRecentLiveSession.id)}
-          >
-            Continue
-          </Button>
-          <Button variant="light" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('new_game')}>
-            New Game
-          </Button>
-          <Button variant="light" type="button" disabled={isLaunching || isPending} loading={isLaunching && launchStatus?.includes('demo')} onClick={() => void launchDemoSession()}>
-            Demo Session
-          </Button>
-          <Button variant="light" type="button" disabled={isLaunching || isPending || !liveSessionSummaries.length} onClick={() => setLauncherView('load_game')}>
-            Load Game
-          </Button>
-          <Button variant="subtle" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('settings')}>
-            Settings
-          </Button>
-        </div>
-
-        {launcherView === 'new_game' ? (
-          <div className="rpg-launcher-panel" aria-label="New Game setup">
-            <div className="rpg-launcher-panel-heading">
-              <div>
-                <p className="eyebrow">New Game setup</p>
-                <h4>Fresh deterministic campaign</h4>
-              </div>
-              <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
-                Close
-              </Button>
-            </div>
-
-            <div className="rpg-launcher-form-grid">
-              <label>
-                <span>Character name</span>
-                <input value={playerName} onChange={(event) => setPlayerName(event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>Pronouns</span>
-                <input value={playerPronouns} onChange={(event) => setPlayerPronouns(event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>Background</span>
-                <input value={playerBackground} onChange={(event) => setPlayerBackground(event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>Starting build</span>
-                <select value={playerBuild} onChange={(event) => setPlayerBuild(event.currentTarget.value as RpgPlayerBuild)}>
-                  {BUILD_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Starting location</span>
-                <select value={startingLocation} onChange={(event) => setStartingLocation(event.currentTarget.value)}>
-                  {STARTING_LOCATIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Difficulty</span>
-                <select value={difficulty} onChange={(event) => setDifficulty(event.currentTarget.value as RpgDifficulty)}>
-                  <option value="story">Story</option>
-                  <option value="normal">Normal</option>
-                  <option value="harsh">Harsh</option>
-                </select>
-              </label>
-              <label>
-                <span>World activity</span>
-                <select value={worldActivity} onChange={(event) => setWorldActivity(event.currentTarget.value as RpgWorldActivity)}>
-                  <option value="quiet">Quiet</option>
-                  <option value="standard">Standard</option>
-                  <option value="living_world">Living World</option>
-                </select>
-              </label>
-              <label>
-                <span>Seed</span>
-                <input inputMode="numeric" placeholder="Random visible seed" value={seed} onChange={(event) => setSeed(event.currentTarget.value)} />
-              </label>
-            </div>
-
-            <div className="rpg-launcher-build-note">
-              {BUILD_OPTIONS.find((option) => option.value === playerBuild)?.detail}
-            </div>
-
-            <div className="rpg-launcher-toggle-grid" aria-label="New Game feature toggles">
-              <label>
-                <input type="checkbox" checked={companionsEnabled} onChange={(event) => setCompanionsEnabled(event.currentTarget.checked)} />
-                <span>Companions enabled</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={validatorEnabled} onChange={(event) => setValidatorEnabled(event.currentTarget.checked)} />
-                <span>Grounding validator</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={backgroundSoftAuditEnabled} onChange={(event) => setBackgroundSoftAuditEnabled(event.currentTarget.checked)} />
-                <span>Background soft audit</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={llmNarrationEnabled} onChange={(event) => setLlmNarrationEnabled(event.currentTarget.checked)} />
-                <span>LLM narration</span>
-              </label>
-            </div>
-
-            <div className="rpg-launcher-panel-actions">
-              <Button type="button" disabled={isLaunching || isPending} loading={isLaunching && launchStatus?.includes('Level 1')} onClick={() => void launchNewGame()}>
-                Start New Game
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {launcherView === 'settings' ? (
-          <div className="rpg-launcher-panel" aria-label="RPG launcher settings">
-            <div className="rpg-launcher-panel-heading">
-              <div>
-                <p className="eyebrow">RPG settings</p>
-                <h4>New Game feature defaults</h4>
-              </div>
-              <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
-                Close
-              </Button>
-            </div>
-            <p className="rpg-settings-note">
-              These settings are stored into the next New Game session manifest. Demo Session keeps its curated showcase defaults.
-            </p>
-            <div className="rpg-launcher-toggle-grid" aria-label="RPG feature toggles">
-              <label>
-                <input type="checkbox" checked={validatorEnabled} onChange={(event) => setValidatorEnabled(event.currentTarget.checked)} />
-                <span>Grounding validator</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={backgroundSoftAuditEnabled} onChange={(event) => setBackgroundSoftAuditEnabled(event.currentTarget.checked)} />
-                <span>Background soft audit</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={llmNarrationEnabled} onChange={(event) => setLlmNarrationEnabled(event.currentTarget.checked)} />
-                <span>LLM narration</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={imageGenerationEnabled} onChange={(event) => setImageGenerationEnabled(event.currentTarget.checked)} />
-                <span>Image generation</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={ttsEnabled} onChange={(event) => setTtsEnabled(event.currentTarget.checked)} />
-                <span>TTS</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={sttEnabled} onChange={(event) => setSttEnabled(event.currentTarget.checked)} />
-                <span>STT</span>
-              </label>
-              <label>
-                <input type="checkbox" checked={companionsEnabled} onChange={(event) => setCompanionsEnabled(event.currentTarget.checked)} />
-                <span>Companions enabled</span>
-              </label>
-            </div>
-          </div>
-        ) : null}
-
-        {launcherView === 'load_game' ? (
-          <div className="rpg-launcher-panel" aria-label="Load Game browser">
-            <div className="rpg-launcher-panel-heading">
-              <div>
-                <p className="eyebrow">Load Game</p>
-                <h4>Saved sessions</h4>
-              </div>
-              <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
-                Close
-              </Button>
-            </div>
-            <div className="rpg-load-game-list">
-              {liveSessionSummaries.map((session) => (
-                <div key={session.id} className="rpg-load-game-card">
-                  <button className="rpg-load-game-main" type="button" disabled={isLaunching || isPending} onClick={() => void continueSession(session.id)}>
-                    <strong>{session.title}</strong>
-                    <span>{session.location} • {session.turnLabel} • {session.updatedAt}</span>
-                    <small>{session.id}</small>
-                  </button>
-                  <div className="rpg-load-game-actions">
-                    <Button size="xs" variant="subtle" type="button" disabled={isLaunching || isPending} onClick={() => void renameSession(session)}>
-                      Rename
-                    </Button>
-                    <Button size="xs" variant="outline" type="button" disabled={isLaunching || isPending} onClick={() => void deleteSession(session)}>
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {launchStatus ? <p className="rpg-session-launcher-status" aria-live="polite">{launchStatus}</p> : null}
-        {launchError ? <p className="rpg-session-launcher-error" aria-live="assertive">{launchError}</p> : null}
+        <Button variant="light" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('home')}>
+          Campaign Menu
+        </Button>
+        <span className="rpg-session-launcher-summary">
+          {mostRecentLiveSession ? `Continue: ${mostRecentLiveSession.title}` : 'Start, load, or demo a campaign'}
+        </span>
+        {launchStatus ? <span className="rpg-session-launcher-status" aria-live="polite">{launchStatus}</span> : null}
+        {launchError ? <span className="rpg-session-launcher-error" aria-live="assertive">{launchError}</span> : null}
       </section>
+
+      {launcherView !== 'closed' ? (
+        <div className="rpg-launcher-modal" role="dialog" aria-modal="true" aria-label={launcherTitle}>
+          <button className="rpg-launcher-backdrop" type="button" aria-label="Close RPG launcher" onClick={closeLauncher} />
+          <section className="rpg-launcher-dialog">
+            <div className="rpg-launcher-panel-heading">
+              <div>
+                <p className="eyebrow">Campaign launcher</p>
+                <h3>{launcherTitle}</h3>
+              </div>
+              <Button variant="subtle" type="button" disabled={isLaunching} onClick={closeLauncher}>
+                Close
+              </Button>
+            </div>
+
+            {launcherView === 'home' ? (
+              <div className="rpg-launcher-home-grid">
+                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending || !mostRecentLiveSession} onClick={() => mostRecentLiveSession && void continueSession(mostRecentLiveSession.id)}>
+                  <strong>Continue</strong>
+                  <span>{mostRecentLiveSession ? mostRecentLiveSession.title : 'No saved run yet'}</span>
+                </button>
+                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('new_game')}>
+                  <strong>New Game</strong>
+                  <span>Configure a fresh Level 1 campaign.</span>
+                </button>
+                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending} onClick={() => void launchDemoSession()}>
+                  <strong>Demo Session</strong>
+                  <span>Clone the polished Glimmerdeep Pass showcase.</span>
+                </button>
+                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending || !liveSessionSummaries.length} onClick={() => setLauncherView('load_game')}>
+                  <strong>Load Game</strong>
+                  <span>Browse, rename, or delete saved sessions.</span>
+                </button>
+                <button className="rpg-launcher-card" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('settings')}>
+                  <strong>Settings</strong>
+                  <span>Set defaults for New Game sessions.</span>
+                </button>
+              </div>
+            ) : null}
+
+            {launcherView === 'new_game' ? (
+              <div className="rpg-launcher-panel" aria-label="New Game setup">
+                <div className="rpg-launcher-section-heading">
+                  <div>
+                    <p className="eyebrow">New Game setup</p>
+                    <h4>Fresh deterministic campaign</h4>
+                  </div>
+                  <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
+                    Back
+                  </Button>
+                </div>
+
+                <div className="rpg-launcher-form-grid">
+                  <label>
+                    <span>Campaign template</span>
+                    <select value={campaignTemplate} onChange={(event) => setCampaignTemplate(event.currentTarget.value)}>
+                      {CAMPAIGN_TEMPLATES.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Character name</span>
+                    <input value={playerName} onChange={(event) => setPlayerName(event.currentTarget.value)} />
+                  </label>
+                  <label>
+                    <span>Pronouns</span>
+                    <input value={playerPronouns} onChange={(event) => setPlayerPronouns(event.currentTarget.value)} />
+                  </label>
+                  <label>
+                    <span>Background</span>
+                    <input value={playerBackground} onChange={(event) => setPlayerBackground(event.currentTarget.value)} />
+                  </label>
+                  <label>
+                    <span>Starting build</span>
+                    <select value={playerBuild} onChange={(event) => setPlayerBuild(event.currentTarget.value as RpgPlayerBuild)}>
+                      {BUILD_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Starting location</span>
+                    <select value={startingLocation} onChange={(event) => setStartingLocation(event.currentTarget.value)}>
+                      {STARTING_LOCATIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Difficulty</span>
+                    <select value={difficulty} onChange={(event) => setDifficulty(event.currentTarget.value as RpgDifficulty)}>
+                      <option value="story">Story</option>
+                      <option value="normal">Normal</option>
+                      <option value="harsh">Harsh</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>World activity</span>
+                    <select value={worldActivity} onChange={(event) => setWorldActivity(event.currentTarget.value as RpgWorldActivity)}>
+                      <option value="quiet">Quiet</option>
+                      <option value="standard">Standard</option>
+                      <option value="living_world">Living World</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Economy pressure</span>
+                    <select value={economyPressure} onChange={(event) => setEconomyPressure(event.currentTarget.value as RpgEconomyPressure)}>
+                      <option value="relaxed">Relaxed</option>
+                      <option value="normal">Normal</option>
+                      <option value="strict">Strict</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Combat lethality</span>
+                    <select value={combatLethality} onChange={(event) => setCombatLethality(event.currentTarget.value as RpgCombatLethality)}>
+                      <option value="safe">Safe</option>
+                      <option value="normal">Normal</option>
+                      <option value="deadly">Deadly</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Seed</span>
+                    <input inputMode="numeric" placeholder="Random visible seed" value={seed} onChange={(event) => setSeed(event.currentTarget.value)} />
+                  </label>
+                </div>
+
+                <div className="rpg-launcher-build-note">
+                  {BUILD_OPTIONS.find((option) => option.value === playerBuild)?.detail}
+                </div>
+
+                <div className="rpg-launcher-toggle-grid" aria-label="New Game feature toggles">
+                  <label><input type="checkbox" checked={autosaveEnabled} onChange={(event) => setAutosaveEnabled(event.currentTarget.checked)} /><span>Autosave</span></label>
+                  <label><input type="checkbox" checked={companionsEnabled} onChange={(event) => setCompanionsEnabled(event.currentTarget.checked)} /><span>Companions enabled</span></label>
+                  <label><input type="checkbox" checked={permadeathEnabled} onChange={(event) => setPermadeathEnabled(event.currentTarget.checked)} /><span>Permadeath</span></label>
+                  <label><input type="checkbox" checked={validatorEnabled} onChange={(event) => setValidatorEnabled(event.currentTarget.checked)} /><span>Grounding validator</span></label>
+                  <label><input type="checkbox" checked={backgroundSoftAuditEnabled} onChange={(event) => setBackgroundSoftAuditEnabled(event.currentTarget.checked)} /><span>Background soft audit</span></label>
+                  <label><input type="checkbox" checked={llmNarrationEnabled} onChange={(event) => setLlmNarrationEnabled(event.currentTarget.checked)} /><span>LLM narration</span></label>
+                  <label><input type="checkbox" checked={imageGenerationEnabled} onChange={(event) => setImageGenerationEnabled(event.currentTarget.checked)} /><span>Image generation</span></label>
+                  <label><input type="checkbox" checked={ttsEnabled} onChange={(event) => setTtsEnabled(event.currentTarget.checked)} /><span>TTS</span></label>
+                  <label><input type="checkbox" checked={sttEnabled} onChange={(event) => setSttEnabled(event.currentTarget.checked)} /><span>STT</span></label>
+                </div>
+
+                <div className="rpg-launcher-panel-actions">
+                  <Button type="button" disabled={isLaunching || isPending} loading={isLaunching && launchStatus?.includes('Level 1')} onClick={() => void launchNewGame()}>
+                    Start New Game
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {launcherView === 'settings' ? (
+              <div className="rpg-launcher-panel" aria-label="RPG launcher settings">
+                <div className="rpg-launcher-section-heading">
+                  <div>
+                    <p className="eyebrow">RPG settings</p>
+                    <h4>New Game defaults</h4>
+                  </div>
+                  <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
+                    Back
+                  </Button>
+                </div>
+                <p className="rpg-settings-note">
+                  These defaults are copied into the next New Game setup. Demo Session keeps its curated showcase defaults.
+                </p>
+                <div className="rpg-launcher-toggle-grid" aria-label="RPG feature toggles">
+                  <label><input type="checkbox" checked={autosaveEnabled} onChange={(event) => setAutosaveEnabled(event.currentTarget.checked)} /><span>Autosave</span></label>
+                  <label><input type="checkbox" checked={validatorEnabled} onChange={(event) => setValidatorEnabled(event.currentTarget.checked)} /><span>Grounding validator</span></label>
+                  <label><input type="checkbox" checked={backgroundSoftAuditEnabled} onChange={(event) => setBackgroundSoftAuditEnabled(event.currentTarget.checked)} /><span>Background soft audit</span></label>
+                  <label><input type="checkbox" checked={llmNarrationEnabled} onChange={(event) => setLlmNarrationEnabled(event.currentTarget.checked)} /><span>LLM narration</span></label>
+                  <label><input type="checkbox" checked={imageGenerationEnabled} onChange={(event) => setImageGenerationEnabled(event.currentTarget.checked)} /><span>Image generation</span></label>
+                  <label><input type="checkbox" checked={ttsEnabled} onChange={(event) => setTtsEnabled(event.currentTarget.checked)} /><span>TTS</span></label>
+                  <label><input type="checkbox" checked={sttEnabled} onChange={(event) => setSttEnabled(event.currentTarget.checked)} /><span>STT</span></label>
+                  <label><input type="checkbox" checked={companionsEnabled} onChange={(event) => setCompanionsEnabled(event.currentTarget.checked)} /><span>Companions enabled</span></label>
+                  <label><input type="checkbox" checked={permadeathEnabled} onChange={(event) => setPermadeathEnabled(event.currentTarget.checked)} /><span>Permadeath</span></label>
+                </div>
+              </div>
+            ) : null}
+
+            {launcherView === 'load_game' ? (
+              <div className="rpg-launcher-panel" aria-label="Load Game browser">
+                <div className="rpg-launcher-section-heading">
+                  <div>
+                    <p className="eyebrow">Load Game</p>
+                    <h4>Saved sessions</h4>
+                  </div>
+                  <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
+                    Back
+                  </Button>
+                </div>
+                <div className="rpg-load-game-list">
+                  {liveSessionSummaries.map((session) => (
+                    <div key={session.id} className="rpg-load-game-card">
+                      <button className="rpg-load-game-main" type="button" disabled={isLaunching || isPending} onClick={() => void continueSession(session.id)}>
+                        <strong>{session.title}</strong>
+                        <span>{session.location} • {session.turnLabel} • {session.updatedAt}</span>
+                        <small>{session.id}</small>
+                      </button>
+                      <div className="rpg-load-game-actions">
+                        <Button size="xs" variant="subtle" type="button" disabled={isLaunching || isPending} onClick={() => void renameSession(session)}>
+                          Rename
+                        </Button>
+                        <Button size="xs" variant="outline" type="button" disabled={isLaunching || isPending} onClick={() => void deleteSession(session)}>
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
 
       <form className="rpg-action-composer" aria-labelledby="rpg-turn-request-title" onSubmit={onSubmit}>
         <div className="rpg-action-composer-heading">
