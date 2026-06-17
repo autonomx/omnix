@@ -5,12 +5,14 @@ import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { RpgActionComposer } from './RpgActionComposer';
+import { RpgCombatSurface } from './RpgCombatSurface';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
 import { RpgPlayerRail } from './RpgPlayerRail';
 import { RpgStoryScene } from './RpgStoryScene';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { RpgWorldRail } from './RpgWorldRail';
+import { createRpgCombatSurfaceState } from './rpgCombatState';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
 
@@ -80,6 +82,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     reports: reportsQuery.data,
     selectedSessionId,
   });
+  const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
   const invalidateRpgWorkspaceQueries = async () => {
@@ -182,6 +185,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         ? `${activeAutoplayJob.status} • ${activeAutoplayJob.id}`
         : 'Off';
   const isRefreshingRpgQueries = inventoryQuery.isFetching || jobsQuery.isFetching || assetsQuery.isFetching || reportsQuery.isFetching;
+  const selectCommand = (command: string) => setValue('command', command, { shouldDirty: true, shouldValidate: true });
 
   return (
     <WorkspacePanel className="rpg-workstation">
@@ -202,7 +206,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               commandRegistration={register('command', { required: true })}
               hasCommandError={Boolean(errors.command)}
               isPending={createJobMutation.isPending}
-              onQuickAction={(command) => setValue('command', command, { shouldDirty: true, shouldValidate: true })}
+              onQuickAction={selectCommand}
               onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}
               quickActions={quickActions}
               sessionRegistration={register('sessionId')}
@@ -219,6 +223,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               successPrefix="RPG turn job queued"
             />
           </RpgStoryScene>
+
+          <RpgCombatSurface combat={combatSurface} onSelectCommand={selectCommand} />
 
           <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
 
