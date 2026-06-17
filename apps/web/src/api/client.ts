@@ -103,6 +103,15 @@ export interface RpgLaunchResponse {
   error?: string;
 }
 
+export interface RpgSessionMutationResponse {
+  ok: boolean;
+  session_id?: string;
+  session?: Record<string, unknown>;
+  archived?: boolean;
+  deleted?: string;
+  error?: string;
+}
+
 export interface ApiClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -264,6 +273,21 @@ export class OmnixApiClient {
   async continueRpgSession(sessionId: string): Promise<RpgLaunchResponse> {
     return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
       action: 'continue',
+      session_id: sessionId,
+    });
+  }
+
+  async renameRpgSession(sessionId: string, name: string): Promise<RpgSessionMutationResponse> {
+    return this.post<Record<string, unknown>, RpgSessionMutationResponse>('/api/rpg/session/get', {
+      action: 'rename',
+      session_id: sessionId,
+      name,
+    });
+  }
+
+  async deleteRpgSession(sessionId: string): Promise<RpgSessionMutationResponse> {
+    return this.post<Record<string, unknown>, RpgSessionMutationResponse>('/api/rpg/session/get', {
+      action: 'delete',
       session_id: sessionId,
     });
   }
