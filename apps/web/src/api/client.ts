@@ -72,6 +72,8 @@ export interface RpgNewGameRequest {
   player?: RpgPlayerOptions;
   difficulty?: 'story' | 'normal' | 'harsh';
   world_activity?: 'quiet' | 'standard' | 'living_world';
+  economy_pressure?: 'relaxed' | 'normal' | 'strict';
+  combat_lethality?: 'safe' | 'normal' | 'deadly';
   companions_enabled?: boolean;
   permadeath?: boolean;
   seed?: number | null;
@@ -258,35 +260,101 @@ export class OmnixApiClient {
   }
 
   async listRpgPresets(): Promise<RpgPresetListResponse> {
-    return this.get<RpgPresetListResponse>('/api/rpg/presets');
+    try {
+      return await this.get<RpgPresetListResponse>('/api/rpg/presets');
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      const compatibility = await this.post<Record<string, never>, RpgSessionListResponse>('/api/rpg/session/list', {});
+      return { ok: compatibility.ok, presets: compatibility.presets ?? [] };
+    }
   }
 
   async listRpgSessions(): Promise<RpgSessionListResponse> {
-    const [sessions, presets] = await Promise.all([
-      this.get<RpgSessionListResponse>('/api/rpg/sessions'),
-      this.listRpgPresets(),
-    ]);
-    return { ...sessions, presets: presets.presets };
+    try {
+      const [sessions, presets] = await Promise.all([
+        this.get<RpgSessionListResponse>('/api/rpg/sessions'),
+        this.listRpgPresets(),
+      ]);
+      return { ...sessions, presets: presets.presets };
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, never>, RpgSessionListResponse>('/api/rpg/session/list', {});
+    }
   }
 
   async createRpgNewGame(request: RpgNewGameRequest = {}): Promise<RpgLaunchResponse> {
-    return this.post<RpgNewGameRequest, RpgLaunchResponse>('/api/rpg/new-game', request);
+    try {
+      return await this.post<RpgNewGameRequest, RpgLaunchResponse>('/api/rpg/new-game', request);
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+        action: 'new_game',
+        request,
+      });
+    }
   }
 
   async startRpgPreset(presetId: string): Promise<RpgLaunchResponse> {
-    return this.post<Record<string, never>, RpgLaunchResponse>(`/api/rpg/presets/${encodeURIComponent(presetId)}/start`, {});
+    try {
+      return await this.post<Record<string, never>, RpgLaunchResponse>(`/api/rpg/presets/${encodeURIComponent(presetId)}/start`, {});
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+        action: 'start_preset',
+        preset_id: presetId,
+      });
+    }
   }
 
   async continueRpgSession(sessionId: string): Promise<RpgLaunchResponse> {
-    return this.post<Record<string, never>, RpgLaunchResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/continue`, {});
+    try {
+      return await this.post<Record<string, never>, RpgLaunchResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/continue`, {});
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+        action: 'continue',
+        session_id: sessionId,
+      });
+    }
   }
 
   async renameRpgSession(sessionId: string, name: string): Promise<RpgSessionMutationResponse> {
-    return this.post<{ name: string }, RpgSessionMutationResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/rename`, { name });
+    try {
+      return await this.post<{ name: string }, RpgSessionMutationResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/rename`, { name });
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgSessionMutationResponse>('/api/rpg/session/get', {
+        action: 'rename',
+        session_id: sessionId,
+        name,
+      });
+    }
   }
 
   async deleteRpgSession(sessionId: string): Promise<RpgSessionMutationResponse> {
-    return this.post<Record<string, never>, RpgSessionMutationResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/delete`, {});
+    try {
+      return await this.post<Record<string, never>, RpgSessionMutationResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/delete`, {});
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgSessionMutationResponse>('/api/rpg/session/get', {
+        action: 'delete',
+        session_id: sessionId,
+      });
+    }
   }
 
   async createReplayCheckpoint(request: Record<string, unknown>): Promise<CheckpointEnvelope> {
@@ -303,6 +371,10 @@ export class OmnixApiClient {
 
   async getDiagnostics(): Promise<DiagnosticsPayload> {
     return this.get<DiagnosticsPayload>('/api/diagnostics');
+  }
+
+  private isNotFound(error: unknown): boolean {
+    return error instanceof ApiError && error.status === 404;
   }
 
   private async request<T>(path: `/api/${string}`, init: RequestInit, options: ApiRequestOptions = {}): Promise<T> {
