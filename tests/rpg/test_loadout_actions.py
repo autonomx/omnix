@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+from typing import Any
+
+from app.platform import rpg_session_compat
+from app.rpg.session import loadout
+
+
+def _session() -> dict[str, Any]:
+    return {
+        "manifest": {"id": "rpg_test", "session_id": "rpg_test", "title": "Test", "updated_at": "before"},
+        "state": {
+            "session_id": "rpg_test",
+            "current_turn": 0,
+            "turn_count": 0,
+            "world": {"time": "Day 1 • 08:00"},
+            "summary": "Before",
+            "player": {
+                "name": "Test Hero",
+                "resources": {
+                    "hp": {"current": 50, "max": 100},
+                    "stamina": {"current": 50, "max": 100},
+                    "mana": {"current": 20, "max": 40},
+                },
+                "inventory": [
+                    {"id": "health_potion", "name": "Health Potion", "quantity": 2, "type": "consumable"},
+                    {"id": "simple_bow", "name": "Simple bow", "quantity": 1, "type": "weapon"},
+                    {"id": "journal", "name": "Journal", "quantity": 1, "type": "quest"},
+                ],
+                "equipment": [],
+            },
+            "timeline": [],
+            "journal": {"entries": []},
+        },
+    }
+
+
+def test_use_health_potion_consumes_item_and_restores_hp(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
+    monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: saved.append(session) or session)
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="use", item_name="Health Potion"))
+
+    assert result["ok"] is True
+    state = saved[0]["state"]
+    assert state["player"]["resources"]["hp"] == {"current": 75, "max": 100}
+    assert state["player"]["inventory"][0]["quantity"] == 1
+    assert state["turn_count"] == 1
+    assert state["timeline"][0]["kind"] == "item"
+
+
+def test_equip_item_updates_equipment(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
+    monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: saved.append(session) or session)
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="equip", item_name="Simple bow"))
+
+    assert result["ok"] is True
+    assert saved[0]["state"]["player"]["equipment"] == [{"slot": "Weapon", "name": "Simple bow"}]
+    assert saved[0]["state"]["timeline"][0]["title"] == "Equipped Simple bow"
+
+
+def test_hotbar_action_spends_resource_and_writes_event(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
+    monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: saved.append(session) or session)
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="hotbar", hotbar_slot="2", target="the nearest foe"))
+
+    assert result["ok"] is True
+    state = saved[0]["state"]
+    assert state["player"]["resources"]["mana"] == {"current": 8, "max": 40}
+    assert state["timeline"][0]["title"] == "Used Frost Arrow"
+    assert state["runtime"]["effects"][0]["source"] == "Frost Arrow"
+
+
+def test_drop_protected_journal_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="drop", item_name="Journal"))
+
+    assert result == {"ok": False, "error": "protected_item", "session_id": "rpg_test", "item_name": "Journal"}
+
+
+def test_session_compat_supports_loadout_action(monkeypatch) -> None:
+    monkeypatch.setattr(loadout, "apply_loadout_action", lambda session_id, request: {"ok": True, "session_id": session_id, "action": request.action})
+
+    assert rpg_session_compat.get_rpg_session_payload(
+        {"action": "loadout_action", "session_id": "rpg_test", "loadout": {"action": "inspect", "item_name": "Journal"}}
+    ) == {"ok": True, "session_id": "rpg_test", "action": "inspect"}
