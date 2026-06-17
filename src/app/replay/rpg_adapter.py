@@ -95,17 +95,35 @@ class RpgReplayPersistenceAdapter:
         sessions: list[dict[str, Any]] = []
         diagnostics: list[dict[str, Any]] = []
         for session in list_sessions_from_disk():
-            manifest = session.get("manifest") if isinstance(session, dict) else {}
-            if isinstance(manifest, dict):
-                sessions.append(
-                    {
-                        "session_id": manifest.get("session_id") or manifest.get("id") or "",
-                        "title": manifest.get("title") or manifest.get("name") or "",
-                        "archived": bool(manifest.get("archived")),
-                    }
-                )
-            else:
+            if not isinstance(session, dict):
+                diagnostics.append({"kind": "invalid_session", "source": "rpg_session"})
+                continue
+
+            manifest = session.get("manifest") if isinstance(session.get("manifest"), dict) else {}
+            state = session.get("state") if isinstance(session.get("state"), dict) else {}
+            metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+            session_id = manifest.get("session_id") or manifest.get("id") or state.get("session_id") or ""
+            if not session_id:
                 diagnostics.append({"kind": "missing_manifest", "source": "rpg_session"})
+                continue
+
+            sessions.append(
+                {
+                    "session_id": session_id,
+                    "id": session_id,
+                    "title": manifest.get("title") or state.get("title") or session_id,
+                    "archived": bool(manifest.get("archived")),
+                    "updated_at": manifest.get("updated_at") or state.get("updated_at"),
+                    "created_at": manifest.get("created_at"),
+                    "location": state.get("location") or state.get("current_location") or metadata.get("location"),
+                    "summary": state.get("summary"),
+                    "turn_count": state.get("turn_count") or state.get("current_turn"),
+                    "checkpoint": manifest.get("checkpoint") or manifest.get("checkpoint_id") or "Autosave session",
+                    "metadata": {**metadata, "manifest": manifest},
+                    "state": state,
+                    "payload": session.get("setup_payload") if isinstance(session.get("setup_payload"), dict) else {},
+                }
+            )
         return PersistenceInventory(sessions=sessions, diagnostics=diagnostics)
 
     def _checkpoint_to_envelope(self, checkpoint: dict[str, Any]) -> CheckpointEnvelope:
