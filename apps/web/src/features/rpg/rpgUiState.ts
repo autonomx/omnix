@@ -72,10 +72,10 @@ export interface RpgJobCardPreview {
   source: 'live' | 'preview';
 }
 
-type RpgSession = PersistenceInventory['sessions'][number];
+type RpgSession = NonNullable<PersistenceInventory['sessions']>[number];
 type RpgJob = JobListResponse['jobs'][number];
 type RpgAsset = AssetListResponse['assets'][number];
-type RpgReport = ReportListResponse['reports'][number];
+type RpgReport = NonNullable<ReportListResponse['reports']>[number];
 
 export interface RpgWorkspaceState {
   heroStats: RpgStatPreview[];
