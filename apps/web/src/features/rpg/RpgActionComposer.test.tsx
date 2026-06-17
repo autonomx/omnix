@@ -1,10 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { FormEvent } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgActionComposer } from './RpgActionComposer';
 import { previewSessionSummary, quickActions } from './rpgUiState';
 
-function registration(name: 'sessionId' | 'command'): UseFormRegisterReturn<typeof name> {
+function registration<TName extends 'sessionId' | 'command'>(name: TName): UseFormRegisterReturn<TName> {
   return {
     name,
     onBlur: vi.fn(),
@@ -16,7 +17,7 @@ function registration(name: 'sessionId' | 'command'): UseFormRegisterReturn<type
 describe('RpgActionComposer', () => {
   it('renders replay-preserving turn controls and quick actions', () => {
     const onQuickAction = vi.fn();
-    const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+    const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => event.preventDefault());
 
     render(
       <RpgActionComposer
