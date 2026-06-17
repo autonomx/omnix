@@ -91,7 +91,8 @@
   padding: 0.65rem 0.75rem;
 }
 
-.rpg-launcher-build-note {
+.rpg-launcher-build-note,
+.rpg-settings-note {
   color: var(--omnix-muted, #a7a4b8);
   font-size: 0.86rem;
 }
@@ -121,27 +122,46 @@
   gap: 0.65rem;
 }
 
-.rpg-load-game-list button {
+.rpg-load-game-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid rgba(168, 139, 250, 0.2);
+  border-radius: 14px;
+  background: rgba(30, 41, 59, 0.52);
+  padding: 0.25rem;
+}
+
+.rpg-load-game-main {
   display: grid;
   gap: 0.3rem;
   width: 100%;
   text-align: left;
-  border: 1px solid rgba(168, 139, 250, 0.2);
-  border-radius: 14px;
-  background: rgba(30, 41, 59, 0.52);
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
   color: #f8fafc;
-  padding: 0.85rem 1rem;
+  padding: 0.7rem 0.85rem;
   cursor: pointer;
 }
 
-.rpg-load-game-list button:hover:not(:disabled) {
+.rpg-load-game-card:hover {
   border-color: rgba(196, 181, 253, 0.45);
   background: rgba(51, 65, 85, 0.68);
 }
 
-.rpg-load-game-list button:disabled {
+.rpg-load-game-main:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.rpg-load-game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding-right: 0.5rem;
 }
 
 .rpg-load-game-list span,
@@ -157,12 +177,14 @@
 }
 
 @media (max-width: 860px) {
-  .rpg-session-launcher {
+  .rpg-session-launcher,
+  .rpg-load-game-card {
     grid-template-columns: 1fr;
   }
 
   .rpg-session-launcher-actions,
-  .rpg-launcher-panel-actions {
+  .rpg-launcher-panel-actions,
+  .rpg-load-game-actions {
     justify-content: flex-start;
   }
 }
