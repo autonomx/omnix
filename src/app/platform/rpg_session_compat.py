@@ -17,19 +17,57 @@ def _safe_str(value: Any) -> str:
 
 
 def list_rpg_sessions_payload() -> dict[str, Any]:
-    """Return the legacy RPG session list envelope without importing API routers."""
+    """Return the legacy RPG session list envelope plus launch presets."""
+    from app.rpg.session.new_game import list_rpg_presets
     from app.rpg.session.service import list_sessions
 
-    return {"ok": True, "sessions": list_sessions() or []}
+    presets_payload = list_rpg_presets()
+    return {
+        "ok": True,
+        "sessions": list_sessions() or [],
+        "presets": presets_payload.get("presets", []),
+    }
 
 
 def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
-    """Return the legacy RPG session inspection envelope for a session id."""
-    from app.rpg.session.runtime import build_frontend_bootstrap_payload, load_runtime_session
+    """Return a session envelope or perform a synchronous RPG launch action.
 
-    session_id = _safe_str(_safe_dict(data).get("session_id")).strip()
+    This gateway-compat route is used by the web app while the typed RPG
+    endpoints are being promoted. Supported launch actions are intentionally
+    synchronous and do not call LLM/image/TTS services:
+
+    - {"action": "new_game", ...}
+    - {"action": "start_preset", "preset_id": "demo_glimmerdeep_pass_lvl14"}
+    - {"action": "continue", "session_id": "..."}
+    """
+    payload = _safe_dict(data)
+    action = _safe_str(payload.get("action")).strip()
+
+    if action == "new_game":
+        from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
+
+        request = RpgNewGameRequest.model_validate(payload.get("request") or payload)
+        return create_new_game_session(request)
+
+    if action == "start_preset":
+        from app.rpg.session.new_game import start_rpg_preset
+
+        preset_id = _safe_str(payload.get("preset_id")).strip()
+        return start_rpg_preset(preset_id)
+
+    if action == "continue":
+        from app.rpg.session.new_game import continue_rpg_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        return continue_rpg_session(session_id)
+
+    session_id = _safe_str(payload.get("session_id")).strip()
     if not session_id:
         return {"ok": False, "error": "missing_session_id"}
+
+    from app.rpg.session.runtime import build_frontend_bootstrap_payload, load_runtime_session
 
     session = load_runtime_session(session_id)
     if not session:
