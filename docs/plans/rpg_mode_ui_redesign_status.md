@@ -31,7 +31,8 @@ This note supersedes the earlier planning-only RPG mode UI inventory work. The a
 | Combat surface | #560 | Merged | Added tactical combat panels and replay-safe combat command affordances. |
 | Loadout actions | #561 | Merged | Added item, ability, and hotbar detail panels with command insertion affordances. |
 | Responsive polish | #562 | Merged | Added collapsible rails, improved narrow-screen behavior, overflow containment, and reduced-motion safeguards. |
-| Regression coverage | #563 | In progress | Adds workspace-level regression coverage for replay-safe live controls and rail accessibility. |
+| Regression coverage | #563 | Merged | Added workspace-level regression coverage for replay-safe live controls and rail accessibility. |
+| Loading and empty states | #564 | In progress | Adds live data status surfaces, empty artifact affordances, and loading/error/empty-state regression coverage. |
 
 ## Current component map
 
@@ -40,6 +41,7 @@ This note supersedes the earlier planning-only RPG mode UI inventory work. The a
 | Workspace orchestration | `RpgWorkspace` | Coordinates data queries, selected session state, submit flow, rail visibility, and layout composition. |
 | State normalization | `rpgUiState` | Builds a stable UI view model from live sessions, jobs, assets, reports, and preview fallbacks. |
 | Header | `RpgWorkspaceHeader` | Shows RPG mode title, engine status, session status, and runtime chips. |
+| Live data status | `RpgLiveDataStatus` | Summarizes session, job, checkpoint/asset, and report query loading/error/empty states. |
 | Left rail | `RpgPlayerRail` | Shows hero state, meters, XP, currency, gear, party, and quests. |
 | Center scene | `RpgStoryScene` | Shows active location, scene copy, dialogue preview, recent events, and action composer slot. |
 | Combat surface | `RpgCombatSurface` | Shows tactical encounter state, initiative, combatants, and combat command affordances. |
@@ -58,7 +60,7 @@ The shell now renders and controls normalized jobs, reports, checkpoints, and au
 - Verify checkpoint creation payloads against replay persistence expectations.
 - Verify autoplay start/stop behavior during active RPG sessions.
 - Confirm job polling/SSE behavior for long-running background RPG jobs.
-- Add final empty/loading/error-state coverage for reports, checkpoints, jobs, and sessions.
+- Keep loading, empty, and error-state coverage aligned with backend behavior as API responses evolve.
 
 ### 2. Combat affordance expansion
 
@@ -86,27 +88,25 @@ The layout is componentized and has its first production polish pass:
 - Narrow-screen stacking and keyboard-safe focus order.
 - Reduced-motion behavior for progress/status effects.
 - Long log overflow handling and scroll containment.
+- Live data status cards for loading, empty, refreshing, ready, and error sources.
 
 Remaining polish:
 
-- Skeleton/loading surfaces for slow live queries.
 - Optional visual regression screenshots if supported locally.
 - Manual browser pass across wide, tablet, and narrow layouts.
 
 ### 5. Regression coverage and docs
 
-Existing component and adapter coverage is strong. This regression slice adds workspace-level coverage for live controls and rail accessibility. Remaining gates after this slice:
+Existing component and adapter coverage is strong. Remaining gates after the loading-state slice:
 
-- Loading/error/empty-state regression coverage for slow or failing live queries.
 - Stop-autoplay coverage once active job cancellation behavior is validated with real backend data.
 - Visual regression screenshots if supported locally.
 - Final screenshot or design reference attachment once local visual validation is available.
 
 ## Recommended next PR sequence
 
-1. `p563-rpg-ui-regression` — add final workspace integration/accessibility regression gates.
-2. `p564-rpg-loading-empty-states` — add richer loading and empty-state surfaces after live query behavior is validated.
-3. `p565-rpg-report-artifact-links` — tighten direct report/checkpoint artifact linking once backend artifact routing is confirmed.
+1. `p564-rpg-loading-empty-states` — add richer loading and empty-state surfaces after live query behavior is validated.
+2. `p565-rpg-report-artifact-links` — tighten direct report/checkpoint artifact linking once backend artifact routing is confirmed.
 
 ## Notes
 
