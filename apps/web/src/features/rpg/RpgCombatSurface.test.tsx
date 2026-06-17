@@ -45,7 +45,7 @@ describe('RpgCombatSurface', () => {
 
     expect(screen.getByText('Combat turn gate active')).toBeInTheDocument();
     expect(screen.getByText('Mira Vale')).toBeInTheDocument();
-    expect(screen.getByText('Road bandit')).toBeInTheDocument();
+    expect(screen.getAllByText('Road bandit')).toHaveLength(2);
     expect(screen.getByLabelText('Road bandit health')).toBeInTheDocument();
     expect(screen.getByText('Combatants: Road bandit, Lookout')).toBeInTheDocument();
 
