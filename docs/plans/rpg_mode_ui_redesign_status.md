@@ -1,6 +1,6 @@
 # RPG Mode UI Redesign Status
 
-This note supersedes the earlier planning-only RPG mode UI inventory work. The approved direction is now implemented as a production-oriented RPG workstation shell, with remaining work focused on deeper live wiring, combat affordances, inventory/ability interactions, responsive polish, and regression coverage.
+This note supersedes the earlier planning-only RPG mode UI inventory work. The approved direction is now implemented as a production-oriented RPG workstation shell, with remaining work focused on final regression coverage and production validation.
 
 ## Source of truth
 
@@ -27,61 +27,70 @@ This note supersedes the earlier planning-only RPG mode UI inventory work. The a
 | World rail extraction | #555 | Merged | Isolated world, encounter, NPC, jobs, report, autoplay, and checkpoint rail rendering. |
 | Story scene extraction | #556 | Merged | Isolated scene card, dialogue preview, recent events, and action-composer slot. |
 | Workspace header extraction | #557 | Merged | Isolated RPG module heading and runtime status chips. |
+| Live controls | #559 | Merged | Wired report, checkpoint, autoplay, and job-card controls. |
+| Combat surface | #560 | Merged | Added tactical combat panels and replay-safe combat command affordances. |
+| Loadout actions | #561 | Merged | Added item, ability, and hotbar detail panels with command insertion affordances. |
+| Responsive polish | #562 | In progress | Adds collapsible rails, improved narrow-screen behavior, overflow containment, and reduced-motion safeguards. |
 
 ## Current component map
 
 | Area | Component / module | Responsibility |
 | --- | --- | --- |
-| Workspace orchestration | `RpgWorkspace` | Coordinates data queries, selected session state, submit flow, and layout composition. |
+| Workspace orchestration | `RpgWorkspace` | Coordinates data queries, selected session state, submit flow, rail visibility, and layout composition. |
 | State normalization | `rpgUiState` | Builds a stable UI view model from live sessions, jobs, assets, reports, and preview fallbacks. |
 | Header | `RpgWorkspaceHeader` | Shows RPG mode title, engine status, session status, and runtime chips. |
 | Left rail | `RpgPlayerRail` | Shows hero state, meters, XP, currency, gear, party, and quests. |
 | Center scene | `RpgStoryScene` | Shows active location, scene copy, dialogue preview, recent events, and action composer slot. |
+| Combat surface | `RpgCombatSurface` | Shows tactical encounter state, initiative, combatants, and combat command affordances. |
 | Action composer | `RpgActionComposer` | Handles session selection, command entry, quick actions, pending/invalid states, and turn submission controls. |
 | Narrative history | `RpgNarrativeTabs` | Shows journal, dialogue log, and turn history panels. |
-| Loadout | `RpgLoadoutTabs` | Shows inventory, abilities, and hotbar panels. |
+| Loadout | `RpgLoadoutTabs` | Shows inventory, abilities, hotbar, details, and command insertion actions. |
 | Right rail | `RpgWorldRail` | Shows location/map, world state, encounter, relationships, jobs, autoplay/report/checkpoint cards. |
 
 ## Remaining implementation work
 
 ### 1. Live control parity
 
-The shell renders normalized jobs, reports, checkpoints, and autoplay status, but remaining work should verify and complete all end-to-end controls:
+The shell now renders and controls normalized jobs, reports, checkpoints, and autoplay status. Remaining work should focus on end-to-end validation under real backend data:
 
-- Open/download report actions from the report cards.
-- Create checkpoint behavior from the checkpoint card.
-- Autoplay start/stop controls and visible running state.
-- Job polling/SSE behavior for active background RPG jobs.
-- Empty/loading/error states for reports, checkpoints, jobs, and sessions.
+- Verify open/download report actions against produced report artifacts.
+- Verify checkpoint creation payloads against replay persistence expectations.
+- Verify autoplay start/stop behavior during active RPG sessions.
+- Confirm job polling/SSE behavior for long-running background RPG jobs.
+- Add final empty/loading/error-state coverage for reports, checkpoints, jobs, and sessions.
 
 ### 2. Combat affordance expansion
 
-The encounter card is live-aware, but combat still needs a full tactical UI layer:
+The tactical combat surface now exists. Remaining combat work should follow backend capability and deterministic contract expansion:
 
-- Active actor, round number, initiative queue, and turn ownership.
-- Enemy cards with HP/status/effects.
-- Combat-specific action buttons and invalid-action gating.
-- Deterministic combat result deltas in the story/log panels.
-- Defeat/victory/escape state handling.
+- Victory, defeat, and escape state handling.
+- Combat result deltas from live turn results in story/log panels.
+- Richer invalid-action explanations when backend returns combat gating errors.
+- Target selection once the simulation exposes targetable combatant identifiers.
 
 ### 3. Inventory and ability interactions
 
-Inventory, abilities, and hotbar are visible. Next interactive layer:
+Inventory, abilities, and hotbar now provide detail panels and replay-safe command insertion. Remaining work depends on simulation affordance support:
 
-- Item detail popovers or side details.
-- Use/equip/drop/sell affordances where supported by the simulation.
-- Ability details, cooldown/resource cost display, and target requirements.
-- Hotbar assignment or command insertion behavior.
+- Sell/trade affordances where shop or merchant state is active.
+- Hotbar assignment persistence if/when supported.
+- Cooldown/resource-cost fields from live ability state.
+- Rich target requirements once combat target identifiers are exposed.
 
 ### 4. Responsive and production polish
 
-The layout is now componentized enough to safely improve responsiveness:
+The layout is componentized and this slice adds the first production polish pass:
 
 - Collapsible left/right rails.
 - Narrow-screen stacking and keyboard-safe focus order.
 - Reduced-motion behavior for progress/status effects.
-- Better skeleton/loading surfaces.
-- Long log overflow handling and pagination/virtualization where needed.
+- Long log overflow handling and scroll containment.
+
+Remaining polish after this slice:
+
+- Skeleton/loading surfaces for slow live queries.
+- Optional visual regression screenshots if supported locally.
+- Manual browser pass across wide, tablet, and narrow layouts.
 
 ### 5. Regression coverage and docs
 
@@ -95,11 +104,9 @@ Existing component and adapter coverage is strong for the slices completed so fa
 
 ## Recommended next PR sequence
 
-1. `p559-rpg-live-controls` — wire/verify report, checkpoint, autoplay, and job-card controls.
-2. `p560-rpg-combat-surface` — add tactical combat state panels and combat-only action affordances.
-3. `p561-rpg-inventory-actions` — add inventory/ability details and supported command insertion behavior.
-4. `p562-rpg-responsive-polish` — add collapsible rails, narrow-screen stacking, and overflow handling.
-5. `p563-rpg-ui-regression` — add final workspace integration/accessibility regression gates.
+1. `p562-rpg-responsive-polish` — add collapsible rails, narrow-screen stacking, reduced motion, and overflow handling.
+2. `p563-rpg-ui-regression` — add final workspace integration/accessibility regression gates.
+3. `p564-rpg-loading-empty-states` — add richer loading and empty-state surfaces after live query behavior is validated.
 
 ## Notes
 
