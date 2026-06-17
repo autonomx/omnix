@@ -39,6 +39,13 @@ export interface RpgJournalEntryPreview {
   detail: string;
 }
 
+export interface RpgJournalDetailPreview {
+  title: string;
+  detail: string;
+  bullets: string[];
+  tags: string[];
+}
+
 export interface RpgInventoryItemPreview {
   icon: string;
   count: string;
@@ -72,6 +79,24 @@ export interface RpgJobCardPreview {
   source: 'live' | 'preview';
 }
 
+export interface RpgSessionSummaryPreview {
+  id: string;
+  title: string;
+  location: string;
+  summary: string;
+  updatedAt: string;
+  turnLabel: string;
+  checkpointLabel: string;
+  sortRank: number;
+  source: 'live' | 'preview';
+}
+
+export interface RpgCheckpointSummaryPreview {
+  label: string;
+  detail: string;
+  source: 'live' | 'preview';
+}
+
 type RpgSession = NonNullable<PersistenceInventory['sessions']>[number];
 type RpgJob = JobListResponse['jobs'][number];
 type RpgAsset = AssetListResponse['assets'][number];
@@ -85,10 +110,14 @@ export interface RpgWorkspaceState {
   quickActions: RpgQuickActionPreview[];
   recentEvents: string[];
   journalEntries: RpgJournalEntryPreview[];
+  journalDetail: RpgJournalDetailPreview;
   inventoryItems: RpgInventoryItemPreview[];
   hotbarAbilities: RpgHotbarAbilityPreview[];
   worldStateRows: RpgWorldStateRowPreview[];
   npcRelationships: RpgNpcRelationshipPreview[];
+  sessionSummaries: RpgSessionSummaryPreview[];
+  selectedSessionSummary: RpgSessionSummaryPreview;
+  checkpointSummary: RpgCheckpointSummaryPreview;
   sessions: RpgSession[];
   rpgJobs: RpgJob[];
   rpgAssets: RpgAsset[];
@@ -101,6 +130,7 @@ export interface RpgWorkspaceStateSources {
   jobs?: JobListResponse;
   assets?: AssetListResponse;
   reports?: ReportListResponse;
+  selectedSessionId?: string;
 }
 
 export const heroStats: RpgStatPreview[] = [
@@ -137,17 +167,24 @@ export const quickActions: RpgQuickActionPreview[] = [
   { label: 'Attack', icon: '⚔', command: 'Prepare an ambush in case Icefang scouts are nearby.' },
 ];
 
-export const recentEvents = [
+export const previewRecentEvents = [
   'You arrived at Glimmerdeep Pass.',
   'Thorin Ironfist: “Best keep our eyes open. This place gives me the chills.”',
   'You gained 120 XP.',
 ];
 
-export const journalEntries: RpgJournalEntryPreview[] = [
+export const previewJournalEntries: RpgJournalEntryPreview[] = [
   { time: 'Day 18 • 09:42', title: 'Arrived at Glimmerdeep Pass', detail: 'Reached the ancient archway.' },
   { time: 'Day 18 • 08:15', title: 'Left Frostpine Hollow', detail: 'Followed the northern trail.' },
   { time: 'Day 17 • 21:30', title: 'Long Rest at Frostpine', detail: 'Recovered after the Icefang fight.' },
 ];
+
+export const previewJournalDetail: RpgJournalDetailPreview = {
+  title: 'Arrived at Glimmerdeep Pass',
+  detail: 'The party makes its way through the winding mountain trail and reaches the ancient pass.',
+  bullets: ['Discovered location: Glimmerdeep Pass', 'Weather: Cold, Windy', 'Detected tracks near the northern archway'],
+  tags: ['Exploration', 'Discovery', 'Travel'],
+};
 
 export const inventoryItems: RpgInventoryItemPreview[] = [
   { icon: '🧪', count: '12', label: 'Healing potion' },
@@ -169,7 +206,7 @@ export const hotbarAbilities: RpgHotbarAbilityPreview[] = [
   { key: '6', icon: '⇥', label: 'Dash' },
 ];
 
-export const worldStateRows: RpgWorldStateRowPreview[] = [
+export const previewWorldStateRows: RpgWorldStateRowPreview[] = [
   { icon: '☀', label: 'Time', value: 'Day 18 • 09:42' },
   { icon: '≋', label: 'Weather', value: 'Cold, Windy' },
   { icon: '❄', label: 'Temperature', value: '-12°C' },
@@ -189,12 +226,35 @@ export const previewJobs: RpgJobCardPreview[] = [
   { id: 'preview-world', title: 'world.state.update', status: 'Queued', progress: 0, detail: 'Waiting for turn output', source: 'preview' },
 ];
 
+export const previewSessionSummary: RpgSessionSummaryPreview = {
+  id: 'preview-session',
+  title: 'Preview campaign',
+  location: 'Glimmerdeep Pass',
+  summary:
+    'The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both sides, and an ancient stone archway stands ahead, half-buried in drifts.',
+  updatedAt: 'Day 18 • 09:42',
+  turnLabel: 'Turn 18',
+  checkpointLabel: 'Preview checkpoint',
+  sortRank: 0,
+  source: 'preview',
+};
+
 export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgWorkspaceState {
   const sessions = sources.inventory?.sessions ?? [];
+  const sessionSummaries = sessions
+    .map(toSessionSummary)
+    .sort((left, right) => right.sortRank - left.sortRank || left.title.localeCompare(right.title));
+  const selectedSessionSummary =
+    sessionSummaries.find((session) => session.id === sources.selectedSessionId) ?? sessionSummaries[0] ?? previewSessionSummary;
   const rpgJobs = sources.jobs?.jobs.filter((job) => job.module === 'rpg') ?? [];
   const rpgAssets = sources.assets?.assets.filter((asset) => asset.type === 'rpg_checkpoint' || asset.module === 'rpg') ?? [];
   const rpgReports = sources.reports?.reports?.filter((report) => report.kind.includes('rpg') || report.id.includes('rpg')) ?? [];
   const jobCards = rpgJobs.length ? rpgJobs.map(toJobCard) : previewJobs;
+  const recentEvents = buildRecentEvents(selectedSessionSummary);
+  const journalEntries = buildJournalEntries(selectedSessionSummary);
+  const journalDetail = buildJournalDetail(selectedSessionSummary);
+  const worldStateRows = buildWorldStateRows(selectedSessionSummary);
+  const checkpointSummary = buildCheckpointSummary(rpgAssets, selectedSessionSummary);
 
   return {
     heroStats,
@@ -204,10 +264,14 @@ export function createRpgWorkspaceState(sources: RpgWorkspaceStateSources): RpgW
     quickActions,
     recentEvents,
     journalEntries,
+    journalDetail,
     inventoryItems,
     hotbarAbilities,
     worldStateRows,
     npcRelationships,
+    sessionSummaries,
+    selectedSessionSummary,
+    checkpointSummary,
     sessions,
     rpgJobs,
     rpgAssets,
@@ -229,6 +293,117 @@ export function progressPercent(progress: { current: number; total: number } | u
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
+function toSessionSummary(session: RpgSession, index: number): RpgSessionSummaryPreview {
+  const metadata = recordValue(session.metadata);
+  const state = recordValue(session.state);
+  const payload = recordValue(session.payload);
+  const id = safeSessionId(session, index);
+  const updatedRaw = firstString(session.updated_at, session.updatedAt, session.modified_at, session.created_at, metadata?.updated_at);
+  const turnCount = firstNumber(session.turn_count, session.turns, session.current_turn, metadata?.turn_count, state?.turn_count);
+  const checkpointLabel = firstString(session.checkpoint_id, session.checkpoint, session.checkpoint_path, session.storage_path, payload?.checkpoint_id) ?? 'Checkpoint indexed';
+
+  return {
+    id,
+    title: firstString(session.title, session.name, session.label, session.session_id, session.id) ?? id,
+    location:
+      firstString(session.location, session.current_location, session.currentLocation, metadata?.location, metadata?.current_location, state?.location, payload?.location) ??
+      previewSessionSummary.location,
+    summary:
+      firstString(session.summary, session.description, session.last_event, metadata?.summary, metadata?.last_event, state?.summary, payload?.summary) ??
+      'Live replay-persistence session indexed by the backend.',
+    updatedAt: compactTimestamp(updatedRaw) ?? 'Updated time unknown',
+    turnLabel: typeof turnCount === 'number' ? `Turn ${turnCount}` : 'Turn count unknown',
+    checkpointLabel,
+    sortRank: timestampRank(updatedRaw),
+    source: 'live',
+  };
+}
+
+function buildRecentEvents(selectedSession: RpgSessionSummaryPreview): string[] {
+  if (selectedSession.source === 'preview') {
+    return previewRecentEvents;
+  }
+
+  return [
+    `Loaded ${selectedSession.title}.`,
+    `Current location: ${selectedSession.location}.`,
+    `${selectedSession.turnLabel} • ${selectedSession.updatedAt}.`,
+  ];
+}
+
+function buildJournalEntries(selectedSession: RpgSessionSummaryPreview): RpgJournalEntryPreview[] {
+  if (selectedSession.source === 'preview') {
+    return previewJournalEntries;
+  }
+
+  return [
+    {
+      time: selectedSession.updatedAt,
+      title: `Selected ${selectedSession.title}`,
+      detail: selectedSession.summary,
+    },
+    {
+      time: selectedSession.turnLabel,
+      title: 'Latest deterministic checkpoint',
+      detail: selectedSession.checkpointLabel,
+    },
+    {
+      time: 'Replay',
+      title: 'Session ready',
+      detail: 'Replay-preserving turn commands will continue from this indexed state.',
+    },
+  ];
+}
+
+function buildJournalDetail(selectedSession: RpgSessionSummaryPreview): RpgJournalDetailPreview {
+  if (selectedSession.source === 'preview') {
+    return previewJournalDetail;
+  }
+
+  return {
+    title: `Live session: ${selectedSession.title}`,
+    detail: selectedSession.summary,
+    bullets: [
+      `Session id: ${selectedSession.id}`,
+      `Location: ${selectedSession.location}`,
+      `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`,
+      `Checkpoint: ${selectedSession.checkpointLabel}`,
+    ],
+    tags: ['Live session', 'Replay-safe', 'Indexed'],
+  };
+}
+
+function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview): RpgWorldStateRowPreview[] {
+  if (selectedSession.source === 'preview') {
+    return previewWorldStateRows;
+  }
+
+  return [
+    { icon: '☀', label: 'Updated', value: selectedSession.updatedAt },
+    { icon: '⌁', label: 'Session', value: selectedSession.title },
+    { icon: '◆', label: 'Turn', value: selectedSession.turnLabel },
+    { icon: '▣', label: 'Mode', value: 'Replay-preserving' },
+  ];
+}
+
+function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionSummaryPreview): RpgCheckpointSummaryPreview {
+  if (!assets.length) {
+    return {
+      label: selectedSession.source === 'live' ? selectedSession.checkpointLabel : 'Preview only',
+      detail: selectedSession.source === 'live' ? `Session checkpoint: ${selectedSession.id}` : 'No RPG checkpoint assets indexed',
+      source: selectedSession.source,
+    };
+  }
+
+  const latestAsset = [...assets].sort((left, right) => timestampRank(right.created_at) - timestampRank(left.created_at))[0];
+
+  return {
+    label: 'Latest checkpoint',
+    detail: String(latestAsset.storage_path ?? latestAsset.id),
+    source: 'live',
+  };
+}
+
 function toJobCard(job: RpgJob): RpgJobCardPreview {
   return {
     id: String(job.id),
@@ -238,4 +413,63 @@ function toJobCard(job: RpgJob): RpgJobCardPreview {
     detail: job.stages?.map((stage) => stage.label).join(' / ') || String(job.resource_class),
     source: 'live',
   };
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return undefined;
+}
+
+function compactTimestamp(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (!value.includes('T')) {
+    return value;
+  }
+
+  const [date, time = ''] = value.split('T');
+  const [hour = '00', minute = '00'] = time.split(':');
+
+  return `${date} ${hour}:${minute} UTC`;
+}
+
+function timestampRank(value: string | undefined): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
