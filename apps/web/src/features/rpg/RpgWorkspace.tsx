@@ -5,6 +5,7 @@ import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
@@ -320,38 +321,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
           <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
 
-          <section className="rpg-card rpg-inventory-card">
-            <div className="rpg-tabs" role="tablist" aria-label="Inventory tabs">
-              <button type="button" className="active" role="tab" aria-selected="true">
-                Inventory
-              </button>
-              <button type="button" role="tab" aria-selected="false">
-                Abilities
-              </button>
-              <button type="button" role="tab" aria-selected="false">
-                Hotbar
-              </button>
-            </div>
-            <div className="rpg-inventory-grid">
-              {inventoryItems.map((item) => (
-                <button className="rpg-item-slot" key={item.label} type="button" aria-label={item.label}>
-                  <span aria-hidden="true">{item.icon}</span>
-                  <small>{item.count}</small>
-                </button>
-              ))}
-              <button className="rpg-item-slot rpg-empty-slot" type="button" aria-label="Empty inventory slot">
-                +
-              </button>
-              <div className="rpg-hotbar" aria-label="Ability hotbar">
-                {hotbarAbilities.map((ability) => (
-                  <button type="button" key={ability.key} aria-label={ability.label}>
-                    <small>{ability.key}</small>
-                    <span>{ability.icon}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
+          <RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} />
         </main>
 
         <aside className="rpg-right-rail" aria-label="World, jobs, and reports">
