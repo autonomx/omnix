@@ -18,7 +18,7 @@ interface RpgActionComposerProps {
   sessionSummaries: RpgSessionSummaryPreview[];
 }
 
-type LauncherView = 'home' | 'new_game' | 'load_game';
+type LauncherView = 'home' | 'new_game' | 'load_game' | 'settings';
 type RpgPlayerBuild = 'balanced_adventurer' | 'warrior' | 'ranger' | 'silver_tongue';
 type RpgDifficulty = 'story' | 'normal' | 'harsh';
 type RpgWorldActivity = 'quiet' | 'standard' | 'living_world';
@@ -102,6 +102,9 @@ export function RpgActionComposer({
   const [validatorEnabled, setValidatorEnabled] = useState(true);
   const [backgroundSoftAuditEnabled, setBackgroundSoftAuditEnabled] = useState(true);
   const [llmNarrationEnabled, setLlmNarrationEnabled] = useState(true);
+  const [imageGenerationEnabled, setImageGenerationEnabled] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [sttEnabled, setSttEnabled] = useState(false);
 
   const liveSessionSummaries = useMemo(
     () => sessionSummaries.filter((session) => session.source === 'live').sort((a, b) => b.sortRank - a.sortRank),
@@ -169,9 +172,9 @@ export function RpgActionComposer({
       validator: validatorEnabled,
       background_soft_audit: backgroundSoftAuditEnabled,
       llm_narration: llmNarrationEnabled,
-      image_generation: false,
-      tts: false,
-      stt: false,
+      image_generation: imageGenerationEnabled,
+      tts: ttsEnabled,
+      stt: sttEnabled,
     },
   });
 
@@ -217,6 +220,55 @@ export function RpgActionComposer({
     }
   };
 
+  const renameSession = async (session: RpgSessionSummaryPreview) => {
+    const nextName = window.prompt('Rename RPG save', session.title);
+    if (!nextName || nextName.trim() === session.title) {
+      return;
+    }
+
+    setIsLaunching(true);
+    setLaunchError(undefined);
+    setLaunchStatus(`Renaming session ${session.id}…`);
+    try {
+      const response = await omnixApiClient.renameRpgSession(session.id, nextName.trim());
+      if (!response.ok) {
+        throw new Error(response.error ?? 'RPG session rename failed.');
+      }
+      await refreshRpgWorkspace();
+      setLaunchStatus(`Save renamed: ${nextName.trim()}.`);
+    } catch (error) {
+      setLaunchError(error instanceof Error ? error.message : 'RPG session rename failed.');
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
+  const deleteSession = async (session: RpgSessionSummaryPreview) => {
+    const confirmed = window.confirm(`Delete save "${session.title}"? The session will be archived and removed from the launcher list.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setIsLaunching(true);
+    setLaunchError(undefined);
+    setLaunchStatus(`Deleting session ${session.id}…`);
+    try {
+      const response = await omnixApiClient.deleteRpgSession(session.id);
+      if (!response.ok) {
+        throw new Error(response.error ?? 'RPG session delete failed.');
+      }
+      if (selectedSessionId === session.id) {
+        applySelectedSessionId('');
+      }
+      await refreshRpgWorkspace();
+      setLaunchStatus(`Save deleted: ${session.title}.`);
+    } catch (error) {
+      setLaunchError(error instanceof Error ? error.message : 'RPG session delete failed.');
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
   const selectedSessionHasOption = !selectedSessionId || sessionSummaries.some((session) => session.id === selectedSessionId);
 
   return (
@@ -245,6 +297,9 @@ export function RpgActionComposer({
           </Button>
           <Button variant="light" type="button" disabled={isLaunching || isPending || !liveSessionSummaries.length} onClick={() => setLauncherView('load_game')}>
             Load Game
+          </Button>
+          <Button variant="subtle" type="button" disabled={isLaunching || isPending} onClick={() => setLauncherView('settings')}>
+            Settings
           </Button>
         </div>
 
@@ -346,6 +401,53 @@ export function RpgActionComposer({
           </div>
         ) : null}
 
+        {launcherView === 'settings' ? (
+          <div className="rpg-launcher-panel" aria-label="RPG launcher settings">
+            <div className="rpg-launcher-panel-heading">
+              <div>
+                <p className="eyebrow">RPG settings</p>
+                <h4>New Game feature defaults</h4>
+              </div>
+              <Button variant="subtle" type="button" disabled={isLaunching} onClick={() => setLauncherView('home')}>
+                Close
+              </Button>
+            </div>
+            <p className="rpg-settings-note">
+              These settings are stored into the next New Game session manifest. Demo Session keeps its curated showcase defaults.
+            </p>
+            <div className="rpg-launcher-toggle-grid" aria-label="RPG feature toggles">
+              <label>
+                <input type="checkbox" checked={validatorEnabled} onChange={(event) => setValidatorEnabled(event.currentTarget.checked)} />
+                <span>Grounding validator</span>
+              </label>
+              <label>
+                <input type="checkbox" checked={backgroundSoftAuditEnabled} onChange={(event) => setBackgroundSoftAuditEnabled(event.currentTarget.checked)} />
+                <span>Background soft audit</span>
+              </label>
+              <label>
+                <input type="checkbox" checked={llmNarrationEnabled} onChange={(event) => setLlmNarrationEnabled(event.currentTarget.checked)} />
+                <span>LLM narration</span>
+              </label>
+              <label>
+                <input type="checkbox" checked={imageGenerationEnabled} onChange={(event) => setImageGenerationEnabled(event.currentTarget.checked)} />
+                <span>Image generation</span>
+              </label>
+              <label>
+                <input type="checkbox" checked={ttsEnabled} onChange={(event) => setTtsEnabled(event.currentTarget.checked)} />
+                <span>TTS</span>
+              </label>
+              <label>
+                <input type="checkbox" checked={sttEnabled} onChange={(event) => setSttEnabled(event.currentTarget.checked)} />
+                <span>STT</span>
+              </label>
+              <label>
+                <input type="checkbox" checked={companionsEnabled} onChange={(event) => setCompanionsEnabled(event.currentTarget.checked)} />
+                <span>Companions enabled</span>
+              </label>
+            </div>
+          </div>
+        ) : null}
+
         {launcherView === 'load_game' ? (
           <div className="rpg-launcher-panel" aria-label="Load Game browser">
             <div className="rpg-launcher-panel-heading">
@@ -359,11 +461,21 @@ export function RpgActionComposer({
             </div>
             <div className="rpg-load-game-list">
               {liveSessionSummaries.map((session) => (
-                <button key={session.id} type="button" disabled={isLaunching || isPending} onClick={() => void continueSession(session.id)}>
-                  <strong>{session.title}</strong>
-                  <span>{session.location} • {session.turnLabel} • {session.updatedAt}</span>
-                  <small>{session.id}</small>
-                </button>
+                <div key={session.id} className="rpg-load-game-card">
+                  <button className="rpg-load-game-main" type="button" disabled={isLaunching || isPending} onClick={() => void continueSession(session.id)}>
+                    <strong>{session.title}</strong>
+                    <span>{session.location} • {session.turnLabel} • {session.updatedAt}</span>
+                    <small>{session.id}</small>
+                  </button>
+                  <div className="rpg-load-game-actions">
+                    <Button size="xs" variant="subtle" type="button" disabled={isLaunching || isPending} onClick={() => void renameSession(session)}>
+                      Rename
+                    </Button>
+                    <Button size="xs" variant="outline" type="button" disabled={isLaunching || isPending} onClick={() => void deleteSession(session)}>
+                      Delete
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
