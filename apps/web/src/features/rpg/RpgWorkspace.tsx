@@ -19,6 +19,8 @@ interface RpgFormValues {
   command: string;
 }
 
+const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
+
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const inventoryQuery = useQuery({
@@ -28,6 +30,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const jobsQuery = useQuery({
     queryKey: ['platform', 'jobs'],
     queryFn: () => omnixApiClient.listJobs(),
+    refetchInterval: 3000,
   });
   const assetsQuery = useQuery({
     queryKey: ['platform', 'assets'],
@@ -77,6 +80,16 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     reports: reportsQuery.data,
     selectedSessionId,
   });
+  const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
+  const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
+  const invalidateRpgWorkspaceQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform', 'assets'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform', 'reports'] }),
+    ]);
+  };
   const createJobMutation = useMutation({
     mutationFn: (values: RpgFormValues) =>
       omnixApiClient.createJob({
@@ -98,10 +111,77 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       }),
     onSuccess: async (_job, values) => {
       reset({ sessionId: values.sessionId, command: '' });
-      await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+      await invalidateRpgWorkspaceQueries();
+    },
+  });
+  const createCheckpointMutation = useMutation({
+    mutationFn: () =>
+      omnixApiClient.createReplayCheckpoint({
+        source: 'rpg-workspace',
+        version: 'rpg-ui-control-v1',
+        metadata: {
+          module: 'rpg',
+          session_id: selectedLiveSessionId,
+          session_title: selectedSessionSummary.title,
+          reason: 'manual-ui-checkpoint',
+        },
+        payload: {
+          selected_session_id: selectedLiveSessionId,
+          title: selectedSessionSummary.title,
+          location: selectedSessionSummary.location,
+          turn_label: selectedSessionSummary.turnLabel,
+          checkpoint_label: selectedSessionSummary.checkpointLabel,
+        },
+      }),
+    onSuccess: async () => {
+      await invalidateRpgWorkspaceQueries();
+    },
+  });
+  const autoplayMutation = useMutation({
+    mutationFn: () => {
+      if (activeAutoplayJob) {
+        return omnixApiClient.cancelJob(activeAutoplayJob.id, 'Stopped from the RPG workspace autoplay control.');
+      }
+
+      return omnixApiClient.createJob({
+        module: 'rpg',
+        type: 'rpg.autoplay',
+        resource_class: 'gpu:llm',
+        priority: 0,
+        input_ref: selectedLiveSessionId ? { session_id: selectedLiveSessionId } : null,
+        input_payload: {
+          determinism_policy: 'replay_preserving',
+          source: 'rpg-workspace',
+          turn_budget: 10,
+        },
+        stages: [
+          { id: 'load-session', label: 'Load RPG session', resource_class: 'cpu', status: 'queued' },
+          { id: 'plan-turns', label: 'Plan deterministic turns', resource_class: 'gpu:llm', status: 'queued' },
+          { id: 'run-turns', label: 'Run autoplay turns', resource_class: 'cpu', status: 'queued' },
+          { id: 'write-report', label: 'Write autoplay report', resource_class: 'cpu', status: 'queued' },
+        ],
+      });
+    },
+    onSuccess: async () => {
+      await invalidateRpgWorkspaceQueries();
     },
   });
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
+  const checkpointControlStatus = createCheckpointMutation.isPending
+    ? 'Creating checkpoint…'
+    : createCheckpointMutation.isError
+      ? 'Checkpoint request failed.'
+      : createCheckpointMutation.data?.checkpoint_id
+        ? `Checkpoint created: ${createCheckpointMutation.data.checkpoint_id}`
+        : undefined;
+  const autoplayStatusLabel = autoplayMutation.isPending
+    ? 'Updating autoplay…'
+    : autoplayMutation.isError
+      ? 'Autoplay control failed.'
+      : activeAutoplayJob
+        ? `${activeAutoplayJob.status} • ${activeAutoplayJob.id}`
+        : 'Off';
+  const isRefreshingRpgQueries = inventoryQuery.isFetching || jobsQuery.isFetching || assetsQuery.isFetching || reportsQuery.isFetching;
 
   return (
     <WorkspacePanel className="rpg-workstation">
@@ -146,10 +226,20 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         </main>
 
         <RpgWorldRail
+          autoplayRunning={Boolean(activeAutoplayJob)}
+          autoplayStatusLabel={autoplayStatusLabel}
+          checkpointControlStatus={checkpointControlStatus}
           checkpointSummary={checkpointSummary}
           encounter={encounter}
+          isAutoplayPending={autoplayMutation.isPending}
+          isCreatingCheckpoint={createCheckpointMutation.isPending}
+          isRefreshingJobs={isRefreshingRpgQueries}
           jobCards={jobCards}
           npcRelationships={npcRelationships}
+          onCreateCheckpoint={() => createCheckpointMutation.mutate()}
+          onRefreshJobs={() => void invalidateRpgWorkspaceQueries()}
+          onToggleAutoplay={() => autoplayMutation.mutate()}
+          reportsHref="/api/reports"
           rpgAssets={rpgAssets}
           rpgJobCount={rpgJobs.length}
           rpgReportCount={rpgReports.length}
