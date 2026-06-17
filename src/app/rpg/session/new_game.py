@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.rpg.session.ability_system import build_progression_package
 from app.rpg.session.service import archive_session, load_session, save_session
 
 DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
@@ -47,10 +48,19 @@ class RpgFeatureOptions(BaseModel):
 
 class RpgNewGameRequest(BaseModel):
     campaign_template: str = "classic_fantasy"
+    genre: str | None = None
+    tone: str = "heroic adventure"
     starting_location: str = "rusty_flagon_tavern"
     player: RpgPlayerOptions = Field(default_factory=RpgPlayerOptions)
+    primary_capability: str | None = None
+    secondary_capabilities: list[str] = Field(default_factory=list)
+    power_source: str | None = None
+    generated_class_name: str | None = None
+    generated_class_summary: str | None = None
     difficulty: Literal["story", "normal", "harsh"] = "normal"
     world_activity: Literal["quiet", "standard", "living_world"] = "standard"
+    economy_pressure: Literal["relaxed", "normal", "strict"] = "normal"
+    combat_lethality: Literal["safe", "normal", "deadly"] = "normal"
     companions_enabled: bool = True
     permadeath: bool = False
     seed: int | None = None
@@ -222,6 +232,9 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     location = STARTING_LOCATIONS.get(request.starting_location, STARTING_LOCATIONS["rusty_flagon_tavern"])
     features = request.features.model_dump(mode="json")
     seed = int(request.seed or secrets.randbits(31))
+    request_payload = request.model_dump(mode="json")
+    progression = build_progression_package(request_payload, build_id=request.player.build, level=1, seed=seed)
+    identity = progression["character_identity"]
     return {
         "contract_version": NEW_GAME_CONTRACT_VERSION,
         "session_id": session_id,
@@ -235,16 +248,28 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "metadata": {
             "kind": "new_game",
             "campaign_template": request.campaign_template,
+            "genre": identity["genre"],
+            "tone": identity["tone"],
             "difficulty": request.difficulty,
             "world_activity": request.world_activity,
+            "economy_pressure": request.economy_pressure,
+            "combat_lethality": request.combat_lethality,
             "seed": seed,
             "created_from_preset": None,
         },
+        "character_identity": identity,
+        "ability_tree": progression["ability_tree"],
+        "ability_state": progression["ability_state"],
+        "hotbar": progression["hotbar"],
+        "skill_progression": {},
+        "mechanics": {"dimension_effects": [], "pending_dimension_effects": []},
+        "narrative_affordances": {},
         "player": {
             "name": request.player.name,
             "pronouns": request.player.pronouns,
             "background": request.player.background,
-            "class": build["role"],
+            "class": identity["generated_class_name"],
+            "role": identity["primary_capability"],
             "build": request.player.build,
             "level": 1,
             "xp": {"current": 0, "max": 100},
@@ -279,6 +304,17 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
 
 
 def _demo_state(session_id: str, now: str) -> dict[str, Any]:
+    demo_payload = {
+        "campaign_template": "classic_fantasy",
+        "genre": "classic_fantasy",
+        "tone": "heroic mountain mystery",
+        "player": {"name": "Alyndra", "pronouns": "she/her", "background": "Wanderer of the North", "build": "ranger"},
+        "primary_capability": "recon",
+        "secondary_capabilities": ["survival", "combat"],
+        "power_source": "martial",
+        "generated_class_name": "Ranger",
+    }
+    progression = build_progression_package(demo_payload, build_id="ranger", level=14, seed=140914)
     return {
         "contract_version": NEW_GAME_CONTRACT_VERSION,
         "session_id": session_id,
@@ -289,12 +325,20 @@ def _demo_state(session_id: str, now: str) -> dict[str, Any]:
         "current_turn": 73,
         "turn_count": 73,
         "updated_at": now,
-        "metadata": {"kind": "playable_demo_clone", "created_from_preset": DEMO_PRESET_ID, "seed": 140914},
+        "metadata": {"kind": "playable_demo_clone", "created_from_preset": DEMO_PRESET_ID, "seed": 140914, "genre": "classic_fantasy"},
+        "character_identity": progression["character_identity"],
+        "ability_tree": progression["ability_tree"],
+        "ability_state": progression["ability_state"],
+        "hotbar": progression["hotbar"],
+        "skill_progression": {"tracking": {"xp": 240, "rank": 4}, "marksmanship": {"xp": 310, "rank": 5}},
+        "mechanics": {"dimension_effects": [], "pending_dimension_effects": []},
+        "narrative_affordances": {},
         "player": {
             "name": "Alyndra",
             "pronouns": "she/her",
             "background": "Wanderer of the North",
             "class": "Ranger",
+            "role": "recon",
             "level": 14,
             "xp": {"current": 7450, "max": 12000},
             "resources": {
