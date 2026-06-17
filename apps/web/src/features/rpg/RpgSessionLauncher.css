@@ -1,0 +1,55 @@
+.rpg-session-launcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(168, 139, 250, 0.26);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.22), rgba(15, 23, 42, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.rpg-session-launcher h3,
+.rpg-session-launcher p {
+  margin: 0;
+}
+
+.rpg-session-launcher p:not(.eyebrow) {
+  color: var(--omnix-muted, #a7a4b8);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.rpg-session-launcher-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.rpg-session-launcher-status,
+.rpg-session-launcher-error {
+  grid-column: 1 / -1;
+  padding-top: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.rpg-session-launcher-status {
+  color: #c4b5fd;
+}
+
+.rpg-session-launcher-error {
+  color: #fca5a5;
+}
+
+@media (max-width: 860px) {
+  .rpg-session-launcher {
+    grid-template-columns: 1fr;
+  }
+
+  .rpg-session-launcher-actions {
+    justify-content: flex-start;
+  }
+}
