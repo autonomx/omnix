@@ -16,6 +16,7 @@ import { RpgWorldRail } from './RpgWorldRail';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
+import './RpgResponsivePolish.css';
 
 interface RpgFormValues {
   sessionId: string;
