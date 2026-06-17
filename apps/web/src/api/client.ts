@@ -7,6 +7,7 @@ export type AssetListResponse = components['schemas']['AssetListResponse'];
 export type CancelJobRequest = components['schemas']['CancelJobRequest'];
 export type ChatSession = components['schemas']['ChatSession'];
 export type ChatSessionListResponse = components['schemas']['ChatSessionListResponse'];
+export type CheckpointEnvelope = components['schemas']['CheckpointEnvelope'];
 export type CreateChatSessionRequest = components['schemas']['CreateChatSessionRequest'];
 export type CreateJobRequest = components['schemas']['CreateJobRequest'];
 export type DiagnosticsPayload = components['schemas']['DiagnosticsPayload'];
@@ -170,6 +171,10 @@ export class OmnixApiClient {
 
   async getReplayPersistenceInventory(): Promise<PersistenceInventory> {
     return this.get<PersistenceInventory>('/api/replay/persistence/inventory');
+  }
+
+  async createReplayCheckpoint(request: Record<string, unknown>): Promise<CheckpointEnvelope> {
+    return this.post<Record<string, unknown>, CheckpointEnvelope>('/api/replay/checkpoints', request);
   }
 
   async getSettings(): Promise<SettingsPayload> {

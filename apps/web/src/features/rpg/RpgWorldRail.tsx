@@ -16,10 +16,20 @@ interface RpgReportAssetPreview {
 }
 
 interface RpgWorldRailProps {
+  autoplayRunning: boolean;
+  autoplayStatusLabel: string;
+  checkpointControlStatus?: string;
   checkpointSummary: RpgCheckpointSummaryPreview;
   encounter: RpgEncounterPreview;
+  isAutoplayPending: boolean;
+  isCreatingCheckpoint: boolean;
+  isRefreshingJobs: boolean;
   jobCards: RpgJobCardPreview[];
   npcRelationships: RpgNpcRelationshipPreview[];
+  onCreateCheckpoint: () => void;
+  onRefreshJobs: () => void;
+  onToggleAutoplay: () => void;
+  reportsHref: string;
   rpgAssets: RpgReportAssetPreview[];
   rpgJobCount: number;
   rpgReportCount: number;
@@ -28,10 +38,20 @@ interface RpgWorldRailProps {
 }
 
 export function RpgWorldRail({
+  autoplayRunning,
+  autoplayStatusLabel,
+  checkpointControlStatus,
   checkpointSummary,
   encounter,
+  isAutoplayPending,
+  isCreatingCheckpoint,
+  isRefreshingJobs,
   jobCards,
   npcRelationships,
+  onCreateCheckpoint,
+  onRefreshJobs,
+  onToggleAutoplay,
+  reportsHref,
   rpgAssets,
   rpgJobCount,
   rpgReportCount,
@@ -98,8 +118,11 @@ export function RpgWorldRail({
       <section className="rpg-card rpg-jobs-card">
         <div className="rpg-section-heading">
           <p className="eyebrow">RPG jobs</p>
-          <span>{rpgJobCount ? `${rpgJobCount} live` : 'Preview'}</span>
+          <button type="button" onClick={onRefreshJobs} disabled={isRefreshingJobs}>
+            {isRefreshingJobs ? 'Refreshing…' : 'Refresh RPG jobs'}
+          </button>
         </div>
+        <span>{rpgJobCount ? `${rpgJobCount} live` : 'Preview'}</span>
         <div className="rpg-list-stack">
           {jobCards.map((job) => (
             <article className="rpg-job-row" key={job.id}>
@@ -120,7 +143,10 @@ export function RpgWorldRail({
           <span>▷</span>
           <div>
             <strong>Autoplay</strong>
-            <small>Off</small>
+            <small>{autoplayStatusLabel}</small>
+            <button className="rpg-secondary-button" type="button" onClick={onToggleAutoplay} disabled={isAutoplayPending}>
+              {isAutoplayPending ? 'Updating autoplay…' : autoplayRunning ? 'Stop autoplay' : 'Start autoplay'}
+            </button>
           </div>
         </div>
         <div className="rpg-report-row">
@@ -128,6 +154,9 @@ export function RpgWorldRail({
           <div>
             <strong>Reports</strong>
             <small>{rpgReportCount ? `${rpgReportCount} ready` : 'No RPG reports found'}</small>
+            <a className="rpg-secondary-button" href={reportsHref}>
+              Open reports index
+            </a>
           </div>
         </div>
         <div className="rpg-report-row">
@@ -137,6 +166,7 @@ export function RpgWorldRail({
             <small>
               {checkpointSummary.label}: {checkpointSummary.detail}
             </small>
+            {checkpointControlStatus ? <small>{checkpointControlStatus}</small> : null}
           </div>
         </div>
         {rpgAssets.map((asset) => (
@@ -150,8 +180,8 @@ export function RpgWorldRail({
             </div>
           </article>
         ))}
-        <button className="rpg-primary-button" type="button">
-          Create checkpoint
+        <button className="rpg-primary-button" type="button" onClick={onCreateCheckpoint} disabled={isCreatingCheckpoint}>
+          {isCreatingCheckpoint ? 'Creating checkpoint…' : 'Create checkpoint'}
         </button>
       </section>
     </aside>
