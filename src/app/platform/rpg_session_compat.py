@@ -33,12 +33,14 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     """Return a session envelope or perform a synchronous RPG launch action.
 
     This gateway-compat route is used by the web app while the typed RPG
-    endpoints are being promoted. Supported launch actions are intentionally
-    synchronous and do not call LLM/image/TTS services:
+    endpoints are being promoted. Supported launch/session actions are
+    intentionally synchronous and do not call LLM/image/TTS services:
 
     - {"action": "new_game", ...}
     - {"action": "start_preset", "preset_id": "demo_glimmerdeep_pass_lvl14"}
     - {"action": "continue", "session_id": "..."}
+    - {"action": "rename", "session_id": "...", "name": "..."}
+    - {"action": "delete", "session_id": "..."}
     """
     payload = _safe_dict(data)
     action = _safe_str(payload.get("action")).strip()
@@ -62,6 +64,25 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         if not session_id:
             return {"ok": False, "error": "missing_session_id"}
         return continue_rpg_session(session_id)
+
+    if action == "rename":
+        from app.rpg.session.new_game import rename_rpg_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        name = _safe_str(payload.get("name")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        if not name:
+            return {"ok": False, "error": "missing_session_name", "session_id": session_id}
+        return rename_rpg_session(session_id, name)
+
+    if action == "delete":
+        from app.rpg.session.new_game import delete_rpg_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        return delete_rpg_session(session_id)
 
     session_id = _safe_str(payload.get("session_id")).strip()
     if not session_id:
