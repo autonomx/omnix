@@ -5,8 +5,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+from app.rpg.session.ability_system import apply_ability_to_state
 from app.rpg.session.service import load_session, save_session
 
 LoadoutActionKind = Literal["inspect", "use", "equip", "drop", "use_ability", "hotbar"]
@@ -18,18 +19,6 @@ class RpgLoadoutActionRequest(BaseModel):
     ability_name: str | None = None
     hotbar_slot: str | int | None = None
     target: str | None = None
-
-
-ABILITY_CATALOG: dict[str, dict[str, Any]] = {
-    "aimed shot": {"name": "Aimed Shot", "slot": "1", "icon": "✦", "resource": "stamina", "cost": 10, "summary": "A careful ranged attack prepared against the best visible target."},
-    "frost arrow": {"name": "Frost Arrow", "slot": "2", "icon": "↯", "resource": "mana", "cost": 12, "summary": "A freezing arrow readied to slow or punish a dangerous foe."},
-    "camouflage": {"name": "Camouflage", "slot": "3", "icon": "☘", "resource": "stamina", "cost": 8, "summary": "The hero blends into terrain and gains a stealth advantage."},
-    "radiant flare": {"name": "Radiant Flare", "slot": "4", "icon": "✹", "resource": "mana", "cost": 15, "summary": "A burst of light reveals threats and can stagger nearby enemies."},
-    "volley": {"name": "Volley", "slot": "5", "icon": "⟡", "resource": "stamina", "cost": 15, "summary": "A quick spread of shots pressures clustered enemies."},
-    "dash": {"name": "Dash", "slot": "6", "icon": "⇥", "resource": "stamina", "cost": 12, "summary": "A fast reposition that improves immediate tactical options."},
-}
-
-HOTBAR_BY_SLOT = {str(value["slot"]): value for value in ABILITY_CATALOG.values()}
 
 
 def _utc_now() -> str:
@@ -161,7 +150,7 @@ def _equip_item(player: dict[str, Any], item: dict[str, Any]) -> str:
     return slot
 
 
-def _append_event(state: dict[str, Any], *, title: str, detail: str, kind: str, actor: str = "Player") -> dict[str, Any]:
+def _append_event(state: dict[str, Any], *, title: str, detail: str, kind: str, actor: str = "Player", effects: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     turn = int(state.get("current_turn") or state.get("turn_count") or 0)
     event = {
         "turn": turn,
@@ -172,6 +161,8 @@ def _append_event(state: dict[str, Any], *, title: str, detail: str, kind: str, 
         "kind": kind,
         "timestamp": _utc_now(),
     }
+    if effects:
+        event["effects"] = effects
     timeline = _safe_list(state.get("timeline"))
     state["timeline"] = [event, *timeline][:50]
     journal = _safe_dict(state.get("journal"))
@@ -203,9 +194,11 @@ def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dic
         current, maximum = _change_metric(player, "stamina", 10)
         detail = f"You ate {name} and recovered stamina to {current}/{maximum}."
     elif "torch" in lower:
-        runtime = _safe_dict(state.get("runtime"))
-        runtime["light_source"] = "torch"
-        state["runtime"] = runtime
+        scene_state = _safe_dict(state.get("scene_state"))
+        statuses = _safe_list(scene_state.get("statuses"))
+        statuses.insert(0, {"status": "lit_torch", "dimension": "environment", "source": name, "created_at": _utc_now()})
+        scene_state["statuses"] = statuses[:20]
+        state["scene_state"] = scene_state
         detail = f"You lit {name}. The immediate area is easier to inspect."
     elif "focus" in lower or "crystal" in lower:
         current, maximum = _change_metric(player, "mana", 10)
@@ -216,6 +209,11 @@ def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dic
         detail = f"You equipped {name} in the {slot} slot."
     elif "journal" in lower or "scroll" in lower:
         consumed = False
+        affordances = _safe_dict(state.get("narrative_affordances"))
+        dialogue = _safe_list(affordances.get("dialogue"))
+        dialogue.insert(0, {"tag": "ask_about_written_clue", "source": name, "dimension": "narrative", "created_at": _utc_now()})
+        affordances["dialogue"] = dialogue[:20]
+        state["narrative_affordances"] = affordances
         detail = f"You reviewed {name} for useful clues."
     else:
         consumed = False
@@ -224,42 +222,6 @@ def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dic
     if consumed:
         _consume(inventory, index)
     return name, detail
-
-
-def _ability_from_request(request: RpgLoadoutActionRequest) -> dict[str, Any] | None:
-    if request.hotbar_slot is not None:
-        ability = HOTBAR_BY_SLOT.get(str(request.hotbar_slot))
-        if ability:
-            return ability
-    wanted = _norm(request.ability_name)
-    if wanted:
-        return ABILITY_CATALOG.get(wanted) or next((ability for key, ability in ABILITY_CATALOG.items() if wanted in key), None)
-    return None
-
-
-def _use_ability(state: dict[str, Any], player: dict[str, Any], request: RpgLoadoutActionRequest) -> tuple[bool, str, str]:
-    ability = _ability_from_request(request)
-    if not ability:
-        return False, "unknown_ability", "Ability was not found in the deterministic catalog."
-
-    resource_name = str(ability["resource"])
-    cost = int(ability["cost"])
-    metric = _metric(player, resource_name)
-    current = int(metric.get("current") or 0)
-    maximum = int(metric.get("max") or current)
-    name = str(ability["name"])
-    if current < cost:
-        return False, "insufficient_resource", f"{name} requires {cost} {resource_name}, but only {current}/{maximum} is available."
-
-    metric["current"] = current - cost
-    target = request.target or "the best available target"
-    runtime = _safe_dict(state.get("runtime"))
-    buffs = _safe_list(runtime.get("effects"))
-    buffs.insert(0, {"source": name, "target": target, "created_at": _utc_now()})
-    runtime["effects"] = buffs[:12]
-    state["runtime"] = runtime
-    detail = f"You used {name} on {target}. {ability['summary']} {resource_name.title()} is now {metric['current']}/{maximum}."
-    return True, name, detail
 
 
 def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
@@ -304,11 +266,11 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
 
         event = _append_event(state, title=title, detail=detail, kind=kind)
     elif action in {"use_ability", "hotbar"}:
-        ok, name, detail = _use_ability(state, player, request)
-        if not ok:
-            return {"ok": False, "error": name, "session_id": session_id, "detail": detail}
+        result = apply_ability_to_state(state, ability_name=request.ability_name, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
+        if not result.ok:
+            return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}
         _advance_turn(state)
-        event = _append_event(state, title=f"Used {name}", detail=detail, kind="ability")
+        event = _append_event(state, title=f"Used {result.name}", detail=result.detail, kind="ability", effects=result.effects)
     else:
         return {"ok": False, "error": "unsupported_loadout_action", "session_id": session_id, "action": action}
 
