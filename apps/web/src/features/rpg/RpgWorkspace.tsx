@@ -5,7 +5,7 @@ import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
-import { createRpgWorkspaceState, safeSessionId } from './rpgUiState';
+import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
 
 interface RpgFormValues {
@@ -36,10 +36,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<RpgFormValues>({
     defaultValues: { sessionId: '', command: '' },
   });
+  const selectedSessionId = watch('sessionId');
   const {
     heroStats,
     equippedGear,
@@ -48,11 +50,14 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     quickActions,
     recentEvents,
     journalEntries,
+    journalDetail,
     inventoryItems,
     hotbarAbilities,
     worldStateRows,
     npcRelationships,
-    sessions,
+    sessionSummaries,
+    selectedSessionSummary,
+    checkpointSummary,
     rpgJobs,
     rpgAssets,
     rpgReports,
@@ -62,6 +67,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     jobs: jobsQuery.data,
     assets: assetsQuery.data,
     reports: reportsQuery.data,
+    selectedSessionId,
   });
   const createJobMutation = useMutation({
     mutationFn: (values: RpgFormValues) =>
@@ -99,6 +105,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
         </div>
         <div className="rpg-header-pills" aria-label="RPG runtime status">
           <OmnixStatusPill>Engine: {submitStatus}</OmnixStatusPill>
+          <OmnixStatusPill>Session: {selectedSessionSummary.title}</OmnixStatusPill>
           <OmnixStatusPill>Replay-preserving</OmnixStatusPill>
           <code>{module.route}</code>
         </div>
@@ -218,25 +225,22 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <div className="rpg-story-heading">
               <div>
                 <p className="eyebrow">Story / scene</p>
-                <h3>📍 Glimmerdeep Pass</h3>
+                <h3>📍 {selectedSessionSummary.location}</h3>
                 <div className="rpg-chip-row">
-                  <span>Mountain Pass</span>
-                  <span>Cold • Windy</span>
-                  <span>Day 18 • 09:42</span>
+                  <span>{selectedSessionSummary.title}</span>
+                  <span>{selectedSessionSummary.turnLabel}</span>
+                  <span>{selectedSessionSummary.updatedAt}</span>
                 </div>
               </div>
-              <div className="rpg-scene-art" aria-label="Snowy mountain pass scene preview" />
+              <div className="rpg-scene-art" aria-label={`${selectedSessionSummary.location} scene preview`} />
             </div>
-            <p className="rpg-scene-copy">
-              The mountain winds howl through the narrow pass, carrying the scent of pine and snow. Jagged cliffs rise on both
-              sides, and an ancient stone archway stands ahead, half-buried in drifts.
-            </p>
+            <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
             <div className="rpg-dialogue-stack">
               <article>
                 <span className="rpg-avatar rpg-avatar-small">A</span>
                 <div>
                   <strong>Alyndra (You)</strong>
-                  <p>“I scan the archway and surrounding cliffs for any signs of recent activity.”</p>
+                  <p>“I scan the current scene for useful details before committing to the next deterministic turn.”</p>
                 </div>
               </article>
               <article>
@@ -244,8 +248,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <div>
                   <strong>Omnix (Narrator)</strong>
                   <p>
-                    Faint tracks—large, clawed, and fresh—mar the snow near the archway. A torn banner from the Northern Watch
-                    flutters in the wind. Something big passed through here not long ago.
+                    The selected RPG session is ready. Queue a replay-preserving command to advance the simulation and update the
+                    scene from the authoritative turn result.
                   </p>
                 </div>
               </article>
@@ -258,7 +262,6 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 ))}
               </ul>
             </div>
-
             <form className="rpg-action-composer" onSubmit={handleSubmit((values) => createJobMutation.mutate(values))}>
               <div className="rpg-action-composer-heading">
                 <h3>Turn request</h3>
@@ -268,14 +271,11 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <span>Session</span>
                 <select {...register('sessionId')}>
                   <option value="">New or current session</option>
-                  {sessions.map((session, index) => {
-                    const sessionId = safeSessionId(session, index);
-                    return (
-                      <option key={sessionId} value={sessionId}>
-                        {sessionId}
-                      </option>
-                    );
-                  })}
+                  {sessionSummaries.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.title === session.id ? session.id : `${session.title} — ${session.id}`}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="rpg-command-field">
@@ -340,17 +340,17 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 ))}
               </div>
               <article className="rpg-journal-detail">
-                <h3>Arrived at Glimmerdeep Pass</h3>
-                <p>The party makes its way through the winding mountain trail and reaches the ancient pass.</p>
+                <h3>{journalDetail.title}</h3>
+                <p>{journalDetail.detail}</p>
                 <ul>
-                  <li>Discovered location: Glimmerdeep Pass</li>
-                  <li>Weather: Cold, Windy</li>
-                  <li>Detected tracks near the northern archway</li>
+                  {journalDetail.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
                 </ul>
                 <div className="rpg-chip-row">
-                  <span>Exploration</span>
-                  <span>Discovery</span>
-                  <span>Travel</span>
+                  {journalDetail.tags.map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
                 </div>
               </article>
             </div>
@@ -396,7 +396,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <p className="eyebrow">World & location</p>
               <button type="button">Change location</button>
             </div>
-            <div className="rpg-map-preview" aria-label="Glimmerdeep Pass travel map">
+            <div className="rpg-map-preview" aria-label={`${selectedSessionSummary.location} travel map`}>
               <span className="rpg-map-pin" aria-hidden="true" />
               <div className="rpg-map-controls" aria-hidden="true">
                 <span>+</span>
@@ -404,7 +404,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <span>◎</span>
               </div>
             </div>
-            <strong>Glimmerdeep Pass</strong>
+            <strong>{selectedSessionSummary.location}</strong>
           </section>
 
           <section className="rpg-card rpg-world-grid-card">
@@ -484,7 +484,9 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
               <span>▣</span>
               <div>
                 <strong>Checkpoint</strong>
-                <small>{rpgAssets.length ? `${rpgAssets.length} indexed` : 'No RPG assets indexed'}</small>
+                <small>
+                  {checkpointSummary.label}: {checkpointSummary.detail}
+                </small>
               </div>
             </div>
             {rpgAssets.map((asset) => (
