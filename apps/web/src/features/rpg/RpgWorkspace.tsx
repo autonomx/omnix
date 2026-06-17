@@ -5,6 +5,7 @@ import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { RpgNarrativeTabs } from './RpgNarrativeTabs';
 import { createRpgWorkspaceState } from './rpgUiState';
 import './RpgWorkspace.css';
 
@@ -317,46 +318,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
             </div>
           </section>
 
-          <section className="rpg-card rpg-journal-card">
-            <div className="rpg-tabs" role="tablist" aria-label="RPG logs">
-              <button type="button" className="active" role="tab" aria-selected="true">
-                Journal
-              </button>
-              <button type="button" role="tab" aria-selected="false">
-                Dialogue log
-              </button>
-              <button type="button" role="tab" aria-selected="false">
-                Turn history
-              </button>
-            </div>
-            <div className="rpg-journal-grid">
-              <div className="rpg-journal-list">
-                {journalEntries.map((entry, index) => (
-                  <article className={index === 0 ? 'active' : undefined} key={entry.title}>
-                    <span aria-hidden="true" />
-                    <div>
-                      <strong>{entry.time}</strong>
-                      <p>{entry.title}</p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <article className="rpg-journal-detail">
-                <h3>{journalDetail.title}</h3>
-                <p>{journalDetail.detail}</p>
-                <ul>
-                  {journalDetail.bullets.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
-                  ))}
-                </ul>
-                <div className="rpg-chip-row">
-                  {journalDetail.tags.map((tag) => (
-                    <span key={tag}>{tag}</span>
-                  ))}
-                </div>
-              </article>
-            </div>
-          </section>
+          <RpgNarrativeTabs journalDetail={journalDetail} journalEntries={journalEntries} recentEvents={recentEvents} />
 
           <section className="rpg-card rpg-inventory-card">
             <div className="rpg-tabs" role="tablist" aria-label="Inventory tabs">
