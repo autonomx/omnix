@@ -1,0 +1,48 @@
+.rpg-hero-avatar-art {
+  background: rgba(7, 6, 13, 0.88);
+  border-color: rgba(217, 205, 255, 0.38);
+  padding: 0;
+}
+
+.rpg-hero-avatar-art img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.rpg-scene-art-has-image,
+.rpg-map-preview-has-image {
+  background: rgba(7, 6, 13, 0.78);
+}
+
+.rpg-scene-art-has-image::before,
+.rpg-scene-art-has-image::after,
+.rpg-map-preview-has-image::before,
+.rpg-map-preview-has-image::after {
+  display: none;
+}
+
+.rpg-scene-art-has-image img,
+.rpg-map-preview-has-image img {
+  display: block;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.rpg-scene-art-has-image img {
+  object-position: center center;
+}
+
+.rpg-map-preview-has-image img {
+  object-position: center center;
+}
+
+.rpg-map-preview-has-image .rpg-map-controls,
+.rpg-map-preview-has-image .rpg-map-pin {
+  position: absolute;
+  z-index: 2;
+}
