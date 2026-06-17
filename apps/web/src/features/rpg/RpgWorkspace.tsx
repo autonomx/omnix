@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { omnixApiClient } from '../../api/client';
@@ -25,6 +26,8 @@ const ACTIVE_JOB_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', '
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
+  const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
+  const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
   const inventoryQuery = useQuery({
     queryKey: ['feature', 'rpg', 'replay-inventory'],
     queryFn: () => omnixApiClient.getReplayPersistenceInventory(),
@@ -85,6 +88,13 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const combatSurface = createRpgCombatSurfaceState({ encounter, heroSummary, partyMembers });
   const selectedLiveSessionId = selectedSessionSummary.source === 'live' ? selectedSessionSummary.id : null;
   const activeAutoplayJob = rpgJobs.find((job) => job.type === 'rpg.autoplay' && ACTIVE_JOB_STATUSES.has(job.status));
+  const dashboardClassName = [
+    'rpg-dashboard-grid',
+    isPlayerRailCollapsed ? 'rpg-dashboard-grid-left-collapsed' : '',
+    isWorldRailCollapsed ? 'rpg-dashboard-grid-right-collapsed' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   const invalidateRpgWorkspaceQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
@@ -191,14 +201,35 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     <WorkspacePanel className="rpg-workstation">
       <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
 
-      <div className="rpg-dashboard-grid">
-        <RpgPlayerRail
-          activeQuests={activeQuests}
-          equippedGear={equippedGear}
-          heroStats={heroStats}
-          heroSummary={heroSummary}
-          partyMembers={partyMembers}
-        />
+      <div className="rpg-layout-controls" aria-label="Workspace layout controls">
+        <button
+          className="rpg-secondary-button"
+          type="button"
+          aria-pressed={isPlayerRailCollapsed}
+          onClick={() => setIsPlayerRailCollapsed((value) => !value)}
+        >
+          {isPlayerRailCollapsed ? 'Show player rail' : 'Hide player rail'}
+        </button>
+        <button
+          className="rpg-secondary-button"
+          type="button"
+          aria-pressed={isWorldRailCollapsed}
+          onClick={() => setIsWorldRailCollapsed((value) => !value)}
+        >
+          {isWorldRailCollapsed ? 'Show world rail' : 'Hide world rail'}
+        </button>
+      </div>
+
+      <div className={dashboardClassName}>
+        {isPlayerRailCollapsed ? null : (
+          <RpgPlayerRail
+            activeQuests={activeQuests}
+            equippedGear={equippedGear}
+            heroStats={heroStats}
+            heroSummary={heroSummary}
+            partyMembers={partyMembers}
+          />
+        )}
 
         <main className="rpg-center-stage" aria-label="Story scene and actions">
           <RpgStoryScene heroSummary={heroSummary} recentEvents={recentEvents} selectedSessionSummary={selectedSessionSummary}>
@@ -231,27 +262,29 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
           <RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={selectCommand} />
         </main>
 
-        <RpgWorldRail
-          autoplayRunning={Boolean(activeAutoplayJob)}
-          autoplayStatusLabel={autoplayStatusLabel}
-          checkpointControlStatus={checkpointControlStatus}
-          checkpointSummary={checkpointSummary}
-          encounter={encounter}
-          isAutoplayPending={autoplayMutation.isPending}
-          isCreatingCheckpoint={createCheckpointMutation.isPending}
-          isRefreshingJobs={isRefreshingRpgQueries}
-          jobCards={jobCards}
-          npcRelationships={npcRelationships}
-          onCreateCheckpoint={() => createCheckpointMutation.mutate()}
-          onRefreshJobs={() => void invalidateRpgWorkspaceQueries()}
-          onToggleAutoplay={() => autoplayMutation.mutate()}
-          reportsHref="/api/reports"
-          rpgAssets={rpgAssets}
-          rpgJobCount={rpgJobs.length}
-          rpgReportCount={rpgReports.length}
-          selectedSessionSummary={selectedSessionSummary}
-          worldStateRows={worldStateRows}
-        />
+        {isWorldRailCollapsed ? null : (
+          <RpgWorldRail
+            autoplayRunning={Boolean(activeAutoplayJob)}
+            autoplayStatusLabel={autoplayStatusLabel}
+            checkpointControlStatus={checkpointControlStatus}
+            checkpointSummary={checkpointSummary}
+            encounter={encounter}
+            isAutoplayPending={autoplayMutation.isPending}
+            isCreatingCheckpoint={createCheckpointMutation.isPending}
+            isRefreshingJobs={isRefreshingRpgQueries}
+            jobCards={jobCards}
+            npcRelationships={npcRelationships}
+            onCreateCheckpoint={() => createCheckpointMutation.mutate()}
+            onRefreshJobs={() => void invalidateRpgWorkspaceQueries()}
+            onToggleAutoplay={() => autoplayMutation.mutate()}
+            reportsHref="/api/reports"
+            rpgAssets={rpgAssets}
+            rpgJobCount={rpgJobs.length}
+            rpgReportCount={rpgReports.length}
+            selectedSessionSummary={selectedSessionSummary}
+            worldStateRows={worldStateRows}
+          />
+        )}
       </div>
     </WorkspacePanel>
   );
