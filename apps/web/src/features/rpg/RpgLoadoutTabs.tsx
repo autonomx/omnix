@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { RpgLoadoutActionRequest } from '../../api/client';
 import type { RpgHotbarAbilityPreview, RpgInventoryItemPreview } from './rpgUiState';
 import './RpgLoadoutTabs.css';
 
@@ -7,7 +8,10 @@ type RpgLoadoutTab = 'inventory' | 'abilities' | 'hotbar';
 interface RpgLoadoutTabsProps {
   inventoryItems: RpgInventoryItemPreview[];
   hotbarAbilities: RpgHotbarAbilityPreview[];
+  isApplyingLoadoutAction?: boolean;
+  onApplyLoadoutAction?: (request: RpgLoadoutActionRequest) => void;
   onSelectCommand: (command: string) => void;
+  selectedSessionId?: string | null;
 }
 
 const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
@@ -16,7 +20,7 @@ const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
   { id: 'hotbar', label: 'Hotbar' },
 ];
 
-export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, onSelectCommand }: RpgLoadoutTabsProps) {
+export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, selectedSessionId }: RpgLoadoutTabsProps) {
   const [activeTab, setActiveTab] = useState<RpgLoadoutTab>('inventory');
   const [activeInventoryIndex, setActiveInventoryIndex] = useState(0);
   const [activeAbilityIndex, setActiveAbilityIndex] = useState(0);
@@ -47,8 +51,11 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, onSelectComman
           activeItemIndex={activeInventoryIndex}
           hotbarAbilities={hotbarAbilities}
           inventoryItems={inventoryItems}
+          isApplyingLoadoutAction={isApplyingLoadoutAction}
+          onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectCommand={onSelectCommand}
           onSelectItem={setActiveInventoryIndex}
+          selectedSessionId={selectedSessionId}
         />
       ) : null}
       {activeTab === 'abilities' ? (
@@ -56,22 +63,41 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, onSelectComman
           activeAbility={activeAbility}
           activeAbilityIndex={activeAbilityIndex}
           hotbarAbilities={hotbarAbilities}
+          isApplyingLoadoutAction={isApplyingLoadoutAction}
+          onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectAbility={setActiveAbilityIndex}
           onSelectCommand={onSelectCommand}
+          selectedSessionId={selectedSessionId}
         />
       ) : null}
-      {activeTab === 'hotbar' ? <HotbarPanel hotbarAbilities={hotbarAbilities} onSelectCommand={onSelectCommand} /> : null}
+      {activeTab === 'hotbar' ? (
+        <HotbarPanel
+          hotbarAbilities={hotbarAbilities}
+          isApplyingLoadoutAction={isApplyingLoadoutAction}
+          onApplyLoadoutAction={onApplyLoadoutAction}
+          onSelectCommand={onSelectCommand}
+          selectedSessionId={selectedSessionId}
+        />
+      ) : null}
     </section>
   );
 }
 
-interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems' | 'hotbarAbilities' | 'onSelectCommand'> {
+interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems' | 'hotbarAbilities' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
   activeItem: RpgInventoryItemPreview | undefined;
   activeItemIndex: number;
   onSelectItem: (index: number) => void;
 }
 
-function InventoryPanel({ activeItem, activeItemIndex, inventoryItems, hotbarAbilities, onSelectCommand, onSelectItem }: InventoryPanelProps) {
+function InventoryPanel({ activeItem, activeItemIndex, inventoryItems, hotbarAbilities, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectCommand, onSelectItem, selectedSessionId }: InventoryPanelProps) {
+  const applyItemAction = (action: RpgLoadoutActionRequest['action'], command: string) => {
+    if (selectedSessionId && activeItem && onApplyLoadoutAction) {
+      onApplyLoadoutAction({ action, item_name: activeItem.label });
+      return;
+    }
+    onSelectCommand(command);
+  };
+
   return (
     <div aria-labelledby="rpg-inventory-loadout-tab" className="rpg-loadout-layout" id="rpg-inventory-loadout-panel" role="tabpanel">
       <div className="rpg-inventory-grid" aria-label="Inventory item slots">
@@ -97,7 +123,12 @@ function InventoryPanel({ activeItem, activeItemIndex, inventoryItems, hotbarAbi
               type="button"
               key={ability.key}
               aria-label={ability.label}
-              onClick={() => onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} when it is tactically useful.`)}
+              disabled={isApplyingLoadoutAction}
+              onClick={() =>
+                selectedSessionId && onApplyLoadoutAction
+                  ? onApplyLoadoutAction({ action: 'hotbar', hotbar_slot: ability.key })
+                  : onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} when it is tactically useful.`)
+              }
             >
               <small>{ability.key}</small>
               <span>{ability.icon}</span>
@@ -109,30 +140,43 @@ function InventoryPanel({ activeItem, activeItemIndex, inventoryItems, hotbarAbi
       <LoadoutDetailCard
         eyebrow="Selected item"
         title={activeItem?.label ?? 'No item selected'}
-        detail={activeItem ? `${activeItem.count} carried • command-safe inventory affordances` : 'Inventory actions appear when an item is indexed.'}
+        detail={
+          activeItem
+            ? `${activeItem.count} carried • ${selectedSessionId ? 'click an action to update the session' : 'select a session to apply actions'}`
+            : 'Inventory actions appear when an item is indexed.'
+        }
         actions={
           activeItem
             ? [
-                { label: 'Inspect', command: `Inspect ${activeItem.label} and describe its useful properties.` },
-                { label: 'Use', command: `Use ${activeItem.label} if it is helpful and legal in the current situation.` },
-                { label: 'Equip', command: `Equip ${activeItem.label} if it improves my current loadout.` },
-                { label: 'Drop', command: `Drop one ${activeItem.label} only if it is safe to discard.` },
+                { label: 'Inspect', command: `Inspect ${activeItem.label} and describe its useful properties.`, apply: () => applyItemAction('inspect', `Inspect ${activeItem.label} and describe its useful properties.`) },
+                { label: 'Use', command: `Use ${activeItem.label} if it is helpful and legal in the current situation.`, apply: () => applyItemAction('use', `Use ${activeItem.label} if it is helpful and legal in the current situation.`) },
+                { label: 'Equip', command: `Equip ${activeItem.label} if it improves my current loadout.`, apply: () => applyItemAction('equip', `Equip ${activeItem.label} if it improves my current loadout.`) },
+                { label: 'Drop', command: `Drop one ${activeItem.label} only if it is safe to discard.`, apply: () => applyItemAction('drop', `Drop one ${activeItem.label} only if it is safe to discard.`) },
               ]
             : []
         }
+        disabled={isApplyingLoadoutAction}
         onSelectCommand={onSelectCommand}
       />
     </div>
   );
 }
 
-interface AbilitiesPanelProps extends Pick<RpgLoadoutTabsProps, 'hotbarAbilities' | 'onSelectCommand'> {
+interface AbilitiesPanelProps extends Pick<RpgLoadoutTabsProps, 'hotbarAbilities' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
   activeAbility: RpgHotbarAbilityPreview | undefined;
   activeAbilityIndex: number;
   onSelectAbility: (index: number) => void;
 }
 
-function AbilitiesPanel({ activeAbility, activeAbilityIndex, hotbarAbilities, onSelectAbility, onSelectCommand }: AbilitiesPanelProps) {
+function AbilitiesPanel({ activeAbility, activeAbilityIndex, hotbarAbilities, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectAbility, onSelectCommand, selectedSessionId }: AbilitiesPanelProps) {
+  const applyAbilityAction = (command: string, target?: string) => {
+    if (selectedSessionId && activeAbility && onApplyLoadoutAction) {
+      onApplyLoadoutAction({ action: 'use_ability', ability_name: activeAbility.label, target });
+      return;
+    }
+    onSelectCommand(command);
+  };
+
   return (
     <div aria-labelledby="rpg-abilities-loadout-tab" className="rpg-loadout-layout" id="rpg-abilities-loadout-panel" role="tabpanel">
       <div className="rpg-list-stack">
@@ -160,26 +204,27 @@ function AbilitiesPanel({ activeAbility, activeAbilityIndex, hotbarAbilities, on
         title={activeAbility?.label ?? 'No ability selected'}
         detail={
           activeAbility
-            ? `Slot ${activeAbility.key} • target and use commands stay replay-preserving until submitted.`
+            ? `Slot ${activeAbility.key} • ${selectedSessionId ? 'uses stamina/mana and writes a deterministic event' : 'select a session to apply ability effects'}.`
             : 'Ability commands appear when an ability is indexed.'
         }
         actions={
           activeAbility
             ? [
-                { label: 'Use', command: `Use ${activeAbility.label} on the most relevant target.` },
-                { label: 'Target enemy', command: `Use ${activeAbility.label} on the most dangerous visible enemy.` },
-                { label: 'Support ally', command: `Use ${activeAbility.label} to support the ally who needs it most.` },
-                { label: 'Describe', command: `Inspect ${activeAbility.label} and explain when I should use it.` },
+                { label: 'Use', command: `Use ${activeAbility.label} on the most relevant target.`, apply: () => applyAbilityAction(`Use ${activeAbility.label} on the most relevant target.`, 'the most relevant target') },
+                { label: 'Target enemy', command: `Use ${activeAbility.label} on the most dangerous visible enemy.`, apply: () => applyAbilityAction(`Use ${activeAbility.label} on the most dangerous visible enemy.`, 'the most dangerous visible enemy') },
+                { label: 'Support ally', command: `Use ${activeAbility.label} to support the ally who needs it most.`, apply: () => applyAbilityAction(`Use ${activeAbility.label} to support the ally who needs it most.`, 'the ally who needs it most') },
+                { label: 'Describe', command: `Inspect ${activeAbility.label} and explain when I should use it.`, apply: () => onSelectCommand(`Inspect ${activeAbility.label} and explain when I should use it.`) },
               ]
             : []
         }
+        disabled={isApplyingLoadoutAction}
         onSelectCommand={onSelectCommand}
       />
     </div>
   );
 }
 
-function HotbarPanel({ hotbarAbilities, onSelectCommand }: Pick<RpgLoadoutTabsProps, 'hotbarAbilities' | 'onSelectCommand'>) {
+function HotbarPanel({ hotbarAbilities, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectCommand, selectedSessionId }: Pick<RpgLoadoutTabsProps, 'hotbarAbilities' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'>) {
   return (
     <div aria-labelledby="rpg-hotbar-loadout-tab" className="rpg-list-stack" id="rpg-hotbar-loadout-panel" role="tabpanel">
       <div className="rpg-hotbar rpg-hotbar-command-grid" aria-label="Active ability hotbar">
@@ -188,7 +233,12 @@ function HotbarPanel({ hotbarAbilities, onSelectCommand }: Pick<RpgLoadoutTabsPr
             type="button"
             key={ability.key}
             aria-label={`${ability.key}: ${ability.label}`}
-            onClick={() => onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} on the best available target.`)}
+            disabled={isApplyingLoadoutAction}
+            onClick={() =>
+              selectedSessionId && onApplyLoadoutAction
+                ? onApplyLoadoutAction({ action: 'hotbar', hotbar_slot: ability.key })
+                : onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} on the best available target.`)
+            }
           >
             <small>{ability.key}</small>
             <span>{ability.icon}</span>
@@ -201,7 +251,7 @@ function HotbarPanel({ hotbarAbilities, onSelectCommand }: Pick<RpgLoadoutTabsPr
         </span>
         <div>
           <strong>Command-ready hotbar</strong>
-          <span>Selecting a slot drafts a replay-preserving RPG command before you queue the turn.</span>
+          <span>{selectedSessionId ? 'Selecting a slot applies the ability to the selected session immediately.' : 'Select a session to apply hotbar effects directly.'}</span>
         </div>
       </article>
     </div>
@@ -211,6 +261,7 @@ function HotbarPanel({ hotbarAbilities, onSelectCommand }: Pick<RpgLoadoutTabsPr
 interface LoadoutDetailAction {
   label: string;
   command: string;
+  apply?: () => void;
 }
 
 interface LoadoutDetailCardProps {
@@ -218,10 +269,11 @@ interface LoadoutDetailCardProps {
   title: string;
   detail: string;
   actions: LoadoutDetailAction[];
+  disabled?: boolean;
   onSelectCommand: (command: string) => void;
 }
 
-function LoadoutDetailCard({ actions, detail, eyebrow, onSelectCommand, title }: LoadoutDetailCardProps) {
+function LoadoutDetailCard({ actions, detail, disabled, eyebrow, onSelectCommand, title }: LoadoutDetailCardProps) {
   return (
     <aside className="rpg-loadout-detail" aria-label={`${eyebrow}: ${title}`}>
       <p className="eyebrow">{eyebrow}</p>
@@ -229,7 +281,7 @@ function LoadoutDetailCard({ actions, detail, eyebrow, onSelectCommand, title }:
       <span>{detail}</span>
       <div className="rpg-loadout-actions" aria-label={`${title} actions`}>
         {actions.map((action) => (
-          <button className="rpg-mini-button" key={action.label} onClick={() => onSelectCommand(action.command)} type="button">
+          <button className="rpg-mini-button" disabled={disabled} key={action.label} onClick={() => (action.apply ? action.apply() : onSelectCommand(action.command))} type="button">
             {action.label}
           </button>
         ))}
