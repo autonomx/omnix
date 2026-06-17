@@ -1,26 +1,27 @@
 .rpg-hero-avatar-art {
   background:
     linear-gradient(rgba(7, 6, 13, 0.04), rgba(7, 6, 13, 0.12)),
-    url('/rpg/hero-alyndra.svg') center / cover no-repeat,
-    rgba(7, 6, 13, 0.88);
+    rgba(7, 6, 13, 0.88) !important;
   border-color: rgba(217, 205, 255, 0.38);
   color: transparent;
   padding: 0;
 }
 
+.rpg-hero-avatar-art img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  width: 100%;
+}
+
 .rpg-scene-art-has-image,
-.rpg-map-preview {
-  background: rgba(7, 6, 13, 0.78);
+.rpg-map-preview-has-image {
+  background: rgba(7, 6, 13, 0.78) !important;
 }
 
-.rpg-scene-art-has-image::before,
-.rpg-scene-art-has-image::after,
-.rpg-map-preview::before,
-.rpg-map-preview::after {
-  display: none;
-}
-
-.rpg-scene-art-has-image img {
+.rpg-scene-art-has-image img,
+.rpg-map-preview-has-image img {
   display: block;
   height: 100%;
   inset: 0;
@@ -28,17 +29,11 @@
   object-position: center center;
   position: absolute;
   width: 100%;
+  z-index: 1;
 }
 
-.rpg-map-preview {
-  background:
-    linear-gradient(rgba(7, 6, 13, 0.02), rgba(7, 6, 13, 0.16)),
-    url('/rpg/glimmerdeep-pass-map.svg') center / cover no-repeat,
-    rgba(7, 6, 13, 0.78);
-}
-
-.rpg-map-preview .rpg-map-controls,
-.rpg-map-preview .rpg-map-pin {
+.rpg-map-preview-has-image .rpg-map-controls,
+.rpg-map-preview-has-image .rpg-map-pin {
   position: absolute;
   z-index: 2;
 }
