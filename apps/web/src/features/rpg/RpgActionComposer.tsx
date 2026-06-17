@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { omnixApiClient } from '../../api/client';
 import type { RpgQuickActionPreview, RpgSessionSummaryPreview } from './rpgUiState';
+import './RpgSessionLauncher.css';
 
 interface RpgActionComposerProps {
   commandRegistration: UseFormRegisterReturn<'command'>;
