@@ -4,7 +4,17 @@ from typing import Any
 
 import pytest
 
-from app.rpg.session.ability_system import apply_ability_to_state, build_ability_tree, build_progression_package, validate_ability_tree
+from app.rpg.session.ability_system import (
+    assign_ability_to_hotbar,
+    apply_ability_to_state,
+    build_ability_tree,
+    build_progression_package,
+    remove_hotbar_slot,
+    tick_ability_state,
+    unlock_ability_in_state,
+    upgrade_ability_rank_in_state,
+    validate_ability_tree,
+)
 
 
 def _base_active_ability(**overrides: Any) -> dict[str, Any]:
@@ -276,6 +286,145 @@ def test_ability_use_changes_information_and_access_dimensions() -> None:
     assert state["clues"][0]["tag"] == "system_weakness"
     assert state["narrative_affordances"]["scene"][0]["tag"] == "technical_bypass_hint"
     assert result.effects[0]["dimension"] == "information"
+
+
+def test_unlock_upgrade_and_hotbar_helpers_enforce_progression_gates() -> None:
+    base = _base_active_ability(ability_id="base", name="Base", resource_cost={}, cooldown_turns=0)
+    advanced = _base_active_ability(
+        ability_id="advanced",
+        name="Advanced",
+        level_required=2,
+        max_rank=2,
+        prerequisites=["base"],
+        resource_cost={},
+        cooldown_turns=0,
+    )
+    passive = {
+        "ability_id": "passive",
+        "kind": "passive",
+        "name": "Passive",
+        "description": "Passive helper.",
+        "capability": "knowledge",
+        "power_source": "magic",
+        "purpose": "utility",
+        "dimensions": ["information"],
+        "resource_cost": {},
+        "cooldown_turns": 0,
+        "level_required": 1,
+        "rank": 1,
+        "max_rank": 1,
+        "prerequisites": [],
+        "hooks": ["on_turn_start"],
+        "effect_ops": [],
+    }
+    state: dict[str, Any] = {
+        "player": {"level": 1, "resources": {}},
+        "ability_tree": {"abilities": [base, advanced, passive]},
+        "ability_state": {"ability_points": 0, "unlocked": ["base"], "ranks": {"base": 1}, "cooldowns": {}, "active_effects": []},
+        "hotbar": {},
+    }
+
+    assert unlock_ability_in_state(state, "advanced").error == "level_required"
+    state["player"]["level"] = 2
+    assert unlock_ability_in_state(state, "advanced").error == "insufficient_ability_points"
+    state["ability_state"]["ability_points"] = 2
+
+    unlock_result = unlock_ability_in_state(state, "advanced")
+    assert unlock_result.ok is True
+    assert state["ability_state"]["ability_points"] == 1
+    assert state["ability_state"]["ranks"]["advanced"] == 1
+
+    assign_result = assign_ability_to_hotbar(state, "advanced", 3)
+    assert assign_result.ok is True
+    assert state["hotbar"]["3"] == "advanced"
+    assert state["ability_state"]["hotbar"]["3"] == "advanced"
+    assert assign_ability_to_hotbar(state, "passive", 4).error == "hotbar_requires_active_ability"
+
+    upgrade_result = upgrade_ability_rank_in_state(state, "advanced")
+    assert upgrade_result.ok is True
+    assert state["ability_state"]["ability_points"] == 0
+    assert state["ability_state"]["ranks"]["advanced"] == 2
+    assert upgrade_ability_rank_in_state(state, "advanced").error == "max_rank"
+
+    remove_result = remove_hotbar_slot(state, 3)
+    assert remove_result.ok is True
+    assert state["hotbar"] == {}
+
+
+def test_unlock_helper_blocks_missing_prerequisites_before_spending_points() -> None:
+    advanced = _base_active_ability(
+        ability_id="advanced",
+        name="Advanced",
+        level_required=2,
+        prerequisites=["base"],
+        resource_cost={},
+        cooldown_turns=0,
+    )
+    state: dict[str, Any] = {
+        "player": {"level": 2, "resources": {}},
+        "ability_tree": {"abilities": [advanced]},
+        "ability_state": {"ability_points": 1, "unlocked": [], "ranks": {}, "cooldowns": {}, "active_effects": []},
+    }
+
+    result = unlock_ability_in_state(state, "advanced")
+
+    assert result.ok is False
+    assert result.error == "missing_prerequisites"
+    assert state["ability_state"]["ability_points"] == 1
+
+
+def test_ranked_use_scales_effects_and_tick_expires_cooldowns_and_active_effects() -> None:
+    ability = _base_active_ability(
+        ability_id="ranked",
+        name="Ranked",
+        dimensions=["resources", "position"],
+        resource_cost={},
+        cooldown_turns=2,
+        effect_ops=[
+            {"dimension": "resources", "op": "resource_delta", "target": "self", "resource": "stamina", "amount": 4},
+            {"dimension": "position", "op": "modify_next_check", "check": "stealth", "amount": 1, "duration_turns": 2},
+        ],
+    )
+    state: dict[str, Any] = {
+        "player": {"resources": {"stamina": {"current": 0, "max": 20}}},
+        "ability_tree": {"abilities": [ability]},
+        "ability_state": {
+            "ability_points": 0,
+            "unlocked": ["ranked"],
+            "ranks": {"ranked": 3},
+            "cooldowns": {"old": 1},
+            "active_effects": [{"ability_id": "old", "remaining_turns": 1}],
+        },
+        "hotbar": {"1": "ranked"},
+    }
+
+    result = apply_ability_to_state(state, ability_name="Ranked")
+
+    assert result.ok is True
+    assert state["player"]["resources"]["stamina"]["current"] == 6
+    assert state["runtime"]["effects"][0]["amount"] == 3
+    assert state["ability_state"]["cooldowns"] == {"ranked": 2}
+    assert state["ability_state"]["active_effects"] == [
+        {
+            "ability_id": "ranked",
+            "name": "Ranked",
+            "rank": 3,
+            "dimensions": ["resources", "position"],
+            "purpose": "utility",
+            "target": "the current situation",
+            "created_at": state["ability_state"]["active_effects"][0]["created_at"],
+            "duration_turns": 2,
+            "remaining_turns": 2,
+        }
+    ]
+    assert apply_ability_to_state(state, ability_name="Ranked").error == "ability_on_cooldown"
+
+    tick_ability_state(state)
+    assert state["ability_state"]["cooldowns"] == {"ranked": 1}
+    assert state["ability_state"]["active_effects"][0]["remaining_turns"] == 1
+    tick_ability_state(state)
+    assert state["ability_state"]["cooldowns"] == {}
+    assert state["ability_state"]["active_effects"] == []
 
 
 def test_effect_executor_mutates_all_gameplay_dimensions_and_records_trace() -> None:

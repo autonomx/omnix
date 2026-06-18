@@ -143,6 +143,15 @@ class RpgAbilityUseResult(BaseModel):
     effects: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class RpgAbilityStateResult(BaseModel):
+    ok: bool
+    ability_id: str | None = None
+    detail: str
+    error: str | None = None
+    slot: str | None = None
+    ability_state: dict[str, Any] = Field(default_factory=dict)
+
+
 BUILD_IDENTITY_DEFAULTS: dict[str, dict[str, Any]] = {
     "balanced_adventurer": {"primary_capability": "recon", "secondary_capabilities": ["survival", "combat"], "power_source": "mundane", "class_name": "Adventurer"},
     "warrior": {"primary_capability": "combat", "secondary_capabilities": ["survival", "influence"], "power_source": "martial", "class_name": "Champion"},
@@ -607,9 +616,120 @@ def _ability_index(tree: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {str(ability.get("ability_id")): _safe_dict(ability) for ability in _safe_list(tree.get("abilities"))}
 
 
+def _ability_by_id(state: dict[str, Any], ability_id: str) -> dict[str, Any] | None:
+    return _ability_index(_safe_dict(state.get("ability_tree"))).get(str(ability_id or ""))
+
+
+def _ability_state(state: dict[str, Any]) -> dict[str, Any]:
+    ability_state = _safe_dict(state.get("ability_state"))
+    ability_state.setdefault("ability_points", 0)
+    ability_state.setdefault("unlocked", [])
+    ability_state.setdefault("ranks", {})
+    ability_state.setdefault("cooldowns", {})
+    ability_state.setdefault("active_effects", [])
+    state["ability_state"] = ability_state
+    return ability_state
+
+
+def _player_level(state: dict[str, Any]) -> int:
+    return max(1, _safe_int(_safe_dict(state.get("player")).get("level"), 1))
+
+
+def _rank_for_ability(ability_state: dict[str, Any], ability: dict[str, Any]) -> int:
+    ability_id = str(ability.get("ability_id") or "")
+    ranks = _safe_dict(ability_state.get("ranks"))
+    rank = _safe_int(ranks.get(ability_id), _safe_int(ability.get("rank"), 1))
+    max_rank = max(1, _safe_int(ability.get("max_rank"), 1))
+    return max(1, min(max_rank, rank))
+
+
+def _state_result(ok: bool, ability_state: dict[str, Any], detail: str, *, ability_id: str | None = None, error: str | None = None, slot: str | None = None) -> RpgAbilityStateResult:
+    return RpgAbilityStateResult(ok=ok, ability_id=ability_id, detail=detail, error=error, slot=slot, ability_state=deepcopy(ability_state))
+
+
+def unlock_ability_in_state(state: dict[str, Any], ability_id: str) -> RpgAbilityStateResult:
+    ability_state = _ability_state(state)
+    ability = _ability_by_id(state, ability_id)
+    if not ability:
+        return _state_result(False, ability_state, "Ability was not found in the session ability tree.", ability_id=ability_id, error="unknown_ability")
+    ability_id = str(ability.get("ability_id"))
+    unlocked = [str(value) for value in _safe_list(ability_state.get("unlocked"))]
+    if ability_id in unlocked:
+        return _state_result(True, ability_state, f"{ability.get('name')} is already unlocked.", ability_id=ability_id)
+    required_level = _safe_int(ability.get("level_required"), 1)
+    if _player_level(state) < required_level:
+        return _state_result(False, ability_state, f"{ability.get('name')} requires level {required_level}.", ability_id=ability_id, error="level_required")
+    missing = [str(value) for value in _safe_list(ability.get("prerequisites")) if str(value) not in unlocked]
+    if missing:
+        return _state_result(False, ability_state, f"{ability.get('name')} requires {', '.join(missing)} first.", ability_id=ability_id, error="missing_prerequisites")
+    points = _safe_int(ability_state.get("ability_points"))
+    if points <= 0:
+        return _state_result(False, ability_state, "No ability points are available.", ability_id=ability_id, error="insufficient_ability_points")
+    unlocked.append(ability_id)
+    ability_state["unlocked"] = unlocked
+    ability_state["ability_points"] = points - 1
+    ranks = _safe_dict(ability_state.get("ranks"))
+    ranks.setdefault(ability_id, 1)
+    ability_state["ranks"] = ranks
+    return _state_result(True, ability_state, f"Unlocked {ability.get('name')}.", ability_id=ability_id)
+
+
+def upgrade_ability_rank_in_state(state: dict[str, Any], ability_id: str) -> RpgAbilityStateResult:
+    ability_state = _ability_state(state)
+    ability = _ability_by_id(state, ability_id)
+    if not ability:
+        return _state_result(False, ability_state, "Ability was not found in the session ability tree.", ability_id=ability_id, error="unknown_ability")
+    ability_id = str(ability.get("ability_id"))
+    unlocked = {str(value) for value in _safe_list(ability_state.get("unlocked"))}
+    if ability_id not in unlocked:
+        return _state_result(False, ability_state, f"{ability.get('name')} is not unlocked yet.", ability_id=ability_id, error="ability_locked")
+    ranks = _safe_dict(ability_state.get("ranks"))
+    current_rank = _safe_int(ranks.get(ability_id), 1)
+    max_rank = max(1, _safe_int(ability.get("max_rank"), 1))
+    if current_rank >= max_rank:
+        return _state_result(False, ability_state, f"{ability.get('name')} is already at max rank.", ability_id=ability_id, error="max_rank")
+    points = _safe_int(ability_state.get("ability_points"))
+    if points <= 0:
+        return _state_result(False, ability_state, "No ability points are available.", ability_id=ability_id, error="insufficient_ability_points")
+    ranks[ability_id] = current_rank + 1
+    ability_state["ranks"] = ranks
+    ability_state["ability_points"] = points - 1
+    return _state_result(True, ability_state, f"Upgraded {ability.get('name')} to rank {ranks[ability_id]}.", ability_id=ability_id)
+
+
+def assign_ability_to_hotbar(state: dict[str, Any], ability_id: str, slot: str | int) -> RpgAbilityStateResult:
+    ability_state = _ability_state(state)
+    ability = _ability_by_id(state, ability_id)
+    slot_key = str(slot)
+    if not slot_key.isdigit() or int(slot_key) < 1 or int(slot_key) > 10:
+        return _state_result(False, ability_state, "Hotbar slot must be between 1 and 10.", ability_id=ability_id, error="invalid_hotbar_slot", slot=slot_key)
+    if not ability:
+        return _state_result(False, ability_state, "Ability was not found in the session ability tree.", ability_id=ability_id, error="unknown_ability", slot=slot_key)
+    ability_id = str(ability.get("ability_id"))
+    if ability.get("kind") != "active":
+        return _state_result(False, ability_state, f"{ability.get('name')} is not an active ability.", ability_id=ability_id, error="hotbar_requires_active_ability", slot=slot_key)
+    if ability_id not in {str(value) for value in _safe_list(ability_state.get("unlocked"))}:
+        return _state_result(False, ability_state, f"{ability.get('name')} is not unlocked yet.", ability_id=ability_id, error="ability_locked", slot=slot_key)
+    hotbar = _safe_dict(state.get("hotbar")) or _safe_dict(ability_state.get("hotbar"))
+    hotbar[slot_key] = ability_id
+    state["hotbar"] = hotbar
+    ability_state["hotbar"] = hotbar
+    return _state_result(True, ability_state, f"Assigned {ability.get('name')} to hotbar slot {slot_key}.", ability_id=ability_id, slot=slot_key)
+
+
+def remove_hotbar_slot(state: dict[str, Any], slot: str | int) -> RpgAbilityStateResult:
+    ability_state = _ability_state(state)
+    slot_key = str(slot)
+    hotbar = _safe_dict(state.get("hotbar")) or _safe_dict(ability_state.get("hotbar"))
+    removed = hotbar.pop(slot_key, None)
+    state["hotbar"] = hotbar
+    ability_state["hotbar"] = hotbar
+    return _state_result(True, ability_state, f"Removed hotbar slot {slot_key}.", ability_id=str(removed) if removed else None, slot=slot_key)
+
+
 def _find_ability(state: dict[str, Any], *, ability_name: str | None = None, hotbar_slot: str | int | None = None) -> dict[str, Any] | None:
     index = _ability_index(_safe_dict(state.get("ability_tree")))
-    ability_state = _safe_dict(state.get("ability_state"))
+    ability_state = _ability_state(state)
     hotbar = _safe_dict(state.get("hotbar")) or _safe_dict(ability_state.get("hotbar"))
     if hotbar_slot is not None and str(hotbar_slot) in hotbar:
         return index.get(str(hotbar[str(hotbar_slot)]))
@@ -753,6 +873,20 @@ def _clear_status(state: dict[str, Any], op: dict[str, Any], target_name: str) -
     after = [item for item in before if _safe_dict(item).get("status") != status]
     target_state[key] = after
     return {"status": status, "target": target_name, "removed": len(before) - len(after), "applied": True}
+
+
+def _ranked_amount(value: Any, rank: int) -> Any:
+    if not _is_plain_int(value) or rank <= 1:
+        return value
+    bonus = rank - 1
+    return int(value) + bonus if int(value) > 0 else int(value) - bonus if int(value) < 0 else value
+
+
+def _ranked_effect_op(op: dict[str, Any], rank: int) -> dict[str, Any]:
+    ranked = deepcopy(op)
+    if "amount" in ranked:
+        ranked["amount"] = _ranked_amount(ranked.get("amount"), rank)
+    return ranked
 
 
 def _modify_relationship(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
@@ -908,8 +1042,9 @@ def _complete_objective(state: dict[str, Any], ability: dict[str, Any], op: dict
 
 def execute_effect_ops(state: dict[str, Any], ability: dict[str, Any], *, target: str | None = None) -> list[dict[str, Any]]:
     applied: list[dict[str, Any]] = []
+    rank = max(1, _safe_int(ability.get("rank"), 1))
     for raw_op in _safe_list(ability.get("effect_ops")):
-        op = _safe_dict(raw_op)
+        op = _ranked_effect_op(_safe_dict(raw_op), rank)
         op_name = str(op.get("op") or "")
         dimension = str(op.get("dimension") or "")
         target_name = _text(op.get("target_id") or op.get("target") or target, "self")
@@ -972,6 +1107,23 @@ def _tick_cooldowns(ability_state: dict[str, Any]) -> None:
     ability_state["cooldowns"] = {str(key): max(0, int(value or 0) - 1) for key, value in cooldowns.items() if max(0, int(value or 0) - 1) > 0}
 
 
+def tick_ability_state(state: dict[str, Any]) -> RpgAbilityStateResult:
+    ability_state = _ability_state(state)
+    _tick_cooldowns(ability_state)
+    active_effects: list[dict[str, Any]] = []
+    for raw_effect in _safe_list(ability_state.get("active_effects")):
+        effect = deepcopy(_safe_dict(raw_effect))
+        if "remaining_turns" not in effect:
+            active_effects.append(effect)
+            continue
+        remaining = _safe_int(effect.get("remaining_turns")) - 1
+        if remaining > 0:
+            effect["remaining_turns"] = remaining
+            active_effects.append(effect)
+    ability_state["active_effects"] = active_effects[:20]
+    return _state_result(True, ability_state, "Ability cooldowns and active effects advanced by one turn.")
+
+
 def apply_ability_to_state(state: dict[str, Any], *, ability_name: str | None = None, hotbar_slot: str | int | None = None, target: str | None = None) -> RpgAbilityUseResult:
     ability = _find_ability(state, ability_name=ability_name, hotbar_slot=hotbar_slot)
     if not ability:
@@ -980,8 +1132,7 @@ def apply_ability_to_state(state: dict[str, Any], *, ability_name: str | None = 
     if errors:
         return RpgAbilityUseResult(ok=False, ability_id=ability.get("ability_id"), name=ability.get("name"), error="invalid_ability", detail="; ".join(errors))
     ability_id = str(ability.get("ability_id"))
-    ability_state = _safe_dict(state.get("ability_state"))
-    state["ability_state"] = ability_state
+    ability_state = _ability_state(state)
     unlocked = set(str(value) for value in _safe_list(ability_state.get("unlocked")))
     if ability_id not in unlocked:
         return RpgAbilityUseResult(ok=False, ability_id=ability_id, name=ability.get("name"), error="ability_locked", detail=f"{ability.get('name')} is not unlocked yet.")
@@ -999,17 +1150,24 @@ def apply_ability_to_state(state: dict[str, Any], *, ability_name: str | None = 
         metric = _resource_metric(player, str(resource))
         metric["current"] = max(0, int(metric.get("current") or 0) - int(cost))
         cost_parts.append(f"{resource}: {metric['current']}/{metric.get('max')}")
-    effects = execute_effect_ops(state, ability, target=target or "the current situation")
+    ranked_ability = deepcopy(ability)
+    ranked_ability["rank"] = _rank_for_ability(ability_state, ability)
+    effects = execute_effect_ops(state, ranked_ability, target=target or "the current situation")
     if effects and not any(effect.get("applied") is not False for effect in effects):
         details = "; ".join(str(effect.get("detail") or effect.get("error") or "effect failed") for effect in effects)
         return RpgAbilityUseResult(ok=False, ability_id=ability_id, name=ability.get("name"), error="effect_target_unavailable", detail=details, effects=effects)
-    _append_player_visible_ability_event(state, ability, effects)
-    _tick_cooldowns(ability_state)
+    _append_player_visible_ability_event(state, ranked_ability, effects)
+    tick_ability_state(state)
     cooldown = int(ability.get("cooldown_turns") or 0)
     if cooldown > 0:
         ability_state.setdefault("cooldowns", {})[ability_id] = cooldown
     active_effects = _safe_list(ability_state.get("active_effects"))
-    active_effects.insert(0, {"ability_id": ability_id, "name": ability.get("name"), "dimensions": ability.get("dimensions", []), "purpose": ability.get("purpose"), "target": target or "the current situation", "created_at": _utc_now()})
+    duration = max([_safe_int(_safe_dict(op).get("duration_turns")) for op in _safe_list(ability.get("effect_ops")) if _safe_int(_safe_dict(op).get("duration_turns")) > 0] or [0])
+    active_effect = {"ability_id": ability_id, "name": ability.get("name"), "rank": ranked_ability["rank"], "dimensions": ability.get("dimensions", []), "purpose": ability.get("purpose"), "target": target or "the current situation", "created_at": _utc_now()}
+    if duration > 0:
+        active_effect["duration_turns"] = duration
+        active_effect["remaining_turns"] = duration
+    active_effects.insert(0, active_effect)
     ability_state["active_effects"] = active_effects[:20]
     dimensions = ", ".join(str(value) for value in ability.get("dimensions", []))
     cost_detail = f" Costs now {', '.join(cost_parts)}." if cost_parts else ""
