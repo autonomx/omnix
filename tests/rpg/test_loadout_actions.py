@@ -100,6 +100,56 @@ def test_salvage_consumes_source_merges_materials_and_writes_trace(monkeypatch) 
     assert state["mechanics"]["item_traces"][0] == trace
 
 
+def test_modify_action_consumes_material_updates_item_and_writes_trace(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
+    monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: saved.append(session) or session)
+
+    result = loadout.apply_loadout_action(
+        "rpg_test",
+        loadout.RpgLoadoutActionRequest(action="modify", item_name="Broken Sword", mod_id="edge_damage_minor"),
+    )
+
+    assert result["ok"] is True
+    assert result["modification"] == {"mod_id": "edge_damage_minor", "name": "Honed Edge"}
+    assert result["consumed_materials"] == [{"material_id": "iron", "quantity": 1, "name": "Iron scrap"}]
+    state = saved[0]["state"]
+    inventory = state["player"]["inventory"]
+    sword = next(item for item in inventory if item.get("name") == "Broken Sword")
+    iron = next(item for item in inventory if item.get("material_id") == "iron")
+    assert sword["damage"] == {"slashing": 1}
+    assert sword["modifications"] == [
+        {"mod_id": "edge_damage_minor", "name": "Honed Edge", "mechanics_source": "engine_item_modification_v1"}
+    ]
+    assert iron["quantity"] == 1
+    assert state["turn_count"] == 1
+    assert state["timeline"][0]["kind"] == "item_modification"
+    assert state["timeline"][0]["title"] == "Modified Broken Sword"
+    assert state["journal"]["entries"][0]["kind"] == "item_modification"
+    trace = state["mechanics"]["modification_traces"][0]
+    assert trace["event"] == "item_modified"
+    assert trace["mod_id"] == "edge_damage_minor"
+    assert trace["consumed_materials"] == [{"material_id": "iron", "quantity": 1, "name": "Iron scrap"}]
+    assert state["mechanics"]["item_traces"][0] == trace
+
+
+def test_modify_action_rejects_missing_materials(monkeypatch) -> None:
+    session = _session()
+    for item in session["state"]["player"]["inventory"]:
+        if item.get("material_id") == "iron":
+            item["quantity"] = 0
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: session)
+
+    result = loadout.apply_loadout_action(
+        "rpg_test",
+        loadout.RpgLoadoutActionRequest(action="modify", item_name="Broken Sword", mod_id="edge_damage_minor"),
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "missing_modification_materials"
+    assert result["missing"] == [{"material_id": "iron", "required": 1, "available": 0}]
+
+
 def test_hotbar_action_spends_resource_writes_event_and_snapshots_coverage(monkeypatch) -> None:
     saved: list[dict[str, Any]] = []
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
