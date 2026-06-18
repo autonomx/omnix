@@ -17,6 +17,7 @@ from app.rpg.session.ability_system import (
     upgrade_ability_rank_in_state,
 )
 from app.rpg.session.crafting import craft_from_inventory
+from app.rpg.session.equipment import equip_item_for_player, normalize_equipment, resolve_equipment_slot
 from app.rpg.session.inventory_items import (
     consume_inventory_item,
     find_inventory_item,
@@ -130,35 +131,17 @@ def _consume(inventory: list[dict[str, Any]], index: int, amount: int = 1) -> No
 
 
 def _item_slot(item: dict[str, Any]) -> str:
-    raw = _norm(item.get("slot") or item.get("type") or item.get("category") or item.get("name"))
-    name = _norm(item.get("name"))
-    if any(token in raw or token in name for token in ("bow", "dagger", "sword", "axe", "weapon")):
-        return "Weapon"
-    if any(token in raw or token in name for token in ("armor", "mail", "leather", "plate")):
-        return "Armor"
-    if "cloak" in raw or "cloak" in name:
-        return "Cloak"
-    if "ring" in raw or "band" in name:
-        return "Ring"
-    return "Utility"
+    return resolve_equipment_slot(item)
 
 
 def _equipment(player: dict[str, Any]) -> list[dict[str, Any]]:
-    equipment = _safe_list(player.get("equipment"))
-    normalized = [item if isinstance(item, dict) else {"name": str(item)} for item in equipment]
-    player["equipment"] = normalized
-    return normalized
+    equipment = normalize_equipment(_safe_list(player.get("equipment")))
+    player["equipment"] = equipment
+    return equipment
 
 
 def _equip_item(player: dict[str, Any], item: dict[str, Any]) -> str:
-    equipment = _equipment(player)
-    slot = _item_slot(item)
-    equipped = {"slot": slot, "name": _title(item.get("name") or item.get("label") or item.get("id"))}
-    for index, existing in enumerate(equipment):
-        if _norm(existing.get("slot")) == _norm(slot):
-            equipment[index] = equipped
-            return slot
-    equipment.append(equipped)
+    slot, _derived = equip_item_for_player(player, item)
     return slot
 
 
