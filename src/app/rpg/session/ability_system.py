@@ -65,6 +65,8 @@ ALLOWED_EFFECT_OPS = {
     "grant_temp_affordance",
 }
 ALLOWED_COST_RESOURCES = {"hp", "stamina", "mana", "gold", "silver", "copper", "renown"}
+ALLOWED_XP_SOURCES = {"quest", "objective", "kill"}
+DEFAULT_SKILL_XP_PER_ABILITY_USE = 5
 
 
 class RpgCharacterIdentity(BaseModel):
@@ -150,6 +152,18 @@ class RpgAbilityStateResult(BaseModel):
     error: str | None = None
     slot: str | None = None
     ability_state: dict[str, Any] = Field(default_factory=dict)
+
+
+class RpgProgressionResult(BaseModel):
+    ok: bool
+    detail: str
+    error: str | None = None
+    xp_gained: int = 0
+    source: str | None = None
+    level_ups: list[dict[str, Any]] = Field(default_factory=list)
+    ability_points_granted: int = 0
+    skill_awards: dict[str, dict[str, int]] = Field(default_factory=dict)
+    skill_level_ups: list[dict[str, Any]] = Field(default_factory=list)
 
 
 BUILD_IDENTITY_DEFAULTS: dict[str, dict[str, Any]] = {
@@ -776,6 +790,96 @@ def _text(value: Any, fallback: str = "") -> str:
     return text or fallback
 
 
+def _xp_metric(player: dict[str, Any]) -> dict[str, int]:
+    xp = _safe_dict(player.get("xp"))
+    current = max(0, _safe_int(xp.get("current")))
+    maximum = max(1, _safe_int(xp.get("max"), 100))
+    player["xp"] = {"current": current, "max": maximum}
+    return player["xp"]
+
+
+def _next_level_xp_max(current_max: int) -> int:
+    return max(100, int(current_max) + 100)
+
+
+def grant_player_xp(state: dict[str, Any], amount: int, *, source: str) -> RpgProgressionResult:
+    source_key = _norm(source)
+    if source_key not in ALLOWED_XP_SOURCES:
+        return RpgProgressionResult(ok=False, detail=f"XP source {source} is not supported for level progression.", error="unsupported_xp_source", source=source_key)
+    xp_gained = max(0, int(amount or 0))
+    if xp_gained <= 0:
+        return RpgProgressionResult(ok=False, detail="XP amount must be positive.", error="invalid_xp_amount", source=source_key)
+    player = _player(state)
+    xp = _xp_metric(player)
+    level = max(1, _safe_int(player.get("level"), 1))
+    xp["current"] += xp_gained
+    level_ups: list[dict[str, int]] = []
+    while xp["current"] >= xp["max"]:
+        before_level = level
+        xp["current"] -= xp["max"]
+        level += 1
+        xp["max"] = _next_level_xp_max(xp["max"])
+        level_ups.append({"from": before_level, "to": level})
+    player["level"] = level
+    ability_points_granted = len(level_ups)
+    if ability_points_granted:
+        ability_state = _ability_state(state)
+        ability_state["ability_points"] = _safe_int(ability_state.get("ability_points")) + ability_points_granted
+    return RpgProgressionResult(
+        ok=True,
+        detail=f"Granted {xp_gained} XP from {source_key}.",
+        xp_gained=xp_gained,
+        source=source_key,
+        level_ups=level_ups,
+        ability_points_granted=ability_points_granted,
+    )
+
+
+def _skill_progression(state: dict[str, Any]) -> dict[str, Any]:
+    progression = _safe_dict(state.get("skill_progression"))
+    state["skill_progression"] = progression
+    return progression
+
+
+def grant_skill_xp(state: dict[str, Any], skill_id: str, amount: int, *, source: str = "ability_use") -> RpgProgressionResult:
+    skill_key = _norm(skill_id)
+    xp_gained = max(0, int(amount or 0))
+    if not skill_key:
+        return RpgProgressionResult(ok=False, detail="Skill id is required.", error="missing_skill_id")
+    if xp_gained <= 0:
+        return RpgProgressionResult(ok=False, detail="Skill XP amount must be positive.", error="invalid_skill_xp_amount", source=source)
+    progression = _skill_progression(state)
+    entry = _safe_dict(progression.get(skill_key))
+    rank = max(1, _safe_int(entry.get("rank"), 1))
+    xp = max(0, _safe_int(entry.get("xp"))) + xp_gained
+    level_ups: list[dict[str, int]] = []
+    threshold = max(25, rank * 100)
+    while xp >= threshold:
+        xp -= threshold
+        before_rank = rank
+        rank += 1
+        level_ups.append({"from": before_rank, "to": rank})
+        threshold = max(25, rank * 100)
+    entry.update({"xp": xp, "rank": rank, "last_source": source})
+    progression[skill_key] = entry
+    return RpgProgressionResult(
+        ok=True,
+        detail=f"Granted {xp_gained} skill XP to {skill_key}.",
+        xp_gained=0,
+        source=source,
+        skill_awards={skill_key: {"xp_gained": xp_gained, "xp": xp, "rank": rank}},
+        skill_level_ups=[{"skill": skill_key, **level_up} for level_up in level_ups],
+    )
+
+
+def skill_modifier_for_check(state: dict[str, Any], check: str | None) -> int:
+    skill_key = _norm(check)
+    if not skill_key:
+        return 0
+    entry = _safe_dict(_skill_progression(state).get(skill_key))
+    return max(0, _safe_int(entry.get("rank"), 1) - 1)
+
+
 def _target_unavailable(op_name: str, target_name: str, detail: str = "") -> dict[str, Any]:
     result = {"applied": False, "error": "target_unavailable", "op": op_name, "target": target_name}
     if detail:
@@ -1053,10 +1157,12 @@ def execute_effect_ops(state: dict[str, Any], ability: dict[str, Any], *, target
             result.update(_resource_delta(state, str(op.get("resource") or "hp"), _safe_int(op.get("amount")), target=target_name if op.get("target") == "target" else op.get("target") or target_name))
         elif op_name == "modify_next_check":
             runtime = _safe_dict(state.get("runtime"))
-            effect = {"source": ability.get("name"), "dimension": dimension, "check": op.get("check"), "amount": _safe_int(op.get("amount")), "duration_turns": op.get("duration_turns", 1), "created_at": _utc_now()}
+            check = str(op.get("check") or "")
+            skill_modifier = skill_modifier_for_check(state, check)
+            effect = {"source": ability.get("name"), "dimension": dimension, "check": check, "amount": _safe_int(op.get("amount")) + skill_modifier, "skill_modifier": skill_modifier, "duration_turns": op.get("duration_turns", 1), "created_at": _utc_now()}
             _append(runtime, "effects", effect)
             state["runtime"] = runtime
-            result.update({"check": effect["check"], "amount": effect["amount"], "duration_turns": effect["duration_turns"], "applied": True})
+            result.update({"check": effect["check"], "amount": effect["amount"], "skill_modifier": skill_modifier, "duration_turns": effect["duration_turns"], "applied": True})
         elif op_name == "apply_status":
             result.update(_apply_status(state, ability, op, target_name))
         elif op_name == "clear_status":
@@ -1156,6 +1262,7 @@ def apply_ability_to_state(state: dict[str, Any], *, ability_name: str | None = 
     if effects and not any(effect.get("applied") is not False for effect in effects):
         details = "; ".join(str(effect.get("detail") or effect.get("error") or "effect failed") for effect in effects)
         return RpgAbilityUseResult(ok=False, ability_id=ability_id, name=ability.get("name"), error="effect_target_unavailable", detail=details, effects=effects)
+    grant_skill_xp(state, str(ability.get("capability") or "ability"), DEFAULT_SKILL_XP_PER_ABILITY_USE, source=ability_id)
     _append_player_visible_ability_event(state, ranked_ability, effects)
     tick_ability_state(state)
     cooldown = int(ability.get("cooldown_turns") or 0)

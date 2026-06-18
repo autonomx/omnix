@@ -9,7 +9,10 @@ from app.rpg.session.ability_system import (
     apply_ability_to_state,
     build_ability_tree,
     build_progression_package,
+    grant_player_xp,
+    grant_skill_xp,
     remove_hotbar_slot,
+    skill_modifier_for_check,
     tick_ability_state,
     unlock_ability_in_state,
     upgrade_ability_rank_in_state,
@@ -425,6 +428,60 @@ def test_ranked_use_scales_effects_and_tick_expires_cooldowns_and_active_effects
     tick_ability_state(state)
     assert state["ability_state"]["cooldowns"] == {}
     assert state["ability_state"]["active_effects"] == []
+
+
+def test_player_xp_levels_up_and_grants_ability_points_from_authorized_sources() -> None:
+    state: dict[str, Any] = {
+        "player": {"level": 1, "xp": {"current": 90, "max": 100}},
+        "ability_state": {"ability_points": 0, "unlocked": [], "ranks": {}, "cooldowns": {}, "active_effects": []},
+    }
+
+    result = grant_player_xp(state, 30, source="objective")
+
+    assert result.ok is True
+    assert result.xp_gained == 30
+    assert result.level_ups == [{"from": 1, "to": 2}]
+    assert result.ability_points_granted == 1
+    assert state["player"]["level"] == 2
+    assert state["player"]["xp"] == {"current": 20, "max": 200}
+    assert state["ability_state"]["ability_points"] == 1
+
+    blocked = grant_player_xp(state, 50, source="conversation")
+    assert blocked.ok is False
+    assert blocked.error == "unsupported_xp_source"
+    assert state["player"]["xp"] == {"current": 20, "max": 200}
+
+
+def test_skill_xp_ranks_separately_and_modifies_matching_checks() -> None:
+    ability = _base_active_ability(
+        ability_id="skill_check",
+        name="Skill Check",
+        dimensions=["position"],
+        resource_cost={},
+        cooldown_turns=0,
+        effect_ops=[{"dimension": "position", "op": "modify_next_check", "check": "stealth", "amount": 1}],
+    )
+    state: dict[str, Any] = {
+        "player": {"resources": {}},
+        "ability_tree": {"abilities": [ability]},
+        "ability_state": {"ability_points": 0, "unlocked": ["skill_check"], "ranks": {"skill_check": 1}, "cooldowns": {}, "active_effects": []},
+        "skill_progression": {"stealth": {"xp": 95, "rank": 1}},
+    }
+
+    skill_result = grant_skill_xp(state, "stealth", 10, source="sneak_action")
+
+    assert skill_result.ok is True
+    assert skill_result.skill_awards["stealth"] == {"xp_gained": 10, "xp": 5, "rank": 2}
+    assert skill_result.skill_level_ups == [{"skill": "stealth", "from": 1, "to": 2}]
+    assert skill_modifier_for_check(state, "stealth") == 1
+
+    use_result = apply_ability_to_state(state, ability_name="Skill Check")
+
+    assert use_result.ok is True
+    assert state["runtime"]["effects"][0]["amount"] == 2
+    assert state["runtime"]["effects"][0]["skill_modifier"] == 1
+    assert state["skill_progression"]["knowledge"]["xp"] == 5
+    assert state["skill_progression"]["knowledge"]["rank"] == 1
 
 
 def test_effect_executor_mutates_all_gameplay_dimensions_and_records_trace() -> None:
