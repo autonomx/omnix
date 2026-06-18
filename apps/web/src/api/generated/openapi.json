@@ -2203,6 +2203,17 @@
       },
       "RpgLoadoutActionRequest": {
         "properties": {
+          "ability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ability Id"
+          },
           "ability_name": {
             "anyOf": [
               {
@@ -2220,8 +2231,13 @@
               "use",
               "equip",
               "drop",
+              "salvage",
               "use_ability",
-              "hotbar"
+              "hotbar",
+              "unlock_ability",
+              "upgrade_ability",
+              "assign_hotbar",
+              "remove_hotbar"
             ],
             "title": "Action",
             "type": "string"
@@ -5053,6 +5069,50 @@
           }
         },
         "summary": "Rpg Read Session",
+        "tags": [
+          "rpg-session"
+        ]
+      }
+    },
+    "/api/rpg/sessions/{session_id}/ability-coverage": {
+      "get": {
+        "operationId": "rpg_ability_coverage_api_rpg_sessions__session_id__ability_coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rpg Ability Coverage Api Rpg Sessions  Session Id  Ability Coverage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rpg Ability Coverage",
         "tags": [
           "rpg-session"
         ]
