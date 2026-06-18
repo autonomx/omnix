@@ -16,6 +16,7 @@ from app.rpg.session.ability_system import (
     unlock_ability_in_state,
     upgrade_ability_rank_in_state,
 )
+from app.rpg.session.item_materials import salvage_item
 from app.rpg.session.service import load_session, save_session
 from app.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
 
@@ -24,6 +25,7 @@ LoadoutActionKind = Literal[
     "use",
     "equip",
     "drop",
+    "salvage",
     "use_ability",
     "hotbar",
     "unlock_ability",
@@ -110,11 +112,12 @@ def _find_item(player: dict[str, Any], item_name: str | None) -> tuple[list[dict
     if not wanted:
         return inventory, -1, None
     for index, item in enumerate(inventory):
-        names = [item.get("name"), item.get("label"), item.get("id")]
+        names = [item.get("name"), item.get("label"), item.get("display_name"), item.get("id"), item.get("item_id")]
         if any(_norm(name) == wanted for name in names):
             return inventory, index, item
     for index, item in enumerate(inventory):
-        if wanted in _norm(item.get("name") or item.get("label") or item.get("id")):
+        names = [item.get("name"), item.get("label"), item.get("display_name"), item.get("id"), item.get("item_id")]
+        if any(wanted in _norm(name) for name in names):
             return inventory, index, item
     return inventory, -1, None
 
@@ -193,6 +196,57 @@ def _append_event(state: dict[str, Any], *, title: str, detail: str, kind: str, 
     state["summary"] = detail
     state["updated_at"] = event["timestamp"]
     return event
+
+
+def _mechanics(state: dict[str, Any]) -> dict[str, Any]:
+    mechanics = _safe_dict(state.get("mechanics"))
+    state["mechanics"] = mechanics
+    return mechanics
+
+
+def _prepend_mechanics_trace(state: dict[str, Any], key: str, trace: dict[str, Any]) -> None:
+    mechanics = _mechanics(state)
+    traces = _safe_list(mechanics.get(key))
+    mechanics[key] = [trace, *traces][:50]
+
+
+def _record_salvage_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    enriched = deepcopy(_safe_dict(trace))
+    enriched["turn"] = int(state.get("current_turn") or state.get("turn_count") or 0)
+    enriched["timestamp"] = _utc_now()
+    _prepend_mechanics_trace(state, "salvage_traces", enriched)
+    _prepend_mechanics_trace(state, "item_traces", enriched)
+    return enriched
+
+
+def _session_genre(state: dict[str, Any], session: dict[str, Any]) -> str:
+    metadata = _safe_dict(state.get("metadata"))
+    identity = _safe_dict(state.get("character_identity"))
+    setup = _safe_dict(session.get("setup_payload"))
+    return str(metadata.get("genre") or identity.get("genre") or setup.get("genre") or metadata.get("campaign_template") or "classic_fantasy")
+
+
+def _material_stack_key(item: dict[str, Any]) -> str:
+    return _norm(item.get("material_id") or item.get("id") or item.get("item_id"))
+
+
+def _merge_inventory_stack(inventory: list[dict[str, Any]], stack: dict[str, Any]) -> dict[str, Any]:
+    incoming = deepcopy(stack)
+    key = _material_stack_key(incoming)
+    if key:
+        for existing in inventory:
+            if _material_stack_key(existing) != key:
+                continue
+            existing["quantity"] = _quantity(existing) + _quantity(incoming)
+            for field in ("item_id", "id", "item_type", "type", "material_id", "material_role", "family", "rarity", "quality", "properties", "stackable", "usable_in_recipes", "mechanics_source"):
+                if field not in existing and field in incoming:
+                    existing[field] = deepcopy(incoming[field])
+            if not _title(_safe_dict(existing.get("display")).get("name") or existing.get("name")):
+                existing["name"] = incoming.get("name")
+                existing["display"] = deepcopy(incoming.get("display"))
+            return existing
+    inventory.append(incoming)
+    return incoming
 
 
 def _advance_turn(state: dict[str, Any]) -> None:
@@ -312,8 +366,10 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
     state = _state(updated)
     player = _player(state)
     action = request.action
+    extra_response: dict[str, Any] = {}
+    event_effects: list[dict[str, Any]] | None = None
 
-    if action in {"inspect", "use", "equip", "drop"}:
+    if action in {"inspect", "use", "equip", "drop", "salvage"}:
         inventory, index, item = _find_item(player, request.item_name)
         if item is None or index < 0:
             return {"ok": False, "error": "item_not_found", "session_id": session_id, "item_name": request.item_name}
@@ -333,6 +389,34 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
             title = f"Equipped {name}"
             kind = "equipment"
             _advance_turn(state)
+        elif action == "salvage":
+            salvage_result = salvage_item(item, genre=_session_genre(state, updated))
+            if not salvage_result.ok:
+                return {
+                    "ok": False,
+                    "error": salvage_result.error or "salvage_failed",
+                    "session_id": session_id,
+                    "item_name": name,
+                    "detail": salvage_result.detail,
+                }
+            _consume(inventory, index)
+            for output in salvage_result.outputs:
+                _merge_inventory_stack(inventory, output)
+            _advance_turn(state)
+            trace = _record_salvage_trace(state, salvage_result.trace)
+            detail = salvage_result.detail
+            title = f"Salvaged {name}"
+            kind = "salvage"
+            event_effects = [
+                {"action": "consume", "items": salvage_result.consumed_items},
+                {"action": "add_materials", "outputs": salvage_result.outputs},
+            ]
+            extra_response = {
+                "outputs": salvage_result.outputs,
+                "consumed_items": salvage_result.consumed_items,
+                "repairs": salvage_result.repairs,
+                "mechanics_trace": trace,
+            }
         else:
             if _norm(name) in {"journal"}:
                 return {"ok": False, "error": "protected_item", "session_id": session_id, "item_name": name}
@@ -341,7 +425,7 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
             title = f"Dropped {name}"
             kind = "inventory"
             _advance_turn(state)
-        event = _append_event(state, title=title, detail=detail, kind=kind)
+        event = _append_event(state, title=title, detail=detail, kind=kind, effects=event_effects)
     elif action in {"use_ability", "hotbar"}:
         _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
         requested_ability = request.ability_name or request.ability_id
@@ -388,4 +472,4 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
 
     write_ability_coverage_snapshot(state)
     saved = save_session(updated, compact=False)
-    return {"ok": True, "session_id": session_id, "status": "ready", "event": event, "session": saved, "game": saved.get("state", {})}
+    return {"ok": True, "session_id": session_id, "status": "ready", "event": event, "session": saved, "game": saved.get("state", {}), **extra_response}
