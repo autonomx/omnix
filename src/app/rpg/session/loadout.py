@@ -27,6 +27,7 @@ from app.rpg.session.inventory_items import (
     set_inventory_quantity,
 )
 from app.rpg.session.item_materials import salvage_item
+from app.rpg.session.item_use import use_inventory_item
 from app.rpg.session.service import load_session, save_session
 from app.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
 
@@ -215,6 +216,15 @@ def _record_craft_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[st
     return enriched
 
 
+def _record_item_use_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    enriched = deepcopy(_safe_dict(trace))
+    enriched["turn"] = int(state.get("current_turn") or state.get("turn_count") or 0)
+    enriched["timestamp"] = _utc_now()
+    _prepend_mechanics_trace(state, "item_use_traces", enriched)
+    _prepend_mechanics_trace(state, "item_traces", enriched)
+    return enriched
+
+
 def _record_inventory_normalization_trace(state: dict[str, Any], trace: dict[str, Any]) -> None:
     if not trace.get("changed"):
         return
@@ -295,49 +305,9 @@ def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, 
     ensure_world_scale_abilities(state)
 
 
-def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dict[str, Any]], index: int, item: dict[str, Any]) -> tuple[str, str]:
-    name = _title(item.get("name") or item.get("label") or item.get("id")) or "item"
-    lower = _norm(name)
-    consumed = True
-
-    if "health" in lower or "healing" in lower:
-        current, maximum = _change_metric(player, "hp", 25)
-        detail = f"You used {name} and recovered HP to {current}/{maximum}."
-    elif "mana" in lower or "tonic" in lower:
-        current, maximum = _change_metric(player, "mana", 25)
-        detail = f"You used {name} and restored mana to {current}/{maximum}."
-    elif "ration" in lower or "food" in lower:
-        current, maximum = _change_metric(player, "stamina", 10)
-        detail = f"You ate {name} and recovered stamina to {current}/{maximum}."
-    elif "torch" in lower:
-        scene_state = _safe_dict(state.get("scene_state"))
-        statuses = _safe_list(scene_state.get("statuses"))
-        statuses.insert(0, {"status": "lit_torch", "dimension": "environment", "source": name, "created_at": _utc_now()})
-        scene_state["statuses"] = statuses[:20]
-        state["scene_state"] = scene_state
-        detail = f"You lit {name}. The immediate area is easier to inspect."
-    elif "focus" in lower or "crystal" in lower:
-        current, maximum = _change_metric(player, "mana", 10)
-        detail = f"You focused through {name}, steadying your magic and mana to {current}/{maximum}."
-    elif "cloak" in lower or "armor" in lower or "bow" in lower or "dagger" in lower or "ring" in lower or "band" in lower:
-        slot = _equip_item(player, item)
-        consumed = False
-        detail = f"You equipped {name} in the {slot} slot."
-    elif "journal" in lower or "scroll" in lower:
-        consumed = False
-        affordances = _safe_dict(state.get("narrative_affordances"))
-        dialogue = _safe_list(affordances.get("dialogue"))
-        dialogue.insert(0, {"tag": "ask_about_written_clue", "source": name, "dimension": "narrative", "created_at": _utc_now()})
-        affordances["dialogue"] = dialogue[:20]
-        state["narrative_affordances"] = affordances
-        detail = f"You reviewed {name} for useful clues."
-    else:
-        consumed = False
-        detail = f"You used {name}, but it has no special deterministic effect yet."
-
-    if consumed:
-        _consume(inventory, index)
-    return name, detail
+def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dict[str, Any]], index: int, item: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+    result = use_inventory_item(state, player, inventory, index, item)
+    return str(result.get("name") or _title(item.get("name") or item.get("label") or item.get("id")) or "item"), str(result.get("detail") or ""), result
 
 
 def _requested_ability_id(request: RpgLoadoutActionRequest) -> str | None:
@@ -403,10 +373,18 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
             title = f"Inspected {name}"
             kind = "inspect"
         elif action == "use":
-            name, detail = _use_item(state, player, inventory, index, item)
+            name, detail, use_result = _use_item(state, player, inventory, index, item)
             title = f"Used {name}"
             kind = "item"
             _advance_turn(state)
+            trace = _record_item_use_trace(state, _safe_dict(use_result.get("trace")))
+            event_effects = _safe_list(use_result.get("effects"))
+            extra_response = {
+                "effects": event_effects,
+                "consumed": bool(use_result.get("consumed")),
+                "repairs": _safe_list(use_result.get("repairs")),
+                "mechanics_trace": trace,
+            }
         elif action == "equip":
             slot = _equip_item(player, item)
             detail = f"You equipped {name} in the {slot} slot."
