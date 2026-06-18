@@ -86,4 +86,3 @@ def test_apply_session_item_combat_supports_actor_map_and_unarmed_fallback() -> 
     assert result["source_item"]["item_id"] == "unarmed"
     assert state["actors"]["dummy"]["health"] == 2
     assert result["effects"][0]["after"] == 2
-}
