@@ -16,6 +16,7 @@ from app.rpg.session.ability_system import (
     unlock_ability_in_state,
     upgrade_ability_rank_in_state,
 )
+from app.rpg.session.crafting import craft_from_inventory
 from app.rpg.session.inventory_items import (
     consume_inventory_item,
     find_inventory_item,
@@ -35,6 +36,7 @@ LoadoutActionKind = Literal[
     "equip",
     "drop",
     "salvage",
+    "craft",
     "use_ability",
     "hotbar",
     "unlock_ability",
@@ -47,6 +49,9 @@ LoadoutActionKind = Literal[
 class RpgLoadoutActionRequest(BaseModel):
     action: LoadoutActionKind
     item_name: str | None = None
+    recipe_id: str | None = None
+    recipe_name: str | None = None
+    station: str | None = None
     ability_id: str | None = None
     ability_name: str | None = None
     hotbar_slot: str | int | None = None
@@ -201,6 +206,15 @@ def _record_salvage_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[
     return enriched
 
 
+def _record_craft_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    enriched = deepcopy(_safe_dict(trace))
+    enriched["turn"] = int(state.get("current_turn") or state.get("turn_count") or 0)
+    enriched["timestamp"] = _utc_now()
+    _prepend_mechanics_trace(state, "crafting_traces", enriched)
+    _prepend_mechanics_trace(state, "item_traces", enriched)
+    return enriched
+
+
 def _record_inventory_normalization_trace(state: dict[str, Any], trace: dict[str, Any]) -> None:
     if not trace.get("changed"):
         return
@@ -330,6 +344,10 @@ def _requested_ability_id(request: RpgLoadoutActionRequest) -> str | None:
     return request.ability_id or request.ability_name
 
 
+def _requested_recipe_id(request: RpgLoadoutActionRequest) -> str | None:
+    return request.recipe_id or request.recipe_name or request.item_name
+
+
 def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
     session = load_session(session_id)
     if not session:
@@ -343,7 +361,39 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
     extra_response: dict[str, Any] = {}
     event_effects: list[dict[str, Any]] | None = None
 
-    if action in {"inspect", "use", "equip", "drop", "salvage"}:
+    if action == "craft":
+        inventory = _inventory(player)
+        craft_result = craft_from_inventory(inventory, _requested_recipe_id(request), station=request.station)
+        if not craft_result.get("ok"):
+            return {
+                "ok": False,
+                "error": craft_result.get("error") or "craft_failed",
+                "session_id": session_id,
+                "recipe_id": craft_result.get("recipe_id") or _requested_recipe_id(request),
+                "detail": craft_result.get("detail"),
+                "missing": craft_result.get("missing", []),
+                "required_station": craft_result.get("required_station"),
+                "station": craft_result.get("station") or request.station,
+            }
+        _advance_turn(state)
+        trace = _record_craft_trace(state, _safe_dict(craft_result.get("trace")))
+        output = _safe_dict(craft_result.get("output"))
+        output_name = _title(output.get("name") or output.get("id") or output.get("item_id")) or "item"
+        detail = str(craft_result.get("detail") or f"Crafted {output_name}.")
+        title = f"Crafted {output_name}"
+        event_effects = [
+            {"action": "consume", "items": _safe_list(craft_result.get("consumed_items"))},
+            {"action": "add_item", "output": output},
+        ]
+        event = _append_event(state, title=title, detail=detail, kind="craft", effects=event_effects)
+        extra_response = {
+            "recipe_id": craft_result.get("recipe_id"),
+            "recipe_name": craft_result.get("recipe_name"),
+            "output": output,
+            "consumed_items": _safe_list(craft_result.get("consumed_items")),
+            "mechanics_trace": trace,
+        }
+    elif action in {"inspect", "use", "equip", "drop", "salvage"}:
         inventory, index, item = _find_item(player, request.item_name)
         if item is None or index < 0:
             return {"ok": False, "error": "item_not_found", "session_id": session_id, "item_name": request.item_name}
