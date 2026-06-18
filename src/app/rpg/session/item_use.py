@@ -66,6 +66,10 @@ def _resource_name(value: Any) -> str:
     return resource if resource in SUPPORTED_RESOURCES else ""
 
 
+def _tags(item: dict[str, Any]) -> set[str]:
+    return {_norm(tag) for tag in _safe_list(item.get("tags") or item.get("flavor_tags")) if _text(tag)}
+
+
 def _effect_ops(item: dict[str, Any]) -> list[Any]:
     for key in ("use_effect_ops", "effect_ops", "effects"):
         raw = item.get(key)
@@ -110,6 +114,23 @@ def _normalize_effect_ops(item: dict[str, Any]) -> tuple[list[dict[str, Any]], l
     return ops, repairs
 
 
+def _knowledge_affordance_ops(item: dict[str, Any], name: str) -> list[dict[str, Any]]:
+    tags = _tags(item)
+    normalized_type = _norm(item_type(item))
+    is_document = normalized_type in {"document", "quest_item", "key", "tool"} or tags & {"document", "knowledge", "evidence", "map", "blueprint"}
+    if "map" in name or "map" in tags:
+        return [{"op": "add_affordance", "bucket": "travel", "tag": "study_map_route", "dimension": "access", "consume": False}]
+    if "blueprint" in name or "schematic" in name or "blueprint" in tags:
+        return [{"op": "add_affordance", "bucket": "crafting", "tag": "study_blueprint_recipe_clue", "dimension": "knowledge", "consume": False}]
+    if "ledger" in name or "record" in name or "evidence" in tags:
+        return [{"op": "add_affordance", "bucket": "evidence", "tag": "present_record_as_evidence", "dimension": "information", "consume": False}]
+    if any(token in name for token in ("seal", "signet", "papers", "pass")):
+        return [{"op": "add_affordance", "bucket": "access", "tag": "present_authorizing_document", "dimension": "access", "consume": False}]
+    if is_document and any(token in name for token in ("letter", "memo", "note")):
+        return [{"op": "add_affordance", "bucket": "dialogue", "tag": "ask_about_written_message", "dimension": "narrative", "consume": False}]
+    return []
+
+
 def _legacy_fallback_ops(item: dict[str, Any]) -> list[dict[str, Any]]:
     name = _norm(display_item_name(item))
     if "health" in name or "healing" in name:
@@ -126,6 +147,9 @@ def _legacy_fallback_ops(item: dict[str, Any]) -> list[dict[str, Any]]:
         return [{"op": "equip_item", "slot": "", "consume": False}]
     if "journal" in name or "scroll" in name:
         return [{"op": "add_affordance", "bucket": "dialogue", "tag": "ask_about_written_clue", "dimension": "narrative", "consume": False}]
+    knowledge_ops = _knowledge_affordance_ops(item, name)
+    if knowledge_ops:
+        return knowledge_ops
     return []
 
 
