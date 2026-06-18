@@ -82,10 +82,12 @@ class RpgEffectOp(BaseModel):
     dimension: GameplayDimension
     op: str
     target: str | None = None
+    target_id: str | None = None
     amount: int | None = None
     resource: str | None = None
     check: str | None = None
     status: str | None = None
+    hazard: str | None = None
     clue_tag: str | None = None
     affordance: str | None = None
     option_tag: str | None = None
@@ -93,6 +95,15 @@ class RpgEffectOp(BaseModel):
     strength: int | None = None
     relationship: str | None = None
     tag: str | None = None
+    faction_id: str | None = None
+    location_id: str | None = None
+    quest_id: str | None = None
+    objective_id: str | None = None
+    state_key: str | None = None
+    state_value: str | int | bool | None = None
+    rumor_id: str | None = None
+    rumor: str | None = None
+    signal: str | None = None
 
 
 class RpgAbilityDefinition(BaseModel):
@@ -480,17 +491,266 @@ def _append(target: dict[str, Any], key: str, value: dict[str, Any], limit: int 
     target[key] = values[:limit]
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _text(value: Any, fallback: str = "") -> str:
+    text = str(value or "").strip()
+    return text or fallback
+
+
+def _target_unavailable(op_name: str, target_name: str, detail: str = "") -> dict[str, Any]:
+    result = {"applied": False, "error": "target_unavailable", "op": op_name, "target": target_name}
+    if detail:
+        result["detail"] = detail
+    return result
+
+
+def _mechanics(state: dict[str, Any]) -> dict[str, Any]:
+    mechanics = _safe_dict(state.get("mechanics"))
+    state["mechanics"] = mechanics
+    return mechanics
+
+
+def _record_effect_trace(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], result: dict[str, Any]) -> None:
+    trace = {
+        "ability_id": ability.get("ability_id"),
+        "ability_name": ability.get("name"),
+        "dimension": result.get("dimension") or op.get("dimension"),
+        "op": result.get("op") or op.get("op"),
+        "target": result.get("target") or op.get("target"),
+        "applied": result.get("applied") is not False,
+        "error": result.get("error"),
+        "created_at": _utc_now(),
+    }
+    _append(_mechanics(state), "ability_effect_trace", trace, limit=80)
+
+
+def _append_player_visible_ability_event(state: dict[str, Any], ability: dict[str, Any], effects: list[dict[str, Any]]) -> None:
+    if not effects:
+        return
+    applied = [effect for effect in effects if effect.get("applied") is not False]
+    if not applied:
+        return
+    turn = _safe_int(state.get("current_turn") or state.get("turn_count"), 0)
+    event = {
+        "turn": turn,
+        "time": _safe_dict(state.get("world")).get("time") or f"Turn {turn}",
+        "title": f"Ability effect: {ability.get('name')}",
+        "actor": "Player",
+        "detail": f"{ability.get('name')} changed {', '.join(str(value) for value in ability.get('dimensions', []))}.",
+        "kind": "ability_effect",
+        "effects": effects,
+        "timestamp": _utc_now(),
+    }
+    timeline = _safe_list(state.get("timeline"))
+    state["timeline"] = [event, *timeline][:50]
+    journal = _safe_dict(state.get("journal"))
+    entries = _safe_list(journal.get("entries"))
+    journal["entries"] = [event, *entries][:50]
+    state["journal"] = journal
+
+
+def _status_bucket(state: dict[str, Any], target_name: str) -> tuple[dict[str, Any], str]:
+    if target_name in {"", "self", "player", "the current situation"}:
+        return _player(state), "statuses"
+    encounter = _safe_dict(state.get("encounter"))
+    state["encounter"] = encounter
+    return encounter, "target_statuses"
+
+
 def _resource_delta(state: dict[str, Any], resource: str, amount: int, *, target: str | None = None) -> dict[str, Any]:
     if target and target not in {"self", "player", "party", "the current situation"}:
         encounter = _safe_dict(state.get("encounter"))
         _append(encounter, "target_effects", {"target": target, "resource": resource, "amount": amount, "created_at": _utc_now()})
         state["encounter"] = encounter
-        return {"target": target, "resource": resource, "amount": amount, "applied": "target_trace"}
+        return {"target": target, "resource": resource, "amount": amount, "applied": True, "mode": "target_trace"}
     metric = _resource_metric(_player(state), resource)
     before = int(metric.get("current") or 0)
     maximum = int(metric.get("max") or before)
     metric["current"] = max(0, min(maximum, before + int(amount)))
-    return {"target": "self", "resource": resource, "before": before, "after": metric["current"], "max": maximum}
+    return {"target": "self", "resource": resource, "before": before, "after": metric["current"], "max": maximum, "applied": True}
+
+
+def _apply_status(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    status = _text(op.get("status") or op.get("tag"), "status")
+    target_state, key = _status_bucket(state, target_name)
+    _append(
+        target_state,
+        key,
+        {
+            "status": status,
+            "target": target_name,
+            "source": ability.get("name"),
+            "duration_turns": op.get("duration_turns"),
+            "created_at": _utc_now(),
+        },
+    )
+    return {"status": status, "target": target_name, "applied": True}
+
+
+def _clear_status(state: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    status = _text(op.get("status") or op.get("tag"), "status")
+    target_state, key = _status_bucket(state, target_name)
+    before = _safe_list(target_state.get(key))
+    after = [item for item in before if _safe_dict(item).get("status") != status]
+    target_state[key] = after
+    return {"status": status, "target": target_name, "removed": len(before) - len(after), "applied": True}
+
+
+def _modify_relationship(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    relationships = _safe_list(state.get("relationships"))
+    relation_name = _text(op.get("relationship") or op.get("target_id") or target_name, "local_contacts")
+    amount = _safe_int(op.get("amount"))
+    for relation in relationships:
+        if _safe_dict(relation).get("name") == relation_name:
+            before = _safe_int(relation.get("score"))
+            relation["score"] = before + amount
+            relation.setdefault("stance", "Noted")
+            break
+    else:
+        before = 0
+        relationships.append({"name": relation_name, "stance": "Noted", "score": amount})
+    state["relationships"] = relationships
+    return {"relationship": relation_name, "before": before, "after": before + amount, "source": ability.get("name"), "applied": True}
+
+
+def _modify_reputation(state: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]:
+    world = _safe_dict(state.get("world"))
+    reputation = _safe_dict(world.get("reputation"))
+    before = _safe_int(reputation.get("score"))
+    reputation["score"] = before + _safe_int(op.get("amount"))
+    reputation.setdefault("label", "Unknown")
+    world["reputation"] = reputation
+    state["world"] = world
+    return {"before": before, "after": reputation["score"], "applied": True}
+
+
+def _modify_faction_alert(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    faction_id = _text(op.get("faction_id") or op.get("target_id") or target_name)
+    if not faction_id or faction_id == "the current situation":
+        return _target_unavailable("modify_faction_alert", target_name, "missing faction_id")
+    faction_state = _safe_dict(state.get("faction_state"))
+    factions = _safe_dict(faction_state.get("factions"))
+    faction = _safe_dict(factions.get(faction_id))
+    before = _safe_int(faction.get("alert"))
+    faction.update({"faction_id": faction_id, "alert": before + _safe_int(op.get("amount")), "updated_by": ability.get("name")})
+    factions[faction_id] = faction
+    faction_state["factions"] = factions
+    state["faction_state"] = faction_state
+    return {"target": faction_id, "faction_id": faction_id, "before": before, "after": faction["alert"], "applied": True}
+
+
+def _modify_price_modifier(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    modifier_id = _text(op.get("tag") or op.get("target_id") or target_name, "general")
+    economy = _safe_dict(state.get("economy"))
+    modifiers = _safe_dict(economy.get("price_modifiers"))
+    modifier = _safe_dict(modifiers.get(modifier_id))
+    before = _safe_int(modifier.get("amount"))
+    modifier.update({"amount": before + _safe_int(op.get("amount")), "source": ability.get("name"), "updated_at": _utc_now()})
+    modifiers[modifier_id] = modifier
+    economy["price_modifiers"] = modifiers
+    state["economy"] = economy
+    return {"target": modifier_id, "modifier_id": modifier_id, "before": before, "after": modifier["amount"], "applied": True}
+
+
+def _apply_scene_status(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]:
+    scene_state = _safe_dict(state.get("scene_state"))
+    status = _text(op.get("status") or op.get("tag"), "changed")
+    _append(scene_state, "statuses", {"status": status, "source": ability.get("name"), "duration_turns": op.get("duration_turns"), "created_at": _utc_now()})
+    state["scene_state"] = scene_state
+    return {"status": status, "applied": True}
+
+
+def _create_hazard(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]:
+    scene_state = _safe_dict(state.get("scene_state"))
+    hazard = _text(op.get("hazard") or op.get("status") or op.get("tag"), "hazard")
+    _append(scene_state, "hazards", {"hazard": hazard, "source": ability.get("name"), "strength": op.get("strength"), "duration_turns": op.get("duration_turns"), "created_at": _utc_now()})
+    state["scene_state"] = scene_state
+    return {"hazard": hazard, "applied": True}
+
+
+def _clear_hazard(state: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]:
+    scene_state = _safe_dict(state.get("scene_state"))
+    hazard = _text(op.get("hazard") or op.get("status") or op.get("tag"), "hazard")
+    before = _safe_list(scene_state.get("hazards"))
+    after = [item for item in before if _safe_dict(item).get("hazard") != hazard]
+    scene_state["hazards"] = after
+    state["scene_state"] = scene_state
+    return {"hazard": hazard, "removed": len(before) - len(after), "applied": True}
+
+
+def _change_location_state(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    location_id = _text(op.get("location_id") or op.get("target_id") or target_name)
+    if not location_id or location_id == "the current situation":
+        return _target_unavailable("change_location_state", target_name, "missing location_id")
+    state_key = _text(op.get("state_key") or op.get("tag"), "state")
+    locations = _safe_dict(state.get("locations"))
+    location = _safe_dict(locations.get(location_id))
+    location.setdefault("location_id", location_id)
+    location_state = _safe_dict(location.get("state"))
+    before = location_state.get(state_key)
+    location_state[state_key] = op.get("state_value", True)
+    location["state"] = location_state
+    location["updated_by"] = ability.get("name")
+    locations[location_id] = location
+    state["locations"] = locations
+    return {"target": location_id, "location_id": location_id, "state_key": state_key, "before": before, "after": location_state[state_key], "applied": True}
+
+
+def _add_world_rumor(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any]) -> dict[str, Any]:
+    world = _safe_dict(state.get("world"))
+    rumor = {
+        "rumor_id": _text(op.get("rumor_id") or op.get("tag"), f"rumor:{len(_safe_list(world.get('rumors'))) + 1}"),
+        "text": _text(op.get("rumor") or op.get("state_value") or op.get("tag"), "A new rumor spreads."),
+        "source": ability.get("name"),
+        "created_at": _utc_now(),
+    }
+    _append(world, "rumors", rumor, limit=80)
+    state["world"] = world
+    return {"rumor_id": rumor["rumor_id"], "applied": True}
+
+
+def _advance_quest_signal(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    quest_id = _text(op.get("quest_id") or op.get("target_id") or target_name)
+    if not quest_id or quest_id == "the current situation":
+        return _target_unavailable("advance_quest_signal", target_name, "missing quest_id")
+    signal = _text(op.get("signal") or op.get("tag"), "ability_signal")
+    quest_signals = _safe_list(state.get("quest_signals"))
+    record = {"quest_id": quest_id, "signal": signal, "source": ability.get("name"), "created_at": _utc_now()}
+    state["quest_signals"] = [record, *quest_signals][:80]
+    for quest in _safe_list(state.get("quests")):
+        quest_record = _safe_dict(quest)
+        if _text(quest_record.get("quest_id") or quest_record.get("id")) == quest_id:
+            signals = _safe_list(quest_record.get("signals"))
+            quest_record["signals"] = [record, *signals][:20]
+            break
+    return {"target": quest_id, "quest_id": quest_id, "signal": signal, "applied": True}
+
+
+def _complete_objective(state: dict[str, Any], ability: dict[str, Any], op: dict[str, Any], target_name: str) -> dict[str, Any]:
+    quest_id = _text(op.get("quest_id") or op.get("target_id") or target_name)
+    objective_id = _text(op.get("objective_id") or op.get("tag"))
+    if not quest_id or quest_id == "the current situation" or not objective_id:
+        return _target_unavailable("complete_objective", target_name, "missing quest_id or objective_id")
+    for quest in _safe_list(state.get("quests")):
+        quest_record = _safe_dict(quest)
+        if _text(quest_record.get("quest_id") or quest_record.get("id")) != quest_id:
+            continue
+        for objective in _safe_list(quest_record.get("objectives")):
+            objective_record = _safe_dict(objective)
+            if _text(objective_record.get("objective_id") or objective_record.get("id")) == objective_id:
+                objective_record["status"] = "completed"
+                objective_record["completed"] = True
+                objective_record["completed_by"] = ability.get("name")
+                objective_record["completed_at"] = _utc_now()
+                return {"target": quest_id, "quest_id": quest_id, "objective_id": objective_id, "applied": True}
+        return _target_unavailable("complete_objective", quest_id, f"missing objective {objective_id}")
+    return _target_unavailable("complete_objective", quest_id, f"missing quest {quest_id}")
 
 
 def execute_effect_ops(state: dict[str, Any], ability: dict[str, Any], *, target: str | None = None) -> list[dict[str, Any]]:
@@ -499,47 +759,57 @@ def execute_effect_ops(state: dict[str, Any], ability: dict[str, Any], *, target
         op = _safe_dict(raw_op)
         op_name = str(op.get("op") or "")
         dimension = str(op.get("dimension") or "")
-        target_name = target or str(op.get("target") or "self")
-        result = {"dimension": dimension, "op": op_name, "target": target_name}
+        target_name = _text(op.get("target_id") or op.get("target") or target, "self")
+        result: dict[str, Any] = {"dimension": dimension, "op": op_name, "target": target_name}
         if op_name == "resource_delta":
-            result.update(_resource_delta(state, str(op.get("resource") or "hp"), int(op.get("amount") or 0), target=target_name if op.get("target") == "target" else op.get("target") or target_name))
+            result.update(_resource_delta(state, str(op.get("resource") or "hp"), _safe_int(op.get("amount")), target=target_name if op.get("target") == "target" else op.get("target") or target_name))
         elif op_name == "modify_next_check":
             runtime = _safe_dict(state.get("runtime"))
-            _append(runtime, "effects", {"source": ability.get("name"), "dimension": dimension, "check": op.get("check"), "amount": op.get("amount"), "duration_turns": op.get("duration_turns", 1), "created_at": _utc_now()})
+            effect = {"source": ability.get("name"), "dimension": dimension, "check": op.get("check"), "amount": _safe_int(op.get("amount")), "duration_turns": op.get("duration_turns", 1), "created_at": _utc_now()}
+            _append(runtime, "effects", effect)
             state["runtime"] = runtime
+            result.update({"check": effect["check"], "amount": effect["amount"], "duration_turns": effect["duration_turns"], "applied": True})
+        elif op_name == "apply_status":
+            result.update(_apply_status(state, ability, op, target_name))
+        elif op_name == "clear_status":
+            result.update(_clear_status(state, op, target_name))
         elif op_name == "reveal_clue":
-            _append(state, "clues", {"source": ability.get("name"), "tag": op.get("clue_tag") or "clue", "strength": op.get("strength", 1), "created_at": _utc_now()})
+            clue_tag = _text(op.get("clue_tag") or op.get("tag"), "clue")
+            _append(state, "clues", {"source": ability.get("name"), "tag": clue_tag, "strength": op.get("strength", 1), "created_at": _utc_now()})
+            result.update({"clue_tag": clue_tag, "applied": True})
         elif op_name in {"unlock_dialogue_option", "unlock_travel_option", "unlock_scene_affordance", "grant_temp_affordance"}:
             affordances = _safe_dict(state.get("narrative_affordances"))
             bucket = "dialogue" if op_name == "unlock_dialogue_option" else "travel" if op_name == "unlock_travel_option" else "scene"
-            _append(affordances, bucket, {"source": ability.get("name"), "tag": op.get("option_tag") or op.get("affordance") or op_name, "duration_turns": op.get("duration_turns"), "created_at": _utc_now()})
+            tag = _text(op.get("option_tag") or op.get("affordance") or op.get("tag"), op_name)
+            _append(affordances, bucket, {"source": ability.get("name"), "tag": tag, "duration_turns": op.get("duration_turns"), "created_at": _utc_now()})
             state["narrative_affordances"] = affordances
-        elif op_name == "apply_scene_status":
-            scene_state = _safe_dict(state.get("scene_state"))
-            _append(scene_state, "statuses", {"status": op.get("status") or "changed", "source": ability.get("name"), "duration_turns": op.get("duration_turns"), "created_at": _utc_now()})
-            state["scene_state"] = scene_state
+            result.update({"bucket": bucket, "tag": tag, "applied": True})
         elif op_name == "modify_relationship":
-            relationships = _safe_list(state.get("relationships"))
-            relation_name = str(op.get("relationship") or target_name or "local_contacts")
-            amount = int(op.get("amount") or 0)
-            for relation in relationships:
-                if _safe_dict(relation).get("name") == relation_name:
-                    relation["score"] = int(relation.get("score") or 0) + amount
-                    break
-            else:
-                relationships.append({"name": relation_name, "stance": "Noted", "score": amount})
-            state["relationships"] = relationships
+            result.update(_modify_relationship(state, ability, op, target_name))
         elif op_name == "modify_reputation":
-            world = _safe_dict(state.get("world"))
-            reputation = _safe_dict(world.get("reputation"))
-            reputation["score"] = int(reputation.get("score") or 0) + int(op.get("amount") or 0)
-            reputation.setdefault("label", "Unknown")
-            world["reputation"] = reputation
-            state["world"] = world
+            result.update(_modify_reputation(state, op))
+        elif op_name == "modify_faction_alert":
+            result.update(_modify_faction_alert(state, ability, op, target_name))
+        elif op_name == "modify_price_modifier":
+            result.update(_modify_price_modifier(state, ability, op, target_name))
+        elif op_name == "apply_scene_status":
+            result.update(_apply_scene_status(state, ability, op))
+        elif op_name == "create_hazard":
+            result.update(_create_hazard(state, ability, op))
+        elif op_name == "clear_hazard":
+            result.update(_clear_hazard(state, op))
+        elif op_name == "change_location_state":
+            result.update(_change_location_state(state, ability, op, target_name))
+        elif op_name == "add_world_rumor":
+            result.update(_add_world_rumor(state, ability, op))
+        elif op_name == "advance_quest_signal":
+            result.update(_advance_quest_signal(state, ability, op, target_name))
+        elif op_name == "complete_objective":
+            result.update(_complete_objective(state, ability, op, target_name))
         else:
-            mechanics = _safe_dict(state.get("mechanics"))
-            _append(mechanics, "pending_dimension_effects", {**deepcopy(op), "source": ability.get("name"), "created_at": _utc_now()})
-            state["mechanics"] = mechanics
+            result.update({"applied": False, "error": "unsupported_effect_op"})
+            _append(_mechanics(state), "pending_dimension_effects", {**deepcopy(op), "source": ability.get("name"), "created_at": _utc_now()})
+        _record_effect_trace(state, ability, op, result)
         applied.append(result)
     return applied
 
@@ -577,6 +847,10 @@ def apply_ability_to_state(state: dict[str, Any], *, ability_name: str | None = 
         metric["current"] = max(0, int(metric.get("current") or 0) - int(cost))
         cost_parts.append(f"{resource}: {metric['current']}/{metric.get('max')}")
     effects = execute_effect_ops(state, ability, target=target or "the current situation")
+    if effects and not any(effect.get("applied") is not False for effect in effects):
+        details = "; ".join(str(effect.get("detail") or effect.get("error") or "effect failed") for effect in effects)
+        return RpgAbilityUseResult(ok=False, ability_id=ability_id, name=ability.get("name"), error="effect_target_unavailable", detail=details, effects=effects)
+    _append_player_visible_ability_event(state, ability, effects)
     _tick_cooldowns(ability_state)
     cooldown = int(ability.get("cooldown_turns") or 0)
     if cooldown > 0:
