@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { hotbarAbilities, inventoryItems } from './rpgUiState';
@@ -34,13 +34,13 @@ describe('RpgLoadoutTabs', () => {
 
     expect(screen.getByRole('tab', { name: 'Abilities' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Abilities' })).toHaveTextContent('Aimed Shot');
-    expect(screen.getByLabelText('Selected ability: Aimed Shot')).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Active ability: Aimed Shot' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Hotbar' }));
 
     expect(screen.getByRole('tab', { name: 'Hotbar' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tabpanel', { name: 'Hotbar' })).toHaveTextContent('Command-ready hotbar');
-    expect(screen.getByRole('button', { name: '1: Aimed Shot' })).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel', { name: 'Hotbar' })).toHaveTextContent('Frost Arrow');
+    expect(screen.getByRole('button', { name: /Aimed Shot/ })).toBeInTheDocument();
   });
 
   it('turns inventory and ability interactions into replay-preserving commands', () => {
@@ -57,12 +57,13 @@ describe('RpgLoadoutTabs', () => {
     expect(onSelectCommand).toHaveBeenLastCalledWith('Inspect Trail rations and describe its useful properties.');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Abilities' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Target enemy' }));
+    const activeAbility = screen.getByRole('complementary', { name: 'Active ability: Aimed Shot' });
+    fireEvent.click(within(activeAbility).getByRole('button', { name: 'Use' }));
 
-    expect(onSelectCommand).toHaveBeenLastCalledWith('Use Aimed Shot on the most dangerous visible enemy.');
+    expect(onSelectCommand).toHaveBeenLastCalledWith('Use Aimed Shot on the most relevant target.');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Hotbar' }));
-    fireEvent.click(screen.getByRole('button', { name: '2: Frost Arrow' }));
+    fireEvent.click(screen.getByRole('button', { name: /Frost Arrow/ }));
 
     expect(onSelectCommand).toHaveBeenLastCalledWith('Use Frost Arrow from hotbar slot 2 on the best available target.');
   });
