@@ -16,6 +16,7 @@ from app.rpg.session.ability_system import (
     upgrade_ability_rank_in_state,
 )
 from app.rpg.session.service import load_session, save_session
+from app.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
 
 LoadoutActionKind = Literal[
     "inspect",
@@ -218,6 +219,7 @@ def _level_gated_initial_unlocks(tree: dict[str, Any], ability_state: dict[str, 
 
 def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, Any] | None = None) -> None:
     if state.get("ability_tree") and state.get("ability_state"):
+        ensure_world_scale_abilities(state)
         return
     player = _player(state)
     identity = _safe_dict(state.get("character_identity"))
@@ -248,6 +250,7 @@ def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, 
     state["ability_tree"] = tree
     state["ability_state"] = ability_state
     state["hotbar"] = hotbar
+    ensure_world_scale_abilities(state)
 
 
 def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dict[str, Any]], index: int, item: dict[str, Any]) -> tuple[str, str]:
@@ -340,11 +343,19 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
         event = _append_event(state, title=title, detail=detail, kind=kind)
     elif action in {"use_ability", "hotbar"}:
         _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
-        result = apply_ability_to_state(state, ability_name=request.ability_name or request.ability_id, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
-        if not result.ok:
-            return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}
-        _advance_turn(state)
-        event = _append_event(state, title=f"Used {result.name}", detail=result.detail, kind="ability", effects=result.effects)
+        requested_ability = request.ability_name or request.ability_id
+        world_result = apply_world_scale_loadout_ability(state, ability_name=requested_ability, hotbar_slot=request.hotbar_slot, target=request.target or "the wider world")
+        if world_result.get("handled"):
+            if not world_result.get("ok"):
+                return {"ok": False, "error": world_result.get("error") or "world_ability_failed", "session_id": session_id, "detail": world_result.get("detail"), "ability_id": world_result.get("ability_id"), "effects": world_result.get("effects", [])}
+            _advance_turn(state)
+            event = _append_event(state, title=f"Used {world_result.get('name')}", detail=str(world_result.get("detail") or "World state changed."), kind="world_ability", effects=_safe_list(world_result.get("effects")))
+        else:
+            result = apply_ability_to_state(state, ability_name=requested_ability, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
+            if not result.ok:
+                return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}
+            _advance_turn(state)
+            event = _append_event(state, title=f"Used {result.name}", detail=result.detail, kind="ability", effects=result.effects)
     elif action in {"unlock_ability", "upgrade_ability", "assign_hotbar", "remove_hotbar"}:
         _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
         ability_id = _requested_ability_id(request)
