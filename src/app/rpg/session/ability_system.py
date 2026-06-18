@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, cast, get_args
 
 from pydantic import BaseModel, Field
 
@@ -37,11 +37,11 @@ AbilityPurpose = Literal[
     "utility",
 ]
 
-ALLOWED_CAPABILITIES = set(Capability.__args__)
-ALLOWED_POWER_SOURCES = set(PowerSource.__args__)
-ALLOWED_DIMENSIONS = set(GameplayDimension.__args__)
-ALLOWED_KINDS = set(AbilityKind.__args__)
-ALLOWED_PURPOSES = set(AbilityPurpose.__args__)
+ALLOWED_CAPABILITIES = set(get_args(Capability))
+ALLOWED_POWER_SOURCES = set(get_args(PowerSource))
+ALLOWED_DIMENSIONS = set(get_args(GameplayDimension))
+ALLOWED_KINDS = set(get_args(AbilityKind))
+ALLOWED_PURPOSES = set(get_args(AbilityPurpose))
 ALLOWED_EFFECT_OPS = {
     "resource_delta",
     "modify_next_check",
@@ -64,6 +64,7 @@ ALLOWED_EFFECT_OPS = {
     "complete_objective",
     "grant_temp_affordance",
 }
+ALLOWED_COST_RESOURCES = {"hp", "stamina", "mana", "gold", "silver", "copper", "renown"}
 
 
 class RpgCharacterIdentity(BaseModel):
@@ -112,6 +113,8 @@ class RpgAbilityDefinition(BaseModel):
     prerequisites: list[str] = Field(default_factory=list)
     targeting: dict[str, Any] = Field(default_factory=dict)
     effect_ops: list[RpgEffectOp] = Field(default_factory=list)
+    hooks: list[str] = Field(default_factory=list)
+    influence_tags: list[str] = Field(default_factory=list)
     flavor_tags: list[str] = Field(default_factory=list)
 
 
@@ -221,18 +224,28 @@ def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _is_plain_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _non_empty_strings(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
 def normalize_genre(value: Any) -> str:
     return GENRE_NORMALIZATION.get(_norm(value) or "classic_fantasy", _norm(value) or "classic_fantasy")
 
 
 def normalize_capability(value: Any, fallback: Capability = "recon") -> Capability:
     raw = _norm(value)
-    return raw if raw in ALLOWED_CAPABILITIES else fallback
+    return cast(Capability, raw) if raw in ALLOWED_CAPABILITIES else fallback
 
 
 def normalize_power_source(value: Any, fallback: PowerSource = "mundane") -> PowerSource:
     raw = _norm(value)
-    return raw if raw in ALLOWED_POWER_SOURCES else fallback
+    return cast(PowerSource, raw) if raw in ALLOWED_POWER_SOURCES else fallback
 
 
 def infer_character_identity(request_payload: dict[str, Any], build_id: str = "balanced_adventurer") -> dict[str, Any]:
@@ -345,18 +358,60 @@ def validate_ability(ability: dict[str, Any]) -> list[str]:
     kind = str(ability.get("kind") or "active")
     dimensions = _safe_list(ability.get("dimensions"))
     effect_ops = _safe_list(ability.get("effect_ops"))
+    resource_cost = ability.get("resource_cost")
+    cooldown_turns = ability.get("cooldown_turns", 0)
+    level_required = ability.get("level_required", 1)
+    rank = ability.get("rank", 1)
+    max_rank = ability.get("max_rank", 3)
+    prerequisites = ability.get("prerequisites", [])
     if not ability_id:
         errors.append("missing ability_id")
     if kind not in ALLOWED_KINDS:
         errors.append(f"{ability_id}: unsupported kind {kind}")
     if ability.get("capability") not in ALLOWED_CAPABILITIES:
         errors.append(f"{ability_id}: unsupported capability {ability.get('capability')}")
+    if ability.get("power_source") not in ALLOWED_POWER_SOURCES:
+        errors.append(f"{ability_id}: unsupported power_source {ability.get('power_source')}")
     if ability.get("purpose") not in ALLOWED_PURPOSES:
         errors.append(f"{ability_id}: unsupported purpose {ability.get('purpose')}")
     if not dimensions or any(dimension not in ALLOWED_DIMENSIONS for dimension in dimensions):
         errors.append(f"{ability_id}: invalid dimensions")
     if kind == "active" and not effect_ops:
         errors.append(f"{ability_id}: active ability has no effect_ops")
+    if kind == "narrative_trait" and not effect_ops:
+        if not (_non_empty_strings(ability.get("influence_tags")) or _non_empty_strings(ability.get("hooks"))):
+            errors.append(f"{ability_id}: narrative_trait without effect_ops requires deterministic influence_tags or hooks")
+    if not isinstance(resource_cost, dict):
+        errors.append(f"{ability_id}: invalid resource_cost")
+    else:
+        for resource, cost in resource_cost.items():
+            if resource not in ALLOWED_COST_RESOURCES:
+                errors.append(f"{ability_id}: invalid cost resource {resource}")
+            if not _is_plain_int(cost) or cost < 0:
+                errors.append(f"{ability_id}: invalid cost value for {resource}")
+    if not _is_plain_int(cooldown_turns) or cooldown_turns < 0:
+        errors.append(f"{ability_id}: invalid cooldown_turns")
+    if not _is_plain_int(level_required) or level_required < 1:
+        errors.append(f"{ability_id}: invalid level_required")
+    if not _is_plain_int(rank) or rank < 1:
+        errors.append(f"{ability_id}: invalid rank")
+    if not _is_plain_int(max_rank) or max_rank < 1:
+        errors.append(f"{ability_id}: invalid max_rank")
+    if _is_plain_int(rank) and _is_plain_int(max_rank) and rank > max_rank:
+        errors.append(f"{ability_id}: rank exceeds max_rank")
+    if not isinstance(prerequisites, list):
+        errors.append(f"{ability_id}: invalid prerequisites")
+    else:
+        seen_prerequisites: set[str] = set()
+        for prerequisite in prerequisites:
+            if not isinstance(prerequisite, str) or not prerequisite.strip():
+                errors.append(f"{ability_id}: invalid prerequisite {prerequisite}")
+                continue
+            if prerequisite == ability_id:
+                errors.append(f"{ability_id}: prerequisite cannot reference itself")
+            if prerequisite in seen_prerequisites:
+                errors.append(f"{ability_id}: duplicate prerequisite {prerequisite}")
+            seen_prerequisites.add(prerequisite)
     for op in effect_ops:
         record = _safe_dict(op)
         if record.get("dimension") not in ALLOWED_DIMENSIONS:
