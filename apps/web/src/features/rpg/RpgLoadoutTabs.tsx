@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import type { RpgLoadoutActionRequest } from '../../api/client';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { omnixApiClient, type RpgLoadoutActionRequest, type RpgLaunchResponse } from '../../api/client';
 import type { RpgHotbarAbilityPreview, RpgInventoryItemPreview } from './rpgUiState';
 import './RpgLoadoutTabs.css';
 
-type RpgLoadoutTab = 'inventory' | 'abilities' | 'hotbar';
+type RpgLoadoutTab = 'inventory' | 'abilities' | 'hotbar' | 'skills' | 'traits' | 'effects';
+type AbilityStatus = 'unlocked' | 'available' | 'locked';
 
 interface RpgLoadoutTabsProps {
   inventoryItems: RpgInventoryItemPreview[];
@@ -14,22 +16,112 @@ interface RpgLoadoutTabsProps {
   selectedSessionId?: string | null;
 }
 
+interface AbilityPreview {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  kind: 'active' | 'passive' | 'narrative_trait' | string;
+  capability: string;
+  powerSource: string;
+  purpose: string;
+  dimensions: string[];
+  levelRequired: number;
+  rank: number;
+  maxRank: number;
+  cooldown: number;
+  resourceCost: Record<string, number>;
+  prerequisites: string[];
+  influenceTags: string[];
+  hooks: string[];
+  categoryName: string;
+  isUnlocked: boolean;
+  isAvailable: boolean;
+  missingPrerequisites: string[];
+  status: AbilityStatus;
+  statusLabel: string;
+}
+
+interface AbilityCategoryPreview {
+  id: string;
+  name: string;
+  capability: string;
+  dimensions: string[];
+  abilities: AbilityPreview[];
+}
+
+interface HotbarSlotPreview {
+  slot: string;
+  ability?: AbilityPreview;
+}
+
+interface SkillProgressionPreview {
+  id: string;
+  label: string;
+  rank: number;
+  xp: number;
+  source: string;
+}
+
+interface EffectPreview {
+  id: string;
+  name: string;
+  detail: string;
+  dimensions: string[];
+  remaining?: number;
+}
+
+interface AbilityOverview {
+  className: string;
+  treeId: string;
+  abilityPoints: number;
+  playerLevel: number;
+  categories: AbilityCategoryPreview[];
+  allAbilities: AbilityPreview[];
+  hotbarSlots: HotbarSlotPreview[];
+  hotbarAbilities: RpgHotbarAbilityPreview[];
+  skills: SkillProgressionPreview[];
+  traits: AbilityPreview[];
+  activeEffects: EffectPreview[];
+  source: 'live' | 'preview';
+}
+
 const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
   { id: 'inventory', label: 'Inventory' },
   { id: 'abilities', label: 'Abilities' },
   { id: 'hotbar', label: 'Hotbar' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'traits', label: 'Traits' },
+  { id: 'effects', label: 'Effects' },
 ];
 
 export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, selectedSessionId }: RpgLoadoutTabsProps) {
   const [activeTab, setActiveTab] = useState<RpgLoadoutTab>('inventory');
   const [activeInventoryIndex, setActiveInventoryIndex] = useState(0);
   const [activeAbilityIndex, setActiveAbilityIndex] = useState(0);
+  const [activeHotbarSlot, setActiveHotbarSlot] = useState('1');
+  const wasApplyingAction = useRef(false);
+  const sessionQuery = useQuery({
+    enabled: Boolean(selectedSessionId),
+    queryKey: ['feature', 'rpg', 'ability-tree-session', selectedSessionId],
+    queryFn: () => omnixApiClient.continueRpgSession(selectedSessionId ?? ''),
+    staleTime: 0,
+  });
+  const abilityOverview = useMemo(() => buildAbilityOverview(sessionQuery.data, hotbarAbilities), [hotbarAbilities, sessionQuery.data]);
+  const displayedHotbarAbilities = abilityOverview.hotbarAbilities.length ? abilityOverview.hotbarAbilities : hotbarAbilities;
   const activeItem = inventoryItems[Math.min(activeInventoryIndex, Math.max(inventoryItems.length - 1, 0))];
-  const activeAbility = hotbarAbilities[Math.min(activeAbilityIndex, Math.max(hotbarAbilities.length - 1, 0))];
+  const activeAbility = abilityOverview.allAbilities[Math.min(activeAbilityIndex, Math.max(abilityOverview.allAbilities.length - 1, 0))];
+
+  useEffect(() => {
+    if (wasApplyingAction.current && !isApplyingLoadoutAction && selectedSessionId) {
+      void sessionQuery.refetch();
+    }
+    wasApplyingAction.current = isApplyingLoadoutAction;
+  }, [isApplyingLoadoutAction, selectedSessionId, sessionQuery]);
 
   return (
     <section className="rpg-card rpg-inventory-card">
-      <div className="rpg-tabs" role="tablist" aria-label="Inventory tabs">
+      <div className="rpg-tabs" role="tablist" aria-label="Inventory and ability tabs">
         {tabs.map((tab) => (
           <button
             aria-controls={`rpg-${tab.id}-loadout-panel`}
@@ -45,11 +137,18 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
           </button>
         ))}
       </div>
+
+      <div className="rpg-ability-summary" aria-label="Ability tree summary">
+        <strong>{abilityOverview.className}</strong>
+        <span>{abilityOverview.source === 'live' ? `Level ${abilityOverview.playerLevel} • ${abilityOverview.abilityPoints} ability point${abilityOverview.abilityPoints === 1 ? '' : 's'}` : 'Preview ability kit'}</span>
+        <small>{abilityOverview.treeId}</small>
+      </div>
+
       {activeTab === 'inventory' ? (
         <InventoryPanel
           activeItem={activeItem}
           activeItemIndex={activeInventoryIndex}
-          hotbarAbilities={hotbarAbilities}
+          hotbarAbilities={displayedHotbarAbilities}
           inventoryItems={inventoryItems}
           isApplyingLoadoutAction={isApplyingLoadoutAction}
           onApplyLoadoutAction={onApplyLoadoutAction}
@@ -60,10 +159,10 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
       ) : null}
       {activeTab === 'abilities' ? (
         <AbilitiesPanel
+          abilityOverview={abilityOverview}
           activeAbility={activeAbility}
           activeAbilityIndex={activeAbilityIndex}
-          hotbarAbilities={hotbarAbilities}
-          isApplyingLoadoutAction={isApplyingLoadoutAction}
+          isApplyingLoadoutAction={isApplyingLoadoutAction || sessionQuery.isFetching}
           onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectAbility={setActiveAbilityIndex}
           onSelectCommand={onSelectCommand}
@@ -72,20 +171,26 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
       ) : null}
       {activeTab === 'hotbar' ? (
         <HotbarPanel
-          hotbarAbilities={hotbarAbilities}
-          isApplyingLoadoutAction={isApplyingLoadoutAction}
+          abilityOverview={abilityOverview}
+          activeHotbarSlot={activeHotbarSlot}
+          isApplyingLoadoutAction={isApplyingLoadoutAction || sessionQuery.isFetching}
           onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectCommand={onSelectCommand}
+          onSelectSlot={setActiveHotbarSlot}
           selectedSessionId={selectedSessionId}
         />
       ) : null}
+      {activeTab === 'skills' ? <SkillsPanel skills={abilityOverview.skills} /> : null}
+      {activeTab === 'traits' ? <TraitsPanel traits={abilityOverview.traits} /> : null}
+      {activeTab === 'effects' ? <EffectsPanel effects={abilityOverview.activeEffects} /> : null}
     </section>
   );
 }
 
-interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems' | 'hotbarAbilities' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
+interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
   activeItem: RpgInventoryItemPreview | undefined;
   activeItemIndex: number;
+  hotbarAbilities: RpgHotbarAbilityPreview[];
   onSelectItem: (index: number) => void;
 }
 
@@ -162,58 +267,143 @@ function InventoryPanel({ activeItem, activeItemIndex, inventoryItems, hotbarAbi
   );
 }
 
-interface AbilitiesPanelProps extends Pick<RpgLoadoutTabsProps, 'hotbarAbilities' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
-  activeAbility: RpgHotbarAbilityPreview | undefined;
+interface AbilitiesPanelProps extends Pick<RpgLoadoutTabsProps, 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
+  abilityOverview: AbilityOverview;
+  activeAbility: AbilityPreview | undefined;
   activeAbilityIndex: number;
   onSelectAbility: (index: number) => void;
 }
 
-function AbilitiesPanel({ activeAbility, activeAbilityIndex, hotbarAbilities, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectAbility, onSelectCommand, selectedSessionId }: AbilitiesPanelProps) {
-  const applyAbilityAction = (command: string, target?: string) => {
-    if (selectedSessionId && activeAbility && onApplyLoadoutAction) {
-      onApplyLoadoutAction({ action: 'use_ability', ability_name: activeAbility.label, target });
+function AbilitiesPanel({ abilityOverview, activeAbility, activeAbilityIndex, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectAbility, onSelectCommand, selectedSessionId }: AbilitiesPanelProps) {
+  const nextSlot = nextAssignableHotbarSlot(abilityOverview.hotbarSlots, activeAbility?.id);
+  const applyAbilityAction = (request: Record<string, unknown>, fallbackCommand: string) => {
+    if (selectedSessionId && onApplyLoadoutAction) {
+      onApplyLoadoutAction(request as unknown as RpgLoadoutActionRequest);
       return;
     }
-    onSelectCommand(command);
+    onSelectCommand(fallbackCommand);
   };
+  const actions: LoadoutDetailAction[] = activeAbility
+    ? [
+        { label: 'Inspect', command: `Inspect ${activeAbility.name} and explain when I should use it.`, apply: () => onSelectCommand(`Inspect ${activeAbility.name} and explain when I should use it.`) },
+        ...(activeAbility.kind === 'active' && activeAbility.isUnlocked
+          ? [
+              { label: 'Use', command: `Use ${activeAbility.name} on the most relevant target.`, apply: () => applyAbilityAction({ action: 'use_ability', ability_id: activeAbility.id, ability_name: activeAbility.name, target: 'the most relevant target' }, `Use ${activeAbility.name} on the most relevant target.`) },
+              { label: `Assign ${nextSlot}`, command: `Assign ${activeAbility.name} to hotbar slot ${nextSlot}.`, apply: () => applyAbilityAction({ action: 'assign_hotbar', ability_id: activeAbility.id, hotbar_slot: nextSlot }, `Assign ${activeAbility.name} to hotbar slot ${nextSlot}.`) },
+            ]
+          : []),
+        ...(!activeAbility.isUnlocked && activeAbility.isAvailable
+          ? [{ label: 'Unlock', command: `Unlock ${activeAbility.name} with an ability point.`, apply: () => applyAbilityAction({ action: 'unlock_ability', ability_id: activeAbility.id }, `Unlock ${activeAbility.name} with an ability point.`) }]
+          : []),
+        ...(activeAbility.isUnlocked && activeAbility.rank < activeAbility.maxRank && abilityOverview.abilityPoints > 0
+          ? [{ label: 'Upgrade', command: `Upgrade ${activeAbility.name} to the next rank.`, apply: () => applyAbilityAction({ action: 'upgrade_ability', ability_id: activeAbility.id }, `Upgrade ${activeAbility.name} to the next rank.`) }]
+          : []),
+      ]
+    : [];
 
   return (
-    <div aria-labelledby="rpg-abilities-loadout-tab" className="rpg-loadout-layout" id="rpg-abilities-loadout-panel" role="tabpanel">
-      <div className="rpg-list-stack">
-        {hotbarAbilities.map((ability, index) => (
-          <button
-            aria-pressed={activeAbilityIndex === index}
-            className="rpg-loadout-row-button"
-            key={ability.label}
-            onClick={() => onSelectAbility(index)}
-            type="button"
-          >
-            <span className="rpg-icon-tile" aria-hidden="true">
-              {ability.icon}
-            </span>
-            <div>
-              <strong>{ability.label}</strong>
-              <span>Assignable action slot {ability.key}</span>
+    <div aria-labelledby="rpg-abilities-loadout-tab" className="rpg-loadout-layout rpg-ability-tree-layout" id="rpg-abilities-loadout-panel" role="tabpanel">
+      <div className="rpg-ability-tree" aria-label="Ability tree categories">
+        {abilityOverview.categories.map((category) => (
+          <section className="rpg-ability-category" key={category.id}>
+            <header>
+              <strong>{category.name}</strong>
+              <span>{titleCase(category.capability)} • {category.dimensions.map(titleCase).join(', ')}</span>
+            </header>
+            <div className="rpg-ability-node-list">
+              {category.abilities.map((ability) => {
+                const index = abilityOverview.allAbilities.findIndex((candidate) => candidate.id === ability.id);
+                return (
+                  <button
+                    aria-pressed={activeAbilityIndex === index}
+                    className={`rpg-ability-node rpg-ability-node-${ability.status}`}
+                    key={ability.id}
+                    onClick={() => onSelectAbility(Math.max(0, index))}
+                    type="button"
+                  >
+                    <span className="rpg-icon-tile" aria-hidden="true">{ability.icon}</span>
+                    <div>
+                      <strong>{ability.name}</strong>
+                      <span>{ability.statusLabel}</span>
+                      <small>{titleCase(ability.kind)} • {titleCase(ability.purpose)}</small>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          </button>
+          </section>
         ))}
       </div>
 
       <LoadoutDetailCard
-        eyebrow="Selected ability"
-        title={activeAbility?.label ?? 'No ability selected'}
-        detail={
-          activeAbility
-            ? `Slot ${activeAbility.key} • ${selectedSessionId ? 'uses stamina/mana and writes a deterministic event' : 'select a session to apply ability effects'}.`
-            : 'Ability commands appear when an ability is indexed.'
-        }
+        eyebrow={activeAbility ? `${titleCase(activeAbility.kind)} ability` : 'Selected ability'}
+        title={activeAbility?.name ?? 'No ability selected'}
+        detail={activeAbility ? abilityDetail(activeAbility) : 'Select a tree node to inspect, unlock, upgrade, assign, or use it.'}
+        actions={actions}
+        disabled={isApplyingLoadoutAction}
+        onSelectCommand={onSelectCommand}
+      />
+    </div>
+  );
+}
+
+interface HotbarPanelProps extends Pick<RpgLoadoutTabsProps, 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
+  abilityOverview: AbilityOverview;
+  activeHotbarSlot: string;
+  onSelectSlot: (slot: string) => void;
+}
+
+function HotbarPanel({ abilityOverview, activeHotbarSlot, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectCommand, onSelectSlot, selectedSessionId }: HotbarPanelProps) {
+  const selectedSlot = abilityOverview.hotbarSlots.find((slot) => slot.slot === activeHotbarSlot);
+  const selectedAbility = selectedSlot?.ability;
+  const applyHotbarAction = (request: Record<string, unknown>, fallbackCommand: string) => {
+    if (selectedSessionId && onApplyLoadoutAction) {
+      onApplyLoadoutAction(request as unknown as RpgLoadoutActionRequest);
+      return;
+    }
+    onSelectCommand(fallbackCommand);
+  };
+
+  return (
+    <div aria-labelledby="rpg-hotbar-loadout-tab" className="rpg-loadout-layout" id="rpg-hotbar-loadout-panel" role="tabpanel">
+      <div className="rpg-hotbar-slot-list" aria-label="Active ability hotbar">
+        {abilityOverview.hotbarSlots.map((slot) => (
+          <article className="rpg-hotbar-slot-row" key={slot.slot}>
+            <button
+              type="button"
+              aria-pressed={activeHotbarSlot === slot.slot}
+              disabled={isApplyingLoadoutAction || !slot.ability}
+              onClick={() => {
+                onSelectSlot(slot.slot);
+                if (slot.ability) {
+                  applyHotbarAction({ action: 'hotbar', hotbar_slot: slot.slot }, `Use ${slot.ability.name} from hotbar slot ${slot.slot} on the best available target.`);
+                }
+              }}
+            >
+              <small>{slot.slot}</small>
+              <span>{slot.ability?.icon ?? '+'}</span>
+              <strong>{slot.ability?.name ?? 'Empty slot'}</strong>
+            </button>
+            <button
+              className="rpg-mini-button"
+              disabled={isApplyingLoadoutAction || !slot.ability}
+              onClick={() => applyHotbarAction({ action: 'remove_hotbar', hotbar_slot: slot.slot }, `Remove hotbar slot ${slot.slot}.`)}
+              type="button"
+            >
+              Remove
+            </button>
+          </article>
+        ))}
+      </div>
+      <LoadoutDetailCard
+        eyebrow="Selected hotbar slot"
+        title={selectedAbility ? `${selectedSlot?.slot}: ${selectedAbility.name}` : `Slot ${activeHotbarSlot}`}
+        detail={selectedAbility ? abilityDetail(selectedAbility) : 'Assign an unlocked active ability from the Abilities tab.'}
         actions={
-          activeAbility
+          selectedAbility
             ? [
-                { label: 'Use', command: `Use ${activeAbility.label} on the most relevant target.`, apply: () => applyAbilityAction(`Use ${activeAbility.label} on the most relevant target.`, 'the most relevant target') },
-                { label: 'Target enemy', command: `Use ${activeAbility.label} on the most dangerous visible enemy.`, apply: () => applyAbilityAction(`Use ${activeAbility.label} on the most dangerous visible enemy.`, 'the most dangerous visible enemy') },
-                { label: 'Support ally', command: `Use ${activeAbility.label} to support the ally who needs it most.`, apply: () => applyAbilityAction(`Use ${activeAbility.label} to support the ally who needs it most.`, 'the ally who needs it most') },
-                { label: 'Describe', command: `Inspect ${activeAbility.label} and explain when I should use it.`, apply: () => onSelectCommand(`Inspect ${activeAbility.label} and explain when I should use it.`) },
+                { label: 'Use slot', command: `Use ${selectedAbility.name} from hotbar slot ${selectedSlot?.slot}.`, apply: () => applyHotbarAction({ action: 'hotbar', hotbar_slot: selectedSlot?.slot }, `Use ${selectedAbility.name} from hotbar slot ${selectedSlot?.slot}.`) },
+                { label: 'Remove', command: `Remove hotbar slot ${selectedSlot?.slot}.`, apply: () => applyHotbarAction({ action: 'remove_hotbar', hotbar_slot: selectedSlot?.slot }, `Remove hotbar slot ${selectedSlot?.slot}.`) },
               ]
             : []
         }
@@ -224,36 +414,62 @@ function AbilitiesPanel({ activeAbility, activeAbilityIndex, hotbarAbilities, is
   );
 }
 
-function HotbarPanel({ hotbarAbilities, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectCommand, selectedSessionId }: Pick<RpgLoadoutTabsProps, 'hotbarAbilities' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'>) {
+function SkillsPanel({ skills }: { skills: SkillProgressionPreview[] }) {
   return (
-    <div aria-labelledby="rpg-hotbar-loadout-tab" className="rpg-list-stack" id="rpg-hotbar-loadout-panel" role="tabpanel">
-      <div className="rpg-hotbar rpg-hotbar-command-grid" aria-label="Active ability hotbar">
-        {hotbarAbilities.map((ability) => (
-          <button
-            type="button"
-            key={ability.key}
-            aria-label={`${ability.key}: ${ability.label}`}
-            disabled={isApplyingLoadoutAction}
-            onClick={() =>
-              selectedSessionId && onApplyLoadoutAction
-                ? onApplyLoadoutAction({ action: 'hotbar', hotbar_slot: ability.key })
-                : onSelectCommand(`Use ${ability.label} from hotbar slot ${ability.key} on the best available target.`)
-            }
-          >
-            <small>{ability.key}</small>
-            <span>{ability.icon}</span>
-          </button>
-        ))}
-      </div>
-      <article className="rpg-list-row">
-        <span className="rpg-icon-tile" aria-hidden="true">
-          ⇥
-        </span>
-        <div>
-          <strong>Command-ready hotbar</strong>
-          <span>{selectedSessionId ? 'Selecting a slot applies the ability to the selected session immediately.' : 'Select a session to apply hotbar effects directly.'}</span>
-        </div>
-      </article>
+    <div aria-labelledby="rpg-skills-loadout-tab" className="rpg-list-stack rpg-compact-panel" id="rpg-skills-loadout-panel" role="tabpanel">
+      {skills.length ? (
+        skills.map((skill) => (
+          <article className="rpg-list-row" key={skill.id}>
+            <span className="rpg-icon-tile" aria-hidden="true">◆</span>
+            <div>
+              <strong>{skill.label}</strong>
+              <span>Rank {skill.rank} • {skill.xp} XP{skill.source ? ` • ${skill.source}` : ''}</span>
+            </div>
+          </article>
+        ))
+      ) : (
+        <article className="rpg-list-row"><span className="rpg-icon-tile">◆</span><div><strong>No skill progress yet</strong><span>Using abilities grants deterministic skill XP by capability.</span></div></article>
+      )}
+    </div>
+  );
+}
+
+function TraitsPanel({ traits }: { traits: AbilityPreview[] }) {
+  return (
+    <div aria-labelledby="rpg-traits-loadout-tab" className="rpg-list-stack rpg-compact-panel" id="rpg-traits-loadout-panel" role="tabpanel">
+      {traits.length ? (
+        traits.map((trait) => (
+          <article className="rpg-list-row" key={trait.id}>
+            <span className="rpg-icon-tile" aria-hidden="true">{trait.icon}</span>
+            <div>
+              <strong>{trait.name}</strong>
+              <span>{trait.statusLabel} • {trait.influenceTags.length ? trait.influenceTags.map(titleCase).join(', ') : 'No influence tags indexed'}</span>
+            </div>
+          </article>
+        ))
+      ) : (
+        <article className="rpg-list-row"><span className="rpg-icon-tile">*</span><div><strong>No narrative traits indexed</strong><span>Traits appear here once the selected session has a saved ability tree.</span></div></article>
+      )}
+    </div>
+  );
+}
+
+function EffectsPanel({ effects }: { effects: EffectPreview[] }) {
+  return (
+    <div aria-labelledby="rpg-effects-loadout-tab" className="rpg-list-stack rpg-compact-panel" id="rpg-effects-loadout-panel" role="tabpanel">
+      {effects.length ? (
+        effects.map((effect) => (
+          <article className="rpg-list-row" key={effect.id}>
+            <span className="rpg-icon-tile" aria-hidden="true">✦</span>
+            <div>
+              <strong>{effect.name}</strong>
+              <span>{effect.detail}{effect.remaining !== undefined ? ` • ${effect.remaining} turn(s) remaining` : ''}</span>
+            </div>
+          </article>
+        ))
+      ) : (
+        <article className="rpg-list-row"><span className="rpg-icon-tile">✦</span><div><strong>No active effects</strong><span>Temporary ability effects and runtime modifiers appear here after ability use.</span></div></article>
+      )}
     </div>
   );
 }
@@ -288,4 +504,284 @@ function LoadoutDetailCard({ actions, detail, disabled, eyebrow, onSelectCommand
       </div>
     </aside>
   );
+}
+
+function buildAbilityOverview(payload: RpgLaunchResponse | undefined, fallbackHotbar: RpgHotbarAbilityPreview[]): AbilityOverview {
+  const session = recordValue(payload?.session);
+  const game = recordValue(payload?.game);
+  const state = recordValue(session?.state) ?? game ?? session;
+  const tree = recordValue(state?.ability_tree);
+  const abilityState = recordValue(state?.ability_state);
+  const player = recordValue(state?.player);
+  const rawAbilities = firstArray(tree?.abilities);
+  if (!state || !tree || !rawAbilities.length) {
+    const previewAbilities = fallbackHotbar.map((ability) => previewAbilityFromHotbar(ability));
+    return {
+      className: 'Preview ability kit',
+      treeId: 'preview-hotbar',
+      abilityPoints: 0,
+      playerLevel: 1,
+      categories: [{ id: 'preview', name: 'Preview Hotbar', capability: 'preview', dimensions: ['resources', 'position'], abilities: previewAbilities }],
+      allAbilities: previewAbilities,
+      hotbarSlots: fallbackHotbar.map((ability) => ({ slot: ability.key, ability: previewAbilities.find((candidate) => candidate.name === ability.label) })),
+      hotbarAbilities: fallbackHotbar,
+      skills: [],
+      traits: [],
+      activeEffects: [],
+      source: 'preview',
+    };
+  }
+
+  const unlocked = new Set(firstArray(abilityState?.unlocked).map(String));
+  const ranks = recordValue(abilityState?.ranks) ?? {};
+  const cooldowns = recordValue(abilityState?.cooldowns) ?? {};
+  const abilityPoints = firstNumber(abilityState?.ability_points) ?? 0;
+  const playerLevel = firstNumber(player?.level) ?? 1;
+  const categoryLookup = buildCategoryLookup(tree);
+  const abilities = rawAbilities.map((rawAbility) => buildAbilityPreview(rawAbility, categoryLookup, unlocked, ranks, cooldowns, abilityPoints, playerLevel));
+  const abilityById = new Map(abilities.map((ability) => [ability.id, ability]));
+  const categories = firstArray(tree.categories).map((rawCategory, index) => buildCategoryPreview(rawCategory, index, abilities, abilityById));
+  const fallbackCategory = categories.length ? categories : [{ id: 'abilities', name: 'Abilities', capability: String(tree.primary_capability ?? 'custom'), dimensions: unique(abilities.flatMap((ability) => ability.dimensions)), abilities }];
+  const hotbar = recordValue(state.hotbar) ?? recordValue(abilityState?.hotbar) ?? {};
+  const hotbarSlots = Array.from({ length: 10 }, (_, index) => {
+    const slot = String(index + 1);
+    const abilityId = firstString(hotbar[slot]);
+    return { slot, ability: abilityId ? abilityById.get(abilityId) : undefined };
+  });
+  const hotbarAbilities = hotbarSlots
+    .filter((slot): slot is HotbarSlotPreview & { ability: AbilityPreview } => Boolean(slot.ability))
+    .slice(0, 6)
+    .map((slot) => ({ key: slot.slot, icon: slot.ability.icon, label: slot.ability.name }));
+
+  return {
+    className: firstString(tree.class_name) ?? 'Ability tree',
+    treeId: firstString(tree.tree_id) ?? 'ability-tree',
+    abilityPoints,
+    playerLevel,
+    categories: fallbackCategory,
+    allAbilities: abilities,
+    hotbarSlots,
+    hotbarAbilities,
+    skills: buildSkillProgression(state),
+    traits: abilities.filter((ability) => ability.kind === 'narrative_trait'),
+    activeEffects: buildActiveEffects(state, abilityState),
+    source: 'live',
+  };
+}
+
+function buildAbilityPreview(rawAbility: unknown, categoryLookup: Map<string, string>, unlocked: Set<string>, ranks: Record<string, unknown>, cooldowns: Record<string, unknown>, abilityPoints: number, playerLevel: number): AbilityPreview {
+  const record = recordValue(rawAbility) ?? {};
+  const id = firstString(record.ability_id, record.id, record.name) ?? 'ability';
+  const kind = firstString(record.kind) ?? 'active';
+  const prerequisites = firstArray(record.prerequisites).map(String);
+  const missingPrerequisites = prerequisites.filter((prerequisite) => !unlocked.has(prerequisite));
+  const levelRequired = firstNumber(record.level_required) ?? 1;
+  const isUnlocked = unlocked.has(id);
+  const isAvailable = !isUnlocked && playerLevel >= levelRequired && missingPrerequisites.length === 0 && abilityPoints > 0;
+  const status: AbilityStatus = isUnlocked ? 'unlocked' : isAvailable ? 'available' : 'locked';
+  const rank = firstNumber(ranks[id], record.rank) ?? 1;
+  const maxRank = firstNumber(record.max_rank) ?? 1;
+  const cooldown = firstNumber(cooldowns[id]) ?? 0;
+  return {
+    id,
+    name: firstString(record.name, record.label, record.ability_id) ?? titleCase(id),
+    icon: firstString(record.icon) ?? iconForAbility(firstString(record.purpose), firstArray(record.dimensions).map(String)),
+    description: firstString(record.description, record.summary) ?? 'Ability indexed from the selected session.',
+    kind,
+    capability: firstString(record.capability) ?? 'custom',
+    powerSource: firstString(record.power_source) ?? 'mundane',
+    purpose: firstString(record.purpose) ?? 'utility',
+    dimensions: firstArray(record.dimensions).map(String),
+    levelRequired,
+    rank,
+    maxRank,
+    cooldown,
+    resourceCost: numericRecord(record.resource_cost),
+    prerequisites,
+    influenceTags: firstArray(record.influence_tags).map(String),
+    hooks: firstArray(record.hooks).map(String),
+    categoryName: categoryLookup.get(id) ?? 'Abilities',
+    isUnlocked,
+    isAvailable,
+    missingPrerequisites,
+    status,
+    statusLabel: abilityStatusLabel(status, levelRequired, playerLevel, missingPrerequisites, rank, maxRank, cooldown, abilityPoints),
+  };
+}
+
+function buildCategoryLookup(tree: Record<string, unknown>): Map<string, string> {
+  const lookup = new Map<string, string>();
+  firstArray(tree.categories).forEach((rawCategory) => {
+    const category = recordValue(rawCategory) ?? {};
+    const name = firstString(category.name, category.category_id) ?? 'Abilities';
+    firstArray(category.abilities).forEach((abilityId) => lookup.set(String(abilityId), name));
+  });
+  return lookup;
+}
+
+function buildCategoryPreview(rawCategory: unknown, index: number, abilities: AbilityPreview[], abilityById: Map<string, AbilityPreview>): AbilityCategoryPreview {
+  const category = recordValue(rawCategory) ?? {};
+  const ids = firstArray(category.abilities).map(String);
+  const categoryAbilities = ids.map((id) => abilityById.get(id)).filter((ability): ability is AbilityPreview => Boolean(ability));
+  return {
+    id: firstString(category.category_id, category.id) ?? `category-${index + 1}`,
+    name: firstString(category.name, category.label) ?? `Category ${index + 1}`,
+    capability: firstString(category.capability) ?? categoryAbilities[0]?.capability ?? 'custom',
+    dimensions: firstArray(category.dimensions).map(String).length ? firstArray(category.dimensions).map(String) : unique(categoryAbilities.flatMap((ability) => ability.dimensions)),
+    abilities: categoryAbilities.length ? categoryAbilities : abilities,
+  };
+}
+
+function buildSkillProgression(state: Record<string, unknown>): SkillProgressionPreview[] {
+  const skills = recordValue(state.skill_progression) ?? {};
+  return Object.entries(skills).map(([id, rawSkill]) => {
+    const skill = recordValue(rawSkill) ?? {};
+    return { id, label: titleCase(id), rank: firstNumber(skill.rank) ?? 1, xp: firstNumber(skill.xp) ?? 0, source: firstString(skill.last_source) ?? '' };
+  });
+}
+
+function buildActiveEffects(state: Record<string, unknown>, abilityState: Record<string, unknown> | undefined): EffectPreview[] {
+  const abilityEffects = firstArray(abilityState?.active_effects);
+  const runtimeEffects = firstArray(recordValue(state.runtime)?.effects);
+  return [...abilityEffects, ...runtimeEffects].slice(0, 8).map((rawEffect, index) => {
+    const effect = recordValue(rawEffect) ?? {};
+    const dimensions = firstArray(effect.dimensions).map(String).length ? firstArray(effect.dimensions).map(String) : [firstString(effect.dimension) ?? 'effect'];
+    const name = firstString(effect.name, effect.source, effect.ability_name, effect.ability_id) ?? `Effect ${index + 1}`;
+    const detail = firstString(effect.check, effect.purpose, effect.target) ?? dimensions.map(titleCase).join(', ');
+    return { id: `${name}-${index}`, name, detail, dimensions, remaining: firstNumber(effect.remaining_turns) };
+  });
+}
+
+function previewAbilityFromHotbar(ability: RpgHotbarAbilityPreview): AbilityPreview {
+  return {
+    id: ability.label,
+    name: ability.label,
+    icon: ability.icon,
+    description: 'Preview hotbar ability. Select or create a session to inspect the saved ability tree.',
+    kind: 'active',
+    capability: 'preview',
+    powerSource: 'preview',
+    purpose: 'utility',
+    dimensions: ['resources', 'position'],
+    levelRequired: 1,
+    rank: 1,
+    maxRank: 1,
+    cooldown: 0,
+    resourceCost: {},
+    prerequisites: [],
+    influenceTags: [],
+    hooks: [],
+    categoryName: 'Preview Hotbar',
+    isUnlocked: true,
+    isAvailable: false,
+    missingPrerequisites: [],
+    status: 'unlocked',
+    statusLabel: 'Preview',
+  };
+}
+
+function abilityStatusLabel(status: AbilityStatus, levelRequired: number, playerLevel: number, missingPrerequisites: string[], rank: number, maxRank: number, cooldown: number, abilityPoints: number): string {
+  if (status === 'unlocked') {
+    return cooldown > 0 ? `Cooldown ${cooldown} turn(s) • rank ${rank}/${maxRank}` : `Unlocked • rank ${rank}/${maxRank}`;
+  }
+  if (playerLevel < levelRequired) {
+    return `Locked • level ${levelRequired}`;
+  }
+  if (missingPrerequisites.length) {
+    return `Locked • requires ${missingPrerequisites.map(titleCase).join(', ')}`;
+  }
+  return abilityPoints > 0 ? 'Available • costs 1 point' : 'Locked • needs ability point';
+}
+
+function abilityDetail(ability: AbilityPreview): string {
+  const cost = Object.entries(ability.resourceCost)
+    .filter(([, value]) => value > 0)
+    .map(([resource, value]) => `${value} ${resource}`)
+    .join(', ');
+  const pieces = [
+    ability.description,
+    `Dimensions: ${ability.dimensions.map(titleCase).join(', ') || 'None indexed'}.`,
+    `Purpose: ${titleCase(ability.purpose)}.`,
+    cost ? `Cost: ${cost}.` : 'No resource cost.',
+    ability.hooks.length ? `Hooks: ${ability.hooks.map(titleCase).join(', ')}.` : undefined,
+    ability.influenceTags.length ? `Tags: ${ability.influenceTags.map(titleCase).join(', ')}.` : undefined,
+  ];
+  return pieces.filter(Boolean).join(' ');
+}
+
+function nextAssignableHotbarSlot(slots: HotbarSlotPreview[], abilityId?: string): string {
+  const existing = slots.find((slot) => slot.ability?.id === abilityId);
+  if (existing) {
+    return existing.slot;
+  }
+  return slots.find((slot) => !slot.ability)?.slot ?? '1';
+}
+
+function numericRecord(value: unknown): Record<string, number> {
+  const record = recordValue(value) ?? {};
+  return Object.fromEntries(Object.entries(record).map(([key, amount]) => [key, firstNumber(amount) ?? 0]));
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function firstArray(...values: unknown[]): unknown[] {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return [];
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value.replace(/,/g, ''));
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function iconForAbility(purpose: string | undefined, dimensions: string[]): string {
+  const text = `${purpose ?? ''} ${dimensions.join(' ')}`.toLowerCase();
+  if (text.includes('healing')) return '✚';
+  if (text.includes('information')) return '⌕';
+  if (text.includes('access')) return '⌁';
+  if (text.includes('relationship')) return '☯';
+  if (text.includes('environment')) return '✹';
+  if (text.includes('damage')) return '⚔';
+  if (text.includes('mobility')) return '⇥';
+  return '✦';
+}
+
+function titleCase(value: string | undefined): string {
+  return String(value ?? '')
+    .replace(/[_-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
