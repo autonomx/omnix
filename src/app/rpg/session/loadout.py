@@ -7,15 +7,34 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from app.rpg.session.ability_system import apply_ability_to_state, build_progression_package
+from app.rpg.session.ability_system import (
+    apply_ability_to_state,
+    assign_ability_to_hotbar,
+    build_progression_package,
+    remove_hotbar_slot,
+    unlock_ability_in_state,
+    upgrade_ability_rank_in_state,
+)
 from app.rpg.session.service import load_session, save_session
 
-LoadoutActionKind = Literal["inspect", "use", "equip", "drop", "use_ability", "hotbar"]
+LoadoutActionKind = Literal[
+    "inspect",
+    "use",
+    "equip",
+    "drop",
+    "use_ability",
+    "hotbar",
+    "unlock_ability",
+    "upgrade_ability",
+    "assign_hotbar",
+    "remove_hotbar",
+]
 
 
 class RpgLoadoutActionRequest(BaseModel):
     action: LoadoutActionKind
     item_name: str | None = None
+    ability_id: str | None = None
     ability_name: str | None = None
     hotbar_slot: str | int | None = None
     target: str | None = None
@@ -256,6 +275,10 @@ def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dic
     return name, detail
 
 
+def _requested_ability_id(request: RpgLoadoutActionRequest) -> str | None:
+    return request.ability_id or request.ability_name
+
+
 def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
     session = load_session(session_id)
     if not session:
@@ -297,11 +320,31 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
         event = _append_event(state, title=title, detail=detail, kind=kind)
     elif action in {"use_ability", "hotbar"}:
         _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
-        result = apply_ability_to_state(state, ability_name=request.ability_name, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
+        result = apply_ability_to_state(state, ability_id=request.ability_id, ability_name=request.ability_name, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
         if not result.ok:
             return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}
         _advance_turn(state)
         event = _append_event(state, title=f"Used {result.name}", detail=result.detail, kind="ability", effects=result.effects)
+    elif action in {"unlock_ability", "upgrade_ability", "assign_hotbar", "remove_hotbar"}:
+        _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
+        ability_id = _requested_ability_id(request)
+        if action == "unlock_ability":
+            result = unlock_ability_in_state(state, str(ability_id or ""))
+        elif action == "upgrade_ability":
+            result = upgrade_ability_rank_in_state(state, str(ability_id or ""))
+        elif action == "assign_hotbar":
+            result = assign_ability_to_hotbar(state, str(ability_id or ""), request.hotbar_slot or "1")
+        else:
+            result = remove_hotbar_slot(state, request.hotbar_slot or "1")
+        if not result.ok:
+            return {"ok": False, "error": result.error or "ability_progression_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id, "slot": result.slot}
+        event = _append_event(
+            state,
+            title="Updated ability progression",
+            detail=result.detail,
+            kind="ability_progression",
+            effects=[{"action": action, "ability_id": result.ability_id, "slot": result.slot}],
+        )
     else:
         return {"ok": False, "error": "unsupported_loadout_action", "session_id": session_id, "action": action}
 
