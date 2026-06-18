@@ -42,6 +42,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     - {"action": "rename", "session_id": "...", "name": "..."}
     - {"action": "delete", "session_id": "..."}
     - {"action": "loadout_action", "session_id": "...", "loadout": {...}}
+    - {"action": "item_command", "session_id": "...", "command": "item report"}
     """
     payload = _safe_dict(data)
     action = _safe_str(payload.get("action")).strip()
@@ -93,6 +94,32 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "missing_session_id"}
         request = RpgLoadoutActionRequest.model_validate(payload.get("loadout") or payload)
         return apply_loadout_action(session_id, request)
+
+    if action == "item_command":
+        from app.rpg.session.item_command_adapter import apply_item_command
+        from app.rpg.session.service import load_session, save_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session = load_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        state = _safe_dict(session.get("state"))
+        session["state"] = state
+        command = payload.get("command") if "command" in payload else payload.get("item_command") or payload.get("request")
+        result = apply_item_command(state, command)
+        if result.get("ok") is not True:
+            return {"session_id": session_id, **result}
+        saved = save_session(session, compact=False)
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "status": "ready",
+            "session": saved,
+            "game": saved.get("state", {}),
+            **result,
+        }
 
     session_id = _safe_str(payload.get("session_id")).strip()
     if not session_id:
