@@ -16,6 +16,15 @@ from app.rpg.session.ability_system import (
     unlock_ability_in_state,
     upgrade_ability_rank_in_state,
 )
+from app.rpg.session.inventory_items import (
+    consume_inventory_item,
+    find_inventory_item,
+    inventory_quantity,
+    is_protected_item,
+    merge_inventory_stack,
+    normalize_player_inventory,
+    set_inventory_quantity,
+)
 from app.rpg.session.item_materials import salvage_item
 from app.rpg.session.service import load_session, save_session
 from app.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
@@ -95,50 +104,23 @@ def _change_metric(player: dict[str, Any], key: str, delta: int) -> tuple[int, i
 
 
 def _inventory(player: dict[str, Any]) -> list[dict[str, Any]]:
-    inventory = _safe_list(player.get("inventory"))
-    normalized: list[dict[str, Any]] = []
-    for item in inventory:
-        if isinstance(item, dict):
-            normalized.append(item)
-        else:
-            normalized.append({"name": str(item), "quantity": 1})
-    player["inventory"] = normalized
-    return normalized
+    return normalize_player_inventory(player)["inventory"]
 
 
 def _find_item(player: dict[str, Any], item_name: str | None) -> tuple[list[dict[str, Any]], int, dict[str, Any] | None]:
-    inventory = _inventory(player)
-    wanted = _norm(item_name)
-    if not wanted:
-        return inventory, -1, None
-    for index, item in enumerate(inventory):
-        names = [item.get("name"), item.get("label"), item.get("display_name"), item.get("id"), item.get("item_id")]
-        if any(_norm(name) == wanted for name in names):
-            return inventory, index, item
-    for index, item in enumerate(inventory):
-        names = [item.get("name"), item.get("label"), item.get("display_name"), item.get("id"), item.get("item_id")]
-        if any(wanted in _norm(name) for name in names):
-            return inventory, index, item
-    return inventory, -1, None
+    return find_inventory_item(player, item_name)
 
 
 def _quantity(item: dict[str, Any]) -> int:
-    for key in ("quantity", "count", "qty", "amount"):
-        value = item.get(key)
-        if isinstance(value, (int, float)):
-            return max(0, int(value))
-    return 1
+    return inventory_quantity(item)
 
 
 def _set_quantity(inventory: list[dict[str, Any]], index: int, quantity: int) -> None:
-    if quantity <= 0:
-        inventory.pop(index)
-        return
-    inventory[index]["quantity"] = quantity
+    set_inventory_quantity(inventory, index, quantity)
 
 
 def _consume(inventory: list[dict[str, Any]], index: int, amount: int = 1) -> None:
-    _set_quantity(inventory, index, _quantity(inventory[index]) - amount)
+    consume_inventory_item(inventory, index, amount)
 
 
 def _item_slot(item: dict[str, Any]) -> str:
@@ -219,6 +201,16 @@ def _record_salvage_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[
     return enriched
 
 
+def _record_inventory_normalization_trace(state: dict[str, Any], trace: dict[str, Any]) -> None:
+    if not trace.get("changed"):
+        return
+    enriched = {key: deepcopy(value) for key, value in trace.items() if key != "inventory"}
+    enriched["turn"] = int(state.get("current_turn") or state.get("turn_count") or 0)
+    enriched["timestamp"] = _utc_now()
+    _prepend_mechanics_trace(state, "inventory_traces", enriched)
+    _prepend_mechanics_trace(state, "item_traces", enriched)
+
+
 def _session_genre(state: dict[str, Any], session: dict[str, Any]) -> str:
     metadata = _safe_dict(state.get("metadata"))
     identity = _safe_dict(state.get("character_identity"))
@@ -226,27 +218,8 @@ def _session_genre(state: dict[str, Any], session: dict[str, Any]) -> str:
     return str(metadata.get("genre") or identity.get("genre") or setup.get("genre") or metadata.get("campaign_template") or "classic_fantasy")
 
 
-def _material_stack_key(item: dict[str, Any]) -> str:
-    return _norm(item.get("material_id") or item.get("id") or item.get("item_id"))
-
-
 def _merge_inventory_stack(inventory: list[dict[str, Any]], stack: dict[str, Any]) -> dict[str, Any]:
-    incoming = deepcopy(stack)
-    key = _material_stack_key(incoming)
-    if key:
-        for existing in inventory:
-            if _material_stack_key(existing) != key:
-                continue
-            existing["quantity"] = _quantity(existing) + _quantity(incoming)
-            for field in ("item_id", "id", "item_type", "type", "material_id", "material_role", "family", "rarity", "quality", "properties", "stackable", "usable_in_recipes", "mechanics_source"):
-                if field not in existing and field in incoming:
-                    existing[field] = deepcopy(incoming[field])
-            if not _title(_safe_dict(existing.get("display")).get("name") or existing.get("name")):
-                existing["name"] = incoming.get("name")
-                existing["display"] = deepcopy(incoming.get("display"))
-            return existing
-    inventory.append(incoming)
-    return incoming
+    return merge_inventory_stack(inventory, stack)
 
 
 def _advance_turn(state: dict[str, Any]) -> None:
@@ -365,6 +338,7 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
     updated = deepcopy(session)
     state = _state(updated)
     player = _player(state)
+    _record_inventory_normalization_trace(state, normalize_player_inventory(player))
     action = request.action
     extra_response: dict[str, Any] = {}
     event_effects: list[dict[str, Any]] | None = None
@@ -418,7 +392,7 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
                 "mechanics_trace": trace,
             }
         else:
-            if _norm(name) in {"journal"}:
+            if is_protected_item(item):
                 return {"ok": False, "error": "protected_item", "session_id": session_id, "item_name": name}
             _consume(inventory, index)
             detail = f"You dropped one {name}."
