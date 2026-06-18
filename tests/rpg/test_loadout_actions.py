@@ -196,6 +196,28 @@ def test_salvage_protected_journal_is_rejected(monkeypatch) -> None:
     assert result["item_name"] == "Journal"
 
 
+def test_loadout_action_normalizes_legacy_inventory_and_writes_trace(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    session = _session()
+    session["state"]["player"]["inventory"] = ["Rope", {"name": "Iron scrap", "quantity": 2, "material_id": "iron", "item_type": "crafting_material"}]
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: session)
+    monkeypatch.setattr(loadout, "save_session", lambda updated, *, compact=False: saved.append(updated) or updated)
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="inspect", item_name="Rope"))
+
+    assert result["ok"] is True
+    state = saved[0]["state"]
+    inventory = state["player"]["inventory"]
+    assert inventory[0]["item_id"] == "rope"
+    assert inventory[0]["instance_id"] == "inst_rope_1"
+    assert inventory[0]["display"] == {"name": "Rope"}
+    assert inventory[1]["item_id"] == "iron"
+    trace = state["mechanics"]["inventory_traces"][0]
+    assert trace["event"] == "inventory_normalized"
+    assert trace["legacy_count"] == 1
+    assert state["mechanics"]["item_traces"][0] == trace
+
+
 def test_session_compat_supports_loadout_action(monkeypatch) -> None:
     monkeypatch.setattr(loadout, "apply_loadout_action", lambda session_id, request: {"ok": True, "session_id": session_id, "action": request.action})
 
