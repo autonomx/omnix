@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException
 
+from app.rpg.session.ability_coverage import summarize_ability_coverage
 from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
 from app.rpg.session.new_game import (
     RpgNewGameRequest,
@@ -32,6 +33,13 @@ def _raise_for_error(payload: dict[str, Any], *, not_found_errors: set[str] | No
     raise HTTPException(status_code=status_code, detail=payload)
 
 
+def _ability_coverage_payload(state: dict[str, Any]) -> dict[str, Any]:
+    """Return a compact N128 ability-dimension coverage report."""
+
+    report = summarize_ability_coverage(state)
+    return report.model_dump(exclude={"observations"})
+
+
 def _with_world_scale_abilities(payload: dict[str, Any]) -> dict[str, Any]:
     """Decorate returned session payloads with high-level world abilities.
 
@@ -46,6 +54,11 @@ def _with_world_scale_abilities(payload: dict[str, Any]) -> dict[str, Any]:
     if not state:
         return payload
     ensure_world_scale_abilities(state)
+    coverage = _ability_coverage_payload(state)
+    mechanics = state.get("mechanics") if isinstance(state.get("mechanics"), dict) else {}
+    mechanics["ability_coverage_latest"] = coverage
+    state["mechanics"] = mechanics
+    payload["ability_coverage"] = coverage
     payload["game"] = state
     return payload
 
@@ -80,6 +93,15 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         if not session:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found", "session_id": session_id})
         return _with_world_scale_abilities({"ok": True, "session_id": session_id, "session": session, "game": session.get("state", {})})
+
+    @app.get("/api/rpg/sessions/{session_id}/ability-coverage", tags=["rpg-session"])
+    async def rpg_ability_coverage(session_id: str) -> dict[str, Any]:
+        session = load_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found", "session_id": session_id})
+        state = session.get("state") if isinstance(session.get("state"), dict) else {}
+        ensure_world_scale_abilities(state)
+        return {"ok": True, "session_id": session_id, "ability_coverage": _ability_coverage_payload(state)}
 
     @app.post("/api/rpg/new-game", tags=["rpg-session"])
     async def rpg_new_game(request: RpgNewGameRequest) -> dict[str, Any]:
