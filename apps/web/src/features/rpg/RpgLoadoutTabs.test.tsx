@@ -1,11 +1,29 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { hotbarAbilities, inventoryItems } from './rpgUiState';
 
+type LoadoutTabsProps = Parameters<typeof RpgLoadoutTabs>[0];
+
+function renderLoadoutTabs(props: LoadoutTabsProps) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <RpgLoadoutTabs {...props} />
+    </QueryClientProvider>,
+  );
+}
+
 describe('RpgLoadoutTabs', () => {
   it('renders inventory by default and switches to abilities and hotbar panels', () => {
-    render(<RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={vi.fn()} />);
+    renderLoadoutTabs(<RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={vi.fn()} />.props);
 
     expect(screen.getByRole('tab', { name: 'Inventory' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Inventory' })).toHaveTextContent('12');
@@ -27,7 +45,7 @@ describe('RpgLoadoutTabs', () => {
 
   it('turns inventory and ability interactions into replay-preserving commands', () => {
     const onSelectCommand = vi.fn();
-    render(<RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={onSelectCommand} />);
+    renderLoadoutTabs(<RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={onSelectCommand} />.props);
 
     fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
