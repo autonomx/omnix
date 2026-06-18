@@ -320,7 +320,7 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
         event = _append_event(state, title=title, detail=detail, kind=kind)
     elif action in {"use_ability", "hotbar"}:
         _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
-        result = apply_ability_to_state(state, ability_id=request.ability_id, ability_name=request.ability_name, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
+        result = apply_ability_to_state(state, ability_name=request.ability_name or request.ability_id, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
         if not result.ok:
             return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}
         _advance_turn(state)
