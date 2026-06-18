@@ -2232,6 +2232,7 @@
               "equip",
               "drop",
               "salvage",
+              "craft",
               "use_ability",
               "hotbar",
               "unlock_ability",
@@ -2266,6 +2267,39 @@
               }
             ],
             "title": "Item Name"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          },
+          "recipe_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Name"
+          },
+          "station": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Station"
           },
           "target": {
             "anyOf": [
