@@ -106,6 +106,37 @@ def test_legacy_ability_backfill_uses_saved_setup_identity(monkeypatch) -> None:
     assert saved[0]["state"]["ability_tree"]["primary_capability"] == "influence"
 
 
+def test_unlock_ability_action_spends_ability_point(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    session = _session()
+    session["state"]["player"]["level"] = 2
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: session)
+    monkeypatch.setattr(loadout, "save_session", lambda updated, *, compact=False: saved.append(updated) or updated)
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="unlock_ability", ability_id="recon_volley"))
+
+    assert result["ok"] is True
+    state = saved[0]["state"]
+    assert "recon_volley" in state["ability_state"]["unlocked"]
+    assert state["ability_state"]["ability_points"] == 0
+    assert state["timeline"][0]["kind"] == "ability_progression"
+
+
+def test_assign_and_remove_hotbar_actions_update_session(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    session = _session()
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: saved[-1] if saved else session)
+    monkeypatch.setattr(loadout, "save_session", lambda updated, *, compact=False: saved.append(updated) or updated)
+
+    assign_result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="assign_hotbar", ability_id="recon_trail_sense", hotbar_slot="7"))
+    remove_result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="remove_hotbar", hotbar_slot="7"))
+
+    assert assign_result["ok"] is True
+    assert saved[0]["state"]["hotbar"]["7"] == "recon_trail_sense"
+    assert remove_result["ok"] is True
+    assert "7" not in saved[-1]["state"]["hotbar"]
+
+
 def test_drop_protected_journal_is_rejected(monkeypatch) -> None:
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
 
