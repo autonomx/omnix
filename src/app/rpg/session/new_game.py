@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.rpg.session.ability_coverage import write_ability_coverage_snapshot
 from app.rpg.session.ability_system import build_progression_package
 from app.rpg.session.service import archive_session, load_session, save_session
 
@@ -417,6 +418,9 @@ def _demo_state(session_id: str, now: str) -> dict[str, Any]:
 
 
 def _save_created_session(session: dict[str, Any]) -> dict[str, Any]:
+    state = session.get("state") if isinstance(session.get("state"), dict) else None
+    if state is not None:
+        write_ability_coverage_snapshot(state)
     saved = save_session(session, compact=False)
     manifest = saved.get("manifest", {})
     return {"ok": True, "session_id": manifest.get("session_id") or manifest.get("id"), "status": "ready", "session": saved, "game": saved.get("state", {})}
