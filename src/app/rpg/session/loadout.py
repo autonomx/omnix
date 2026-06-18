@@ -198,6 +198,24 @@ def _advance_turn(state: dict[str, Any]) -> None:
     state["turn_count"] = int(state.get("turn_count") or 0) + 1
 
 
+def _level_gated_initial_unlocks(tree: dict[str, Any], ability_state: dict[str, Any], hotbar: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    """Keep legacy backfills progression-based instead of auto-unlocking by level.
+
+    ``build_initial_ability_state`` currently supports demo/high-level packages by
+    unlocking every level-eligible active ability. For legacy session backfills,
+    loadout actions should preserve the newer progression contract: level gates
+    make abilities available, while ability points are still spent to unlock them.
+    """
+    starting_unlocks = {str(value) for value in _safe_list(tree.get("starting_unlocks"))}
+    unlocked = [str(value) for value in _safe_list(ability_state.get("unlocked")) if str(value) in starting_unlocks]
+    ranks = {str(key): value for key, value in _safe_dict(ability_state.get("ranks")).items() if str(key) in starting_unlocks}
+    filtered_hotbar = {str(slot): str(ability_id) for slot, ability_id in _safe_dict(hotbar).items() if str(ability_id) in starting_unlocks}
+    ability_state["unlocked"] = unlocked
+    ability_state["ranks"] = ranks
+    ability_state["hotbar"] = filtered_hotbar
+    return ability_state, filtered_hotbar
+
+
 def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, Any] | None = None) -> None:
     if state.get("ability_tree") and state.get("ability_state"):
         return
@@ -224,10 +242,12 @@ def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, 
         "generated_class_summary": identity.get("generated_class_summary") or setup.get("generated_class_summary"),
     }
     progression = build_progression_package(payload, build_id=build, level=level, seed=metadata.get("seed") if isinstance(metadata.get("seed"), int) else None)
+    tree = _safe_dict(progression.get("ability_tree"))
+    ability_state, hotbar = _level_gated_initial_unlocks(tree, _safe_dict(progression.get("ability_state")), _safe_dict(progression.get("hotbar")))
     state.setdefault("character_identity", progression["character_identity"])
-    state["ability_tree"] = progression["ability_tree"]
-    state["ability_state"] = progression["ability_state"]
-    state["hotbar"] = progression["hotbar"]
+    state["ability_tree"] = tree
+    state["ability_state"] = ability_state
+    state["hotbar"] = hotbar
 
 
 def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dict[str, Any]], index: int, item: dict[str, Any]) -> tuple[str, str]:
