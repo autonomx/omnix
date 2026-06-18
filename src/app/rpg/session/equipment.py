@@ -10,6 +10,7 @@ DERIVED_STAT_KEYS = {
     "social_modifier",
 }
 SKILL_MODIFIER_KEYS = {"archery", "melee", "defense", "alchemy", "crafting", "survival", "lockpicking", "persuasion", "stealth"}
+MECHANICAL_EQUIPMENT_FIELDS = {"damage", "defense", "resistances", "stats", "modifiers", "capabilities", "rarity", "quality"}
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -75,9 +76,7 @@ def _equipment_entry(item: dict[str, Any], slot: str) -> dict[str, Any]:
     ):
         if key in item:
             entry[key] = deepcopy(item[key])
-    if set(entry) == {"slot", "name", "id", "item_type", "type"}:
-        return {"slot": slot, "name": entry["name"]}
-    if set(entry) == {"slot", "name", "id", "type"}:
+    if not any(field in entry for field in MECHANICAL_EQUIPMENT_FIELDS):
         return {"slot": slot, "name": entry["name"]}
     return entry
 
