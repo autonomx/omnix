@@ -28,6 +28,7 @@ from app.rpg.session.inventory_items import (
     set_inventory_quantity,
 )
 from app.rpg.session.item_materials import salvage_item
+from app.rpg.session.item_modifications import apply_item_modification, replace_inventory_item
 from app.rpg.session.item_use import use_inventory_item
 from app.rpg.session.service import load_session, save_session
 from app.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
@@ -39,6 +40,7 @@ LoadoutActionKind = Literal[
     "drop",
     "salvage",
     "craft",
+    "modify",
     "use_ability",
     "hotbar",
     "unlock_ability",
@@ -54,6 +56,8 @@ class RpgLoadoutActionRequest(BaseModel):
     recipe_id: str | None = None
     recipe_name: str | None = None
     station: str | None = None
+    mod_id: str | None = None
+    mod_name: str | None = None
     ability_id: str | None = None
     ability_name: str | None = None
     hotbar_slot: str | int | None = None
@@ -145,7 +149,15 @@ def _equip_item(player: dict[str, Any], item: dict[str, Any]) -> str:
     return slot
 
 
-def _append_event(state: dict[str, Any], *, title: str, detail: str, kind: str, actor: str = "Player", effects: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _append_event(
+    state: dict[str, Any],
+    *,
+    title: str,
+    detail: str,
+    kind: str,
+    actor: str = "Player",
+    effects: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     turn = int(state.get("current_turn") or state.get("turn_count") or 0)
     event = {
         "turn": turn,
@@ -181,29 +193,37 @@ def _prepend_mechanics_trace(state: dict[str, Any], key: str, trace: dict[str, A
     mechanics[key] = [trace, *traces][:50]
 
 
-def _record_salvage_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+def _enrich_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
     enriched = deepcopy(_safe_dict(trace))
     enriched["turn"] = int(state.get("current_turn") or state.get("turn_count") or 0)
     enriched["timestamp"] = _utc_now()
+    return enriched
+
+
+def _record_salvage_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    enriched = _enrich_trace(state, trace)
     _prepend_mechanics_trace(state, "salvage_traces", enriched)
     _prepend_mechanics_trace(state, "item_traces", enriched)
     return enriched
 
 
 def _record_craft_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
-    enriched = deepcopy(_safe_dict(trace))
-    enriched["turn"] = int(state.get("current_turn") or state.get("turn_count") or 0)
-    enriched["timestamp"] = _utc_now()
+    enriched = _enrich_trace(state, trace)
     _prepend_mechanics_trace(state, "crafting_traces", enriched)
     _prepend_mechanics_trace(state, "item_traces", enriched)
     return enriched
 
 
 def _record_item_use_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
-    enriched = deepcopy(_safe_dict(trace))
-    enriched["turn"] = int(state.get("current_turn") or state.get("turn_count") or 0)
-    enriched["timestamp"] = _utc_now()
+    enriched = _enrich_trace(state, trace)
     _prepend_mechanics_trace(state, "item_use_traces", enriched)
+    _prepend_mechanics_trace(state, "item_traces", enriched)
+    return enriched
+
+
+def _record_modification_trace(state: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    enriched = _enrich_trace(state, trace)
+    _prepend_mechanics_trace(state, "modification_traces", enriched)
     _prepend_mechanics_trace(state, "item_traces", enriched)
     return enriched
 
@@ -222,7 +242,13 @@ def _session_genre(state: dict[str, Any], session: dict[str, Any]) -> str:
     metadata = _safe_dict(state.get("metadata"))
     identity = _safe_dict(state.get("character_identity"))
     setup = _safe_dict(session.get("setup_payload"))
-    return str(metadata.get("genre") or identity.get("genre") or setup.get("genre") or metadata.get("campaign_template") or "classic_fantasy")
+    return str(
+        metadata.get("genre")
+        or identity.get("genre")
+        or setup.get("genre")
+        or metadata.get("campaign_template")
+        or "classic_fantasy"
+    )
 
 
 def _merge_inventory_stack(inventory: list[dict[str, Any]], stack: dict[str, Any]) -> dict[str, Any]:
@@ -234,18 +260,16 @@ def _advance_turn(state: dict[str, Any]) -> None:
     state["turn_count"] = int(state.get("turn_count") or 0) + 1
 
 
-def _level_gated_initial_unlocks(tree: dict[str, Any], ability_state: dict[str, Any], hotbar: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
-    """Keep legacy backfills progression-based instead of auto-unlocking by level.
-
-    ``build_initial_ability_state`` currently supports demo/high-level packages by
-    unlocking every level-eligible active ability. For legacy session backfills,
-    loadout actions should preserve the newer progression contract: level gates
-    make abilities available, while ability points are still spent to unlock them.
-    """
+def _level_gated_initial_unlocks(
+    tree: dict[str, Any], ability_state: dict[str, Any], hotbar: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Keep legacy backfills progression-based instead of auto-unlocking by level."""
     starting_unlocks = {str(value) for value in _safe_list(tree.get("starting_unlocks"))}
     unlocked = [str(value) for value in _safe_list(ability_state.get("unlocked")) if str(value) in starting_unlocks]
     ranks = {str(key): value for key, value in _safe_dict(ability_state.get("ranks")).items() if str(key) in starting_unlocks}
-    filtered_hotbar = {str(slot): str(ability_id) for slot, ability_id in _safe_dict(hotbar).items() if str(ability_id) in starting_unlocks}
+    filtered_hotbar = {
+        str(slot): str(ability_id) for slot, ability_id in _safe_dict(hotbar).items() if str(ability_id) in starting_unlocks
+    }
     ability_state["unlocked"] = unlocked
     ability_state["ranks"] = ranks
     ability_state["hotbar"] = filtered_hotbar
@@ -264,12 +288,19 @@ def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, 
     build = str(player.get("build") or "ranger")
     level = int(player.get("level") or 1)
     payload = {
-        "campaign_template": metadata.get("campaign_template") or setup.get("campaign_template") or identity.get("genre") or "classic_fantasy",
+        "campaign_template": metadata.get("campaign_template")
+        or setup.get("campaign_template")
+        or identity.get("genre")
+        or "classic_fantasy",
         "genre": metadata.get("genre") or identity.get("genre") or setup.get("genre") or "classic_fantasy",
         "tone": metadata.get("tone") or identity.get("tone") or setup.get("tone") or "heroic adventure",
         "player": {
             "name": player.get("name") or "Hero",
-            "background": player.get("background") or identity.get("background") or setup_player.get("background") or setup.get("background") or "Wanderer",
+            "background": player.get("background")
+            or identity.get("background")
+            or setup_player.get("background")
+            or setup.get("background")
+            or "Wanderer",
             "build": build,
         },
         "primary_capability": identity.get("primary_capability") or setup.get("primary_capability"),
@@ -278,9 +309,13 @@ def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, 
         "generated_class_name": player.get("class") or identity.get("generated_class_name") or setup.get("generated_class_name"),
         "generated_class_summary": identity.get("generated_class_summary") or setup.get("generated_class_summary"),
     }
-    progression = build_progression_package(payload, build_id=build, level=level, seed=metadata.get("seed") if isinstance(metadata.get("seed"), int) else None)
+    progression = build_progression_package(
+        payload, build_id=build, level=level, seed=metadata.get("seed") if isinstance(metadata.get("seed"), int) else None
+    )
     tree = _safe_dict(progression.get("ability_tree"))
-    ability_state, hotbar = _level_gated_initial_unlocks(tree, _safe_dict(progression.get("ability_state")), _safe_dict(progression.get("hotbar")))
+    ability_state, hotbar = _level_gated_initial_unlocks(
+        tree, _safe_dict(progression.get("ability_state")), _safe_dict(progression.get("hotbar"))
+    )
     state.setdefault("character_identity", progression["character_identity"])
     state["ability_tree"] = tree
     state["ability_state"] = ability_state
@@ -288,9 +323,15 @@ def _ensure_ability_progression(state: dict[str, Any], setup_payload: dict[str, 
     ensure_world_scale_abilities(state)
 
 
-def _use_item(state: dict[str, Any], player: dict[str, Any], inventory: list[dict[str, Any]], index: int, item: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+def _use_item(
+    state: dict[str, Any], player: dict[str, Any], inventory: list[dict[str, Any]], index: int, item: dict[str, Any]
+) -> tuple[str, str, dict[str, Any]]:
     result = use_inventory_item(state, player, inventory, index, item)
-    return str(result.get("name") or _title(item.get("name") or item.get("label") or item.get("id")) or "item"), str(result.get("detail") or ""), result
+    return (
+        str(result.get("name") or _title(item.get("name") or item.get("label") or item.get("id")) or "item"),
+        str(result.get("detail") or ""),
+        result,
+    )
 
 
 def _requested_ability_id(request: RpgLoadoutActionRequest) -> str | None:
@@ -299,6 +340,10 @@ def _requested_ability_id(request: RpgLoadoutActionRequest) -> str | None:
 
 def _requested_recipe_id(request: RpgLoadoutActionRequest) -> str | None:
     return request.recipe_id or request.recipe_name or request.item_name
+
+
+def _requested_mod_id(request: RpgLoadoutActionRequest) -> str | None:
+    return request.mod_id or request.mod_name or request.recipe_id or request.recipe_name or request.target
 
 
 def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
@@ -346,7 +391,7 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
             "consumed_items": _safe_list(craft_result.get("consumed_items")),
             "mechanics_trace": trace,
         }
-    elif action in {"inspect", "use", "equip", "drop", "salvage"}:
+    elif action in {"inspect", "use", "equip", "drop", "salvage", "modify"}:
         inventory, index, item = _find_item(player, request.item_name)
         if item is None or index < 0:
             return {"ok": False, "error": "item_not_found", "session_id": session_id, "item_name": request.item_name}
@@ -402,6 +447,43 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
                 "repairs": salvage_result.repairs,
                 "mechanics_trace": trace,
             }
+        elif action == "modify":
+            if is_protected_item(item):
+                return {"ok": False, "error": "protected_item", "session_id": session_id, "item_name": name}
+            mod_id = _requested_mod_id(request)
+            if not mod_id:
+                return {"ok": False, "error": "missing_modification", "session_id": session_id, "item_name": name}
+            result = apply_item_modification(item, inventory, mod_id)
+            if not result.get("ok"):
+                return {
+                    "ok": False,
+                    "error": result.get("error") or "modification_failed",
+                    "session_id": session_id,
+                    "item_name": name,
+                    "mod_id": result.get("mod_id") or mod_id,
+                    "detail": result.get("detail"),
+                    "missing": result.get("missing", []),
+                }
+            updated_item = _safe_dict(result.get("item"))
+            if not replace_inventory_item(inventory, name, updated_item):
+                inventory[index] = deepcopy(updated_item)
+            _advance_turn(state)
+            trace = _record_modification_trace(state, _safe_dict(result.get("trace")))
+            modification = _safe_dict(result.get("modification"))
+            detail = str(result.get("detail") or f"Modified {name}.")
+            title = f"Modified {name}"
+            kind = "item_modification"
+            event_effects = [
+                {"action": "consume", "items": _safe_list(result.get("consumed_materials"))},
+                {"action": "modify_item", "item": updated_item, "modification": modification},
+            ]
+            extra_response = {
+                "item": updated_item,
+                "modification": modification,
+                "consumed_materials": _safe_list(result.get("consumed_materials")),
+                "repairs": _safe_list(result.get("repairs")),
+                "mechanics_trace": trace,
+            }
         else:
             if is_protected_item(item):
                 return {"ok": False, "error": "protected_item", "session_id": session_id, "item_name": name}
@@ -414,16 +496,39 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
     elif action in {"use_ability", "hotbar"}:
         _ensure_ability_progression(state, _safe_dict(updated.get("setup_payload")))
         requested_ability = request.ability_name or request.ability_id
-        world_result = apply_world_scale_loadout_ability(state, ability_name=requested_ability, hotbar_slot=request.hotbar_slot, target=request.target or "the wider world")
+        world_result = apply_world_scale_loadout_ability(
+            state, ability_name=requested_ability, hotbar_slot=request.hotbar_slot, target=request.target or "the wider world"
+        )
         if world_result.get("handled"):
             if not world_result.get("ok"):
-                return {"ok": False, "error": world_result.get("error") or "world_ability_failed", "session_id": session_id, "detail": world_result.get("detail"), "ability_id": world_result.get("ability_id"), "effects": world_result.get("effects", [])}
+                return {
+                    "ok": False,
+                    "error": world_result.get("error") or "world_ability_failed",
+                    "session_id": session_id,
+                    "detail": world_result.get("detail"),
+                    "ability_id": world_result.get("ability_id"),
+                    "effects": world_result.get("effects", []),
+                }
             _advance_turn(state)
-            event = _append_event(state, title=f"Used {world_result.get('name')}", detail=str(world_result.get("detail") or "World state changed."), kind="world_ability", effects=_safe_list(world_result.get("effects")))
+            event = _append_event(
+                state,
+                title=f"Used {world_result.get('name')}",
+                detail=str(world_result.get("detail") or "World state changed."),
+                kind="world_ability",
+                effects=_safe_list(world_result.get("effects")),
+            )
         else:
-            result = apply_ability_to_state(state, ability_name=requested_ability, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation")
+            result = apply_ability_to_state(
+                state, ability_name=requested_ability, hotbar_slot=request.hotbar_slot, target=request.target or "the current situation"
+            )
             if not result.ok:
-                return {"ok": False, "error": result.error or "ability_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id}
+                return {
+                    "ok": False,
+                    "error": result.error or "ability_failed",
+                    "session_id": session_id,
+                    "detail": result.detail,
+                    "ability_id": result.ability_id,
+                }
             _advance_turn(state)
             event = _append_event(state, title=f"Used {result.name}", detail=result.detail, kind="ability", effects=result.effects)
     elif action in {"unlock_ability", "upgrade_ability", "assign_hotbar", "remove_hotbar"}:
@@ -438,7 +543,14 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
         else:
             result = remove_hotbar_slot(state, request.hotbar_slot or "1")
         if not result.ok:
-            return {"ok": False, "error": result.error or "ability_progression_failed", "session_id": session_id, "detail": result.detail, "ability_id": result.ability_id, "slot": result.slot}
+            return {
+                "ok": False,
+                "error": result.error or "ability_progression_failed",
+                "session_id": session_id,
+                "detail": result.detail,
+                "ability_id": result.ability_id,
+                "slot": result.slot,
+            }
         event = _append_event(
             state,
             title="Updated ability progression",

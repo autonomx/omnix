@@ -2233,6 +2233,7 @@
               "drop",
               "salvage",
               "craft",
+              "modify",
               "use_ability",
               "hotbar",
               "unlock_ability",
@@ -2267,6 +2268,28 @@
               }
             ],
             "title": "Item Name"
+          },
+          "mod_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Id"
+          },
+          "mod_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mod Name"
           },
           "recipe_id": {
             "anyOf": [
