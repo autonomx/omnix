@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rpg.session.ability_system import apply_ability_to_state, build_progression_package, validate_ability_tree
+import pytest
+
+from app.rpg.session.ability_system import apply_ability_to_state, build_ability_tree, build_progression_package, validate_ability_tree
 
 
 def _base_active_ability(**overrides: Any) -> dict[str, Any]:
@@ -52,6 +54,37 @@ def test_progression_package_stores_capability_identity_and_valid_tree() -> None
     assert validate_ability_tree(tree).ok is True
     assert tree["design_rule"].startswith("Every active ability")
     assert {"information", "access"}.issubset(set(tree["dimensions"]))
+
+
+@pytest.mark.parametrize(
+    ("identity", "expected_family", "expected_class"),
+    [
+        ({"genre": "classic_fantasy", "primary_capability": "knowledge", "power_source": "magic"}, "classic_fantasy_knowledge_magic_v1", "Runebinder"),
+        ({"genre": "classic_fantasy", "primary_capability": "combat", "power_source": "martial"}, "classic_fantasy_combat_martial_v1", "Champion"),
+        ({"genre": "classic_fantasy", "primary_capability": "recon", "power_source": "martial"}, "classic_fantasy_recon_martial_v1", "Ranger"),
+        ({"genre": "cyberpunk", "primary_capability": "technical", "power_source": "technology"}, "cyberpunk_technical_technology_v1", "Netrunner"),
+        ({"genre": "cyberpunk", "primary_capability": "combat", "power_source": "technology"}, "cyberpunk_combat_technology_v1", "Street Samurai"),
+        ({"genre": "detective_noir", "primary_capability": "recon", "power_source": "mundane"}, "detective_noir_recon_mundane_v1", "Private Eye"),
+        ({"genre": "political_intrigue", "primary_capability": "influence", "power_source": "social_power"}, "political_intrigue_influence_social_power_v1", "Court Schemer"),
+        ({"genre": "post_apocalyptic", "primary_capability": "survival", "power_source": "scrap"}, "post_apocalyptic_survival_scrap_v1", "Scavenger"),
+        ({"genre": "space_opera", "primary_capability": "knowledge", "power_source": "psionic"}, "space_opera_knowledge_psionic_v1", "Psionic"),
+        ({"genre": "space_opera", "primary_capability": "technical", "power_source": "technology"}, "space_opera_technical_technology_v1", "Science Officer"),
+        ({"genre": "modern_occult", "primary_capability": "knowledge", "power_source": "occult"}, "modern_occult_knowledge_occult_v1", "Ritualist"),
+        ({"genre": "survival_horror", "primary_capability": "survival", "power_source": "mundane"}, "survival_horror_survival_mundane_v1", "Survivor"),
+    ],
+)
+def test_template_families_build_valid_playable_trees(identity: dict[str, Any], expected_family: str, expected_class: str) -> None:
+    tree = build_ability_tree(identity)
+
+    assert tree["source"] == "template_family_v1"
+    assert tree["template_family"] == expected_family
+    assert tree["class_name"] == expected_class
+    assert validate_ability_tree(tree).ok is True
+    assert tree["starting_unlocks"]
+    assert tree["recommended_hotbar"] == tree["starting_unlocks"][:6]
+    assert any(ability["kind"] == "passive" and ability["hooks"] for ability in tree["abilities"])
+    assert any(ability["kind"] == "narrative_trait" and ability["influence_tags"] for ability in tree["abilities"])
+    assert any(ability["kind"] == "active" and ability["effect_ops"] for ability in tree["abilities"])
 
 
 def test_active_abilities_must_have_dimension_effects() -> None:

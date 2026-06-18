@@ -164,6 +164,7 @@ GENRE_NORMALIZATION = {
     "modern_occult": "modern_occult",
     "detective_noir": "detective_noir",
     "political_intrigue": "political_intrigue",
+    "survival_horror": "survival_horror",
     "sandbox": "sandbox",
 }
 
@@ -171,13 +172,111 @@ GENRE_CLASS_NAMES = {
     ("classic_fantasy", "knowledge", "magic"): "Runebinder",
     ("classic_fantasy", "combat", "martial"): "Champion",
     ("classic_fantasy", "recon", "martial"): "Ranger",
+    ("classic_fantasy", "recon", "mundane"): "Ranger",
     ("cyberpunk", "technical", "technology"): "Netrunner",
+    ("cyberpunk", "combat", "technology"): "Street Samurai",
     ("cyberpunk", "recon", "technology"): "Ghostwalker",
     ("detective_noir", "recon", "mundane"): "Private Eye",
     ("political_intrigue", "influence", "social_power"): "Court Schemer",
     ("post_apocalyptic", "survival", "scrap"): "Scavenger",
     ("space_opera", "knowledge", "psionic"): "Psionic",
+    ("space_opera", "technical", "technology"): "Science Officer",
     ("modern_occult", "knowledge", "occult"): "Ritualist",
+    ("survival_horror", "survival", "mundane"): "Survivor",
+}
+
+TEMPLATE_FAMILIES: dict[tuple[str, str, str], dict[str, Any]] = {
+    ("classic_fantasy", "knowledge", "magic"): {
+        "family_id": "classic_fantasy_knowledge_magic_v1",
+        "class_name": "Runebinder",
+        "category_name": "Runes & Arcana",
+        "passive": ("runic_memory", "Runic Memory", "on_investigation_check", "Improves symbol and lore checks."),
+        "trait": ("academy_exile", "Academy Exile", ["recognize_arcane_orders", "unlock_mage_dialogue_paths"]),
+    },
+    ("classic_fantasy", "combat", "martial"): {
+        "family_id": "classic_fantasy_combat_martial_v1",
+        "class_name": "Champion",
+        "category_name": "Arms & Command",
+        "passive": ("shield_drilled", "Shield Drilled", "on_combat_start", "Improves opening defense."),
+        "trait": ("oathbound_warrior", "Oathbound Warrior", ["recognized_by_soldiers", "unlock_honor_dialogue_paths"]),
+    },
+    ("classic_fantasy", "recon", "martial"): {
+        "family_id": "classic_fantasy_recon_martial_v1",
+        "class_name": "Ranger",
+        "category_name": "Trail & Bowcraft",
+        "passive": ("keen_trail_eye", "Keen Trail Eye", "on_investigation_check", "Improves track and terrain reads."),
+        "trait": ("borderlands_guide", "Borderlands Guide", ["recognize_wilderness_signs", "unlock_ranger_dialogue_paths"]),
+    },
+    ("classic_fantasy", "recon", "mundane"): {
+        "family_id": "classic_fantasy_recon_mundane_v1",
+        "class_name": "Ranger",
+        "category_name": "Trailcraft",
+        "passive": ("fieldcraft", "Fieldcraft", "on_enter_location", "Improves mundane travel reads."),
+        "trait": ("roadwise_wanderer", "Roadwise Wanderer", ["recognize_road_signs", "unlock_travel_story_paths"]),
+    },
+    ("cyberpunk", "technical", "technology"): {
+        "family_id": "cyberpunk_technical_technology_v1",
+        "class_name": "Netrunner",
+        "category_name": "Systems Intrusion",
+        "passive": ("packet_sense", "Packet Sense", "on_investigation_check", "Improves device and network reads."),
+        "trait": ("corporate_defector", "Corporate Defector", ["recognize_corp_protocols", "unlock_corporate_dialogue_paths"]),
+    },
+    ("cyberpunk", "combat", "technology"): {
+        "family_id": "cyberpunk_combat_technology_v1",
+        "class_name": "Street Samurai",
+        "category_name": "Augmented Combat",
+        "passive": ("cybernetic_reflexes", "Cybernetic Reflexes", "on_combat_start", "Improves initiative and position checks."),
+        "trait": ("street_code", "Street Code", ["recognize_gang_signals", "unlock_street_contact_paths"]),
+    },
+    ("detective_noir", "recon", "mundane"): {
+        "family_id": "detective_noir_recon_mundane_v1",
+        "class_name": "Private Eye",
+        "category_name": "Casework",
+        "passive": ("keen_eye", "Keen Eye", "on_investigation_check", "Improves clue discovery."),
+        "trait": ("former_detective", "Former Detective", ["recognize_police_procedure", "unlock_detective_dialogue_paths"]),
+    },
+    ("political_intrigue", "influence", "social_power"): {
+        "family_id": "political_intrigue_influence_social_power_v1",
+        "class_name": "Court Schemer",
+        "category_name": "Court Leverage",
+        "passive": ("courtly_read", "Courtly Read", "on_social_check", "Improves social pressure reads."),
+        "trait": ("disgraced_envoy", "Disgraced Envoy", ["recognize_court_factions", "unlock_court_dialogue_paths"]),
+    },
+    ("post_apocalyptic", "survival", "scrap"): {
+        "family_id": "post_apocalyptic_survival_scrap_v1",
+        "class_name": "Scavenger",
+        "category_name": "Scrapcraft",
+        "passive": ("scrap_sense", "Scrap Sense", "on_enter_location", "Improves salvage discovery."),
+        "trait": ("wasteland_survivor", "Wasteland Survivor", ["recognize_salvage_value", "unlock_wasteland_paths"]),
+    },
+    ("space_opera", "knowledge", "psionic"): {
+        "family_id": "space_opera_knowledge_psionic_v1",
+        "class_name": "Psionic",
+        "category_name": "Psi Studies",
+        "passive": ("psionic_focus", "Psionic Focus", "on_investigation_check", "Improves strange-signal interpretation."),
+        "trait": ("trained_mind", "Trained Mind", ["recognize_psionic_echoes", "unlock_psionic_dialogue_paths"]),
+    },
+    ("space_opera", "technical", "technology"): {
+        "family_id": "space_opera_technical_technology_v1",
+        "class_name": "Science Officer",
+        "category_name": "Ship Systems",
+        "passive": ("systems_discipline", "Systems Discipline", "on_investigation_check", "Improves ship and station diagnostics."),
+        "trait": ("fleet_academy", "Fleet Academy", ["recognize_fleet_protocols", "unlock_science_dialogue_paths"]),
+    },
+    ("modern_occult", "knowledge", "occult"): {
+        "family_id": "modern_occult_knowledge_occult_v1",
+        "class_name": "Ritualist",
+        "category_name": "Rites & Omens",
+        "passive": ("occult_index", "Occult Index", "on_investigation_check", "Improves cult and ritual clue reads."),
+        "trait": ("cult_survivor", "Cult Survivor", ["recognize_cult_symbols", "unlock_cult_dialogue_paths"]),
+    },
+    ("survival_horror", "survival", "mundane"): {
+        "family_id": "survival_horror_survival_mundane_v1",
+        "class_name": "Survivor",
+        "category_name": "Last Light",
+        "passive": ("steady_breathing", "Steady Breathing", "on_turn_start", "Improves panic and fatigue recovery."),
+        "trait": ("sole_survivor", "Sole Survivor", ["recognize_horror_tells", "unlock_survivor_dialogue_paths"]),
+    },
 }
 
 # Template abilities are capability-based but keep the first six recon labels
@@ -313,26 +412,76 @@ def _category_label(capability: str, power_source: str) -> str:
     return labels.get(capability, capability.replace("_", " ").title())
 
 
+def _family_bonus_abilities(family: dict[str, Any], *, capability: str, power_source: str) -> list[dict[str, Any]]:
+    passive_id, passive_name, hook, passive_description = family["passive"]
+    trait_id, trait_name, influence_tags = family["trait"]
+    return [
+        _ability(
+            {
+                "ability_id": passive_id,
+                "kind": "passive",
+                "name": passive_name,
+                "icon": "+",
+                "description": passive_description,
+                "purpose": "utility",
+                "dimensions": ["information", "position"],
+                "resource_cost": {},
+                "cooldown_turns": 0,
+                "max_rank": 3,
+                "hooks": [hook],
+                "effect_ops": [],
+            },
+            capability=capability,
+            power_source=power_source,
+        ),
+        _ability(
+            {
+                "ability_id": trait_id,
+                "kind": "narrative_trait",
+                "name": trait_name,
+                "icon": "*",
+                "description": "A grounded background trait that unlocks deterministic story affordances.",
+                "purpose": "information_gathering",
+                "dimensions": ["information", "relationships", "narrative"],
+                "resource_cost": {},
+                "cooldown_turns": 0,
+                "max_rank": 1,
+                "influence_tags": list(influence_tags),
+                "effect_ops": [],
+            },
+            capability=capability,
+            power_source=power_source,
+        ),
+    ]
+
+
 def build_ability_tree(identity: dict[str, Any], *, seed: int | None = None) -> dict[str, Any]:
     primary = normalize_capability(identity.get("primary_capability"), "recon")
     secondary = [normalize_capability(value, "custom") for value in _safe_list(identity.get("secondary_capabilities"))]
     power_source = normalize_power_source(identity.get("power_source"), "mundane")
     genre = normalize_genre(identity.get("genre"))
+    family = TEMPLATE_FAMILIES.get((genre, primary, power_source))
     capabilities = [primary, *[capability for capability in secondary if capability != primary]][:3]
     categories: list[dict[str, Any]] = []
     all_abilities: list[dict[str, Any]] = []
     for capability in capabilities:
         abilities = [_ability(data, capability=capability, power_source=power_source) for data in ABILITY_TEMPLATES.get(capability, ABILITY_TEMPLATES["recon"])]
-        categories.append({"category_id": capability, "name": _category_label(capability, power_source), "capability": capability, "dimensions": sorted({dimension for ability in abilities for dimension in ability.get("dimensions", [])}), "abilities": [ability["ability_id"] for ability in abilities]})
+        if capability == primary and family:
+            abilities.extend(_family_bonus_abilities(family, capability=capability, power_source=power_source))
+        category_name = str(family.get("category_name")) if family and capability == primary else _category_label(capability, power_source)
+        categories.append({"category_id": capability, "name": category_name, "capability": capability, "dimensions": sorted({dimension for ability in abilities for dimension in ability.get("dimensions", [])}), "abilities": [ability["ability_id"] for ability in abilities]})
         all_abilities.extend(abilities)
+    starting_unlocks = [ability["ability_id"] for ability in all_abilities if ability.get("kind") == "active" and int(ability.get("level_required") or 1) <= 1]
+    recommended_hotbar = [ability_id for ability_id in starting_unlocks[:6]]
     tree_id = f"ability_tree_{genre}_{primary}_{power_source}_v1"
     if seed is not None:
         tree_id = f"{tree_id}_{abs(int(seed)) % 100000:05d}"
     tree = {
         "tree_id": tree_id,
         "version": 1,
-        "source": "template_capability_v1",
-        "class_name": str(identity.get("generated_class_name") or primary.title()),
+        "source": "template_family_v1" if family else "template_capability_v1",
+        "template_family": family.get("family_id") if family else None,
+        "class_name": str(identity.get("generated_class_name") or (family or {}).get("class_name") or primary.title()),
         "genre": genre,
         "primary_capability": primary,
         "secondary_capabilities": secondary,
@@ -340,6 +489,8 @@ def build_ability_tree(identity: dict[str, Any], *, seed: int | None = None) -> 
         "dimensions": sorted({dimension for ability in all_abilities for dimension in ability.get("dimensions", [])}),
         "categories": categories,
         "abilities": all_abilities,
+        "starting_unlocks": starting_unlocks,
+        "recommended_hotbar": recommended_hotbar,
         "design_rule": "Every active ability must alter at least one gameplay dimension through validated deterministic operations.",
     }
     validation = validate_ability_tree(tree)
@@ -352,7 +503,9 @@ def build_initial_ability_state(tree: dict[str, Any], *, level: int = 1) -> dict
     abilities = _safe_list(tree.get("abilities"))
     unlocked = [ability["ability_id"] for ability in abilities if ability.get("kind") == "active" and int(ability.get("level_required") or 1) <= level]
     ranks = {ability_id: 1 for ability_id in unlocked}
-    hotbar = {str(index + 1): ability_id for index, ability_id in enumerate(unlocked[:6])}
+    recommended = [ability_id for ability_id in _safe_list(tree.get("recommended_hotbar")) if ability_id in unlocked]
+    hotbar_ids = [*recommended, *[ability_id for ability_id in unlocked if ability_id not in recommended]][:6]
+    hotbar = {str(index + 1): ability_id for index, ability_id in enumerate(hotbar_ids)}
     return {"ability_points": max(0, int(level) - 1), "unlocked": unlocked, "ranks": ranks, "cooldowns": {}, "active_effects": [], "hotbar": hotbar}
 
 

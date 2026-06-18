@@ -150,6 +150,34 @@ def test_create_new_game_session_persists_capability_identity(monkeypatch, ident
     assert state["ability_tree"]["primary_capability"] == expected_identity["primary_capability"]
 
 
+def test_create_new_game_session_saves_template_family_and_recommended_hotbar(monkeypatch) -> None:
+    captured = _capture_saved_session(monkeypatch)
+
+    result = new_game.create_new_game_session(
+        new_game.RpgNewGameRequest(
+            seed=13579,
+            genre="survival_horror",
+            tone="claustrophobic dread",
+            player=new_game.RpgPlayerOptions(name="June", background="sole survivor", build="balanced_adventurer"),
+            primary_capability="survival",
+            secondary_capabilities=["recon", "knowledge"],
+            power_source="mundane",
+        )
+    )
+
+    assert result["ok"] is True
+    state = captured["session"]["state"]
+    tree = state["ability_tree"]
+    assert tree["template_family"] == "survival_horror_survival_mundane_v1"
+    assert tree["source"] == "template_family_v1"
+    assert tree["class_name"] == "Survivor"
+    assert tree["starting_unlocks"]
+    assert tree["recommended_hotbar"] == tree["starting_unlocks"][:6]
+    assert list(state["hotbar"].values()) == tree["recommended_hotbar"]
+    assert any(ability["kind"] == "passive" for ability in tree["abilities"])
+    assert any(ability["kind"] == "narrative_trait" for ability in tree["abilities"])
+
+
 def test_continue_rpg_session_returns_saved_identity_without_regeneration(monkeypatch) -> None:
     identity = {
         "genre": "cyberpunk",
