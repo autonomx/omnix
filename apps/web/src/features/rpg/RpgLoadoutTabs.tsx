@@ -4,7 +4,7 @@ import { omnixApiClient, type RpgLoadoutActionRequest, type RpgLaunchResponse } 
 import type { RpgHotbarAbilityPreview, RpgInventoryItemPreview } from './rpgUiState';
 import './RpgLoadoutTabs.css';
 
-type RpgLoadoutTab = 'inventory' | 'abilities' | 'hotbar' | 'skills' | 'traits' | 'effects';
+type RpgLoadoutTab = 'inventory' | 'abilities' | 'hotbar' | 'skills' | 'traits' | 'effects' | 'coverage';
 type AbilityStatus = 'unlocked' | 'available' | 'locked';
 
 interface RpgLoadoutTabsProps {
@@ -71,6 +71,17 @@ interface EffectPreview {
   remaining?: number;
 }
 
+interface AbilityCoveragePreview {
+  ok: boolean;
+  score: number;
+  totalObservations: number;
+  coveredDimensions: string[];
+  missingDimensions: string[];
+  dimensionCounts: Record<string, number>;
+  sourceCounts: Record<string, number>;
+  warnings: string[];
+}
+
 interface AbilityOverview {
   className: string;
   treeId: string;
@@ -83,6 +94,7 @@ interface AbilityOverview {
   skills: SkillProgressionPreview[];
   traits: AbilityPreview[];
   activeEffects: EffectPreview[];
+  coverage: AbilityCoveragePreview;
   source: 'live' | 'preview';
 }
 
@@ -93,7 +105,10 @@ const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
   { id: 'skills', label: 'Skills' },
   { id: 'traits', label: 'Traits' },
   { id: 'effects', label: 'Effects' },
+  { id: 'coverage', label: 'Coverage' },
 ];
+
+const REQUIRED_DIMENSIONS = ['resources', 'information', 'relationships', 'access', 'environment', 'position', 'narrative', 'economy', 'world'];
 
 export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, selectedSessionId }: RpgLoadoutTabsProps) {
   const [activeTab, setActiveTab] = useState<RpgLoadoutTab>('inventory');
@@ -111,6 +126,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
   const displayedHotbarAbilities = abilityOverview.hotbarAbilities.length ? abilityOverview.hotbarAbilities : hotbarAbilities;
   const activeItem = inventoryItems[Math.min(activeInventoryIndex, Math.max(inventoryItems.length - 1, 0))];
   const activeAbility = abilityOverview.allAbilities[Math.min(activeAbilityIndex, Math.max(abilityOverview.allAbilities.length - 1, 0))];
+  const coveragePercent = Math.round(abilityOverview.coverage.score * 100);
 
   useEffect(() => {
     if (wasApplyingAction.current && !isApplyingLoadoutAction && selectedSessionId) {
@@ -140,7 +156,11 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
 
       <div className="rpg-ability-summary" aria-label="Ability tree summary">
         <strong>{abilityOverview.className}</strong>
-        <span>{abilityOverview.source === 'live' ? `Level ${abilityOverview.playerLevel} • ${abilityOverview.abilityPoints} ability point${abilityOverview.abilityPoints === 1 ? '' : 's'}` : 'Preview ability kit'}</span>
+        <span>
+          {abilityOverview.source === 'live'
+            ? `Level ${abilityOverview.playerLevel} • ${abilityOverview.abilityPoints} ability point${abilityOverview.abilityPoints === 1 ? '' : 's'} • ${coveragePercent}% dimension coverage`
+            : 'Preview ability kit'}
+        </span>
         <small>{abilityOverview.treeId}</small>
       </div>
 
@@ -183,6 +203,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
       {activeTab === 'skills' ? <SkillsPanel skills={abilityOverview.skills} /> : null}
       {activeTab === 'traits' ? <TraitsPanel traits={abilityOverview.traits} /> : null}
       {activeTab === 'effects' ? <EffectsPanel effects={abilityOverview.activeEffects} /> : null}
+      {activeTab === 'coverage' ? <CoveragePanel coverage={abilityOverview.coverage} /> : null}
     </section>
   );
 }
@@ -474,6 +495,73 @@ function EffectsPanel({ effects }: { effects: EffectPreview[] }) {
   );
 }
 
+function CoveragePanel({ coverage }: { coverage: AbilityCoveragePreview }) {
+  const percent = Math.round(coverage.score * 100);
+  const dimensionRows = REQUIRED_DIMENSIONS.map((dimension) => ({
+    dimension,
+    count: coverage.dimensionCounts[dimension] ?? 0,
+    covered: coverage.coveredDimensions.includes(dimension),
+  }));
+  const sourceRows = Object.entries(coverage.sourceCounts).sort(([, left], [, right]) => right - left).slice(0, 6);
+
+  return (
+    <div aria-labelledby="rpg-coverage-loadout-tab" className="rpg-coverage-panel" id="rpg-coverage-loadout-panel" role="tabpanel">
+      <section className="rpg-coverage-summary-card" aria-label="Ability coverage score">
+        <div className="rpg-coverage-score">
+          <strong>{percent}%</strong>
+          <span>{coverage.ok ? 'All required dimensions covered' : `${coverage.missingDimensions.length} dimension${coverage.missingDimensions.length === 1 ? '' : 's'} still missing`}</span>
+        </div>
+        <div className="rpg-coverage-meter" aria-label={`Ability dimension coverage ${percent}%`}>
+          <span style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
+        </div>
+        <small>{coverage.totalObservations} deterministic observation{coverage.totalObservations === 1 ? '' : 's'} indexed from ability traces, world effects, passives, traits, and timeline events.</small>
+      </section>
+
+      <div className="rpg-coverage-grid" aria-label="Ability dimension coverage">
+        {dimensionRows.map((row) => (
+          <article className={row.covered ? 'rpg-coverage-dimension covered' : 'rpg-coverage-dimension missing'} key={row.dimension}>
+            <strong>{titleCase(row.dimension)}</strong>
+            <span>{row.covered ? `${row.count} observation${row.count === 1 ? '' : 's'}` : 'Missing'}</span>
+          </article>
+        ))}
+      </div>
+
+      <div className="rpg-loadout-layout">
+        <section className="rpg-list-stack rpg-compact-panel" aria-label="Coverage sources">
+          {sourceRows.length ? (
+            sourceRows.map(([source, count]) => (
+              <article className="rpg-list-row" key={source}>
+                <span className="rpg-icon-tile" aria-hidden="true">◎</span>
+                <div>
+                  <strong>{titleCase(source)}</strong>
+                  <span>{count} observation{count === 1 ? '' : 's'}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <article className="rpg-list-row"><span className="rpg-icon-tile">◎</span><div><strong>No coverage sources yet</strong><span>Use abilities, passives, traits, or world effects to populate coverage.</span></div></article>
+          )}
+        </section>
+        <section className="rpg-list-stack rpg-compact-panel" aria-label="Coverage warnings">
+          {coverage.warnings.length ? (
+            coverage.warnings.slice(0, 6).map((warning) => (
+              <article className="rpg-list-row" key={warning}>
+                <span className="rpg-icon-tile" aria-hidden="true">!</span>
+                <div>
+                  <strong>Coverage warning</strong>
+                  <span>{warning}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <article className="rpg-list-row"><span className="rpg-icon-tile">✓</span><div><strong>No coverage warnings</strong><span>All indexed dimensions are supported by the deterministic ability system.</span></div></article>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 interface LoadoutDetailAction {
   label: string;
   command: string;
@@ -507,13 +595,15 @@ function LoadoutDetailCard({ actions, detail, disabled, eyebrow, onSelectCommand
 }
 
 function buildAbilityOverview(payload: RpgLaunchResponse | undefined, fallbackHotbar: RpgHotbarAbilityPreview[]): AbilityOverview {
-  const session = recordValue(payload?.session);
-  const game = recordValue(payload?.game);
+  const payloadRecord = recordValue(payload);
+  const session = recordValue(payloadRecord?.session);
+  const game = recordValue(payloadRecord?.game);
   const state = recordValue(session?.state) ?? game ?? session;
   const tree = recordValue(state?.ability_tree);
   const abilityState = recordValue(state?.ability_state);
   const player = recordValue(state?.player);
   const rawAbilities = firstArray(tree?.abilities);
+  const coverage = buildCoveragePreview(payloadRecord, state);
   if (!state || !tree || !rawAbilities.length) {
     const previewAbilities = fallbackHotbar.map((ability) => previewAbilityFromHotbar(ability));
     return {
@@ -528,6 +618,7 @@ function buildAbilityOverview(payload: RpgLaunchResponse | undefined, fallbackHo
       skills: [],
       traits: [],
       activeEffects: [],
+      coverage,
       source: 'preview',
     };
   }
@@ -565,7 +656,43 @@ function buildAbilityOverview(payload: RpgLaunchResponse | undefined, fallbackHo
     skills: buildSkillProgression(state),
     traits: abilities.filter((ability) => ability.kind === 'narrative_trait'),
     activeEffects: buildActiveEffects(state, abilityState),
+    coverage,
     source: 'live',
+  };
+}
+
+function buildCoveragePreview(payload: Record<string, unknown> | undefined, state: Record<string, unknown> | undefined): AbilityCoveragePreview {
+  const mechanics = recordValue(state?.mechanics);
+  const snapshots = firstArray(mechanics?.ability_coverage_snapshots);
+  const source =
+    recordValue(payload?.ability_coverage) ??
+    recordValue(mechanics?.ability_coverage_latest) ??
+    recordValue(snapshots[0]);
+
+  if (!source) {
+    return {
+      ok: false,
+      score: 0,
+      totalObservations: 0,
+      coveredDimensions: [],
+      missingDimensions: REQUIRED_DIMENSIONS,
+      dimensionCounts: {},
+      sourceCounts: {},
+      warnings: [],
+    };
+  }
+
+  const coveredDimensions = firstArray(source.covered_dimensions).map(String);
+  const missingDimensions = firstArray(source.missing_dimensions).map(String);
+  return {
+    ok: typeof source.ok === 'boolean' ? source.ok : missingDimensions.length === 0,
+    score: Math.max(0, Math.min(1, firstNumber(source.coverage_score) ?? 0)),
+    totalObservations: firstNumber(source.total_observations) ?? 0,
+    coveredDimensions,
+    missingDimensions,
+    dimensionCounts: numericRecord(source.dimension_counts),
+    sourceCounts: numericRecord(source.source_counts),
+    warnings: firstArray(source.warnings).map(String),
   };
 }
 
