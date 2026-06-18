@@ -46,6 +46,9 @@ def test_create_new_game_session_builds_level_one_campaign(monkeypatch) -> None:
     assert {item["id"] for item in state["player"]["inventory"]} >= {"ration", "torch", "iron_dagger", "simple_bow", "journal"}
     assert state["current_location"] == "Rusty Flagon Tavern"
     assert state["turn_count"] == 0
+    snapshot = state["mechanics"]["ability_coverage_snapshots"][0]
+    assert "covered_dimensions" in snapshot
+    assert "observations" not in snapshot
 
 
 @pytest.mark.parametrize(
@@ -255,6 +258,7 @@ def test_start_rpg_preset_clones_playable_demo_session(monkeypatch) -> None:
     assert state["current_location"] == "Glimmerdeep Pass"
     assert len(state["party"]) == 3
     assert {quest["id"] for quest in state["quests"]} == {"frostbound_relic", "secrets_in_snow", "icefang_alpha"}
+    assert state["mechanics"]["ability_coverage_snapshots"][0]["created_at"].endswith("Z")
 
 
 def test_start_rpg_preset_rejects_unknown_id(monkeypatch) -> None:
