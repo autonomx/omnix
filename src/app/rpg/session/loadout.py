@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from app.rpg.session.ability_coverage import write_ability_coverage_snapshot
 from app.rpg.session.ability_system import (
     apply_ability_to_state,
     assign_ability_to_hotbar,
@@ -385,5 +386,6 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
     manifest["current_turn"] = state.get("current_turn")
     updated["manifest"] = manifest
 
+    write_ability_coverage_snapshot(state)
     saved = save_session(updated, compact=False)
     return {"ok": True, "session_id": session_id, "status": "ready", "event": event, "session": saved, "game": saved.get("state", {})}
