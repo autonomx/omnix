@@ -25,6 +25,18 @@ def _session() -> dict[str, Any]:
                 "inventory": [
                     {"id": "health_potion", "name": "Health Potion", "quantity": 2, "type": "consumable"},
                     {"id": "simple_bow", "name": "Simple bow", "quantity": 1, "type": "weapon"},
+                    {"id": "broken_sword", "name": "Broken Sword", "quantity": 1, "item_type": "weapon", "type": "weapon", "weapon_type": "sword"},
+                    {
+                        "id": "iron",
+                        "item_id": "iron",
+                        "name": "Iron scrap",
+                        "quantity": 2,
+                        "item_type": "crafting_material",
+                        "type": "crafting_material",
+                        "material_id": "iron",
+                        "material_role": "metal",
+                        "stackable": True,
+                    },
                     {"id": "journal", "name": "Journal", "quantity": 1, "type": "quest"},
                 ],
                 "equipment": [],
@@ -60,6 +72,32 @@ def test_equip_item_updates_equipment(monkeypatch) -> None:
     assert result["ok"] is True
     assert saved[0]["state"]["player"]["equipment"] == [{"slot": "Weapon", "name": "Simple bow"}]
     assert saved[0]["state"]["timeline"][0]["title"] == "Equipped Simple bow"
+
+
+def test_salvage_consumes_source_merges_materials_and_writes_trace(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
+    monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: saved.append(session) or session)
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="salvage", item_name="Broken Sword"))
+
+    assert result["ok"] is True
+    assert result["outputs"][0]["material_id"] == "iron"
+    state = saved[0]["state"]
+    inventory = state["player"]["inventory"]
+    assert all(item.get("name") != "Broken Sword" for item in inventory)
+    by_material = {item.get("material_id"): item for item in inventory if item.get("material_id")}
+    assert by_material["iron"]["quantity"] == 5
+    assert by_material["leather"]["quantity"] == 1
+    assert state["turn_count"] == 1
+    assert state["timeline"][0]["kind"] == "salvage"
+    assert state["timeline"][0]["title"] == "Salvaged Broken Sword"
+    assert state["journal"]["entries"][0]["kind"] == "salvage"
+    trace = state["mechanics"]["salvage_traces"][0]
+    assert trace["event"] == "item_salvaged"
+    assert trace["source_item_name"] == "Broken Sword"
+    assert trace["outputs"][0]["material_id"] == "iron"
+    assert state["mechanics"]["item_traces"][0] == trace
 
 
 def test_hotbar_action_spends_resource_writes_event_and_snapshots_coverage(monkeypatch) -> None:
@@ -146,6 +184,16 @@ def test_drop_protected_journal_is_rejected(monkeypatch) -> None:
     result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="drop", item_name="Journal"))
 
     assert result == {"ok": False, "error": "protected_item", "session_id": "rpg_test", "item_name": "Journal"}
+
+
+def test_salvage_protected_journal_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
+
+    result = loadout.apply_loadout_action("rpg_test", loadout.RpgLoadoutActionRequest(action="salvage", item_name="Journal"))
+
+    assert result["ok"] is False
+    assert result["error"] == "protected_item_not_salvageable"
+    assert result["item_name"] == "Journal"
 
 
 def test_session_compat_supports_loadout_action(monkeypatch) -> None:
