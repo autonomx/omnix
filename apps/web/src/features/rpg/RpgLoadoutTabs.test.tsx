@@ -23,7 +23,7 @@ function renderLoadoutTabs(props: LoadoutTabsProps) {
 
 describe('RpgLoadoutTabs', () => {
   it('renders inventory by default and switches to abilities and hotbar panels', () => {
-    renderLoadoutTabs(<RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={vi.fn()} />.props);
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn() });
 
     expect(screen.getByRole('tab', { name: 'Inventory' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Inventory' })).toHaveTextContent('12');
@@ -45,7 +45,7 @@ describe('RpgLoadoutTabs', () => {
 
   it('turns inventory and ability interactions into replay-preserving commands', () => {
     const onSelectCommand = vi.fn();
-    renderLoadoutTabs(<RpgLoadoutTabs hotbarAbilities={hotbarAbilities} inventoryItems={inventoryItems} onSelectCommand={onSelectCommand} />.props);
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand });
 
     fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
