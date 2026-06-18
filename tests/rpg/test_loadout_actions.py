@@ -62,7 +62,7 @@ def test_equip_item_updates_equipment(monkeypatch) -> None:
     assert saved[0]["state"]["timeline"][0]["title"] == "Equipped Simple bow"
 
 
-def test_hotbar_action_spends_resource_and_writes_event(monkeypatch) -> None:
+def test_hotbar_action_spends_resource_writes_event_and_snapshots_coverage(monkeypatch) -> None:
     saved: list[dict[str, Any]] = []
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
     monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: saved.append(session) or session)
@@ -74,6 +74,9 @@ def test_hotbar_action_spends_resource_and_writes_event(monkeypatch) -> None:
     assert state["player"]["resources"]["mana"] == {"current": 8, "max": 40}
     assert state["timeline"][0]["title"] == "Used Frost Arrow"
     assert state["runtime"]["effects"][0]["source"] == "Frost Arrow"
+    snapshot = state["mechanics"]["ability_coverage_snapshots"][0]
+    assert snapshot["covered_dimensions"] == ["environment", "position"]
+    assert snapshot["missing_dimensions"] == ["resources", "information", "relationships", "access", "narrative", "economy", "world"]
 
 
 def test_legacy_ability_backfill_uses_saved_setup_identity(monkeypatch) -> None:
