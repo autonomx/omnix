@@ -18,6 +18,7 @@ from app.rpg.session.new_game import (
     start_rpg_preset,
 )
 from app.rpg.session.service import list_sessions, load_session
+from app.rpg.session.world_ability_integration import ensure_world_scale_abilities
 
 _ROUTE_SENTINEL = "_omnix_rpg_session_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_session_route_hook_installed"
@@ -29,6 +30,24 @@ def _raise_for_error(payload: dict[str, Any], *, not_found_errors: set[str] | No
     error = str(payload.get("error") or "rpg_session_error")
     status_code = 404 if error in (not_found_errors or set()) else 400
     raise HTTPException(status_code=status_code, detail=payload)
+
+
+def _with_world_scale_abilities(payload: dict[str, Any]) -> dict[str, Any]:
+    """Decorate returned session payloads with high-level world abilities.
+
+    This keeps the Ability UI aware of N127 world-scale templates even for saves
+    created before those templates existed. Loadout actions also persist the same
+    templates before unlock/use actions, so this response decoration is safe.
+    """
+    session = payload.get("session") if isinstance(payload.get("session"), dict) else None
+    if not session:
+        return payload
+    state = session.get("state") if isinstance(session.get("state"), dict) else None
+    if not state:
+        return payload
+    ensure_world_scale_abilities(state)
+    payload["game"] = state
+    return payload
 
 
 def register_rpg_session_routes(app: FastAPI) -> None:
@@ -49,7 +68,7 @@ def register_rpg_session_routes(app: FastAPI) -> None:
 
     @app.post("/api/rpg/presets/{preset_id}/start", tags=["rpg-session"])
     async def rpg_start_preset(preset_id: str) -> dict[str, Any]:
-        return _raise_for_error(start_rpg_preset(preset_id), not_found_errors={"unknown_rpg_preset"})
+        return _with_world_scale_abilities(_raise_for_error(start_rpg_preset(preset_id), not_found_errors={"unknown_rpg_preset"}))
 
     @app.get("/api/rpg/sessions", tags=["rpg-session"])
     async def rpg_sessions() -> dict[str, Any]:
@@ -60,15 +79,15 @@ def register_rpg_session_routes(app: FastAPI) -> None:
         session = load_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "session_not_found", "session_id": session_id})
-        return {"ok": True, "session_id": session_id, "session": session, "game": session.get("state", {})}
+        return _with_world_scale_abilities({"ok": True, "session_id": session_id, "session": session, "game": session.get("state", {})})
 
     @app.post("/api/rpg/new-game", tags=["rpg-session"])
     async def rpg_new_game(request: RpgNewGameRequest) -> dict[str, Any]:
-        return create_new_game_session(request)
+        return _with_world_scale_abilities(create_new_game_session(request))
 
     @app.post("/api/rpg/sessions/{session_id}/continue", tags=["rpg-session"])
     async def rpg_continue_session(session_id: str) -> dict[str, Any]:
-        return _raise_for_error(continue_rpg_session(session_id), not_found_errors={"session_not_found"})
+        return _with_world_scale_abilities(_raise_for_error(continue_rpg_session(session_id), not_found_errors={"session_not_found"}))
 
     @app.post("/api/rpg/sessions/{session_id}/rename", tags=["rpg-session"])
     async def rpg_rename_session(session_id: str, request: RpgRenameSessionRequest) -> dict[str, Any]:
