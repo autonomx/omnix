@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.rpg.session.item_loadout_hooks import loadout_item_trace_order
 from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
 
 
@@ -19,14 +20,15 @@ def apply_loadout_action_with_item_hooks(
 ) -> dict[str, Any]:
     """Apply a loadout action with explicit item hook controls."""
 
-    return apply_loadout_action(
-        session_id,
-        request,
-        run_item_hooks=True,
-        diagnostics_interval=diagnostics_interval,
-        maintenance_interval=maintenance_interval,
-        report_interval=report_interval,
-        objective_limit=objective_limit,
-        record_trace=record_trace,
-        record_hook_trace=record_hook_trace,
-    )
+    with loadout_item_trace_order(preserve_action_traces=False):
+        return apply_loadout_action(
+            session_id,
+            request,
+            run_item_hooks=True,
+            diagnostics_interval=diagnostics_interval,
+            maintenance_interval=maintenance_interval,
+            report_interval=report_interval,
+            objective_limit=objective_limit,
+            record_trace=record_trace,
+            record_hook_trace=record_hook_trace,
+        )
