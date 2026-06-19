@@ -150,7 +150,8 @@ def build_item_state_audit(state: dict[str, Any]) -> dict[str, Any]:
             )
 
     normalized, normalization_trace = normalize_inventory_items(raw_inventory)
-    if normalization_trace.get("changed"):
+    normalization_needs_repair = bool(normalization_trace.get("legacy_count") or normalization_trace.get("merged_count"))
+    if normalization_trace.get("changed") and normalization_needs_repair:
         warnings.append(_issue("inventory_requires_normalization", "Inventory can be normalized before gameplay use."))
         repairs.append(normalization_trace)
 
