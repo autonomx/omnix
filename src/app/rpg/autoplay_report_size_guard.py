@@ -13,7 +13,9 @@ import os
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
+
+from app.rpg.autoplay_item_report_hook import run_autoplay_item_report_hook
 
 SIZE_GUARD_SOURCE = "autoplay_report_size_guard_v1"
 REPORT_JSON_NAME = "autoplay-campaign-report.json"
@@ -205,18 +207,28 @@ def _merge_zip_results(existing: Dict[str, Any], current: List[Dict[str, Any]]) 
     return list(existing_zip_results or []) + list(current or [])
 
 
+def _safe_item_report_hook(output_dir: Path, zip_paths: List[str | Path]) -> Dict[str, Any]:
+    try:
+        return run_autoplay_item_report_hook(output_dir, zip_paths=zip_paths)
+    except Exception as exc:  # pragma: no cover - defensive post-run guard
+        return {"ok": False, "error": repr(exc), "source": "autoplay_item_report_hook_guard"}
+
+
 def cap_oversized_autoplay_reports(output_dir: str | Path, *, zip_paths: Iterable[str | Path] = ()) -> Dict[str, Any]:
     output_dir = Path(output_dir)
+    zip_path_list = [path for path in zip_paths if path]
     summary_path = output_dir / SUMMARY_NAME
     existing_summary = _read_existing_summary(summary_path)
+    item_report_result = _safe_item_report_hook(output_dir, zip_path_list)
     file_result = cap_oversized_report_files(output_dir)
-    zip_results = [cap_oversized_report_zip(path) for path in zip_paths if path]
+    zip_results = [cap_oversized_report_zip(path) for path in zip_path_list]
     payload = dict(existing_summary)
     payload.update(
         {
             "ok": True,
             "source": SIZE_GUARD_SOURCE,
             "materialization_guard_source": existing_summary.get("materialization_guard_source"),
+            "item_autoplay_report": item_report_result,
             "file_result": _merge_file_results(existing_summary, file_result),
             "zip_results": _merge_zip_results(existing_summary, zip_results),
         }
