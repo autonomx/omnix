@@ -1,4 +1,5 @@
 import type { RpgItemObjectivePreview, RpgItemStatusCard, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
+import './RpgItemPanel.css';
 
 interface RpgItemPanelProps {
   actions: RpgItemUiAction[];
