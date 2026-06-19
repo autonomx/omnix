@@ -91,7 +91,12 @@ def _priced_offer(item: dict[str, Any], *, profile: str, quantity: int, reputati
     normalized = normalize_item_instance(item, quantity=quantity)
     base = max(1, value_to_copper(normalized.get("value")))
     multiplier = _merchant_multiplier(reputation)
+    bounded_reputation = max(-5, min(5, int(reputation or 0)))
     buy_copper = max(1, round(base * 1.25 * multiplier))
+    if bounded_reputation > 0:
+        buy_copper = max(1, buy_copper - 1)
+    elif bounded_reputation < 0:
+        buy_copper = max(1, buy_copper + 1)
     sell_copper = max(1, round(base * 0.5 * multiplier))
     return {
         "merchant_profile": profile,
