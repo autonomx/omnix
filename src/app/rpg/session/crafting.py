@@ -124,7 +124,7 @@ def _requirement_label(requirement: dict[str, Any]) -> str:
     if kind == "role":
         return f"{_text(requirement.get('role'), 'material')} role"
     if kind == "property":
-        return f"{_text(requirement.get('property'), 'property')} material"
+        return f"{_text(requirement.get('property'), 'property')} property material"
     return _text(requirement.get("item_id") or requirement.get("id"), "item")
 
 
