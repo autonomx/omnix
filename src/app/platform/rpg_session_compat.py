@@ -167,7 +167,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         )
 
     if action == "item_action":
-        from app.rpg.session.item_session_actions import apply_item_session_action
+        from app.rpg.session.item_session_with_hooks import apply_item_session_action_with_hooks
         from app.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
@@ -178,7 +178,18 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "session_not_found", "session_id": session_id}
 
         request = _item_action_request_from_payload(payload)
-        result = apply_item_session_action(state, request)
+        result = apply_item_session_action_with_hooks(
+            state,
+            request,
+            station=_safe_str(payload.get("station")).strip() or None,
+            genre=_safe_str(payload.get("genre")).strip() or "classic_fantasy",
+            diagnostics_interval=_safe_int(payload.get("diagnostics_interval"), default=10),
+            maintenance_interval=_safe_int(payload.get("maintenance_interval"), default=25),
+            report_interval=_safe_int(payload.get("report_interval"), default=20),
+            objective_limit=_safe_int(payload.get("objective_limit"), default=5),
+            record_trace=_safe_bool(payload.get("record_trace"), default=True),
+            record_hook_trace=_safe_bool(payload.get("record_hook_trace"), default=True),
+        )
         if result.get("ok") is not True:
             return {"session_id": session_id, **result}
 
@@ -193,7 +204,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_command":
-        from app.rpg.session.item_command_adapter import apply_item_command
+        from app.rpg.session.item_session_with_hooks import apply_item_command_with_hooks
         from app.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
@@ -207,7 +218,18 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             if "command" in payload
             else payload.get("item_command") or payload.get("request")
         )
-        result = apply_item_command(state, command)
+        result = apply_item_command_with_hooks(
+            state,
+            command,
+            station=_safe_str(payload.get("station")).strip() or None,
+            genre=_safe_str(payload.get("genre")).strip() or "classic_fantasy",
+            diagnostics_interval=_safe_int(payload.get("diagnostics_interval"), default=10),
+            maintenance_interval=_safe_int(payload.get("maintenance_interval"), default=25),
+            report_interval=_safe_int(payload.get("report_interval"), default=20),
+            objective_limit=_safe_int(payload.get("objective_limit"), default=5),
+            record_trace=_safe_bool(payload.get("record_trace"), default=True),
+            record_hook_trace=_safe_bool(payload.get("record_hook_trace"), default=True),
+        )
         if result.get("ok") is not True:
             return {"session_id": session_id, **result}
         saved = save_session(session, compact=False)
