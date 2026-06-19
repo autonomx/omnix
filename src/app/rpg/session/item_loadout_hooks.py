@@ -72,6 +72,18 @@ def _has_item_trace_for_turn(mechanics: dict[str, Any], *, turn: int) -> bool:
     return False
 
 
+def _restore_existing_item_trace_order(mechanics: dict[str, Any], original: list[Any]) -> None:
+    """Keep action-owned traces first when hooks run after a same-turn action."""
+
+    if not original:
+        return
+    current = _safe_list(mechanics.get("item_traces"))
+    if current[: len(original)] == original:
+        return
+    additions = [deepcopy(trace) for trace in current if trace not in original]
+    mechanics["item_traces"] = [*deepcopy(original), *additions][:ITEM_TRACE_LIMIT]
+
+
 def _existing_hook_trace(mechanics: dict[str, Any], *, action: str, turn: int) -> dict[str, Any] | None:
     for value in _safe_list(mechanics.get("item_loadout_hook_traces")):
         trace = _safe_dict(value)
@@ -178,6 +190,7 @@ def run_loadout_item_hooks(
             "mechanics_source": MECHANICS_SOURCE,
         }
 
+    original_item_traces = deepcopy(_safe_list(mechanics.get("item_traces")))
     had_item_trace_for_turn = _has_item_trace_for_turn(mechanics, turn=plan["turn"])
     hook_result = run_item_turn_hooks(
         mutable_state,
@@ -190,6 +203,8 @@ def run_loadout_item_hooks(
         objective_limit=objective_limit,
         record_trace=record_hook_trace,
     )
+    if had_item_trace_for_turn:
+        _restore_existing_item_trace_order(mechanics, original_item_traces)
     trace = {
         "event": "item_loadout_hooks_ran",
         "action": plan["action"],
