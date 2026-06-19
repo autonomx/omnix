@@ -70,6 +70,17 @@ def _find_pickup_id(state: dict[str, Any] | None, label: str) -> str:
     return label
 
 
+def _first_effect_id(effect: dict[str, Any]) -> str | None:
+    if _text(effect.get("effect_id")):
+        return _text(effect.get("effect_id"))
+    for raw_signal in _safe_list(effect.get("effects")):
+        signal = _safe_dict(raw_signal)
+        signal_id = _text(signal.get("effect_id") or signal.get("signal_id") or signal.get("id"))
+        if signal_id:
+            return signal_id
+    return None
+
+
 def _find_effect(state: dict[str, Any] | None, label: str) -> tuple[str, str | None]:
     if not state:
         return label, None
@@ -79,7 +90,7 @@ def _find_effect(state: dict[str, Any] | None, label: str) -> tuple[str, str | N
         effect = _safe_dict(raw_effect)
         names = {_norm(effect.get("item_id")), _norm(effect.get("name")), _norm(effect.get("item_name"))}
         if target in names:
-            return _text(effect.get("name") or effect.get("item_name") or effect.get("item_id"), label), effect.get("effect_id")
+            return _text(effect.get("name") or effect.get("item_name") or effect.get("item_id"), label), _first_effect_id(effect)
     return label, None
 
 
