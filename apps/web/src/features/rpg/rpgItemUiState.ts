@@ -98,7 +98,7 @@ export function buildSelectedItemActions({ item, selectedSessionId }: BuildSelec
   });
 
   return [
-    loadout('inspect', 'Inspect', 'Review deterministic item details.' , 'inspect'),
+    loadout('inspect', 'Inspect', 'Review deterministic item details.', 'inspect'),
     loadout('use', 'Use', 'Apply item effects through deterministic item handling.', 'use'),
     loadout('equip', 'Equip', 'Equip the item if it belongs in a gear slot.', 'equip'),
     loadout('drop', 'Drop', 'Remove one carried instance when safe.', 'drop'),
@@ -114,7 +114,7 @@ export function buildItemObjectivePreviews(payload: Record<string, unknown> | nu
     const action = readString(objective.action) || readString(objective.kind) || 'item_action';
     const label = readString(objective.label) || titleCase(action);
     const detail = readString(objective.detail) || readString(objective.reason) || 'Deterministic item-system suggestion.';
-    const payloadValue = asRecord(objective.payload) ?? asRecord(objective.request) ?? {};
+    const payloadValue = readRecord(objective.payload) ?? readRecord(objective.request) ?? {};
     return {
       id: readString(objective.id) || `${action}:${index}`,
       label,
@@ -188,7 +188,11 @@ export function buildMerchantEntryPreviews(payload: Record<string, unknown> | nu
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  return readRecord(value) ?? {};
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function readString(value: unknown): string | undefined {
