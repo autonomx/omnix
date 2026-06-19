@@ -1,5 +1,4 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RpgItemPanel } from './RpgItemPanel';
 import type { RpgItemObjectivePreview, RpgItemUiAction, RpgMerchantEntryPreview } from './rpgItemUiState';
@@ -40,25 +39,25 @@ describe('RpgItemPanel', () => {
     expect(screen.getByText('Select an inventory item to reveal deterministic actions.')).toBeInTheDocument();
   });
 
-  it('applies selected item actions through callbacks', async () => {
+  it('applies selected item actions through callbacks', () => {
     const onApplyAction = vi.fn();
     render(<RpgItemPanel actions={[action]} onApplyAction={onApplyAction} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Use' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
     expect(onApplyAction).toHaveBeenCalledWith(action);
   });
 
-  it('falls back to command selection when no action callback is present', async () => {
+  it('falls back to command selection when no action callback is present', () => {
     const onSelectCommand = vi.fn();
     render(<RpgItemPanel actions={[action]} onSelectCommand={onSelectCommand} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Use' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
 
     expect(onSelectCommand).toHaveBeenCalledWith('Use Field Kit');
   });
 
-  it('renders status cards, objectives, and merchant entries', async () => {
+  it('renders status cards, objectives, and merchant entries', () => {
     const onApplyObjective = vi.fn();
     const onApplyMerchantEntry = vi.fn();
     render(
@@ -76,8 +75,8 @@ describe('RpgItemPanel', () => {
     expect(screen.getByText('Suggested next item steps')).toBeInTheDocument();
     expect(screen.getByText('Merchant service')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Craft torch' }));
-    await userEvent.click(screen.getByRole('button', { name: 'buy Torch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Craft torch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'buy Torch' }));
 
     expect(onApplyObjective).toHaveBeenCalledWith(objective);
     expect(onApplyMerchantEntry).toHaveBeenCalledWith(merchantEntry);
