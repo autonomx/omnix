@@ -14,7 +14,7 @@ from app.rpg.session.inventory_items import display_item_name, normalize_invento
 
 RECIPE_HINTS: dict[str, tuple[str, ...]] = {
     "torch": ("torch", "lamp", "light", "campfire"),
-    "crude_blade": ("crude_blade", "blade", "blueprint", "edge", "forge", "metalwork", "recipe_clue"),
+    "crude_blade": ("crude_blade", "blade", "blueprint", "forge", "metalwork", "recipe_clue"),
 }
 
 
