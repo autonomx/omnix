@@ -27,6 +27,12 @@ def extract_item_autoplay_state(value: Any) -> dict[str, Any]:
     direct_state = _safe_dict(payload.get("state"))
     if direct_state:
         return direct_state
+    simulation_state = _safe_dict(payload.get("simulation_state"))
+    if simulation_state:
+        return simulation_state
+    final_state = _safe_dict(payload.get("final_state"))
+    if final_state:
+        return final_state
     game = _safe_dict(payload.get("game"))
     if game:
         return game
