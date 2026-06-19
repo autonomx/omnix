@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from app.rpg.autoplay_item_report_hook import (
+    ITEM_AUTOPLAY_COVERAGE_HTML_NAME,
+    ITEM_AUTOPLAY_COVERAGE_JSON_NAME,
     ITEM_AUTOPLAY_ENDURANCE_JSON_NAME,
     ITEM_AUTOPLAY_MANIFEST_JSON_NAME,
     ITEM_AUTOPLAY_REPORT_JSON_NAME,
@@ -67,16 +69,38 @@ def test_run_autoplay_item_report_hook_writes_files_and_zip_members(tmp_path: Pa
     result = run_autoplay_item_report_hook(output_dir, zip_paths=[zip_path], total_turns=100)
 
     assert result["ok"] is True
+    assert result["coverage_state_found"] is True
     assert (output_dir / ITEM_AUTOPLAY_REPORT_JSON_NAME).exists()
     assert (output_dir / ITEM_AUTOPLAY_REPORT_ROWS_JSON_NAME).exists()
     assert (output_dir / ITEM_AUTOPLAY_ENDURANCE_JSON_NAME).exists()
     assert (output_dir / ITEM_AUTOPLAY_MANIFEST_JSON_NAME).exists()
+    assert (output_dir / ITEM_AUTOPLAY_COVERAGE_JSON_NAME).exists()
+    assert (output_dir / ITEM_AUTOPLAY_COVERAGE_HTML_NAME).exists()
+    coverage = json.loads((output_dir / ITEM_AUTOPLAY_COVERAGE_JSON_NAME).read_text(encoding="utf-8"))
+    assert coverage["state_found"] is True
+    assert coverage["latest_report"]["ok"] is True
+    assert coverage["endurance_progress"]["covered_targets"] == ["merchant", "pickup", "use_effect"]
     with zipfile.ZipFile(zip_path, "r") as archive:
         names = set(archive.namelist())
     assert f"item/{ITEM_AUTOPLAY_REPORT_JSON_NAME}" in names
     assert f"item/{ITEM_AUTOPLAY_REPORT_ROWS_JSON_NAME}" in names
     assert f"item/{ITEM_AUTOPLAY_ENDURANCE_JSON_NAME}" in names
+    assert f"item/{ITEM_AUTOPLAY_COVERAGE_JSON_NAME}" in names
+    assert f"item/{ITEM_AUTOPLAY_COVERAGE_HTML_NAME}" in names
     assert f"item/{ITEM_AUTOPLAY_MANIFEST_JSON_NAME}" in names
+
+
+def test_run_autoplay_item_report_hook_ignores_stale_generated_coverage(tmp_path: Path) -> None:
+    output_dir = tmp_path / "run"
+    _write_json(output_dir / ITEM_AUTOPLAY_COVERAGE_JSON_NAME, {"ok": False, "state_found": False})
+    _write_json(output_dir / "autoplay-summary.json", {"summary": {"simulation_state": _state()}})
+
+    result = run_autoplay_item_report_hook(output_dir, total_turns=100)
+
+    assert result["ok"] is True
+    coverage = json.loads((output_dir / ITEM_AUTOPLAY_COVERAGE_JSON_NAME).read_text(encoding="utf-8"))
+    assert coverage["state_found"] is True
+    assert coverage["latest_report"]["ok"] is True
 
 
 def test_run_autoplay_item_report_hook_reports_missing_state(tmp_path: Path) -> None:
@@ -103,4 +127,6 @@ def test_size_guard_runs_item_report_hook_before_capping(tmp_path: Path) -> None
     assert result["item_autoplay_report"]["ok"] is True
     assert (output_dir / "autoplay-report-size-guard-summary.json").exists()
     with zipfile.ZipFile(zip_path, "r") as archive:
-        assert f"item/{ITEM_AUTOPLAY_REPORT_JSON_NAME}" in archive.namelist()
+        names = set(archive.namelist())
+    assert f"item/{ITEM_AUTOPLAY_REPORT_JSON_NAME}" in names
+    assert f"item/{ITEM_AUTOPLAY_COVERAGE_JSON_NAME}" in names
