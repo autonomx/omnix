@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Iterable, List, Optional
 
 from app.rpg.autoplay_report_size_guard import cap_oversized_autoplay_reports
 
 _INSTALLED = False
+_EXIT_ARTIFACTS_RAN = False
 _ORIGINAL_EXIT = os._exit
 
 
@@ -34,6 +36,45 @@ def run_report_size_guard_from_argv(argv: Iterable[str]) -> dict:
     return cap_oversized_autoplay_reports(output_dir, zip_paths=[zip_path] if zip_path else [])
 
 
+def run_forced_exit_report_artifact_hooks(argv: Iterable[str]) -> dict:
+    """Materialize report artifacts before a forced ``os._exit`` skips normal hooks."""
+
+    global _EXIT_ARTIFACTS_RAN
+    if _EXIT_ARTIFACTS_RAN:
+        return {"ok": True, "skipped": True, "reason": "already_ran", "source": "force_exit_report_artifact_hooks"}
+    _EXIT_ARTIFACTS_RAN = True
+    args = list(argv)
+    output_dir = _output_dir_from_argv(args)
+    if output_dir is None:
+        return {"ok": False, "reason": "output_dir_not_found", "source": "force_exit_report_artifact_hooks"}
+
+    results: dict[str, object] = {"ok": True, "results_dir": str(output_dir), "source": "force_exit_report_artifact_hooks"}
+    try:
+        from tests.rpg.autoplay.survival_report_writer_hook import run_autoplay_survival_report_writer_hook
+
+        results["survival_writer"] = run_autoplay_survival_report_writer_hook(
+            script_path=Path(sys.argv[0]).resolve() if sys.argv else Path("src/tests/rpg/autoplay_llm_campaign.py"),
+            argv=args,
+            exit_code=0,
+            results_dir=output_dir,
+        )
+    except Exception as exc:  # pragma: no cover - defensive forced-exit path
+        results["survival_writer"] = {"ok": False, "error": repr(exc), "source": "force_exit_report_artifact_hooks"}
+
+    try:
+        from app.rpg.autoplay_item_report_hook import run_autoplay_item_report_hook
+
+        zip_path = _latest_zip(output_dir) if output_dir.exists() else None
+        results["item_report_writer"] = run_autoplay_item_report_hook(
+            output_dir,
+            zip_paths=[zip_path] if zip_path else [],
+            total_turns=100,
+        )
+    except Exception as exc:  # pragma: no cover - defensive forced-exit path
+        results["item_report_writer"] = {"ok": False, "error": repr(exc), "source": "force_exit_report_artifact_hooks"}
+    return results
+
+
 def install_force_exit_report_size_guard(argv: Iterable[str]) -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -42,6 +83,7 @@ def install_force_exit_report_size_guard(argv: Iterable[str]) -> None:
 
     def guarded_exit(code: int = 0) -> None:
         try:
+            run_forced_exit_report_artifact_hooks(captured_argv)
             run_report_size_guard_from_argv(captured_argv)
         finally:
             _ORIGINAL_EXIT(code)
