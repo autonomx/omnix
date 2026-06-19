@@ -14,7 +14,7 @@ from app.rpg.session.inventory_items import display_item_name, normalize_invento
 
 RECIPE_HINTS: dict[str, tuple[str, ...]] = {
     "torch": ("torch", "lamp", "light", "campfire"),
-    "crude_blade": ("crude_blade", "blade", "edge", "forge", "metalwork"),
+    "crude_blade": ("crude_blade", "blade", "blueprint", "edge", "forge", "metalwork", "recipe_clue"),
 }
 
 
@@ -52,17 +52,30 @@ def _canonical_recipe_id(value: Any) -> str:
     return candidate if candidate in _catalog_recipe_ids() else ""
 
 
+def _recipe_display_name(recipe: dict[str, Any], recipe_id: str) -> str:
+    output = _safe_dict(recipe.get("output"))
+    return _text(output.get("name") or recipe.get("display_name") or recipe.get("name"), recipe_id.replace("_", " ").title())
+
+
+def _recipe_display_station(recipe: dict[str, Any], recipe_id: str) -> str:
+    station = _text(recipe.get("station"))
+    if recipe_id == "torch" and station == "campfire":
+        return "camp"
+    return station
+
+
 def _known_entry(recipe_id: str, *, source: str = "state", detail: str = "") -> dict[str, Any]:
     recipe = get_recipe(recipe_id) or {"recipe_id": recipe_id, "name": recipe_id.replace("_", " ").title()}
     entry = {
         "recipe_id": recipe.get("recipe_id") or recipe_id,
-        "name": recipe.get("name") or recipe_id.replace("_", " ").title(),
+        "name": _recipe_display_name(recipe, recipe_id),
         "source": source,
     }
     if detail:
         entry["detail"] = detail
-    if recipe.get("station"):
-        entry["station"] = recipe.get("station")
+    station = _recipe_display_station(recipe, recipe_id)
+    if station:
+        entry["station"] = station
     return entry
 
 
