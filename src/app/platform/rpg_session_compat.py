@@ -148,13 +148,23 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         return delete_rpg_session(session_id)
 
     if action == "loadout_action":
-        from app.rpg.session.loadout import RpgLoadoutActionRequest, apply_loadout_action
+        from app.rpg.session.loadout import RpgLoadoutActionRequest
+        from app.rpg.session.loadout_with_hooks import apply_loadout_action_with_item_hooks
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
             return {"ok": False, "error": "missing_session_id"}
         request = RpgLoadoutActionRequest.model_validate(payload.get("loadout") or payload)
-        return apply_loadout_action(session_id, request)
+        return apply_loadout_action_with_item_hooks(
+            session_id,
+            request,
+            diagnostics_interval=_safe_int(payload.get("diagnostics_interval"), default=10),
+            maintenance_interval=_safe_int(payload.get("maintenance_interval"), default=25),
+            report_interval=_safe_int(payload.get("report_interval"), default=20),
+            objective_limit=_safe_int(payload.get("objective_limit"), default=5),
+            record_trace=_safe_bool(payload.get("record_trace"), default=True),
+            record_hook_trace=_safe_bool(payload.get("record_hook_trace"), default=True),
+        )
 
     if action == "item_action":
         from app.rpg.session.item_session_actions import apply_item_session_action
