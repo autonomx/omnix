@@ -8,6 +8,10 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _safe_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
 def _safe_str(value: Any) -> str:
     if value is None:
         return ""
@@ -73,6 +77,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     - {"action": "item_command", "session_id": "...", "command": "item report"}
     - {"action": "item_diagnostics", "session_id": "...", "record": true}
     - {"action": "item_maintenance", "session_id": "...", "dry_run": true}
+    - {"action": "item_objectives", "session_id": "..."}
+    - {"action": "item_scenario", "session_id": "...", "run": true}
     """
     payload = _safe_dict(data)
     action = _safe_str(payload.get("action")).strip()
@@ -248,6 +254,76 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             "maintenance": maintenance,
         }
 
+    if action == "item_objectives":
+        from app.rpg.session.item_objectives import build_item_objectives
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session, state = _load_mutable_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        station = _safe_str(payload.get("station")).strip() or None
+        genre = _safe_str(payload.get("genre")).strip() or "classic_fantasy"
+        limit = _safe_int(payload.get("limit") or payload.get("objective_limit"), default=6)
+        objectives = build_item_objectives(state, station=station, genre=genre, limit=limit)
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "status": "ready",
+            "game": state,
+            "objectives": objectives,
+        }
+
+    if action == "item_scenario":
+        from app.rpg.session.item_scenarios import build_item_scenario_plan, run_item_scenario
+        from app.rpg.session.service import save_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session, state = _load_mutable_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        station = _safe_str(payload.get("station")).strip() or None
+        genre = _safe_str(payload.get("genre")).strip() or "classic_fantasy"
+        limit = _safe_int(payload.get("limit") or payload.get("scenario_limit"), default=8)
+        include_status_steps = _safe_bool(payload.get("include_status_steps"), default=True)
+        if _safe_bool(payload.get("run"), default=False):
+            steps = _safe_list(payload.get("steps")) or None
+            source = _safe_str(payload.get("source")).strip() or "item_scenario_compat"
+            scenario = run_item_scenario(
+                state,
+                steps=steps,
+                station=station,
+                genre=genre,
+                limit=limit,
+                source=source,
+            )
+            saved = save_session(session, compact=False)
+            return {
+                "ok": scenario.get("ok") is True,
+                "session_id": session_id,
+                "status": "ready",
+                "session": saved,
+                "game": saved.get("state", {}),
+                "scenario": scenario,
+            }
+        scenario = build_item_scenario_plan(
+            state,
+            station=station,
+            genre=genre,
+            limit=limit,
+            include_status_steps=include_status_steps,
+        )
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "status": "ready",
+            "game": state,
+            "scenario": scenario,
+        }
+
     session_id = _safe_str(payload.get("session_id")).strip()
     if not session_id:
         return {"ok": False, "error": "missing_session_id"}
@@ -257,8 +333,4 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     session = load_runtime_session(session_id)
     if not session:
         return {"ok": False, "error": "session_not_found", "session_id": session_id}
-
-    game = _safe_dict(build_frontend_bootstrap_payload(session))
-    if game.get("session_id") == "session:unknown":
-        game["session_id"] = session_id
-    return {"ok": True, "game": game}
+    return build_frontend_bootstrap_payload(session)
