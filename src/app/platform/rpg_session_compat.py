@@ -16,6 +16,34 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
+def _safe_bool(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _safe_int(value: Any, *, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _load_mutable_session(session_id: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    from app.rpg.session.service import load_session
+
+    session = load_session(session_id)
+    if not session:
+        return None, {}
+    state = _safe_dict(session.get("state"))
+    session["state"] = state
+    return session, state
+
+
 def list_rpg_sessions_payload() -> dict[str, Any]:
     """Return the legacy RPG session list envelope plus launch presets."""
     from app.rpg.session.new_game import list_rpg_presets
@@ -43,6 +71,8 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     - {"action": "delete", "session_id": "..."}
     - {"action": "loadout_action", "session_id": "...", "loadout": {...}}
     - {"action": "item_command", "session_id": "...", "command": "item report"}
+    - {"action": "item_diagnostics", "session_id": "...", "record": true}
+    - {"action": "item_maintenance", "session_id": "...", "dry_run": true}
     """
     payload = _safe_dict(data)
     action = _safe_str(payload.get("action")).strip()
@@ -97,17 +127,19 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
 
     if action == "item_command":
         from app.rpg.session.item_command_adapter import apply_item_command
-        from app.rpg.session.service import load_session, save_session
+        from app.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
         if not session_id:
             return {"ok": False, "error": "missing_session_id"}
-        session = load_session(session_id)
+        session, state = _load_mutable_session(session_id)
         if not session:
             return {"ok": False, "error": "session_not_found", "session_id": session_id}
-        state = _safe_dict(session.get("state"))
-        session["state"] = state
-        command = payload.get("command") if "command" in payload else payload.get("item_command") or payload.get("request")
+        command = (
+            payload.get("command")
+            if "command" in payload
+            else payload.get("item_command") or payload.get("request")
+        )
         result = apply_item_command(state, command)
         if result.get("ok") is not True:
             return {"session_id": session_id, **result}
@@ -119,6 +151,101 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             "session": saved,
             "game": saved.get("state", {}),
             **result,
+        }
+
+    if action == "item_diagnostics":
+        from app.rpg.session.item_diagnostics import (
+            build_item_diagnostics,
+            record_item_diagnostics,
+        )
+        from app.rpg.session.service import save_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session, state = _load_mutable_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        station = _safe_str(payload.get("station")).strip() or None
+        genre = _safe_str(payload.get("genre")).strip() or "classic_fantasy"
+        scenario_limit = _safe_int(payload.get("scenario_limit"), default=8)
+        objective_limit = _safe_int(payload.get("objective_limit"), default=8)
+        if _safe_bool(payload.get("record") or payload.get("record_trace")):
+            diagnostics = record_item_diagnostics(
+                state,
+                station=station,
+                genre=genre,
+                scenario_limit=scenario_limit,
+                objective_limit=objective_limit,
+            )
+            saved = save_session(session, compact=False)
+            return {
+                "ok": True,
+                "session_id": session_id,
+                "status": "ready",
+                "session": saved,
+                "game": saved.get("state", {}),
+                "diagnostics": diagnostics,
+            }
+        diagnostics = build_item_diagnostics(
+            state,
+            station=station,
+            genre=genre,
+            scenario_limit=scenario_limit,
+            objective_limit=objective_limit,
+        )
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "status": "ready",
+            "game": state,
+            "diagnostics": diagnostics,
+        }
+
+    if action == "item_maintenance":
+        from app.rpg.session.item_state_maintenance import (
+            build_item_state_maintenance_plan,
+            run_item_state_maintenance,
+        )
+        from app.rpg.session.service import save_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session, state = _load_mutable_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        bucket_limit = _safe_int(payload.get("bucket_limit"), default=50)
+        compaction_threshold = _safe_int(payload.get("compaction_threshold"), default=bucket_limit)
+        record_report = _safe_bool(payload.get("record_report"), default=False)
+        if _safe_bool(payload.get("dry_run"), default=False):
+            maintenance = build_item_state_maintenance_plan(
+                state,
+                bucket_limit=bucket_limit,
+                compaction_threshold=compaction_threshold,
+                include_report=record_report,
+            )
+            return {
+                "ok": True,
+                "session_id": session_id,
+                "status": "ready",
+                "game": state,
+                "maintenance": maintenance,
+            }
+        maintenance = run_item_state_maintenance(
+            state,
+            bucket_limit=bucket_limit,
+            compaction_threshold=compaction_threshold,
+            record_report=record_report,
+        )
+        saved = save_session(session, compact=False)
+        return {
+            "ok": maintenance.get("ok") is True,
+            "session_id": session_id,
+            "status": "ready",
+            "session": saved,
+            "game": saved.get("state", {}),
+            "maintenance": maintenance,
         }
 
     session_id = _safe_str(payload.get("session_id")).strip()
