@@ -22,8 +22,8 @@ function renderLoadoutTabs(props: LoadoutTabsProps) {
   );
 }
 
-function mockLiveItemApis() {
-  const continueRpgSession = vi.spyOn(omnixApiClient, 'continueRpgSession').mockResolvedValue({ ok: true } as never);
+function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }) {
+  const continueRpgSession = vi.spyOn(omnixApiClient, 'continueRpgSession').mockResolvedValue(sessionPayload as never);
   const applyRpgLoadoutAction = vi.spyOn(omnixApiClient, 'applyRpgLoadoutAction').mockResolvedValue({ ok: true } as never);
   const post = vi.spyOn(omnixApiClient, 'post').mockImplementation(async (_path: `/api/${string}`, body: unknown) => {
     const payload = body as Record<string, unknown>;
@@ -62,6 +62,58 @@ function mockLiveItemApis() {
     return { ok: true } as never;
   });
   return { applyRpgLoadoutAction, continueRpgSession, post };
+}
+
+function liveAbilitySession() {
+  return {
+    ok: true,
+    session: {
+      state: {
+        player: { level: 2 },
+        skill_progression: {
+          swordsmanship: { rank: 2, xp: 35, last_source: 'training' },
+        },
+        ability_tree: {
+          tree_id: 'warden-tree',
+          class_name: 'Warden',
+          categories: [
+            { category_id: 'traits', name: 'Traits', capability: 'resolve', dimensions: ['relationships'], abilities: ['steady_hand'] },
+          ],
+          abilities: [
+            {
+              ability_id: 'steady_hand',
+              name: 'Steady Hand',
+              kind: 'narrative_trait',
+              purpose: 'support',
+              dimensions: ['relationships'],
+              influence_tags: ['calm'],
+              icon: '◇',
+              description: 'Keeps the party steady under pressure.',
+            },
+          ],
+        },
+        ability_state: {
+          unlocked: ['steady_hand'],
+          ranks: { steady_hand: 1 },
+          active_effects: [
+            { name: 'Calm Focus', purpose: 'steady aim', dimensions: ['resources'], remaining_turns: 2 },
+          ],
+        },
+        mechanics: {
+          ability_coverage_latest: {
+            ok: false,
+            coverage_score: 0.25,
+            total_observations: 3,
+            covered_dimensions: ['relationships'],
+            missing_dimensions: ['resources'],
+            dimension_counts: { relationships: 3 },
+            source_counts: { trait: 3 },
+            warnings: ['resources missing'],
+          },
+        },
+      },
+    },
+  };
 }
 
 afterEach(() => {
@@ -105,6 +157,15 @@ describe('RpgLoadoutTabs', () => {
     fireEvent.click(screen.getByRole('button', { name: /Frost Arrow/ }));
 
     expect(onSelectCommand).toHaveBeenLastCalledWith('Use Frost Arrow from hotbar slot 2 on the best available target.');
+  });
+
+  it('wires the empty inventory slot to a pickup/search command', () => {
+    const onSelectCommand = vi.fn();
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search for inventory supplies' }));
+
+    expect(onSelectCommand).toHaveBeenLastCalledWith('Search the area for useful supplies I can pick up and add to my inventory.');
   });
 
   it('shows item objectives, status cards, and merchant entries for a live session', async () => {
@@ -152,6 +213,38 @@ describe('RpgLoadoutTabs', () => {
         recipe_id: 'torch',
         station: 'campfire',
       });
+    });
+  });
+
+  it('wires skills, traits, effects, and coverage panels to commands or live refresh', async () => {
+    const onSelectCommand = vi.fn();
+    const { continueRpgSession } = mockLiveItemApis(liveAbilitySession());
+
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand, selectedSessionId: 'session-live' });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Skills' }));
+    expect(await screen.findByText('Swordsmanship')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice Swordsmanship' }));
+    expect(onSelectCommand).toHaveBeenLastCalledWith('Practice Swordsmanship with a careful training drill and record any skill progress.');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Traits' }));
+    expect(await screen.findByText('Steady Hand')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Use trait' }));
+    expect(onSelectCommand).toHaveBeenLastCalledWith('Lean on the Steady Hand trait to influence my next action.');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Effects' }));
+    expect(await screen.findByText('Calm Focus')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Use effect' }));
+    expect(onSelectCommand).toHaveBeenLastCalledWith('Act while taking advantage of the active effect Calm Focus.');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Coverage' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Practice missing dimension' }));
+    expect(onSelectCommand).toHaveBeenLastCalledWith('Practice or use an ability that covers the Resources dimension.');
+
+    const previousRefreshCalls = continueRpgSession.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh coverage' }));
+    await waitFor(() => {
+      expect(continueRpgSession.mock.calls.length).toBeGreaterThan(previousRefreshCalls);
     });
   });
 });
