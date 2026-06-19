@@ -9,9 +9,9 @@ import {
   buildMerchantEntryPreviews,
   buildSelectedItemActions,
   type RpgItemObjectivePreview,
+  type RpgItemStatusCard,
   type RpgItemUiAction,
   type RpgMerchantEntryPreview,
-  type RpgItemStatusCard,
 } from './rpgItemUiState';
 import type { RpgHotbarAbilityPreview, RpgInventoryItemPreview } from './rpgUiState';
 import './RpgLoadoutTabs.css';
@@ -110,6 +110,12 @@ interface AbilityOverview {
   source: 'live' | 'preview';
 }
 
+interface LoadoutDetailAction {
+  label: string;
+  command: string;
+  apply?: () => void;
+}
+
 const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
   { id: 'inventory', label: 'Inventory' },
   { id: 'abilities', label: 'Abilities' },
@@ -130,6 +136,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
   const [activeAbilityIndex, setActiveAbilityIndex] = useState(0);
   const [activeHotbarSlot, setActiveHotbarSlot] = useState('1');
   const wasApplyingAction = useRef(false);
+
   const sessionQuery = useQuery({
     enabled: Boolean(selectedSessionId),
     queryKey: ['feature', 'rpg', 'ability-tree-session', selectedSessionId],
@@ -154,11 +161,13 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     queryFn: () => runRpgItemMaintenance(selectedSessionId ?? '', { dryRun: true, bucketLimit: 20, recordReport: true }),
     staleTime: 0,
   });
+
   const abilityOverview = useMemo(() => buildAbilityOverview(sessionQuery.data, hotbarAbilities), [hotbarAbilities, sessionQuery.data]);
   const displayedHotbarAbilities = abilityOverview.hotbarAbilities.length ? abilityOverview.hotbarAbilities : hotbarAbilities;
   const activeItem = inventoryItems[Math.min(activeInventoryIndex, Math.max(inventoryItems.length - 1, 0))];
   const activeAbility = abilityOverview.allAbilities[Math.min(activeAbilityIndex, Math.max(abilityOverview.allAbilities.length - 1, 0))];
   const coveragePercent = Math.round(abilityOverview.coverage.score * 100);
+
   const itemObjectives = useMemo(
     () =>
       buildItemObjectivePreviews(
@@ -193,6 +202,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
       ),
     [itemDiagnosticsQuery.data, itemObjectivesQuery.data],
   );
+
   const refreshItemPanelQueries = async () => {
     await Promise.all([
       sessionQuery.refetch(),
@@ -217,6 +227,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     itemObjectivesQuery.isFetching ||
     itemDiagnosticsQuery.isFetching ||
     itemMaintenanceQuery.isFetching;
+  const panelDisabled = isApplyingLoadoutAction || sessionQuery.isFetching;
 
   useEffect(() => {
     if (wasApplyingAction.current && !isApplyingLoadoutAction && selectedSessionId) {
@@ -256,7 +267,6 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
 
       {activeTab === 'inventory' ? (
         <InventoryPanel
-          activeItem={activeItem}
           activeItemIndex={activeInventoryIndex}
           hotbarAbilities={displayedHotbarAbilities}
           inventoryItems={inventoryItems}
@@ -279,7 +289,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
           abilityOverview={abilityOverview}
           activeAbility={activeAbility}
           activeAbilityIndex={activeAbilityIndex}
-          isApplyingLoadoutAction={isApplyingLoadoutAction || sessionQuery.isFetching}
+          isApplyingLoadoutAction={panelDisabled}
           onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectAbility={setActiveAbilityIndex}
           onSelectCommand={onSelectCommand}
@@ -290,23 +300,22 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
         <HotbarPanel
           abilityOverview={abilityOverview}
           activeHotbarSlot={activeHotbarSlot}
-          isApplyingLoadoutAction={isApplyingLoadoutAction || sessionQuery.isFetching}
+          isApplyingLoadoutAction={panelDisabled}
           onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectCommand={onSelectCommand}
           onSelectSlot={setActiveHotbarSlot}
           selectedSessionId={selectedSessionId}
         />
       ) : null}
-      {activeTab === 'skills' ? <SkillsPanel skills={abilityOverview.skills} /> : null}
-      {activeTab === 'traits' ? <TraitsPanel traits={abilityOverview.traits} /> : null}
-      {activeTab === 'effects' ? <EffectsPanel effects={abilityOverview.activeEffects} /> : null}
-      {activeTab === 'coverage' ? <CoveragePanel coverage={abilityOverview.coverage} /> : null}
+      {activeTab === 'skills' ? <SkillsPanel disabled={panelDisabled} onSelectCommand={onSelectCommand} skills={abilityOverview.skills} /> : null}
+      {activeTab === 'traits' ? <TraitsPanel disabled={panelDisabled} onSelectCommand={onSelectCommand} traits={abilityOverview.traits} /> : null}
+      {activeTab === 'effects' ? <EffectsPanel disabled={panelDisabled} effects={abilityOverview.activeEffects} onSelectCommand={onSelectCommand} /> : null}
+      {activeTab === 'coverage' ? <CoveragePanel coverage={abilityOverview.coverage} disabled={panelDisabled} onRefreshCoverage={() => void sessionQuery.refetch()} onSelectCommand={onSelectCommand} /> : null}
     </section>
   );
 }
 
 interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems' | 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
-  activeItem: RpgInventoryItemPreview | undefined;
   activeItemIndex: number;
   hotbarAbilities: RpgHotbarAbilityPreview[];
   itemActions: RpgItemUiAction[];
@@ -344,7 +353,7 @@ function InventoryPanel({
             aria-label={item.label}
             aria-pressed={activeItemIndex === index}
             className="rpg-item-slot"
-            key={item.label}
+            key={`${item.label}-${index}`}
             onClick={() => onSelectItem(index)}
             type="button"
           >
@@ -352,7 +361,14 @@ function InventoryPanel({
             <small>{item.count}</small>
           </button>
         ))}
-        <button className="rpg-item-slot rpg-empty-slot" type="button" aria-label="Empty inventory slot">
+        <button
+          className="rpg-item-slot rpg-empty-slot"
+          disabled={isApplyingLoadoutAction}
+          onClick={() => onSelectCommand('Search the area for useful supplies I can pick up and add to my inventory.')}
+          title="Search for useful supplies through the next RPG turn."
+          type="button"
+          aria-label="Search for inventory supplies"
+        >
           +
         </button>
         <div className="rpg-hotbar" aria-label="Ability hotbar preview">
@@ -579,27 +595,34 @@ function HotbarPanel({ abilityOverview, activeHotbarSlot, isApplyingLoadoutActio
   );
 }
 
-function SkillsPanel({ skills }: { skills: SkillProgressionPreview[] }) {
+function SkillsPanel({ disabled, onSelectCommand, skills }: { disabled: boolean; onSelectCommand: (command: string) => void; skills: SkillProgressionPreview[] }) {
+  const rows = skills.length
+    ? skills
+    : [{ id: 'swordsmanship', label: 'Swordsmanship', rank: 1, xp: 0, source: 'starter practice' }];
   return (
     <div aria-labelledby="rpg-skills-loadout-tab" className="rpg-list-stack rpg-compact-panel" id="rpg-skills-loadout-panel" role="tabpanel">
-      {skills.length ? (
-        skills.map((skill) => (
-          <article className="rpg-list-row" key={skill.id}>
-            <span className="rpg-icon-tile" aria-hidden="true">◆</span>
-            <div>
-              <strong>{skill.label}</strong>
-              <span>Rank {skill.rank} • {skill.xp} XP{skill.source ? ` • ${skill.source}` : ''}</span>
+      {rows.map((skill) => (
+        <article className="rpg-list-row" key={skill.id}>
+          <span className="rpg-icon-tile" aria-hidden="true">◆</span>
+          <div>
+            <strong>{skills.length ? skill.label : 'No skill progress yet'}</strong>
+            <span>{skills.length ? `Rank ${skill.rank} • ${skill.xp} XP${skill.source ? ` • ${skill.source}` : ''}` : 'Using abilities grants deterministic skill XP by capability.'}</span>
+            <div className="rpg-loadout-actions" aria-label={`${skill.label} skill actions`}>
+              <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Check my ${skill.label} skill rank, XP, and recent training progress.`)} type="button">
+                Check skills
+              </button>
+              <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Practice ${skill.label} with a careful training drill and record any skill progress.`)} type="button">
+                Practice {skill.label}
+              </button>
             </div>
-          </article>
-        ))
-      ) : (
-        <article className="rpg-list-row"><span className="rpg-icon-tile">◆</span><div><strong>No skill progress yet</strong><span>Using abilities grants deterministic skill XP by capability.</span></div></article>
-      )}
+          </div>
+        </article>
+      ))}
     </div>
   );
 }
 
-function TraitsPanel({ traits }: { traits: AbilityPreview[] }) {
+function TraitsPanel({ disabled, onSelectCommand, traits }: { disabled: boolean; onSelectCommand: (command: string) => void; traits: AbilityPreview[] }) {
   return (
     <div aria-labelledby="rpg-traits-loadout-tab" className="rpg-list-stack rpg-compact-panel" id="rpg-traits-loadout-panel" role="tabpanel">
       {traits.length ? (
@@ -609,17 +632,36 @@ function TraitsPanel({ traits }: { traits: AbilityPreview[] }) {
             <div>
               <strong>{trait.name}</strong>
               <span>{trait.statusLabel} • {trait.influenceTags.length ? trait.influenceTags.map(titleCase).join(', ') : 'No influence tags indexed'}</span>
+              <div className="rpg-loadout-actions" aria-label={`${trait.name} trait actions`}>
+                <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Inspect the ${trait.name} trait and explain how it affects the current situation.`)} type="button">
+                  Inspect trait
+                </button>
+                <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Lean on the ${trait.name} trait to influence my next action.`)} type="button">
+                  Use trait
+                </button>
+              </div>
             </div>
           </article>
         ))
       ) : (
-        <article className="rpg-list-row"><span className="rpg-icon-tile">*</span><div><strong>No narrative traits indexed</strong><span>Traits appear here once the selected session has a saved ability tree.</span></div></article>
+        <article className="rpg-list-row">
+          <span className="rpg-icon-tile">*</span>
+          <div>
+            <strong>No narrative traits indexed</strong>
+            <span>Traits appear here once the selected session has a saved ability tree.</span>
+            <div className="rpg-loadout-actions" aria-label="Trait actions">
+              <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand('Inspect my current traits and personality hooks for this scene.')} type="button">
+                Inspect traits
+              </button>
+            </div>
+          </div>
+        </article>
       )}
     </div>
   );
 }
 
-function EffectsPanel({ effects }: { effects: EffectPreview[] }) {
+function EffectsPanel({ disabled, effects, onSelectCommand }: { disabled: boolean; effects: EffectPreview[]; onSelectCommand: (command: string) => void }) {
   return (
     <div aria-labelledby="rpg-effects-loadout-tab" className="rpg-list-stack rpg-compact-panel" id="rpg-effects-loadout-panel" role="tabpanel">
       {effects.length ? (
@@ -629,17 +671,36 @@ function EffectsPanel({ effects }: { effects: EffectPreview[] }) {
             <div>
               <strong>{effect.name}</strong>
               <span>{effect.detail}{effect.remaining !== undefined ? ` • ${effect.remaining} turn(s) remaining` : ''}</span>
+              <div className="rpg-loadout-actions" aria-label={`${effect.name} effect actions`}>
+                <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Inspect the active effect ${effect.name} and summarize its current modifier.`)} type="button">
+                  Inspect effect
+                </button>
+                <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Act while taking advantage of the active effect ${effect.name}.`)} type="button">
+                  Use effect
+                </button>
+              </div>
             </div>
           </article>
         ))
       ) : (
-        <article className="rpg-list-row"><span className="rpg-icon-tile">✦</span><div><strong>No active effects</strong><span>Temporary ability effects and runtime modifiers appear here after ability use.</span></div></article>
+        <article className="rpg-list-row">
+          <span className="rpg-icon-tile">✦</span>
+          <div>
+            <strong>No active effects</strong>
+            <span>Temporary ability effects and runtime modifiers appear here after ability use.</span>
+            <div className="rpg-loadout-actions" aria-label="Effect actions">
+              <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand('Inspect current active effects and temporary modifiers.')} type="button">
+                Inspect effects
+              </button>
+            </div>
+          </div>
+        </article>
       )}
     </div>
   );
 }
 
-function CoveragePanel({ coverage }: { coverage: AbilityCoveragePreview }) {
+function CoveragePanel({ coverage, disabled, onRefreshCoverage, onSelectCommand }: { coverage: AbilityCoveragePreview; disabled: boolean; onRefreshCoverage: () => void; onSelectCommand: (command: string) => void }) {
   const percent = Math.round(coverage.score * 100);
   const dimensionRows = REQUIRED_DIMENSIONS.map((dimension) => ({
     dimension,
@@ -647,6 +708,7 @@ function CoveragePanel({ coverage }: { coverage: AbilityCoveragePreview }) {
     covered: coverage.coveredDimensions.includes(dimension),
   }));
   const sourceRows = Object.entries(coverage.sourceCounts).sort(([, left], [, right]) => right - left).slice(0, 6);
+  const firstMissingDimension = coverage.missingDimensions[0] ?? REQUIRED_DIMENSIONS.find((dimension) => !coverage.coveredDimensions.includes(dimension)) ?? 'resources';
 
   return (
     <div aria-labelledby="rpg-coverage-loadout-tab" className="rpg-coverage-panel" id="rpg-coverage-loadout-panel" role="tabpanel">
@@ -659,6 +721,14 @@ function CoveragePanel({ coverage }: { coverage: AbilityCoveragePreview }) {
           <span style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
         </div>
         <small>{coverage.totalObservations} deterministic observation{coverage.totalObservations === 1 ? '' : 's'} indexed from ability traces, world effects, passives, traits, and timeline events.</small>
+        <div className="rpg-loadout-actions" aria-label="Coverage actions">
+          <button className="rpg-mini-button" disabled={disabled} onClick={onRefreshCoverage} type="button">
+            Refresh coverage
+          </button>
+          <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Practice or use an ability that covers the ${titleCase(firstMissingDimension)} dimension.`)} type="button">
+            Practice missing dimension
+          </button>
+        </div>
       </section>
 
       <div className="rpg-coverage-grid" aria-label="Ability dimension coverage">
@@ -704,12 +774,6 @@ function CoveragePanel({ coverage }: { coverage: AbilityCoveragePreview }) {
       </div>
     </div>
   );
-}
-
-interface LoadoutDetailAction {
-  label: string;
-  command: string;
-  apply?: () => void;
 }
 
 interface LoadoutDetailCardProps {
