@@ -6,9 +6,11 @@ autoplay without changing the public request schema.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterator
 
 from app.rpg.session.item_turn_hooks import build_item_turn_hook_plan, run_item_turn_hooks
 
@@ -26,6 +28,18 @@ ITEM_LOADOUT_ACTIONS = frozenset(
         "modify",
     }
 )
+_PRESERVE_ACTION_TRACE_ORDER: ContextVar[bool] = ContextVar("loadout_item_preserve_action_trace_order", default=True)
+
+
+@contextmanager
+def loadout_item_trace_order(*, preserve_action_traces: bool) -> Iterator[None]:
+    """Temporarily control whether action-owned item traces stay ahead of hook traces."""
+
+    token = _PRESERVE_ACTION_TRACE_ORDER.set(bool(preserve_action_traces))
+    try:
+        yield
+    finally:
+        _PRESERVE_ACTION_TRACE_ORDER.reset(token)
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -203,7 +217,7 @@ def run_loadout_item_hooks(
         objective_limit=objective_limit,
         record_trace=record_hook_trace,
     )
-    if had_item_trace_for_turn:
+    if had_item_trace_for_turn and _PRESERVE_ACTION_TRACE_ORDER.get():
         _restore_existing_item_trace_order(mechanics, original_item_traces)
     trace = {
         "event": "item_loadout_hooks_ran",
