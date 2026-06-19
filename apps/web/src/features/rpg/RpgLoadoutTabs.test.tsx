@@ -7,6 +7,10 @@ import { hotbarAbilities, inventoryItems } from './rpgUiState';
 
 type LoadoutTabsProps = Parameters<typeof RpgLoadoutTabs>[0];
 
+interface MockLiveItemApiOptions {
+  merchantEntries?: boolean;
+}
+
 function renderLoadoutTabs(props: LoadoutTabsProps) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -22,9 +26,10 @@ function renderLoadoutTabs(props: LoadoutTabsProps) {
   );
 }
 
-function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }) {
+function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }, options: MockLiveItemApiOptions = {}) {
   const continueRpgSession = vi.spyOn(omnixApiClient, 'continueRpgSession').mockResolvedValue(sessionPayload as never);
   const applyRpgLoadoutAction = vi.spyOn(omnixApiClient, 'applyRpgLoadoutAction').mockResolvedValue({ ok: true } as never);
+  const includeMerchantEntries = options.merchantEntries ?? true;
   const post = vi.spyOn(omnixApiClient, 'post').mockImplementation(async (_path: `/api/${string}`, body: unknown) => {
     const payload = body as Record<string, unknown>;
     if (payload.action === 'item_objectives') {
@@ -48,11 +53,13 @@ function mockLiveItemApis(sessionPayload: Record<string, unknown> = { ok: true }
         diagnostics: {
           summary: { issue_count: 0, warning_count: 1 },
           report: { summary: { coverage_score: 0.5, detail: '2 of 4 item pillars covered.' } },
-          merchant_menu: {
-            menu: [
-              { id: 'buy:torch', action: 'buy', item_name: 'Torch', description: 'A useful light source.', price: { copper: 4 } },
-            ],
-          },
+          ...(includeMerchantEntries
+            ? {
+                merchant_menu: {
+                  menu: [{ id: 'buy:torch', action: 'buy', item_name: 'Torch', description: 'A useful light source.', price: { copper: 4 } }],
+                },
+              }
+            : {}),
         },
       } as never;
     }
@@ -95,9 +102,7 @@ function liveAbilitySession() {
         ability_state: {
           unlocked: ['steady_hand'],
           ranks: { steady_hand: 1 },
-          active_effects: [
-            { name: 'Calm Focus', purpose: 'steady aim', dimensions: ['resources'], remaining_turns: 2 },
-          ],
+          active_effects: [{ name: 'Calm Focus', purpose: 'steady aim', dimensions: ['resources'], remaining_turns: 2 }],
         },
         mechanics: {
           ability_coverage_latest: {
@@ -199,6 +204,17 @@ describe('RpgLoadoutTabs', () => {
         command: 'sell Healing potion',
       });
     });
+  });
+
+  it('disables merchant-only item actions until merchant context exists', async () => {
+    mockLiveItemApis({ ok: true }, { merchantEntries: false });
+
+    renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
+    await screen.findByText('Item diagnostics');
+
+    expect(screen.getByRole('button', { name: 'Use' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Sell' })).toBeDisabled();
+    expect(screen.getByText('Start a merchant conversation or open a merchant service before selling.')).toBeInTheDocument();
   });
 
   it('routes structured item objectives through loadout actions', async () => {
