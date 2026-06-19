@@ -42,7 +42,8 @@
 .rpg-item-status-card p,
 .rpg-item-status-card small,
 .rpg-item-action-row small,
-.rpg-item-empty {
+.rpg-item-empty,
+.rpg-item-action-context-list span {
   color: var(--omnix-muted-text, #94a3b8);
 }
 
@@ -51,6 +52,70 @@
 .rpg-item-merchant {
   display: grid;
   gap: 0.55rem;
+}
+
+.rpg-item-action-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.rpg-item-action-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.45rem;
+  height: 2.45rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 0.8rem;
+  background: rgba(15, 23, 42, 0.72);
+  color: inherit;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.rpg-item-action-icon-button:hover:not(:disabled),
+.rpg-item-action-icon-button:focus-visible:not(:disabled) {
+  border-color: rgba(167, 139, 250, 0.72);
+  background: rgba(88, 28, 135, 0.38);
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.22);
+}
+
+.rpg-item-action-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.rpg-item-action-sell:disabled {
+  border-color: rgba(251, 191, 36, 0.16);
+}
+
+.rpg-item-action-context-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rpg-item-action-context-list li {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 0.35fr) 1fr;
+  gap: 0.6rem;
+  align-items: baseline;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(2, 6, 23, 0.22);
+  font-size: 0.82rem;
+}
+
+.rpg-item-action-context-disabled {
+  opacity: 0.72;
+}
+
+.rpg-item-action-context-disabled strong {
+  color: rgba(248, 250, 252, 0.72);
 }
 
 .rpg-item-objectives h4,
