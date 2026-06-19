@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from html import escape
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -24,6 +25,8 @@ ITEM_AUTOPLAY_REPORT_JSON_NAME = "item-autoplay-report.json"
 ITEM_AUTOPLAY_REPORT_ROWS_JSON_NAME = "item-autoplay-report-rows.json"
 ITEM_AUTOPLAY_ENDURANCE_JSON_NAME = "item-endurance-progress.json"
 ITEM_AUTOPLAY_MANIFEST_JSON_NAME = "item-autoplay-manifest.json"
+ITEM_AUTOPLAY_COVERAGE_JSON_NAME = "item-autoplay-coverage.json"
+ITEM_AUTOPLAY_COVERAGE_HTML_NAME = "item-autoplay-coverage.html"
 _MAX_JSON_FILES = 80
 _MAX_ZIP_JSON_MEMBERS = 80
 
@@ -34,6 +37,17 @@ def _safe_dict(value: Any) -> dict[str, Any]:
 
 def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
+
+
+def _safe_str(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
 
 
 def _load_json_bytes(data: bytes) -> Any:
@@ -153,7 +167,7 @@ def _load_candidate_states_from_zip(zip_path: Path) -> list[dict[str, Any]]:
                     continue
     except Exception:
         return []
-    states.sort(key=_score_candidate_state)
+    states.sort(key=_score_candidate_state, reverse=True)
     return states
 
 
@@ -163,14 +177,19 @@ def collect_item_autoplay_states(output_dir: str | Path, *, zip_paths: Iterable[
     output = Path(output_dir)
     states: list[dict[str, Any]] = []
     if output.exists():
+        excluded_names = {
+            ITEM_AUTOPLAY_REPORT_JSON_NAME,
+            ITEM_AUTOPLAY_REPORT_ROWS_JSON_NAME,
+            ITEM_AUTOPLAY_ENDURANCE_JSON_NAME,
+            ITEM_AUTOPLAY_MANIFEST_JSON_NAME,
+            ITEM_AUTOPLAY_COVERAGE_JSON_NAME,
+        }
         json_files = sorted(
-            [path for path in output.rglob("*.json") if path.is_file()],
+            [path for path in output.rglob("*.json") if path.is_file() and path.name not in excluded_names],
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )[:_MAX_JSON_FILES]
         for path in json_files:
-            if path.name in {ITEM_AUTOPLAY_REPORT_JSON_NAME, ITEM_AUTOPLAY_ENDURANCE_JSON_NAME, ITEM_AUTOPLAY_MANIFEST_JSON_NAME}:
-                continue
             states.extend(_load_candidate_states_from_file(path))
     for raw_path in zip_paths:
         path = Path(raw_path)
@@ -187,11 +206,30 @@ def _write_json(path: Path, payload: Any) -> dict[str, Any]:
     return {"ok": True, "path": str(path), "size_bytes": len(data.encode("utf-8"))}
 
 
+def _write_text(path: Path, content: str) -> dict[str, Any]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return {"ok": True, "path": str(path), "size_bytes": len(content.encode("utf-8"))}
+
+
 def _append_json_to_zip(zip_path: Path, *, prefix: str, name: str, payload: Any) -> dict[str, Any]:
     if not zip_path.exists():
         return {"ok": False, "reason": "zip_not_found", "zip_path": str(zip_path)}
     member = f"{prefix.strip().strip('/')}/{name}" if prefix else name
     data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+    try:
+        with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(member, data)
+    except Exception as exc:
+        return {"ok": False, "reason": "zip_append_failed", "error": repr(exc), "zip_path": str(zip_path)}
+    return {"ok": True, "zip_path": str(zip_path), "member": member, "size_bytes": len(data)}
+
+
+def _append_text_to_zip(zip_path: Path, *, prefix: str, name: str, content: str) -> dict[str, Any]:
+    if not zip_path.exists():
+        return {"ok": False, "reason": "zip_not_found", "zip_path": str(zip_path)}
+    member = f"{prefix.strip().strip('/')}/{name}" if prefix else name
+    data = content.encode("utf-8")
     try:
         with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(member, data)
@@ -211,6 +249,95 @@ def _item_trace_events(state: dict[str, Any]) -> list[dict[str, Any]]:
     return traces[-500:]
 
 
+def _observed_turn_count(state: dict[str, Any], total_turns: int) -> int:
+    for key in ("current_turn", "turn_count", "turn_index", "turn"):
+        value = state.get(key)
+        try:
+            if value is not None:
+                return max(int(value), int(total_turns))
+        except Exception:
+            continue
+    return int(total_turns)
+
+
+def _build_coverage_payload(
+    *,
+    state: dict[str, Any],
+    report: dict[str, Any],
+    rows: list[Any],
+    plan: dict[str, Any],
+    progress: dict[str, Any],
+    total_turns: int,
+) -> dict[str, Any]:
+    report_summary = _safe_dict(report.get("summary"))
+    score = _safe_float(report_summary.get("coverage_score"))
+    traces = _item_trace_events(state)
+    payload = {
+        "ok": bool(report.get("ok")),
+        "summary": {
+            "ok": True,
+            "artifact_count": 1,
+            "report_count": 1 if report.get("ok") else 0,
+            "max_coverage_score": score,
+            "min_coverage_score": score,
+            "coverage_gap_count": int(report_summary.get("coverage_gap_count") or 0),
+            "objective_count": int(report_summary.get("objective_count") or 0),
+            "mechanics_source": "engine_item_autoplay_adapter_v1",
+        },
+        "latest_report": report,
+        "latest_rows": rows,
+        "endurance_plan": plan,
+        "endurance_progress": progress,
+        "observed_turns": _observed_turn_count(state, total_turns),
+        "state_found": bool(state),
+        "trace_count": len(traces),
+        "source": "runtime_item_autoplay_coverage_artifacts",
+        "json_filename": ITEM_AUTOPLAY_COVERAGE_JSON_NAME,
+        "html_filename": ITEM_AUTOPLAY_COVERAGE_HTML_NAME,
+    }
+    return payload
+
+
+def render_item_autoplay_coverage_html(payload: dict[str, Any]) -> str:
+    summary = _safe_dict(payload.get("summary"))
+    latest = _safe_dict(payload.get("latest_report"))
+    latest_summary = _safe_dict(latest.get("summary"))
+    progress = _safe_dict(payload.get("endurance_progress"))
+    rows = _safe_list(payload.get("latest_rows"))
+    row_html = "".join(
+        "<tr>"
+        f"<th>{escape(_safe_str(_safe_dict(row).get('label')))}</th>"
+        f"<td>{escape(_safe_str(_safe_dict(row).get('value')))}</td>"
+        "</tr>"
+        for row in rows
+    ) or "<tr><td colspan='2'>No item coverage rows were generated.</td></tr>"
+    covered_html = "".join(f"<li>{escape(_safe_str(item))}</li>" for item in _safe_list(progress.get("covered_targets"))) or "<li>none</li>"
+    missing_html = "".join(f"<li>{escape(_safe_str(item))}</li>" for item in _safe_list(progress.get("missing_targets"))) or "<li>none</li>"
+    status = "ok" if progress.get("ok") else "gaps"
+    return "\n".join(
+        [
+            "<!doctype html>",
+            "<html><head><meta charset='utf-8'><title>Item Autoplay Coverage</title>",
+            "<style>body{font-family:system-ui,sans-serif;margin:24px;line-height:1.45} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.card{border:1px solid #ddd;border-radius:12px;padding:14px} table{border-collapse:collapse;width:100%;max-width:760px} th,td{border:1px solid #ddd;padding:8px;text-align:left}.status{font-weight:800;text-transform:uppercase}</style>",
+            "</head><body>",
+            "<h1>Item Autoplay Coverage</h1>",
+            "<div class='grid'>",
+            f"<div class='card'><strong>State found</strong><p>{str(bool(payload.get('state_found'))).lower()}</p></div>",
+            f"<div class='card'><strong>Reports</strong><p>{int(summary.get('report_count') or 0)} / {int(summary.get('artifact_count') or 0)}</p></div>",
+            f"<div class='card'><strong>Coverage</strong><p>{escape(_safe_str(latest_summary.get('coverage_score', summary.get('max_coverage_score', 0))))}</p></div>",
+            f"<div class='card'><strong>Endurance</strong><p class='status'>{escape(status)}</p><p>score: {escape(_safe_str(progress.get('coverage_score', 0)))}</p></div>",
+            "</div>",
+            "<h2>Latest item coverage rows</h2>",
+            f"<table><tbody>{row_html}</tbody></table>",
+            "<h2>Covered endurance targets</h2>",
+            f"<ul>{covered_html}</ul>",
+            "<h2>Missing endurance targets</h2>",
+            f"<ul>{missing_html}</ul>",
+            "</body></html>",
+        ]
+    )
+
+
 def build_item_autoplay_artifacts(state: dict[str, Any], *, total_turns: int = 100) -> dict[str, Any]:
     """Build the compact item artifacts for a final autoplay state."""
 
@@ -219,12 +346,22 @@ def build_item_autoplay_artifacts(state: dict[str, Any], *, total_turns: int = 1
     rows = _safe_list(attached.get("item_autoplay_report_rows"))
     plan = build_item_endurance_plan(total_turns=total_turns)
     progress = summarize_item_endurance_progress(plan, _item_trace_events(state))
+    coverage = _build_coverage_payload(
+        state=state,
+        report=report,
+        rows=rows,
+        plan=plan,
+        progress=progress,
+        total_turns=total_turns,
+    )
     return {
         "ok": bool(report.get("ok")),
         "report": report,
         "rows": rows,
         "endurance_plan": plan,
         "endurance_progress": progress,
+        "coverage": coverage,
+        "coverage_html": render_item_autoplay_coverage_html(coverage),
         "source": ITEM_AUTOPLAY_REPORT_HOOK_SOURCE,
     }
 
@@ -252,6 +389,8 @@ def run_autoplay_item_report_hook(
     report_write = _write_json(output / ITEM_AUTOPLAY_REPORT_JSON_NAME, artifacts["report"])
     rows_write = _write_json(output / ITEM_AUTOPLAY_REPORT_ROWS_JSON_NAME, artifacts["rows"])
     endurance_write = _write_json(output / ITEM_AUTOPLAY_ENDURANCE_JSON_NAME, artifacts["endurance_progress"])
+    coverage_write = _write_json(output / ITEM_AUTOPLAY_COVERAGE_JSON_NAME, artifacts["coverage"])
+    coverage_html_write = _write_text(output / ITEM_AUTOPLAY_COVERAGE_HTML_NAME, _safe_str(artifacts.get("coverage_html")))
     manifest = {
         "ok": True,
         "results_dir": str(output),
@@ -259,6 +398,8 @@ def run_autoplay_item_report_hook(
         "report": report_write,
         "rows": rows_write,
         "endurance": endurance_write,
+        "coverage": coverage_write,
+        "coverage_html": coverage_html_write,
         "source": ITEM_AUTOPLAY_REPORT_HOOK_SOURCE,
     }
     manifest_write = _write_json(output / ITEM_AUTOPLAY_MANIFEST_JSON_NAME, manifest)
@@ -267,16 +408,21 @@ def run_autoplay_item_report_hook(
         zip_results.append(_append_json_to_zip(zip_path, prefix=prefix, name=ITEM_AUTOPLAY_REPORT_JSON_NAME, payload=artifacts["report"]))
         zip_results.append(_append_json_to_zip(zip_path, prefix=prefix, name=ITEM_AUTOPLAY_REPORT_ROWS_JSON_NAME, payload=artifacts["rows"]))
         zip_results.append(_append_json_to_zip(zip_path, prefix=prefix, name=ITEM_AUTOPLAY_ENDURANCE_JSON_NAME, payload=artifacts["endurance_progress"]))
+        zip_results.append(_append_json_to_zip(zip_path, prefix=prefix, name=ITEM_AUTOPLAY_COVERAGE_JSON_NAME, payload=artifacts["coverage"]))
+        zip_results.append(_append_text_to_zip(zip_path, prefix=prefix, name=ITEM_AUTOPLAY_COVERAGE_HTML_NAME, content=_safe_str(artifacts.get("coverage_html"))))
         zip_results.append(_append_json_to_zip(zip_path, prefix=prefix, name=ITEM_AUTOPLAY_MANIFEST_JSON_NAME, payload=manifest))
     return {
         "ok": True,
         "results_dir": str(output),
         "state_candidates_observed": len(states),
         "coverage_score": _safe_dict(artifacts["report"].get("summary")).get("coverage_score"),
+        "coverage_state_found": bool(_safe_dict(artifacts.get("coverage")).get("state_found")),
         "endurance_ok": _safe_dict(artifacts["endurance_progress"]).get("ok"),
         "report_write": report_write,
         "rows_write": rows_write,
         "endurance_write": endurance_write,
+        "coverage_write": coverage_write,
+        "coverage_html_write": coverage_html_write,
         "manifest_write": manifest_write,
         "zip_results": zip_results,
         "source": ITEM_AUTOPLAY_REPORT_HOOK_SOURCE,
