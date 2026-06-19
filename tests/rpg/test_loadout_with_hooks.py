@@ -67,7 +67,7 @@ def test_loadout_wrapper_runs_item_hooks_after_successful_item_action(monkeypatc
     }
 
 
-def test_loadout_wrapper_skips_non_item_actions_without_second_save(monkeypatch) -> None:
+def test_loadout_wrapper_skips_successful_non_item_actions_without_second_save(monkeypatch) -> None:
     loadout_saves: list[dict[str, Any]] = []
     hook_saves: list[dict[str, Any]] = []
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
@@ -80,10 +80,13 @@ def test_loadout_wrapper_skips_non_item_actions_without_second_save(monkeypatch)
 
     result = loadout_with_hooks.apply_loadout_action_with_item_hooks(
         "rpg_test",
-        loadout.RpgLoadoutActionRequest(action="unlock_ability", ability_id="recon_volley"),
+        loadout.RpgLoadoutActionRequest(action="hotbar", hotbar_slot="2", target="the nearest foe"),
     )
 
-    assert result["ok"] is False
+    assert result["ok"] is True
+    assert result["item_hook_result"]["skipped"] is True
+    assert result["item_hook_result"]["action"] == "hotbar"
+    assert loadout_saves
     assert hook_saves == []
 
 
