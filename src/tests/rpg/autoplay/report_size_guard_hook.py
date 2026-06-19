@@ -1,6 +1,7 @@
 """Install a report-size guard that survives forced autoplay exits."""
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 from pathlib import Path
@@ -81,12 +82,24 @@ def install_force_exit_report_size_guard(argv: Iterable[str]) -> None:
         return
     captured_argv = list(argv)
 
+    def _run_exit_hooks() -> None:
+        try:
+            result = run_forced_exit_report_artifact_hooks(captured_argv)
+            print(f"[AUTOPLAY-FORCE-EXIT-REPORT] artifact_hooks={result}", file=sys.stderr)
+        except Exception as exc:  # pragma: no cover - exit guard must be defensive
+            print(f"[AUTOPLAY-FORCE-EXIT-REPORT] artifact_hooks_failed={exc!r}", file=sys.stderr)
+        try:
+            size_result = run_report_size_guard_from_argv(captured_argv)
+            print(f"[AUTOPLAY-FORCE-EXIT-REPORT] size_guard={size_result}", file=sys.stderr)
+        except Exception as exc:  # pragma: no cover - exit guard must be defensive
+            print(f"[AUTOPLAY-FORCE-EXIT-REPORT] size_guard_failed={exc!r}", file=sys.stderr)
+
     def guarded_exit(code: int = 0) -> None:
         try:
-            run_forced_exit_report_artifact_hooks(captured_argv)
-            run_report_size_guard_from_argv(captured_argv)
+            _run_exit_hooks()
         finally:
             _ORIGINAL_EXIT(code)
 
+    atexit.register(_run_exit_hooks)
     os._exit = guarded_exit  # type: ignore[assignment]
     _INSTALLED = True
