@@ -150,6 +150,7 @@ def build_item_scenario_plan(
         "mechanics_source": ITEM_SCENARIOS_SOURCE,
     }
     return {
+        "ok": True,
         "steps": deduped,
         "availability": availability,
         "objectives": objectives,
