@@ -92,6 +92,13 @@ def _action_kind(action: dict[str, Any] | None, result: dict[str, Any]) -> str:
     )
 
 
+def _compat_failure(result: dict[str, Any]) -> dict[str, Any]:
+    failure = deepcopy(_safe_dict(result))
+    if failure.get("error") == "unsupported_item_command":
+        failure.pop("mechanics_source", None)
+    return failure
+
+
 def run_item_session_action_hooks(
     state: dict[str, Any],
     *,
@@ -231,7 +238,7 @@ def apply_item_command_with_hooks(
 
     result = item_command_adapter.apply_item_command(state, command)
     if result.get("ok") is not True:
-        return result
+        return _compat_failure(result)
     action = _safe_dict(result.get("normalized_action"))
     hook_result = run_item_session_action_hooks(
         state,
