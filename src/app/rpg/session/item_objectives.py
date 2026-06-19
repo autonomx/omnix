@@ -125,7 +125,7 @@ def build_item_objectives(
             )
 
     coverage = _safe_dict(report.get("coverage"))
-    gaps = _safe_list(coverage.get("gaps") or report.get("gaps"))
+    gaps = _safe_list(coverage.get("gaps") or coverage.get("missing") or report.get("gaps"))
     if gaps:
         objectives.append(
             {
