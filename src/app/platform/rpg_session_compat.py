@@ -100,6 +100,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     - {"action": "loadout_action", "session_id": "...", "loadout": {...}}
     - {"action": "item_action", "session_id": "...", "item_action": {...}}
     - {"action": "item_command", "session_id": "...", "command": "item report"}
+    - {"action": "item_resolve", "session_id": "...", "input": {...}}
     - {"action": "item_diagnostics", "session_id": "...", "record": true}
     - {"action": "item_maintenance", "session_id": "...", "dry_run": true}
     - {"action": "item_objectives", "session_id": "..."}
@@ -232,6 +233,52 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         )
         if result.get("ok") is not True:
             return {"session_id": session_id, **result}
+        saved = save_session(session, compact=False)
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "status": "ready",
+            "session": saved,
+            "game": saved.get("state", {}),
+            **result,
+        }
+
+    if action == "item_resolve":
+        from app.rpg.session.item_action_resolution import apply_item_action_input
+        from app.rpg.session.service import save_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session, state = _load_mutable_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+        item_input = payload.get("input") if "input" in payload else payload.get("request")
+        if item_input is None:
+            item_input = payload.get("command") or payload.get("item_command") or payload
+        result = apply_item_action_input(
+            state,
+            item_input,
+            current_turn=_safe_int(payload.get("current_turn"), default=0) or None,
+            station=_safe_str(payload.get("station")).strip() or None,
+            genre=_safe_str(payload.get("genre")).strip() or "classic_fantasy",
+            diagnostics_interval=_safe_int(payload.get("diagnostics_interval"), default=10),
+            maintenance_interval=_safe_int(payload.get("maintenance_interval"), default=25),
+            report_interval=_safe_int(payload.get("report_interval"), default=20),
+            objective_limit=_safe_int(payload.get("objective_limit"), default=5),
+            record_trace=_safe_bool(payload.get("record_trace"), default=True),
+            record_hook_trace=_safe_bool(payload.get("record_hook_trace"), default=True),
+        )
+        if result.get("ok") is not True:
+            return {"session_id": session_id, **result}
+        if result.get("handled") is not True:
+            return {
+                "ok": True,
+                "session_id": session_id,
+                "status": "ready",
+                "game": state,
+                **result,
+            }
         saved = save_session(session, compact=False)
         return {
             "ok": True,
