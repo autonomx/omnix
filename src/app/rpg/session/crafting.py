@@ -128,6 +128,13 @@ def _requirement_label(requirement: dict[str, Any]) -> str:
     return _text(requirement.get("item_id") or requirement.get("id"), "item")
 
 
+def _consumed_requirement_label(requirement: dict[str, Any]) -> str:
+    kind = _norm(requirement.get("kind"))
+    if kind == "property":
+        return f"{_text(requirement.get('property'), 'property')} material"
+    return _requirement_label(requirement)
+
+
 def _find_consumptions(inventory: list[dict[str, Any]], requirements: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     remaining = {index: inventory_quantity(item) for index, item in enumerate(inventory)}
     consumptions: list[dict[str, Any]] = []
@@ -152,7 +159,7 @@ def _find_consumptions(inventory: list[dict[str, Any]], requirements: list[dict[
                     "item_id": item.get("item_id") or item.get("id"),
                     "material_id": item.get("material_id"),
                     "name": display_item_name(item),
-                    "requirement": _requirement_label(requirement),
+                    "requirement": _consumed_requirement_label(requirement),
                 }
             )
         if needed > 0:
