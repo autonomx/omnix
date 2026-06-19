@@ -60,6 +60,19 @@ def _prepend_trace(mechanics: dict[str, Any], key: str, trace: dict[str, Any], *
     mechanics[key] = [deepcopy(trace), *_safe_list(mechanics.get(key))][: max(1, int(limit or 1))]
 
 
+def _existing_hook_trace(mechanics: dict[str, Any], *, action: str, turn: int) -> dict[str, Any] | None:
+    for value in _safe_list(mechanics.get("item_loadout_hook_traces")):
+        trace = _safe_dict(value)
+        if (
+            trace.get("event") == "item_loadout_hooks_ran"
+            and trace.get("action") == action
+            and int(trace.get("turn") or -1) == turn
+            and trace.get("mechanics_source") == MECHANICS_SOURCE
+        ):
+            return deepcopy(trace)
+    return None
+
+
 def build_loadout_item_hook_plan(
     state: dict[str, Any],
     *,
@@ -139,6 +152,20 @@ def run_loadout_item_hooks(
             "mechanics_source": MECHANICS_SOURCE,
         }
 
+    mechanics = _mechanics(mutable_state)
+    existing_trace = _existing_hook_trace(mechanics, action=plan["action"], turn=plan["turn"])
+    if existing_trace is not None:
+        return {
+            "ok": True,
+            "skipped": True,
+            "turn": plan["turn"],
+            "action": plan["action"],
+            "reason": "already_ran",
+            "recorded": False,
+            "mechanics_trace": existing_trace,
+            "mechanics_source": MECHANICS_SOURCE,
+        }
+
     hook_result = run_item_turn_hooks(
         mutable_state,
         current_turn=plan["turn"],
@@ -160,7 +187,6 @@ def run_loadout_item_hooks(
         "timestamp": _utc_now(),
     }
     if record_trace:
-        mechanics = _mechanics(mutable_state)
         _prepend_trace(mechanics, "item_loadout_hook_traces", trace, limit=TRACE_LIMIT)
         _prepend_trace(mechanics, "item_traces", trace, limit=ITEM_TRACE_LIMIT)
 

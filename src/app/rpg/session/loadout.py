@@ -29,6 +29,7 @@ from app.rpg.session.inventory_items import (
 )
 from app.rpg.session.item_materials import salvage_item
 from app.rpg.session.item_modifications import apply_item_modification, replace_inventory_item
+from app.rpg.session.item_loadout_hooks import run_loadout_item_hooks
 from app.rpg.session.item_use import use_inventory_item
 from app.rpg.session.service import load_session, save_session
 from app.rpg.session.world_ability_integration import apply_world_scale_loadout_ability, ensure_world_scale_abilities
@@ -346,7 +347,18 @@ def _requested_mod_id(request: RpgLoadoutActionRequest) -> str | None:
     return request.mod_id or request.mod_name or request.recipe_id or request.recipe_name or request.target
 
 
-def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> dict[str, Any]:
+def apply_loadout_action(
+    session_id: str,
+    request: RpgLoadoutActionRequest,
+    *,
+    run_item_hooks: bool = True,
+    diagnostics_interval: int = 10,
+    maintenance_interval: int = 25,
+    report_interval: int = 20,
+    objective_limit: int = 5,
+    record_trace: bool = True,
+    record_hook_trace: bool = True,
+) -> dict[str, Any]:
     session = load_session(session_id)
     if not session:
         return {"ok": False, "error": "session_not_found", "session_id": session_id}
@@ -567,6 +579,32 @@ def apply_loadout_action(session_id: str, request: RpgLoadoutActionRequest) -> d
     manifest["current_turn"] = state.get("current_turn")
     updated["manifest"] = manifest
 
+    item_hook_result: dict[str, Any] | None = None
+    if run_item_hooks:
+        item_hook_result = run_loadout_item_hooks(
+            state,
+            action=action,
+            station=request.station,
+            genre=_session_genre(state, updated),
+            diagnostics_interval=diagnostics_interval,
+            maintenance_interval=maintenance_interval,
+            report_interval=report_interval,
+            objective_limit=objective_limit,
+            record_trace=record_trace,
+            record_hook_trace=record_hook_trace,
+        )
+
     write_ability_coverage_snapshot(state)
     saved = save_session(updated, compact=False)
-    return {"ok": True, "session_id": session_id, "status": "ready", "event": event, "session": saved, "game": saved.get("state", {}), **extra_response}
+    response = {
+        "ok": True,
+        "session_id": session_id,
+        "status": "ready",
+        "event": event,
+        "session": saved,
+        "game": saved.get("state", {}),
+        **extra_response,
+    }
+    if item_hook_result is not None:
+        response["item_hook_result"] = item_hook_result
+    return response

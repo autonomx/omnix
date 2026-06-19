@@ -35,14 +35,8 @@ def _session() -> dict[str, Any]:
 
 def test_loadout_wrapper_runs_item_hooks_after_successful_item_action(monkeypatch) -> None:
     loadout_saves: list[dict[str, Any]] = []
-    hook_saves: list[dict[str, Any]] = []
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
     monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: loadout_saves.append(session) or session)
-    monkeypatch.setattr(
-        loadout_with_hooks,
-        "save_session",
-        lambda session, *, compact=False: hook_saves.append(session) or session,
-    )
 
     result = loadout_with_hooks.apply_loadout_action_with_item_hooks(
         "rpg_test",
@@ -55,12 +49,13 @@ def test_loadout_wrapper_runs_item_hooks_after_successful_item_action(monkeypatc
     assert result["ok"] is True
     assert result["item_hook_result"]["skipped"] is False
     assert result["item_hook_result"]["action"] == "use"
-    assert loadout_saves
-    assert hook_saves
-    state = hook_saves[0]["state"]
+    assert len(loadout_saves) == 1
+    state = loadout_saves[0]["state"]
     assert state["player"]["resources"]["hp"] == {"current": 75, "max": 100}
     assert state["mechanics"]["item_loadout_hook_traces"][0]["event"] == "item_loadout_hooks_ran"
     assert state["mechanics"]["item_loadout_hook_traces"][0]["action"] == "use"
+    assert "maintenance" in result["item_hook_result"]["executed_actions"]
+    assert "report" in result["item_hook_result"]["executed_actions"]
     assert state["mechanics"]["item_traces"][0]["event"] in {
         "item_loadout_hooks_ran",
         "item_turn_hooks_ran",
@@ -69,14 +64,8 @@ def test_loadout_wrapper_runs_item_hooks_after_successful_item_action(monkeypatc
 
 def test_loadout_wrapper_skips_successful_non_item_actions_without_second_save(monkeypatch) -> None:
     loadout_saves: list[dict[str, Any]] = []
-    hook_saves: list[dict[str, Any]] = []
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
     monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: loadout_saves.append(session) or session)
-    monkeypatch.setattr(
-        loadout_with_hooks,
-        "save_session",
-        lambda session, *, compact=False: hook_saves.append(session) or session,
-    )
 
     result = loadout_with_hooks.apply_loadout_action_with_item_hooks(
         "rpg_test",
@@ -86,18 +75,13 @@ def test_loadout_wrapper_skips_successful_non_item_actions_without_second_save(m
     assert result["ok"] is True
     assert result["item_hook_result"]["skipped"] is True
     assert result["item_hook_result"]["action"] == "hotbar"
-    assert loadout_saves
-    assert hook_saves == []
+    assert len(loadout_saves) == 1
 
 
 def test_loadout_wrapper_does_not_run_hooks_after_failed_item_action(monkeypatch) -> None:
-    hook_saves: list[dict[str, Any]] = []
+    loadout_saves: list[dict[str, Any]] = []
     monkeypatch.setattr(loadout, "load_session", lambda session_id: _session())
-    monkeypatch.setattr(
-        loadout_with_hooks,
-        "save_session",
-        lambda session, *, compact=False: hook_saves.append(session) or session,
-    )
+    monkeypatch.setattr(loadout, "save_session", lambda session, *, compact=False: loadout_saves.append(session) or session)
 
     result = loadout_with_hooks.apply_loadout_action_with_item_hooks(
         "rpg_test",
@@ -105,4 +89,4 @@ def test_loadout_wrapper_does_not_run_hooks_after_failed_item_action(monkeypatch
     )
 
     assert result == {"ok": False, "error": "item_not_found", "session_id": "rpg_test", "item_name": "Missing Potion"}
-    assert hook_saves == []
+    assert loadout_saves == []

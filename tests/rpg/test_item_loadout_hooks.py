@@ -110,3 +110,14 @@ def test_run_loadout_item_hooks_can_silence_bridge_trace_but_keep_hook_result() 
     assert "item_loadout_hook_traces" not in state["mechanics"]
     assert state["mechanics"]["item_turn_hook_traces"][0]["event"] == "item_turn_hooks_ran"
     assert state["mechanics"]["item_traces"][0]["event"] == "item_turn_hooks_ran"
+
+
+def test_run_loadout_item_hooks_skips_duplicate_action_turn_trace() -> None:
+    state = _state()
+    first = run_loadout_item_hooks(state, action="use", current_turn=20)
+    second = run_loadout_item_hooks(state, action="use", current_turn=20)
+
+    assert first["skipped"] is False
+    assert second["skipped"] is True
+    assert second["reason"] == "already_ran"
+    assert len(state["mechanics"]["item_loadout_hook_traces"]) == 1

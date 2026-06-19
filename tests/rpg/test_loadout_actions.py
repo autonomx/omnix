@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.platform import rpg_session_compat
-from app.rpg.session import loadout
+from app.rpg.session import loadout, loadout_with_hooks
 
 
 def _session() -> dict[str, Any]:
@@ -60,6 +60,9 @@ def test_use_health_potion_consumes_item_and_restores_hp(monkeypatch) -> None:
     assert state["player"]["inventory"][0]["quantity"] == 1
     assert state["turn_count"] == 1
     assert state["timeline"][0]["kind"] == "item"
+    assert result["item_hook_result"]["skipped"] is False
+    assert result["item_hook_result"]["action"] == "use"
+    assert state["mechanics"]["item_loadout_hook_traces"][0]["action"] == "use"
 
 
 def test_equip_item_updates_equipment(monkeypatch) -> None:
@@ -97,7 +100,8 @@ def test_salvage_consumes_source_merges_materials_and_writes_trace(monkeypatch) 
     assert trace["event"] == "item_salvaged"
     assert trace["source_item_name"] == "Broken Sword"
     assert trace["outputs"][0]["material_id"] == "iron"
-    assert state["mechanics"]["item_traces"][0] == trace
+    assert trace in state["mechanics"]["item_traces"]
+    assert state["mechanics"]["item_loadout_hook_traces"][0]["action"] == "salvage"
 
 
 def test_modify_action_consumes_material_updates_item_and_writes_trace(monkeypatch) -> None:
@@ -130,15 +134,18 @@ def test_modify_action_consumes_material_updates_item_and_writes_trace(monkeypat
     assert trace["event"] == "item_modified"
     assert trace["mod_id"] == "edge_damage_minor"
     assert trace["consumed_materials"] == [{"material_id": "iron", "quantity": 1, "name": "Iron scrap"}]
-    assert state["mechanics"]["item_traces"][0] == trace
+    assert trace in state["mechanics"]["item_traces"]
+    assert state["mechanics"]["item_loadout_hook_traces"][0]["action"] == "modify"
 
 
 def test_modify_action_rejects_missing_materials(monkeypatch) -> None:
+    saved: list[dict[str, Any]] = []
     session = _session()
-    for item in session["state"]["player"]["inventory"]:
-        if item.get("material_id") == "iron":
-            item["quantity"] = 0
+    session["state"]["player"]["inventory"] = [
+        item for item in session["state"]["player"]["inventory"] if item.get("material_id") != "iron"
+    ]
     monkeypatch.setattr(loadout, "load_session", lambda session_id: session)
+    monkeypatch.setattr(loadout, "save_session", lambda updated, *, compact=False: saved.append(updated) or updated)
 
     result = loadout.apply_loadout_action(
         "rpg_test",
@@ -148,6 +155,7 @@ def test_modify_action_rejects_missing_materials(monkeypatch) -> None:
     assert result["ok"] is False
     assert result["error"] == "missing_modification_materials"
     assert result["missing"] == [{"material_id": "iron", "required": 1, "available": 0}]
+    assert saved == []
 
 
 def test_hotbar_action_spends_resource_writes_event_and_snapshots_coverage(monkeypatch) -> None:
@@ -162,6 +170,8 @@ def test_hotbar_action_spends_resource_writes_event_and_snapshots_coverage(monke
     assert state["player"]["resources"]["mana"] == {"current": 8, "max": 40}
     assert state["timeline"][0]["title"] == "Used Frost Arrow"
     assert state["runtime"]["effects"][0]["source"] == "Frost Arrow"
+    assert result["item_hook_result"]["skipped"] is True
+    assert "item_loadout_hook_traces" not in state["mechanics"]
     snapshot = state["mechanics"]["ability_coverage_snapshots"][0]
     assert snapshot["covered_dimensions"] == ["environment", "position"]
     assert snapshot["missing_dimensions"] == ["resources", "information", "relationships", "access", "narrative", "economy", "world"]
@@ -265,11 +275,16 @@ def test_loadout_action_normalizes_legacy_inventory_and_writes_trace(monkeypatch
     trace = state["mechanics"]["inventory_traces"][0]
     assert trace["event"] == "inventory_normalized"
     assert trace["legacy_count"] == 1
-    assert state["mechanics"]["item_traces"][0] == trace
+    assert trace in state["mechanics"]["item_traces"]
+    assert state["mechanics"]["item_loadout_hook_traces"][0]["action"] == "inspect"
 
 
 def test_session_compat_supports_loadout_action(monkeypatch) -> None:
-    monkeypatch.setattr(loadout, "apply_loadout_action", lambda session_id, request: {"ok": True, "session_id": session_id, "action": request.action})
+    monkeypatch.setattr(
+        loadout_with_hooks,
+        "apply_loadout_action",
+        lambda session_id, request, **options: {"ok": True, "session_id": session_id, "action": request.action},
+    )
 
     assert rpg_session_compat.get_rpg_session_payload(
         {"action": "loadout_action", "session_id": "rpg_test", "loadout": {"action": "inspect", "item_name": "Journal"}}

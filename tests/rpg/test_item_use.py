@@ -123,5 +123,6 @@ def test_loadout_use_writes_item_use_trace_and_event_effects(monkeypatch) -> Non
     assert trace["event"] == "item_used"
     assert trace["source_item_id"] == "field_medkit"
     assert trace["repairs"] == ["ignored_unsupported_item_effect_op:award_xp"]
-    assert state["mechanics"]["item_traces"][0] == trace
+    assert trace in state["mechanics"]["item_traces"]
+    assert state["mechanics"]["item_loadout_hook_traces"][0]["action"] == "use"
     assert result["mechanics_trace"] == trace
