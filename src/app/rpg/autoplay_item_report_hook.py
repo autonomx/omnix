@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Iterable
 
-from app.rpg.session.item_autoplay_adapter import attach_item_autoplay_report
+from app.rpg.session.item_autoplay_adapter import attach_item_autoplay_report, extract_item_autoplay_state
 from app.rpg.session.item_endurance_scenarios import (
     build_item_endurance_plan,
     summarize_item_endurance_progress,
@@ -73,30 +73,43 @@ def _candidate_values_from_payload(value: Any) -> list[Any]:
 
 
 def _looks_like_item_state(value: Any) -> bool:
-    state = _safe_dict(value)
-    if not state:
+    state = extract_item_autoplay_state(value)
+    if state:
+        return True
+    raw = _safe_dict(value)
+    if not raw:
         return False
-    mechanics = _safe_dict(state.get("mechanics"))
-    player = _safe_dict(state.get("player"))
+    mechanics = _safe_dict(raw.get("mechanics"))
+    player = _safe_dict(raw.get("player"))
     if mechanics and any("item" in str(key).lower() for key in mechanics.keys()):
         return True
     inventory = player.get("inventory")
     if isinstance(inventory, list) and inventory:
         return True
-    return bool(state.get("crafting") or state.get("item_market") or state.get("equipment"))
+    if _safe_list(_safe_dict(raw.get("inventory_state")).get("items")):
+        return True
+    runtime_inventory = _safe_dict(_safe_dict(raw.get("player_state")).get("inventory"))
+    if _safe_list(runtime_inventory.get("items")):
+        return True
+    return bool(raw.get("crafting") or raw.get("item_market") or raw.get("equipment"))
 
 
 def _score_candidate_state(state: dict[str, Any]) -> int:
-    mechanics = _safe_dict(state.get("mechanics"))
-    player = _safe_dict(state.get("player"))
+    normalized = extract_item_autoplay_state(state) or state
+    mechanics = _safe_dict(normalized.get("mechanics"))
+    player = _safe_dict(normalized.get("player"))
     score = 0
     score += len(_safe_list(player.get("inventory"))) * 2
-    score += len(_safe_dict(state.get("crafting")).get("known_recipes") or [])
+    score += len(_safe_dict(normalized.get("crafting")).get("known_recipes") or [])
     for key, value in mechanics.items():
         if "item" in str(key).lower():
             score += 5 + len(_safe_list(value))
-    if state.get("current_turn") or state.get("turn_count"):
+    if normalized.get("current_turn") or normalized.get("turn_count"):
         score += 3
+    if _safe_list(_safe_dict(state.get("inventory_state")).get("items")):
+        score += 4
+    if state.get("progression_completed_node_count"):
+        score += 1
     return score
 
 
@@ -110,7 +123,10 @@ def _extract_candidate_states(value: Any) -> list[dict[str, Any]]:
         if candidate_id in seen:
             continue
         seen.add(candidate_id)
-        if _looks_like_item_state(candidate):
+        normalized = extract_item_autoplay_state(candidate)
+        if normalized:
+            states.append(normalized)
+        elif _looks_like_item_state(candidate):
             states.append(candidate)
     states.sort(key=_score_candidate_state, reverse=True)
     return states
@@ -137,7 +153,7 @@ def _load_candidate_states_from_zip(zip_path: Path) -> list[dict[str, Any]]:
                     continue
     except Exception:
         return []
-    states.sort(key=_score_candidate_state, reverse=True)
+    states.sort(key=_score_candidate_state)
     return states
 
 
