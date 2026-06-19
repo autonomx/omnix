@@ -102,7 +102,7 @@ export function buildSelectedItemActions({ item, selectedSessionId }: BuildSelec
     loadout('use', 'Use', 'Apply item effects through deterministic item handling.', 'use'),
     loadout('equip', 'Equip', 'Equip the item if it belongs in a gear slot.', 'equip'),
     loadout('drop', 'Drop', 'Remove one carried instance when safe.', 'drop'),
-    resolve('salvage', 'Salvage', 'Recover deterministic materials from the item.', `salvage ${itemName}`),
+    loadout('salvage', 'Salvage', 'Recover deterministic materials from the item.', 'salvage'),
     resolve('sell', 'Sell', 'Offer the item to the active merchant service.', `sell ${itemName}`),
   ];
 }
@@ -111,12 +111,13 @@ export function buildItemObjectivePreviews(payload: Record<string, unknown> | nu
   const objectives = Array.isArray(payload?.objectives) ? payload.objectives : [];
   return objectives.map((entry, index) => {
     const objective = asRecord(entry);
-    const action = readString(objective.action) || readString(objective.kind) || 'item_action';
+    const actionPayload = readRecord(objective.action);
+    const action = readString(actionPayload?.action) || readString(actionPayload?.kind) || readString(objective.action) || readString(objective.kind) || 'item_action';
     const label = readString(objective.label) || titleCase(action);
     const detail = readString(objective.detail) || readString(objective.reason) || 'Deterministic item-system suggestion.';
-    const payloadValue = readRecord(objective.payload) ?? readRecord(objective.request) ?? {};
+    const payloadValue = readRecord(objective.payload) ?? readRecord(objective.request) ?? actionPayload ?? {};
     return {
-      id: readString(objective.id) || `${action}:${index}`,
+      id: readString(objective.id) || readString(objective.objective_id) || `${action}:${index}`,
       label,
       detail,
       action,

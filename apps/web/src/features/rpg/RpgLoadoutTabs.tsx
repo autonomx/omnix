@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { omnixApiClient, type RpgLoadoutActionRequest, type RpgLaunchResponse } from '../../api/client';
+import { applyRpgItemCommand, applyRpgItemResolve, fetchRpgItemDiagnostics, fetchRpgItemObjectives, runRpgItemMaintenance } from './rpgItemApi';
+import { RpgItemPanel } from './RpgItemPanel';
+import {
+  buildItemObjectivePreviews,
+  buildItemStatusCards,
+  buildMerchantEntryPreviews,
+  buildSelectedItemActions,
+  type RpgItemObjectivePreview,
+  type RpgItemUiAction,
+  type RpgMerchantEntryPreview,
+  type RpgItemStatusCard,
+} from './rpgItemUiState';
 import type { RpgHotbarAbilityPreview, RpgInventoryItemPreview } from './rpgUiState';
 import './RpgLoadoutTabs.css';
 
@@ -109,8 +121,10 @@ const tabs: Array<{ id: RpgLoadoutTab; label: string }> = [
 ];
 
 const REQUIRED_DIMENSIONS = ['resources', 'information', 'relationships', 'access', 'environment', 'position', 'narrative', 'economy', 'world'];
+const LOADOUT_ITEM_ACTIONS = new Set(['inspect', 'use', 'equip', 'drop', 'salvage', 'craft', 'modify']);
 
 export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoadoutAction = false, onApplyLoadoutAction, onSelectCommand, selectedSessionId }: RpgLoadoutTabsProps) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<RpgLoadoutTab>('inventory');
   const [activeInventoryIndex, setActiveInventoryIndex] = useState(0);
   const [activeAbilityIndex, setActiveAbilityIndex] = useState(0);
@@ -122,11 +136,87 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
     queryFn: () => omnixApiClient.continueRpgSession(selectedSessionId ?? ''),
     staleTime: 0,
   });
+  const itemObjectivesQuery = useQuery({
+    enabled: Boolean(selectedSessionId) && activeTab === 'inventory',
+    queryKey: ['feature', 'rpg', 'item-objectives', selectedSessionId],
+    queryFn: () => fetchRpgItemObjectives(selectedSessionId ?? '', { objectiveLimit: 5 }),
+    staleTime: 0,
+  });
+  const itemDiagnosticsQuery = useQuery({
+    enabled: Boolean(selectedSessionId) && activeTab === 'inventory',
+    queryKey: ['feature', 'rpg', 'item-diagnostics', selectedSessionId],
+    queryFn: () => fetchRpgItemDiagnostics(selectedSessionId ?? '', { objectiveLimit: 4, scenarioLimit: 4 }),
+    staleTime: 0,
+  });
+  const itemMaintenanceQuery = useQuery({
+    enabled: Boolean(selectedSessionId) && activeTab === 'inventory',
+    queryKey: ['feature', 'rpg', 'item-maintenance', selectedSessionId],
+    queryFn: () => runRpgItemMaintenance(selectedSessionId ?? '', { dryRun: true, bucketLimit: 20, recordReport: true }),
+    staleTime: 0,
+  });
   const abilityOverview = useMemo(() => buildAbilityOverview(sessionQuery.data, hotbarAbilities), [hotbarAbilities, sessionQuery.data]);
   const displayedHotbarAbilities = abilityOverview.hotbarAbilities.length ? abilityOverview.hotbarAbilities : hotbarAbilities;
   const activeItem = inventoryItems[Math.min(activeInventoryIndex, Math.max(inventoryItems.length - 1, 0))];
   const activeAbility = abilityOverview.allAbilities[Math.min(activeAbilityIndex, Math.max(abilityOverview.allAbilities.length - 1, 0))];
   const coveragePercent = Math.round(abilityOverview.coverage.score * 100);
+  const itemObjectives = useMemo(
+    () =>
+      buildItemObjectivePreviews(
+        recordValue(itemObjectivesQuery.data?.objectives) ??
+          recordValue(recordValue(itemDiagnosticsQuery.data?.diagnostics)?.objectives) ??
+          recordValue(itemObjectivesQuery.data),
+      ),
+    [itemDiagnosticsQuery.data, itemObjectivesQuery.data],
+  );
+  const itemStatusCards = useMemo(
+    () =>
+      selectedSessionId
+        ? buildItemStatusCards({
+            diagnostics: recordValue(itemDiagnosticsQuery.data?.diagnostics),
+            maintenance: recordValue(itemMaintenanceQuery.data?.maintenance),
+            report: recordValue(recordValue(itemDiagnosticsQuery.data?.diagnostics)?.report),
+          })
+        : [],
+    [itemDiagnosticsQuery.data, itemMaintenanceQuery.data, selectedSessionId],
+  );
+  const merchantEntries = useMemo(
+    () =>
+      buildMerchantEntryPreviews(
+        firstRecord(
+          itemDiagnosticsQuery.data?.merchant,
+          itemDiagnosticsQuery.data?.merchant_menu,
+          recordValue(itemDiagnosticsQuery.data?.diagnostics)?.merchant,
+          recordValue(itemDiagnosticsQuery.data?.diagnostics)?.merchant_menu,
+          recordValue(itemObjectivesQuery.data?.objectives)?.merchant,
+          recordValue(itemObjectivesQuery.data?.objectives)?.merchant_menu,
+        ),
+      ),
+    [itemDiagnosticsQuery.data, itemObjectivesQuery.data],
+  );
+  const refreshItemPanelQueries = async () => {
+    await Promise.all([
+      sessionQuery.refetch(),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'replay-inventory'] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'item-objectives', selectedSessionId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'item-diagnostics', selectedSessionId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature', 'rpg', 'item-maintenance', selectedSessionId] }),
+    ]);
+  };
+  const itemPanelMutation = useMutation({
+    mutationFn: (request: RpgItemPanelRequest) => {
+      if (!selectedSessionId) {
+        throw new Error('Select a live RPG session before applying item actions.');
+      }
+      return applyRpgItemPanelRequest(selectedSessionId, request);
+    },
+    onSuccess: refreshItemPanelQueries,
+  });
+  const itemPanelPending =
+    isApplyingLoadoutAction ||
+    itemPanelMutation.isPending ||
+    itemObjectivesQuery.isFetching ||
+    itemDiagnosticsQuery.isFetching ||
+    itemMaintenanceQuery.isFetching;
 
   useEffect(() => {
     if (wasApplyingAction.current && !isApplyingLoadoutAction && selectedSessionId) {
@@ -170,7 +260,14 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
           activeItemIndex={activeInventoryIndex}
           hotbarAbilities={displayedHotbarAbilities}
           inventoryItems={inventoryItems}
-          isApplyingLoadoutAction={isApplyingLoadoutAction}
+          isApplyingLoadoutAction={itemPanelPending}
+          itemActions={buildSelectedItemActions({ item: activeItem, selectedSessionId })}
+          itemMerchantEntries={merchantEntries}
+          itemObjectives={itemObjectives}
+          itemStatusCards={itemStatusCards}
+          onApplyItemAction={(action) => itemPanelMutation.mutate({ kind: 'action', action })}
+          onApplyItemMerchantEntry={(entry) => itemPanelMutation.mutate({ kind: 'merchant', entry })}
+          onApplyItemObjective={(objective) => itemPanelMutation.mutate({ kind: 'objective', objective })}
           onApplyLoadoutAction={onApplyLoadoutAction}
           onSelectCommand={onSelectCommand}
           onSelectItem={setActiveInventoryIndex}
@@ -212,20 +309,35 @@ interface InventoryPanelProps extends Pick<RpgLoadoutTabsProps, 'inventoryItems'
   activeItem: RpgInventoryItemPreview | undefined;
   activeItemIndex: number;
   hotbarAbilities: RpgHotbarAbilityPreview[];
+  itemActions: RpgItemUiAction[];
+  itemMerchantEntries: RpgMerchantEntryPreview[];
+  itemObjectives: RpgItemObjectivePreview[];
+  itemStatusCards: RpgItemStatusCard[];
+  onApplyItemAction: (action: RpgItemUiAction) => void;
+  onApplyItemMerchantEntry: (entry: RpgMerchantEntryPreview) => void;
+  onApplyItemObjective: (objective: RpgItemObjectivePreview) => void;
   onSelectItem: (index: number) => void;
 }
 
-function InventoryPanel({ activeItem, activeItemIndex, inventoryItems, hotbarAbilities, isApplyingLoadoutAction, onApplyLoadoutAction, onSelectCommand, onSelectItem, selectedSessionId }: InventoryPanelProps) {
-  const applyItemAction = (action: RpgLoadoutActionRequest['action'], command: string) => {
-    if (selectedSessionId && activeItem && onApplyLoadoutAction) {
-      onApplyLoadoutAction({ action, item_name: activeItem.label });
-      return;
-    }
-    onSelectCommand(command);
-  };
-
+function InventoryPanel({
+  activeItemIndex,
+  inventoryItems,
+  hotbarAbilities,
+  isApplyingLoadoutAction,
+  itemActions,
+  itemMerchantEntries,
+  itemObjectives,
+  itemStatusCards,
+  onApplyItemAction,
+  onApplyItemMerchantEntry,
+  onApplyItemObjective,
+  onApplyLoadoutAction,
+  onSelectCommand,
+  onSelectItem,
+  selectedSessionId,
+}: InventoryPanelProps) {
   return (
-    <div aria-labelledby="rpg-inventory-loadout-tab" className="rpg-loadout-layout" id="rpg-inventory-loadout-panel" role="tabpanel">
+    <div aria-labelledby="rpg-inventory-loadout-tab" className="rpg-loadout-layout rpg-item-loadout-layout" id="rpg-inventory-loadout-panel" role="tabpanel">
       <div className="rpg-inventory-grid" aria-label="Inventory item slots">
         {inventoryItems.map((item, index) => (
           <button
@@ -263,29 +375,61 @@ function InventoryPanel({ activeItem, activeItemIndex, inventoryItems, hotbarAbi
         </div>
       </div>
 
-      <LoadoutDetailCard
-        eyebrow="Selected item"
-        title={activeItem?.label ?? 'No item selected'}
-        detail={
-          activeItem
-            ? `${activeItem.count} carried • ${selectedSessionId ? 'click an action to update the session' : 'select a session to apply actions'}`
-            : 'Inventory actions appear when an item is indexed.'
-        }
-        actions={
-          activeItem
-            ? [
-                { label: 'Inspect', command: `Inspect ${activeItem.label} and describe its useful properties.`, apply: () => applyItemAction('inspect', `Inspect ${activeItem.label} and describe its useful properties.`) },
-                { label: 'Use', command: `Use ${activeItem.label} if it is helpful and legal in the current situation.`, apply: () => applyItemAction('use', `Use ${activeItem.label} if it is helpful and legal in the current situation.`) },
-                { label: 'Equip', command: `Equip ${activeItem.label} if it improves my current loadout.`, apply: () => applyItemAction('equip', `Equip ${activeItem.label} if it improves my current loadout.`) },
-                { label: 'Drop', command: `Drop one ${activeItem.label} only if it is safe to discard.`, apply: () => applyItemAction('drop', `Drop one ${activeItem.label} only if it is safe to discard.`) },
-              ]
-            : []
-        }
-        disabled={isApplyingLoadoutAction}
+      <RpgItemPanel
+        actions={itemActions}
+        isPending={isApplyingLoadoutAction}
+        merchantEntries={itemMerchantEntries}
+        objectives={itemObjectives}
+        onApplyAction={onApplyItemAction}
+        onApplyMerchantEntry={onApplyItemMerchantEntry}
+        onApplyObjective={onApplyItemObjective}
         onSelectCommand={onSelectCommand}
+        statusCards={itemStatusCards}
       />
     </div>
   );
+}
+
+type RpgItemPanelRequest =
+  | { kind: 'action'; action: RpgItemUiAction }
+  | { kind: 'objective'; objective: RpgItemObjectivePreview }
+  | { kind: 'merchant'; entry: RpgMerchantEntryPreview };
+
+function applyRpgItemPanelRequest(sessionId: string, request: RpgItemPanelRequest): Promise<unknown> {
+  if (request.kind === 'action') {
+    const loadoutRequest = loadoutRequestFromPayload(request.action.payload);
+    if (loadoutRequest) {
+      return omnixApiClient.applyRpgLoadoutAction(sessionId, loadoutRequest);
+    }
+    if (request.action.mode === 'merchant') {
+      return applyRpgItemCommand(sessionId, request.action.command);
+    }
+    return applyRpgItemResolve(sessionId, { command: request.action.command, input: request.action.payload });
+  }
+
+  if (request.kind === 'merchant') {
+    const itemName = firstString(request.entry.payload.item_name, request.entry.payload.item_id, request.entry.label) ?? request.entry.label;
+    return applyRpgItemCommand(sessionId, `${request.entry.action} ${itemName}`);
+  }
+
+  const loadoutRequest = loadoutRequestFromPayload(request.objective.payload);
+  if (loadoutRequest) {
+    return omnixApiClient.applyRpgLoadoutAction(sessionId, loadoutRequest);
+  }
+  const action = firstString(request.objective.payload.action, request.objective.action);
+  const itemName = firstString(request.objective.payload.item_name, request.objective.payload.item_id);
+  if ((action === 'buy' || action === 'sell') && itemName) {
+    return applyRpgItemCommand(sessionId, `${action} ${itemName}`);
+  }
+  return applyRpgItemResolve(sessionId, { input: request.objective.payload });
+}
+
+function loadoutRequestFromPayload(payload: Record<string, unknown>): RpgLoadoutActionRequest | null {
+  const action = firstString(payload.action);
+  if (!action || !LOADOUT_ITEM_ACTIONS.has(action)) {
+    return null;
+  }
+  return payload as unknown as RpgLoadoutActionRequest;
 }
 
 interface AbilitiesPanelProps extends Pick<RpgLoadoutTabsProps, 'isApplyingLoadoutAction' | 'onApplyLoadoutAction' | 'onSelectCommand' | 'selectedSessionId'> {
@@ -852,6 +996,16 @@ function numericRecord(value: unknown): Record<string, number> {
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function firstRecord(...values: unknown[]): Record<string, unknown> | undefined {
+  for (const value of values) {
+    const record = recordValue(value);
+    if (record) {
+      return record;
+    }
   }
   return undefined;
 }

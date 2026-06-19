@@ -6,6 +6,10 @@
   min-width: 0;
 }
 
+.rpg-item-loadout-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+}
+
 .rpg-ability-summary {
   align-items: center;
   background: rgba(7, 6, 13, 0.34);

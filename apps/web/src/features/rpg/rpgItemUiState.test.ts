@@ -20,9 +20,8 @@ describe('rpg item UI state', () => {
       disabled: false,
     });
     expect(actions[4]).toMatchObject({
-      mode: 'item_resolve',
-      command: 'salvage Field Kit',
-      payload: { command: 'salvage Field Kit' },
+      mode: 'loadout',
+      payload: { action: 'salvage', item_name: 'Field Kit' },
     });
     expect(actions[5]).toMatchObject({ mode: 'merchant', command: 'sell Field Kit' });
   });
@@ -39,11 +38,10 @@ describe('rpg item UI state', () => {
     const objectives = buildItemObjectivePreviews({
       objectives: [
         {
-          id: 'craft:torch',
-          action: 'craft',
+          objective_id: 'craft:torch',
+          action: { action: 'craft', recipe_id: 'torch', station: 'campfire' },
           label: 'Craft torch',
           reason: 'Enough materials are available.',
-          payload: { recipe_id: 'torch' },
         },
         { kind: 'report', request: { record: true }, disabled: true },
       ],
@@ -55,7 +53,7 @@ describe('rpg item UI state', () => {
         label: 'Craft torch',
         detail: 'Enough materials are available.',
         action: 'craft',
-        payload: { recipe_id: 'torch' },
+        payload: { action: 'craft', recipe_id: 'torch', station: 'campfire' },
         disabled: false,
       },
       {
