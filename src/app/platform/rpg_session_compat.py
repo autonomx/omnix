@@ -135,7 +135,11 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         session, state = _load_mutable_session(session_id)
         if not session:
             return {"ok": False, "error": "session_not_found", "session_id": session_id}
-        command = payload.get("command") if "command" in payload else payload.get("item_command") or payload.get("request")
+        command = (
+            payload.get("command")
+            if "command" in payload
+            else payload.get("item_command") or payload.get("request")
+        )
         result = apply_item_command(state, command)
         if result.get("ok") is not True:
             return {"session_id": session_id, **result}
@@ -150,7 +154,10 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if action == "item_diagnostics":
-        from app.rpg.session.item_diagnostics import build_item_diagnostics, record_item_diagnostics
+        from app.rpg.session.item_diagnostics import (
+            build_item_diagnostics,
+            record_item_diagnostics,
+        )
         from app.rpg.session.service import save_session
 
         session_id = _safe_str(payload.get("session_id")).strip()
