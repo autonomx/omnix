@@ -48,6 +48,30 @@ def _load_mutable_session(session_id: str) -> tuple[dict[str, Any] | None, dict[
     return session, state
 
 
+def _item_action_request_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    request = _safe_dict(
+        payload.get("item_action")
+        or payload.get("item_session_action")
+        or payload.get("request")
+    )
+    if request:
+        return dict(request)
+
+    action_kind = (
+        payload.get("item_action_kind")
+        or payload.get("item_kind")
+        or payload.get("session_action")
+        or payload.get("kind")
+    )
+    request = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"action", "session_id"}
+    }
+    request["action"] = _safe_str(action_kind).strip()
+    return request
+
+
 def list_rpg_sessions_payload() -> dict[str, Any]:
     """Return the legacy RPG session list envelope plus launch presets."""
     from app.rpg.session.new_game import list_rpg_presets
@@ -74,6 +98,7 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     - {"action": "rename", "session_id": "...", "name": "..."}
     - {"action": "delete", "session_id": "..."}
     - {"action": "loadout_action", "session_id": "...", "loadout": {...}}
+    - {"action": "item_action", "session_id": "...", "item_action": {...}}
     - {"action": "item_command", "session_id": "...", "command": "item report"}
     - {"action": "item_diagnostics", "session_id": "...", "record": true}
     - {"action": "item_maintenance", "session_id": "...", "dry_run": true}
@@ -130,6 +155,32 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "error": "missing_session_id"}
         request = RpgLoadoutActionRequest.model_validate(payload.get("loadout") or payload)
         return apply_loadout_action(session_id, request)
+
+    if action == "item_action":
+        from app.rpg.session.item_session_actions import apply_item_session_action
+        from app.rpg.session.service import save_session
+
+        session_id = _safe_str(payload.get("session_id")).strip()
+        if not session_id:
+            return {"ok": False, "error": "missing_session_id"}
+        session, state = _load_mutable_session(session_id)
+        if not session:
+            return {"ok": False, "error": "session_not_found", "session_id": session_id}
+
+        request = _item_action_request_from_payload(payload)
+        result = apply_item_session_action(state, request)
+        if result.get("ok") is not True:
+            return {"session_id": session_id, **result}
+
+        saved = save_session(session, compact=False)
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "status": "ready",
+            "session": saved,
+            "game": saved.get("state", {}),
+            **result,
+        }
 
     if action == "item_command":
         from app.rpg.session.item_command_adapter import apply_item_command
