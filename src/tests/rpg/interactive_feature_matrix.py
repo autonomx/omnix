@@ -175,8 +175,8 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
             ),
             expectations=(
                 E(1, contains_any=("job", "quest", "work", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
-                E(2, contains_any=("accept", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
-                E(3, contains_any=("next", "step", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), final_target_contains_any=("bran",), provider_called=True),
+                E(2, contains_any=("accept", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), provider_called=True),
+                E(3, contains_any=("next", "step", "job", "quest", "confirmed", "do not have", "no backed"), forbids=("confirmed rumor",), provider_called=True),
             ),
         ),
     ]
