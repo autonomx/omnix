@@ -20,6 +20,13 @@ def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+
 def extract_item_autoplay_state(value: Any) -> dict[str, Any]:
     """Extract the most likely RPG state payload from a turn/session artifact."""
 
@@ -90,7 +97,7 @@ def summarize_item_autoplay_reports(artifacts: list[dict[str, Any]], *, report_k
     reports = [_safe_dict(artifact.get(report_key)) for artifact in artifacts]
     valid_reports = [report for report in reports if report.get("ok") is True]
     summaries = [_safe_dict(report.get("summary")) for report in valid_reports]
-    scores = [int(summary.get("coverage_score") or 0) for summary in summaries]
+    scores = [_safe_float(summary.get("coverage_score")) for summary in summaries]
     gap_count = sum(int(summary.get("coverage_gap_count") or 0) for summary in summaries)
     objective_count = sum(int(summary.get("objective_count") or 0) for summary in summaries)
     return {
