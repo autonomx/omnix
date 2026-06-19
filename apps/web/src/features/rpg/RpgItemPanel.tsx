@@ -13,6 +13,22 @@ interface RpgItemPanelProps {
   onSelectCommand?: (command: string) => void;
 }
 
+const actionIcons: Record<string, string> = {
+  inspect: '🔎',
+  use: '✨',
+  equip: '🛡️',
+  drop: '⬇️',
+  salvage: '♻️',
+  craft: '🛠️',
+  modify: '⚙️',
+  sell: '🪙',
+  buy: '🛒',
+  diagnostics: '📋',
+  maintenance: '🧰',
+  objectives: '🎯',
+  scenario: '🧭',
+};
+
 export function RpgItemPanel({
   actions,
   objectives = [],
@@ -54,6 +70,7 @@ export function RpgItemPanel({
       <ActionList
         actions={actions}
         emptyLabel="Select an inventory item to reveal deterministic actions."
+        hasMerchantContext={hasMerchantEntries}
         isPending={isPending}
         onApplyAction={onApplyAction}
         onSelectCommand={onSelectCommand}
@@ -69,6 +86,7 @@ export function RpgItemPanel({
               disabled={isPending || objective.disabled}
               key={objective.id}
               onClick={() => onApplyObjective?.(objective)}
+              title={objective.disabled ? 'This objective is not currently available.' : objective.detail}
               type="button"
             >
               <span>
@@ -91,6 +109,7 @@ export function RpgItemPanel({
               disabled={isPending || entry.disabled}
               key={entry.id}
               onClick={() => onApplyMerchantEntry?.(entry)}
+              title={entry.disabled ? 'This merchant entry is not currently available.' : `${entry.action} ${entry.label}: ${entry.detail}`}
               type="button"
             >
               <span>
@@ -109,40 +128,71 @@ export function RpgItemPanel({
 interface ActionListProps {
   actions: RpgItemUiAction[];
   emptyLabel: string;
+  hasMerchantContext: boolean;
   isPending: boolean;
   onApplyAction?: (action: RpgItemUiAction) => void;
   onSelectCommand?: (command: string) => void;
 }
 
-function ActionList({ actions, emptyLabel, isPending, onApplyAction, onSelectCommand }: ActionListProps) {
+function ActionList({ actions, emptyLabel, hasMerchantContext, isPending, onApplyAction, onSelectCommand }: ActionListProps) {
   if (!actions.length) {
     return <p className="rpg-item-empty">{emptyLabel}</p>;
   }
 
   return (
     <div className="rpg-item-actions" aria-label="Selected item actions">
-      {actions.map((action) => (
-        <button
-          aria-label={action.label}
-          className="rpg-item-action-row"
-          disabled={isPending || action.disabled}
-          key={action.id}
-          onClick={() => {
-            if (onApplyAction) {
-              onApplyAction(action);
-              return;
-            }
-            onSelectCommand?.(action.command);
-          }}
-          type="button"
-        >
-          <span>
-            <strong>{action.label}</strong>
-            <small>{action.detail}</small>
-          </span>
-          <code>{action.mode}</code>
-        </button>
-      ))}
+      <div className="rpg-item-action-toolbar" role="toolbar" aria-label="Selected item contextual actions">
+        {actions.map((action) => {
+          const disabledReason = itemActionDisabledReason(action, { hasMerchantContext, isPending });
+          const disabled = Boolean(disabledReason);
+          return (
+            <button
+              aria-label={action.label}
+              className={`rpg-item-action-icon-button rpg-item-action-${action.kind}`}
+              disabled={disabled}
+              key={action.id}
+              onClick={() => {
+                if (disabled) {
+                  return;
+                }
+                if (onApplyAction) {
+                  onApplyAction(action);
+                  return;
+                }
+                onSelectCommand?.(action.command);
+              }}
+              title={disabledReason ? `${action.label}: ${disabledReason}` : `${action.label}: ${action.detail}`}
+              type="button"
+            >
+              <span aria-hidden="true">{actionIcons[action.kind] ?? '•'}</span>
+            </button>
+          );
+        })}
+      </div>
+      <ul className="rpg-item-action-context-list" aria-label="Item action context requirements">
+        {actions.map((action) => {
+          const disabledReason = itemActionDisabledReason(action, { hasMerchantContext, isPending });
+          return (
+            <li key={`${action.id}:context`} className={disabledReason ? 'rpg-item-action-context-disabled' : undefined}>
+              <strong>{action.label}</strong>
+              <span>{disabledReason ?? action.detail}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
+}
+
+function itemActionDisabledReason(action: RpgItemUiAction, context: { hasMerchantContext: boolean; isPending: boolean }): string | null {
+  if (context.isPending) {
+    return 'Item action is already running.';
+  }
+  if (action.disabled) {
+    return 'Select a live session before applying item actions.';
+  }
+  if (action.kind === 'sell' && !context.hasMerchantContext) {
+    return 'Start a merchant conversation or open a merchant service before selling.';
+  }
+  return null;
 }
