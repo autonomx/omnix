@@ -24,9 +24,11 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 
 from tests.rpg import interactive_intent_matrix as matrix  # noqa: E402
 
-FEATURE_MATRIX_VERSION = "interactive_feature_matrix_v3"
+FEATURE_MATRIX_VERSION = "interactive_feature_matrix_v4"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "resources" / "data" / "test-results" / "interactive-feature-matrix"
 KNOWN_FEATURE_GAP_SCENARIO_IDS = frozenset()
+SKILLS_MATRIX_SCENARIO_ID = "skills_progression_probe"
+ITEMS_MATRIX_SCENARIO_ID = "item_system_actions_probe"
 
 IntentFeatureScenario = matrix.IntentMatrixScenario
 FeatureTurnExpectation = matrix.TurnExpectation
@@ -128,6 +130,38 @@ def default_feature_matrix_scenarios() -> List[IntentFeatureScenario]:
                 E(1, contains_any=("inventory", "gear", "carrying", "ration", "waterskin", "sword", "shield"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
                 E(2, contains_any=("sword", "shield", "ready", "gear", "weapon"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
                 E(3, contains_any=("carrying", "inventory", "gear", "ration", "waterskin", "sword", "shield"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+            ),
+        ),
+        S(
+            scenario_id=SKILLS_MATRIX_SCENARIO_ID,
+            title="Skills: check training, practice, and re-check progression",
+            description="Covers visible skills/training progression surfaces without requiring combat victory or a level-up.",
+            commands=(
+                "I check my skills and training progress.",
+                "I practice swordsmanship with careful controlled cuts.",
+                "I check my skill progress after that practice.",
+            ),
+            expectations=(
+                E(1, contains_any=("skill", "skills", "training", "progress", "level", "xp", "experience"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+                E(2, contains_any=("practice", "sword", "swordsmanship", "training", "skill", "cuts"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+                E(3, contains_any=("skill", "progress", "training", "sword", "improved", "xp", "experience"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+            ),
+        ),
+        S(
+            scenario_id=ITEMS_MATRIX_SCENARIO_ID,
+            title="Items: inspect inventory, use ration, query merchant, and ask crafting options",
+            description="Covers player-facing item surfaces for inventory, consumables, merchant supply, and crafting/repair affordances.",
+            commands=(
+                "I check my items, inventory, equipment, and crafting options.",
+                "I use one trail ration from my pack.",
+                "Bran, what useful items or supplies can I buy or sell here?",
+                "Do my items include materials for crafting or repairing a torch?",
+            ),
+            expectations=(
+                E(1, contains_any=("item", "items", "inventory", "equipment", "crafting", "ration", "waterskin", "cloak", "dagger"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+                E(2, contains_any=("ration", "use", "eat", "hunger", "provision", "inventory"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
+                E(3, contains_any=("item", "items", "supplies", "sell", "buy", "trade", "copper", "merchant", "Bran"), forbids=("confirmed job or quest", "confirmed rumor"), final_target_contains_any=("bran",), provider_called=True),
+                E(4, contains_any=("craft", "crafting", "repair", "torch", "material", "items", "supplies", "recipe"), forbids=("confirmed job or quest", "confirmed rumor"), provider_called=True),
             ),
         ),
         S(
