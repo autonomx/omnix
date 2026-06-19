@@ -52,3 +52,12 @@ def test_items_probe_checks_inventory_use_merchant_and_crafting_text() -> None:
     assert any("ration" in term for term in scenario.expectations[1].contains_any)
     assert any("sell" in term for term in scenario.expectations[2].contains_any)
     assert any("torch" in term for term in scenario.expectations[3].contains_any)
+
+
+def test_backed_quest_followup_probe_does_not_require_pronoun_turn_target() -> None:
+    scenario = _scenario_by_id()["backed_quest_acceptance_probe"]
+
+    assert scenario.expectations[0].final_target_contains_any == ("bran",)
+    assert scenario.expectations[1].final_target_contains_any == ()
+    assert scenario.expectations[2].final_target_contains_any == ()
+    assert all(expectation.provider_called is True for expectation in scenario.expectations)
