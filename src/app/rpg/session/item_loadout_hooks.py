@@ -60,6 +60,18 @@ def _prepend_trace(mechanics: dict[str, Any], key: str, trace: dict[str, Any], *
     mechanics[key] = [deepcopy(trace), *_safe_list(mechanics.get(key))][: max(1, int(limit or 1))]
 
 
+def _has_item_trace_for_turn(mechanics: dict[str, Any], *, turn: int) -> bool:
+    for value in _safe_list(mechanics.get("item_traces")):
+        trace = _safe_dict(value)
+        try:
+            trace_turn = int(trace.get("turn"))
+        except (TypeError, ValueError):
+            continue
+        if trace_turn == turn:
+            return True
+    return False
+
+
 def _existing_hook_trace(mechanics: dict[str, Any], *, action: str, turn: int) -> dict[str, Any] | None:
     for value in _safe_list(mechanics.get("item_loadout_hook_traces")):
         trace = _safe_dict(value)
@@ -166,6 +178,7 @@ def run_loadout_item_hooks(
             "mechanics_source": MECHANICS_SOURCE,
         }
 
+    had_item_trace_for_turn = _has_item_trace_for_turn(mechanics, turn=plan["turn"])
     hook_result = run_item_turn_hooks(
         mutable_state,
         current_turn=plan["turn"],
@@ -188,7 +201,8 @@ def run_loadout_item_hooks(
     }
     if record_trace:
         _prepend_trace(mechanics, "item_loadout_hook_traces", trace, limit=TRACE_LIMIT)
-        _prepend_trace(mechanics, "item_traces", trace, limit=ITEM_TRACE_LIMIT)
+        if not had_item_trace_for_turn:
+            _prepend_trace(mechanics, "item_traces", trace, limit=ITEM_TRACE_LIMIT)
 
     return {
         "ok": True,
