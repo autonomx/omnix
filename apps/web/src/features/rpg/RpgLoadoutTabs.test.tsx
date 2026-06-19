@@ -212,7 +212,9 @@ describe('RpgLoadoutTabs', () => {
     renderLoadoutTabs({ hotbarAbilities, inventoryItems, onSelectCommand: vi.fn(), selectedSessionId: 'session-live' });
     await screen.findByText('Item diagnostics');
 
-    expect(screen.getByRole('button', { name: 'Use' })).not.toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Use' })).not.toBeDisabled();
+    });
     expect(screen.getByRole('button', { name: 'Sell' })).toBeDisabled();
     expect(screen.getByText('Start a merchant conversation or open a merchant service before selling.')).toBeInTheDocument();
   });
