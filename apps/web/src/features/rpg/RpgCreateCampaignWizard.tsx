@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { RpgLaunchResponse, RpgNewGameRequest } from '../../api/client';
 import {
   BASE_STAT,
   MAX_STAT,
   STAT_POOL,
   backgrounds,
+  buildRpgNewGameRequest,
   buildTemplates,
   capabilityLabels,
   creationStages,
@@ -19,10 +21,15 @@ import {
 import './RpgCreateCampaignWizard.css';
 
 interface RpgCreateCampaignWizardProps {
+  onCreateCampaign?: (request: RpgNewGameRequest) => Promise<RpgLaunchResponse>;
   onSelectCommand?: (command: string) => void;
 }
 
-export function RpgCreateCampaignWizard({ onSelectCommand }: RpgCreateCampaignWizardProps) {
+const FALLBACK_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 96, 100];
+const API_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 92];
+
+export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: RpgCreateCampaignWizardProps) {
+  const progressTimers = useRef<Array<ReturnType<typeof window.setTimeout>>>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [characterName, setCharacterName] = useState('Elara');
   const [pronouns, setPronouns] = useState('she/her');
@@ -59,6 +66,8 @@ export function RpgCreateCampaignWizard({ onSelectCommand }: RpgCreateCampaignWi
   const [progress, setProgress] = useState(0);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreated, setIsCreated] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
+  const [launchResponse, setLaunchResponse] = useState<RpgLaunchResponse | null>(null);
 
   const selectedBuild = buildTemplates.find((template) => template.key === buildKey) ?? buildTemplates[0];
   const spentPoints = Object.values(stats).reduce((total, value) => total + Math.max(0, value - BASE_STAT), 0);
@@ -81,7 +90,65 @@ export function RpgCreateCampaignWizard({ onSelectCommand }: RpgCreateCampaignWi
     return merged;
   }, [selectedBuild, stats]);
 
+  const campaignRequest = useMemo(
+    () =>
+      buildRpgNewGameRequest({
+        background,
+        buildKey,
+        capabilities,
+        characterName,
+        combatLethality,
+        difficulty,
+        economyPressure,
+        powerSource,
+        primaryCapability,
+        pronouns,
+        seed,
+        startingLocation,
+        stats,
+        systems,
+        worldActivity,
+      }),
+    [
+      background,
+      buildKey,
+      capabilities,
+      characterName,
+      combatLethality,
+      difficulty,
+      economyPressure,
+      powerSource,
+      primaryCapability,
+      pronouns,
+      seed,
+      startingLocation,
+      stats,
+      systems,
+      worldActivity,
+    ],
+  );
+
   const canCreate = remainingPoints >= 0 && characterName.trim().length > 0 && activeCapabilities.length > 0;
+
+  const clearProgressTimers = () => {
+    progressTimers.current.forEach((timerId) => window.clearTimeout(timerId));
+    progressTimers.current = [];
+  };
+
+  useEffect(() => clearProgressTimers, []);
+
+  const scheduleProgress = (values: number[], markCreated = false) => {
+    clearProgressTimers();
+    values.forEach((value, index) => {
+      const timerId = window.setTimeout(() => {
+        setProgress((current) => Math.max(current, value));
+        if (markCreated && value === 100) {
+          setIsCreated(true);
+        }
+      }, 260 + index * 360);
+      progressTimers.current.push(timerId);
+    });
+  };
 
   const adjustStat = (key: string, delta: number) => {
     setStats((current) => {
@@ -100,31 +167,48 @@ export function RpgCreateCampaignWizard({ onSelectCommand }: RpgCreateCampaignWi
     setSystems((current) => ({ ...current, [key]: !current[key] }));
   };
 
-  const startCreation = () => {
+  const startCreation = async () => {
     if (!canCreate) {
       return;
     }
     setIsCreating(true);
     setIsCreated(false);
+    setCreationError(null);
+    setLaunchResponse(null);
     setProgress(0);
 
-    [8, 18, 31, 44, 56, 68, 78, 88, 96, 100].forEach((value, index) => {
-      window.setTimeout(() => {
-        setProgress(value);
-        if (value === 100) {
-          setIsCreated(true);
-        }
-      }, 260 + index * 360);
-    });
+    if (!onCreateCampaign) {
+      scheduleProgress(FALLBACK_PROGRESS_STEPS, true);
+      return;
+    }
+
+    scheduleProgress(API_PROGRESS_STEPS);
+    try {
+      const result = await onCreateCampaign(campaignRequest);
+      if (result.ok === false) {
+        throw new Error(result.error || 'Campaign creation failed before a session was returned.');
+      }
+      clearProgressTimers();
+      setLaunchResponse(result);
+      setProgress(100);
+      setIsCreated(true);
+    } catch (error) {
+      clearProgressTimers();
+      setCreationError(error instanceof Error ? error.message : 'Campaign creation failed before a session was returned.');
+      setProgress((current) => Math.max(current, 68));
+      setIsCreated(false);
+    }
   };
 
   const closeProgress = () => {
+    clearProgressTimers();
     setIsCreating(false);
   };
 
   const enterWorld = () => {
+    const sessionDetail = launchResponse?.session_id ? ` Session ${launchResponse.session_id} is ready.` : '';
     onSelectCommand?.(
-      `Begin a new ${selectedBuild.label} campaign for ${characterName.trim()} at ${selectedLocation.label} with ${activeCapabilities.join(', ')} focus.`,
+      `Enter the newly created ${selectedBuild.label} campaign for ${characterName.trim()} at ${selectedLocation.label}.${sessionDetail} Focus: ${activeCapabilities.join(', ')}.`,
     );
     setIsCreating(false);
     setIsExpanded(false);
@@ -314,6 +398,7 @@ export function RpgCreateCampaignWizard({ onSelectCommand }: RpgCreateCampaignWi
           activeStageIndex={activeStageIndex}
           characterName={characterName}
           closeProgress={closeProgress}
+          creationError={creationError}
           enterWorld={enterWorld}
           isCreated={isCreated}
           progressPercent={progressPercent}
@@ -322,6 +407,7 @@ export function RpgCreateCampaignWizard({ onSelectCommand }: RpgCreateCampaignWi
           selectedBuild={selectedBuild.label}
           selectedLocation={selectedLocation.label}
           selectedPrimary={selectedPrimary.label}
+          sessionId={launchResponse?.session_id}
           stageState={stageState}
         />
       ) : null}
@@ -382,6 +468,7 @@ interface ProgressModalProps {
   activeStageIndex: number;
   characterName: string;
   closeProgress: () => void;
+  creationError: string | null;
   enterWorld: () => void;
   isCreated: boolean;
   progressPercent: number;
@@ -390,6 +477,7 @@ interface ProgressModalProps {
   selectedBuild: string;
   selectedLocation: string;
   selectedPrimary: string;
+  sessionId?: string;
   stageState: (index: number) => CreationStageState;
 }
 
@@ -398,6 +486,7 @@ function ProgressModal({
   activeStageIndex,
   characterName,
   closeProgress,
+  creationError,
   enterWorld,
   isCreated,
   progressPercent,
@@ -406,15 +495,19 @@ function ProgressModal({
   selectedBuild,
   selectedLocation,
   selectedPrimary,
+  sessionId,
   stageState,
 }: ProgressModalProps) {
+  const title = creationError ? 'Campaign Creation Failed' : isCreated ? 'Campaign Ready' : 'Creating Campaign';
+  const activeStage = creationStages[activeStageIndex];
+
   return (
     <div className="rpg-create-progress-overlay" role="dialog" aria-modal="true" aria-labelledby="rpg-create-progress-title">
       <div className="rpg-create-progress-modal">
         <header>
           <div>
             <p className="eyebrow">Campaign creation</p>
-            <h3 id="rpg-create-progress-title">Creating Campaign</h3>
+            <h3 id="rpg-create-progress-title">{title}</h3>
             <p>Building a deterministic world from your setup.</p>
           </div>
           <strong>{progressPercent}%</strong>
@@ -422,7 +515,11 @@ function ProgressModal({
         <div className="rpg-create-progress-track" aria-label="Campaign creation progress" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100} role="progressbar">
           <span style={{ width: `${progressPercent}%` }} />
         </div>
-        <p className="rpg-create-current-stage">{creationStages[activeStageIndex].label}: {creationStages[activeStageIndex].detail}</p>
+        {creationError ? (
+          <p className="rpg-create-warning">Failed at {activeStage.label}: {creationError}</p>
+        ) : (
+          <p className="rpg-create-current-stage">{activeStage.label}: {activeStage.detail}</p>
+        )}
         <div className="rpg-create-stage-list">
           {creationStages.map((stage, index) => (
             <div className={`rpg-create-stage-row rpg-create-stage-${stageState(index)}`} key={stage.label}>
@@ -442,13 +539,14 @@ function ProgressModal({
           <span>{selectedPrimary}</span>
           <span>{activeCapabilities.join(' + ')}</span>
           <span>Seed {seed || 'random'}</span>
+          {sessionId ? <span>Session {sessionId}</span> : null}
         </div>
         <p className="rpg-create-modal-note">Optional opening narration, TTS, STT, or image generation can continue after the campaign is ready.</p>
         <footer>
           <button className="rpg-secondary-button" type="button" onClick={closeProgress}>
-            Cancel
+            {creationError ? 'Back to setup' : 'Cancel'}
           </button>
-          <button className="rpg-primary-button" type="button" disabled={!isCreated} onClick={enterWorld}>
+          <button className="rpg-primary-button" type="button" disabled={!isCreated || Boolean(creationError)} onClick={enterWorld}>
             Enter World
           </button>
         </footer>
