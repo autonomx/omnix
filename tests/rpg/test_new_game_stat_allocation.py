@@ -8,16 +8,21 @@ from app.rpg.session.new_game import RpgNewGameRequest, RpgPlayerOptions, STARTI
 NOW = "2026-06-20T00:00:00Z"
 
 
+def _summary(stats: dict[str, object]) -> str:
+    stat_text = ", ".join(f"{key} {value}" for key, value in stats.items())
+    return f"Starter gear: Shortbow. Stats: {stat_text}. Opening: Tavern Rumor. Pace: Balanced. Relationship: Unknown outsider."
+
+
 def _state(initial_stats: dict[str, object] | None = None, *, build: str = "ranger") -> dict[str, Any]:
     request = RpgNewGameRequest(
         player=RpgPlayerOptions(name="Mira", pronouns="she/her", background="Wanderer", build=build),
         seed=9137,
-        initial_stats=initial_stats or {},
+        generated_class_summary=_summary(initial_stats) if initial_stats is not None else None,
     )
     return _new_game_state(request, "rpg_test", NOW)
 
 
-def test_new_game_initial_stats_drive_backend_core_stats() -> None:
+def test_new_game_summary_stats_drive_backend_core_stats() -> None:
     state = _state(
         {
             "strength": 15,
@@ -69,7 +74,7 @@ def test_new_game_invalid_stats_fall_back_per_key_and_clamp_ranges() -> None:
             "strength": "not-a-number",
             "agility": 99,
             "endurance": 4,
-            "intellect": 12.5,
+            "intellect": "twelve",
             "charisma": True,
             "perception": "15",
             "archery": None,
