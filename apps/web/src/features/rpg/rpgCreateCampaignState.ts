@@ -37,12 +37,12 @@ export interface CampaignCreationSelections {
   combatLethality: string;
   difficulty: string;
   economyPressure: string;
-  openingHook: string;
-  openingPace: string;
+  openingHook?: string;
+  openingPace?: string;
   powerSource: string;
   primaryCapability: string;
   pronouns: string;
-  relationshipPreset: string;
+  relationshipPreset?: string;
   seed: string;
   startingLocation: string;
   stats: Record<string, number>;
@@ -191,9 +191,12 @@ export const initialStats = Object.fromEntries(statDefinitions.map((stat) => [st
 
 export function buildRpgNewGameRequest(selections: CampaignCreationSelections): RpgNewGameRequest {
   const selectedBuild = buildTemplates.find((template) => template.key === selections.buildKey) ?? buildTemplates[0];
-  const selectedHook = openingHooks.find((option) => option.value === selections.openingHook) ?? openingHooks[0];
-  const selectedPace = openingPaces.find((option) => option.value === selections.openingPace) ?? openingPaces[1];
-  const selectedRelationship = relationshipPresets.find((option) => option.value === selections.relationshipPreset) ?? relationshipPresets[0];
+  const openingHook = selections.openingHook ?? 'tavern-rumor';
+  const openingPace = selections.openingPace ?? 'balanced';
+  const relationshipPreset = selections.relationshipPreset ?? 'unknown-outsider';
+  const selectedHook = openingHooks.find((option) => option.value === openingHook) ?? openingHooks[0];
+  const selectedPace = openingPaces.find((option) => option.value === openingPace) ?? openingPaces[1];
+  const selectedRelationship = relationshipPresets.find((option) => option.value === relationshipPreset) ?? relationshipPresets[0];
   const primary = mapPrimaryCapability(selections.primaryCapability);
   const secondary = (Object.entries(selections.capabilities) as Array<[Capability, boolean]>)
     .filter(([, enabled]) => enabled)
@@ -227,15 +230,15 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     initial_stats: { ...selections.stats },
     starter_gear: [...selectedBuild.starterGear],
     starting_build: selectedBuild.label,
-    opening_hook: mapOpeningHook(selections.openingHook),
-    opening_pace: mapOpeningPace(selections.openingPace),
-    relationship_preset: mapRelationshipPreset(selections.relationshipPreset),
+    opening_hook: mapOpeningHook(openingHook),
+    opening_pace: mapOpeningPace(openingPace),
+    relationship_preset: mapRelationshipPreset(relationshipPreset),
     story_options: {
-      opening_hook: mapOpeningHook(selections.openingHook),
+      opening_hook: mapOpeningHook(openingHook),
       opening_hook_label: selectedHook.label,
-      opening_pace: mapOpeningPace(selections.openingPace),
+      opening_pace: mapOpeningPace(openingPace),
       opening_pace_label: selectedPace.label,
-      relationship_preset: mapRelationshipPreset(selections.relationshipPreset),
+      relationship_preset: mapRelationshipPreset(relationshipPreset),
       relationship_label: selectedRelationship.label,
     },
     system_options: { ...selections.systems },
