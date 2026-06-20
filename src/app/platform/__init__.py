@@ -1,4 +1,15 @@
 """Small platform summary services for gateway contracts."""
+from app.rpg.session import new_game as _rpg_new_game_module
+from app.rpg.session.new_game_creation_progress import (
+    create_new_game_session_with_progress as _create_new_game_session_with_progress,
+)
+
+# Gateway compatibility routes import ``create_new_game_session`` lazily from the
+# canonical new-game module.  Install the progress-aware wrapper here so the
+# route contract gains backend-authored creation progress without changing the
+# public request schema or duplicating compatibility-route logic.
+_rpg_new_game_module.create_new_game_session = _create_new_game_session_with_progress
+
 from .diagnostics import DiagnosticsPayload, get_diagnostics_payload
 from .legacy_sessions import (
     LegacyGenerateTitleRequest,
