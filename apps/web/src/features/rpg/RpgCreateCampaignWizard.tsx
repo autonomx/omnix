@@ -11,8 +11,11 @@ import {
   creationStages,
   initialStats,
   locations,
+  openingHooks,
+  openingPaces,
   powerSources,
   primaryCapabilities,
+  relationshipPresets,
   statDefinitions,
   type BuildKey,
   type Capability,
@@ -42,6 +45,9 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
   const [worldActivity, setWorldActivity] = useState('standard');
   const [economyPressure, setEconomyPressure] = useState('normal');
   const [combatLethality, setCombatLethality] = useState('normal');
+  const [openingHook, setOpeningHook] = useState('tavern-rumor');
+  const [openingPace, setOpeningPace] = useState('balanced');
+  const [relationshipPreset, setRelationshipPreset] = useState('unknown-outsider');
   const [seed, setSeed] = useState('482193');
   const [stats, setStats] = useState<Record<string, number>>(initialStats);
   const [capabilities, setCapabilities] = useState<Record<Capability, boolean>>({
@@ -79,8 +85,11 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
   const progressPercent = Math.max(0, Math.min(100, progress));
   const selectedBackground = backgrounds.find((option) => option.value === background) ?? backgrounds[0];
   const selectedLocation = locations.find((option) => option.value === startingLocation) ?? locations[0];
+  const selectedOpeningHook = openingHooks.find((option) => option.value === openingHook) ?? openingHooks[0];
+  const selectedOpeningPace = openingPaces.find((option) => option.value === openingPace) ?? openingPaces[1];
   const selectedPower = powerSources.find((option) => option.value === powerSource) ?? powerSources[0];
   const selectedPrimary = primaryCapabilities.find((option) => option.value === primaryCapability) ?? primaryCapabilities[0];
+  const selectedRelationship = relationshipPresets.find((option) => option.value === relationshipPreset) ?? relationshipPresets[0];
 
   const derivedStats = useMemo(() => {
     const merged = { ...stats };
@@ -100,9 +109,12 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
         combatLethality,
         difficulty,
         economyPressure,
+        openingHook,
+        openingPace,
         powerSource,
         primaryCapability,
         pronouns,
+        relationshipPreset,
         seed,
         startingLocation,
         stats,
@@ -117,9 +129,12 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
       combatLethality,
       difficulty,
       economyPressure,
+      openingHook,
+      openingPace,
       powerSource,
       primaryCapability,
       pronouns,
+      relationshipPreset,
       seed,
       startingLocation,
       stats,
@@ -208,7 +223,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
   const enterWorld = () => {
     const sessionDetail = launchResponse?.session_id ? ` Session ${launchResponse.session_id} is ready.` : '';
     onSelectCommand?.(
-      `Enter the newly created ${selectedBuild.label} campaign for ${characterName.trim()} at ${selectedLocation.label}.${sessionDetail} Focus: ${activeCapabilities.join(', ')}.`,
+      `Enter the newly created ${selectedBuild.label} campaign for ${characterName.trim()} at ${selectedLocation.label}.${sessionDetail} Opening: ${selectedOpeningHook.label}. Pace: ${selectedOpeningPace.label}. Focus: ${activeCapabilities.join(', ')}.`,
     );
     setIsCreating(false);
     setIsExpanded(false);
@@ -227,7 +242,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
         <div>
           <p className="eyebrow">Campaign setup</p>
           <h3>Create Campaign</h3>
-          <p>Open the deeper RPG setup flow with point-buy stats, starter gear, world rules, and creation progress.</p>
+          <p>Open the deeper RPG setup flow with point-buy stats, starter gear, story hooks, world rules, and creation progress.</p>
         </div>
         <button className="rpg-primary-button" type="button" onClick={() => setIsExpanded(true)}>
           New Campaign
@@ -323,6 +338,15 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
           </div>
         </div>
 
+        <div className="rpg-create-section rpg-create-section-story">
+          <h4>Opening story</h4>
+          <div className="rpg-create-field-grid">
+            <OptionSelect label="Opening hook" value={openingHook} onChange={setOpeningHook} options={openingHooks} detail={selectedOpeningHook.detail} />
+            <OptionSelect label="Opening pace" value={openingPace} onChange={setOpeningPace} options={openingPaces} detail={selectedOpeningPace.detail} />
+            <OptionSelect label="Relationship preset" value={relationshipPreset} onChange={setRelationshipPreset} options={relationshipPresets} detail={selectedRelationship.detail} />
+          </div>
+        </div>
+
         <div className="rpg-create-section rpg-create-section-world">
           <h4>World and rules</h4>
           <div className="rpg-create-field-grid">
@@ -370,6 +394,8 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
           </div>
           <dl>
             <SummaryRow label="Location" value={selectedLocation.label} />
+            <SummaryRow label="Opening" value={`${selectedOpeningHook.label} · ${selectedOpeningPace.label}`} />
+            <SummaryRow label="Relationship" value={selectedRelationship.label} />
             <SummaryRow label="Focus" value={`${selectedPrimary.label} + ${activeCapabilities.join(' + ') || 'None selected'}`} />
             <SummaryRow label="Rules" value={`${difficulty} · ${worldActivity} · ${economyPressure} economy · ${combatLethality} combat`} />
             <SummaryRow label="Seed" value={seed || 'Random visible seed'} />
@@ -406,6 +432,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
           selectedBackground={selectedBackground.label}
           selectedBuild={selectedBuild.label}
           selectedLocation={selectedLocation.label}
+          selectedOpeningHook={selectedOpeningHook.label}
           selectedPrimary={selectedPrimary.label}
           sessionId={launchResponse?.session_id}
           stageState={stageState}
@@ -476,6 +503,7 @@ interface ProgressModalProps {
   selectedBackground: string;
   selectedBuild: string;
   selectedLocation: string;
+  selectedOpeningHook: string;
   selectedPrimary: string;
   sessionId?: string;
   stageState: (index: number) => CreationStageState;
@@ -494,6 +522,7 @@ function ProgressModal({
   selectedBackground,
   selectedBuild,
   selectedLocation,
+  selectedOpeningHook,
   selectedPrimary,
   sessionId,
   stageState,
@@ -536,6 +565,7 @@ function ProgressModal({
           <span>{selectedBackground}</span>
           <span>{selectedLocation}</span>
           <span>{selectedBuild}</span>
+          <span>{selectedOpeningHook}</span>
           <span>{selectedPrimary}</span>
           <span>{activeCapabilities.join(' + ')}</span>
           <span>Seed {seed || 'random'}</span>
