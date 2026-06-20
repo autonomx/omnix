@@ -270,7 +270,10 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
   const createCampaignMutation = useMutation({
     mutationFn: (request: RpgNewGameRequest) => omnixApiClient.createRpgNewGame(request),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (result.ok && result.session_id) {
+        setValue('sessionId', result.session_id, { shouldDirty: true, shouldValidate: true });
+      }
       await invalidateRpgWorkspaceQueries();
     },
   });
