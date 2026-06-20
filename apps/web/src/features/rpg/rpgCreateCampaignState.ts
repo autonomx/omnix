@@ -171,8 +171,7 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     .map(([capability]) => mapSecondaryCapability(capability))
     .filter((capability, index, all) => capability !== primary && all.indexOf(capability) === index);
   const seed = parseSeed(selections.seed);
-
-  return {
+  const request: RpgNewGameRequest & Record<string, unknown> = {
     campaign_template: 'deterministic_rpg_campaign',
     tone: selectedBuild.detail,
     background: selections.background,
@@ -210,6 +209,7 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
       stt: selections.systems.stt,
     },
   };
+  return request;
 }
 
 function parseSeed(value: string): number | null {
