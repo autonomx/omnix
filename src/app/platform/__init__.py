@@ -52,7 +52,8 @@ from .rpg_player_compat import (
     player_objectives_payload,
     player_state_payload,
 )
-from .rpg_session_compat import get_rpg_session_payload, list_rpg_sessions_payload
+from .rpg_session_compat import list_rpg_sessions_payload
+from .rpg_session_genesis_compat import get_rpg_session_payload
 from .settings import SettingsPayload, SettingsSaveResponse, get_settings_payload, save_settings_payload
 
 __all__ = [
