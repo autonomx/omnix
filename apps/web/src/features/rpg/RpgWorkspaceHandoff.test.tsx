@@ -101,7 +101,7 @@ describe('RpgWorkspace campaign handoff', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: 'Created Campaign' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Created Campaign — rpg-created-1' })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByLabelText('Session')).toHaveValue('rpg-created-1');
@@ -110,7 +110,8 @@ describe('RpgWorkspace campaign handoff', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Command')).toHaveValue(expect.stringContaining('Session rpg-created-1 is ready'));
+      const commandInput = screen.getByLabelText('Command') as HTMLTextAreaElement;
+      expect(commandInput.value).toContain('Session rpg-created-1 is ready');
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Queue RPG turn' }));
