@@ -218,3 +218,243 @@ export class OmnixApiClient {
   async listProviders(): Promise<ProviderFacadePayload> {
     return this.get<ProviderFacadePayload>('/api/providers');
   }
+
+  async listModels(): Promise<ProviderFacadePayload> {
+    return this.get<ProviderFacadePayload>('/api/models');
+  }
+
+  async refreshProviders(request: ProviderModelRefreshRequest = { scope: 'all', priority: 0 }): Promise<JobRecord> {
+    return this.post<ProviderModelRefreshRequest, JobRecord>('/api/providers/refresh', request);
+  }
+
+  async refreshModels(request: ProviderModelRefreshRequest = { scope: 'models', priority: 0 }): Promise<JobRecord> {
+    return this.post<ProviderModelRefreshRequest, JobRecord>('/api/models/refresh', request);
+  }
+
+  async getModelResidency(): Promise<ModelResidencyDiagnostics> {
+    return this.get<ModelResidencyDiagnostics>('/api/model-residency');
+  }
+
+  async reportModelResidency(request: ModelResidencyRecord): Promise<ModelResidencyDiagnostics> {
+    return this.post<ModelResidencyRecord, ModelResidencyDiagnostics>('/api/model-residency', request);
+  }
+
+  async deleteModelResidency(modelId: string): Promise<ModelResidencyDiagnostics> {
+    return this.request<ModelResidencyDiagnostics>(`/api/model-residency/${encodeURIComponent(modelId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listJobs(): Promise<JobListResponse> {
+    return this.get<JobListResponse>('/api/jobs');
+  }
+
+  async createJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {
+    return this.post<CreateJobRequest, JobRecord>('/api/jobs', request, options);
+  }
+
+  async cancelJob(jobId: string, reason: string): Promise<JobRecord> {
+    return this.post<CancelJobRequest, JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { reason });
+  }
+
+  async listAssets(): Promise<AssetListResponse> {
+    return this.get<AssetListResponse>('/api/assets');
+  }
+
+  async getAssetContent(assetId: string): Promise<AssetContentResponse> {
+    return this.get<AssetContentResponse>(`/api/assets/${encodeURIComponent(assetId)}/content`);
+  }
+
+  async saveStoryAsset(request: SaveStoryAssetRequest): Promise<SavedStoryAssetResponse> {
+    return this.post<SaveStoryAssetRequest, SavedStoryAssetResponse>('/api/assets/story', request);
+  }
+
+  async previewLegacyNonImageAssetImport(): Promise<AssetLegacyImportDryRun> {
+    return this.request<AssetLegacyImportDryRun>('/api/assets/migrations/legacy-non-image/dry-run', {
+      method: 'POST',
+    });
+  }
+
+  async listReports(): Promise<ReportListResponse> {
+    return this.get<ReportListResponse>('/api/reports');
+  }
+
+  async getReplayPersistenceInventory(): Promise<PersistenceInventory> {
+    return this.get<PersistenceInventory>('/api/replay/persistence/inventory');
+  }
+
+  async listRpgPresets(): Promise<RpgPresetListResponse> {
+    try {
+      return await this.get<RpgPresetListResponse>('/api/rpg/presets');
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      const compatibility = await this.post<Record<string, never>, RpgSessionListResponse>('/api/rpg/session/list', {});
+      return { ok: compatibility.ok, presets: compatibility.presets ?? [] };
+    }
+  }
+
+  async listRpgSessions(): Promise<RpgSessionListResponse> {
+    try {
+      const [sessions, presets] = await Promise.all([
+        this.get<RpgSessionListResponse>('/api/rpg/sessions'),
+        this.listRpgPresets(),
+      ]);
+      return { ...sessions, presets: presets.presets };
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, never>, RpgSessionListResponse>('/api/rpg/session/list', {});
+    }
+  }
+
+  async createRpgNewGame(request: RpgNewGameRequest = {}): Promise<RpgLaunchResponse> {
+    try {
+      return await this.post<RpgNewGameRequest, RpgLaunchResponse>('/api/rpg/new-game', request);
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+        action: 'new_game',
+        request,
+      });
+    }
+  }
+
+  async startRpgPreset(presetId: string): Promise<RpgLaunchResponse> {
+    try {
+      return await this.post<Record<string, never>, RpgLaunchResponse>(`/api/rpg/presets/${encodeURIComponent(presetId)}/start`, {});
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+        action: 'start_preset',
+        preset_id: presetId,
+      });
+    }
+  }
+
+  async continueRpgSession(sessionId: string): Promise<RpgLaunchResponse> {
+    try {
+      return await this.post<Record<string, never>, RpgLaunchResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/continue`, {});
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
+        action: 'continue',
+        session_id: sessionId,
+      });
+    }
+  }
+
+  async renameRpgSession(sessionId: string, name: string): Promise<RpgSessionMutationResponse> {
+    try {
+      return await this.post<{ name: string }, RpgSessionMutationResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/rename`, { name });
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgSessionMutationResponse>('/api/rpg/session/get', {
+        action: 'rename',
+        session_id: sessionId,
+        name,
+      });
+    }
+  }
+
+  async deleteRpgSession(sessionId: string): Promise<RpgSessionMutationResponse> {
+    try {
+      return await this.post<Record<string, never>, RpgSessionMutationResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/delete`, {});
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgSessionMutationResponse>('/api/rpg/session/get', {
+        action: 'delete',
+        session_id: sessionId,
+      });
+    }
+  }
+
+  async applyRpgLoadoutAction(sessionId: string, request: RpgLoadoutActionRequest): Promise<RpgLoadoutActionResponse> {
+    try {
+      return await this.post<RpgLoadoutActionRequest, RpgLoadoutActionResponse>(`/api/rpg/sessions/${encodeURIComponent(sessionId)}/loadout-action`, request);
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.post<Record<string, unknown>, RpgLoadoutActionResponse>('/api/rpg/session/get', {
+        action: 'loadout_action',
+        session_id: sessionId,
+        loadout: request,
+      });
+    }
+  }
+
+  async createReplayCheckpoint(request: Record<string, unknown>): Promise<CheckpointEnvelope> {
+    return this.post<Record<string, unknown>, CheckpointEnvelope>('/api/replay/checkpoints', request);
+  }
+
+  async getSettings(): Promise<SettingsPayload> {
+    return this.get<SettingsPayload>('/api/settings');
+  }
+
+  async saveSettings(request: Record<string, unknown>): Promise<SettingsSaveResponse> {
+    return this.post<Record<string, unknown>, SettingsSaveResponse>('/api/settings', request);
+  }
+
+  async getDiagnostics(): Promise<DiagnosticsPayload> {
+    return this.get<DiagnosticsPayload>('/api/diagnostics');
+  }
+
+  private isNotFound(error: unknown): boolean {
+    return error instanceof ApiError && error.status === 404;
+  }
+
+  private async request<T>(path: `/api/${string}`, init: RequestInit, options: ApiRequestOptions = {}): Promise<T> {
+    let didTimeout = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const controller = options.timeoutMs ? new AbortController() : undefined;
+
+    if (controller && options.timeoutMs) {
+      timeoutId = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, options.timeoutMs);
+    }
+
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        ...init,
+        signal: controller?.signal ?? init.signal,
+      });
+      const text = await response.text();
+
+      if (!response.ok) {
+        throw new ApiError(response.status, text);
+      }
+
+      if (!text) {
+        return undefined as T;
+      }
+
+      return JSON.parse(text) as T;
+    } catch (error) {
+      if (didTimeout && options.timeoutMs) {
+        throw new ApiTimeoutError(options.timeoutMs, options.timeoutMessage);
+      }
+      throw error;
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+}
+
+export const omnixApiClient = new OmnixApiClient();
