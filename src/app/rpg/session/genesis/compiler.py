@@ -11,6 +11,14 @@ _WORLD_PROFILE_TRAITS = {
     "harsh_frontier": ["scarce_resources", "remote_start", "active_factions"],
     "quiet_start": ["low_pressure", "local_rumors"],
 }
+_DRIVER_PREFERENCES = {
+    "greedy": {"reward_priority": 1.2, "shared_cost_priority": 0.8},
+    "reckless": {"speed_priority": 1.2, "planning_priority": 0.85},
+    "cowardly": {"safety_priority": 1.2, "boldness_priority": 0.85},
+    "arrogant": {"independence_priority": 1.15, "deference_priority": 0.85},
+    "naive": {"trust_priority": 1.2, "verification_priority": 0.85},
+    "impulsive": {"immediacy_priority": 1.2, "delay_priority": 0.8},
+}
 
 
 def _normal_key(value: object) -> str:
@@ -38,6 +46,26 @@ def _gear_intents(contract: CampaignGenesisContract) -> list[dict[str, str]]:
     ]
 
 
+def _motivation_goals(contract: CampaignGenesisContract) -> list[dict[str, Any]]:
+    motivation = contract.drivers.motivation
+    primary = _normal_key(motivation.primary) or "survival"
+    target = _normal_key(motivation.target) or "campaign"
+    priority = max(1, min(100, int(motivation.intensity or 0)))
+    return [
+        {
+            "id": f"pursue_{primary}_for_{target}",
+            "source": f"motivation:{primary}",
+            "priority": priority,
+            "status": "complete" if motivation.fulfilled else "active",
+        }
+    ]
+
+
+def _decision_biases(contract: CampaignGenesisContract) -> dict[str, float]:
+    key = _normal_key(contract.drivers.flaw)
+    return dict(_DRIVER_PREFERENCES.get(key, {}))
+
+
 def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any]:
     """Compile declarative genesis into deterministic pre-bootstrap state."""
 
@@ -52,9 +80,10 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
                 "source": "genesis:bootstrap",
                 "priority": 50,
                 "status": "active",
-            }
+            },
+            *_motivation_goals(contract),
         ],
-        "compiled_decision_biases": {},
+        "compiled_decision_biases": _decision_biases(contract),
         "compiled_gear_intents": _gear_intents(contract),
         "compiled_story_state": contract.story_options.model_dump(mode="json", exclude_none=True),
         "compiled_feature_flags": contract.system_options.model_dump(mode="json"),
