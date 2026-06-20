@@ -7,9 +7,7 @@ def test_new_game_story_setup_seeds_objective_relationship_and_actions() -> None
     request = RpgNewGameRequest(
         player=RpgPlayerOptions(name="Mira", pronouns="she/her", background="Wanderer", build="ranger"),
         seed=9137,
-        opening_hook="merchant_job",
-        opening_pace="immediate_action",
-        relationship_preset="known_contact_nearby",
+        generated_class_summary="Road scout. Opening: Merchant Job. Pace: Immediate action. Relationship: Known contact nearby.",
     )
 
     state = _new_game_state(request, "rpg_test", "2026-06-20T00:00:00Z")
@@ -36,9 +34,7 @@ def test_new_game_story_setup_seeds_objective_relationship_and_actions() -> None
 def test_new_game_random_story_hook_is_seed_deterministic() -> None:
     request = RpgNewGameRequest(
         seed=7,
-        opening_hook="random_from_seed",
-        opening_pace="slow-roleplay",
-        relationship_preset="guard-suspicion",
+        generated_class_summary="Opening: Random from Seed. Pace: Slow roleplay. Relationship: Guard suspicion.",
     )
 
     first = _new_game_state(request, "rpg_a", "2026-06-20T00:00:00Z")
@@ -54,7 +50,7 @@ def test_new_game_random_story_hook_is_seed_deterministic() -> None:
 
 def test_new_game_story_setup_uses_safe_defaults() -> None:
     state = _new_game_state(
-        RpgNewGameRequest(opening_hook="unknown", opening_pace="unknown", relationship_preset="unknown"),
+        RpgNewGameRequest(generated_class_summary="Opening: unknown. Pace: unknown. Relationship: unknown."),
         "rpg_default",
         "2026-06-20T00:00:00Z",
     )
