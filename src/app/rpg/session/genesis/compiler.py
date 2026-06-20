@@ -19,6 +19,38 @@ _DRIVER_PREFERENCES = {
     "naive": {"trust_priority": 1.2, "verification_priority": 0.85},
     "impulsive": {"immediacy_priority": 1.2, "delay_priority": 0.8},
 }
+_STARTER_TAGS = {
+    "ranged_weapon": {
+        "category": "equipment",
+        "role": "ranged",
+        "item_id": "starter_ranged_kit",
+        "label": "Starter ranged kit",
+    },
+    "close_weapon": {
+        "category": "equipment",
+        "role": "close",
+        "item_id": "starter_close_kit",
+        "label": "Starter close kit",
+    },
+    "survival_tool": {
+        "category": "tool",
+        "role": "survival",
+        "item_id": "field_survival_tool",
+        "label": "Field survival tool",
+    },
+    "travel_supplies": {
+        "category": "supply",
+        "role": "travel",
+        "item_id": "travel_supplies",
+        "label": "Travel supplies",
+    },
+    "field_notes": {
+        "category": "record",
+        "role": "reference",
+        "item_id": "field_notes",
+        "label": "Field notes",
+    },
+}
 
 
 def _normal_key(value: object) -> str:
@@ -39,10 +71,32 @@ def _world_traits(contract: CampaignGenesisContract) -> list[str]:
     return list(dict.fromkeys(traits))
 
 
+def _starter_intent(tag: object) -> dict[str, str]:
+    key = _normal_key(tag)
+    template = dict(_STARTER_TAGS.get(key, {}))
+    return {
+        "tag": key,
+        "category": template.get("category", "misc"),
+        "role": template.get("role", "starter"),
+        "quality": "starter",
+        "item_id": template.get("item_id", key or "starter_item"),
+        "label": template.get("label", (key or "starter item").replace("_", " ").title()),
+    }
+
+
 def _gear_intents(contract: CampaignGenesisContract) -> list[dict[str, str]]:
+    return [_starter_intent(tag) for tag in contract.starter_gear_tags]
+
+
+def _starter_loadout(intents: list[dict[str, str]]) -> list[dict[str, str]]:
     return [
-        {"tag": _normal_key(tag), "quality": "starter", "role": "starter"}
-        for tag in contract.starter_gear_tags
+        {
+            "id": intent["item_id"],
+            "name": intent["label"],
+            "source_tag": intent["tag"],
+            "quality": intent["quality"],
+        }
+        for intent in intents
     ]
 
 
@@ -69,6 +123,7 @@ def _decision_biases(contract: CampaignGenesisContract) -> dict[str, float]:
 def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any]:
     """Compile declarative genesis into deterministic pre-bootstrap state."""
 
+    intents = _gear_intents(contract)
     return {
         "compiler_version": GENESIS_COMPILER_VERSION,
         "compiled_stats": contract.initial_stats.model_dump(mode="json"),
@@ -84,7 +139,8 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
             *_motivation_goals(contract),
         ],
         "compiled_decision_biases": _decision_biases(contract),
-        "compiled_gear_intents": _gear_intents(contract),
+        "compiled_gear_intents": intents,
+        "compiled_starter_loadout": _starter_loadout(intents),
         "compiled_story_state": contract.story_options.model_dump(mode="json", exclude_none=True),
         "compiled_feature_flags": contract.system_options.model_dump(mode="json"),
         "compiled_provenance": {

@@ -13,6 +13,7 @@ def bootstrap_session_from_compiled_genesis(compiled: dict[str, Any]) -> dict[st
         "active_goals": list(compiled.get("compiled_goals") or []),
         "decision_biases": dict(compiled.get("compiled_decision_biases") or {}),
         "gear_intents": list(compiled.get("compiled_gear_intents") or []),
+        "starter_loadout": list(compiled.get("compiled_starter_loadout") or []),
         "world_traits": list(compiled.get("compiled_world_traits") or []),
         "feature_flags": dict(compiled.get("compiled_feature_flags") or {}),
         "stats": dict(compiled.get("compiled_stats") or {}),
