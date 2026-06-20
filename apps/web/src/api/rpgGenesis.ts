@@ -12,6 +12,13 @@ const CAPABILITY_TALENT_IDS: Partial<Record<RpgCapability, string>> = {
   technical: 'technical_handling',
 };
 
+const BUILD_STARTER_TAGS: Record<string, string[]> = {
+  balanced_adventurer: ['travel_supplies', 'close_weapon'],
+  ranger: ['ranged_weapon', 'survival_tool', 'travel_supplies'],
+  silver_tongue: ['field_notes', 'travel_supplies'],
+  warrior: ['close_weapon', 'survival_tool', 'travel_supplies'],
+};
+
 interface GenesisTalentInput {
   id?: unknown;
   rank?: unknown;
@@ -111,18 +118,32 @@ function buildTalents(request: LooseRequest): Array<{ id: string; rank: number }
   return talents;
 }
 
+function addTag(tags: Set<string>, tag: string): void {
+  if (tag.trim()) {
+    tags.add(tag.trim());
+  }
+}
+
 function fallbackGearTags(request: LooseRequest): string[] {
   const provided = Array.isArray(request.starter_gear_tags) ? request.starter_gear_tags.filter((tag) => typeof tag === 'string') : [];
   if (provided.length > 0) {
     return provided;
   }
-  const tags = new Set<string>(['travel_supplies']);
+  const player = asRecord(request.player);
+  const buildKey = asString(player.build, '').replace('-', '_');
+  const tags = new Set<string>(BUILD_STARTER_TAGS[buildKey] ?? ['travel_supplies']);
   const capabilities = [request.primary_capability, ...(request.secondary_capabilities ?? [])];
+  if (capabilities.includes('combat')) {
+    addTag(tags, 'close_weapon');
+  }
+  if (capabilities.includes('recon')) {
+    addTag(tags, 'ranged_weapon');
+  }
   if (capabilities.includes('survival')) {
-    tags.add('survival_tool');
+    addTag(tags, 'survival_tool');
   }
   if (capabilities.includes('knowledge') || capabilities.includes('technical')) {
-    tags.add('field_notes');
+    addTag(tags, 'field_notes');
   }
   return Array.from(tags);
 }
