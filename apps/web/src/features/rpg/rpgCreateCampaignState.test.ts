@@ -16,9 +16,12 @@ const baseSelections: CampaignCreationSelections = {
   combatLethality: 'deadly',
   difficulty: 'hard',
   economyPressure: 'tight',
+  openingHook: 'bandit-trail',
+  openingPace: 'immediate-action',
   powerSource: 'arcane',
   primaryCapability: 'craft',
   pronouns: 'she/her',
+  relationshipPreset: 'known-contact',
   seed: '9137',
   startingLocation: 'watch-post',
   stats: { ...initialStats, perception: 11 },
@@ -45,8 +48,11 @@ describe('RPG campaign creation state', () => {
       combat_lethality: 'deadly',
       difficulty: 'harsh',
       economy_pressure: 'strict',
+      opening_hook: 'bandit_trail',
+      opening_pace: 'immediate_action',
       power_source: 'magic',
       primary_capability: 'technical',
+      relationship_preset: 'known_contact_nearby',
       seed: 9137,
       starting_location: 'northern_watch_post',
       world_activity: 'living_world',
@@ -56,6 +62,13 @@ describe('RPG campaign creation state', () => {
     expect(request.initial_stats).toMatchObject({ perception: 11 });
     expect(request.starter_gear).toContain('Shortbow');
     expect(request.features).toMatchObject({ autosave: true, background_soft_audit: true, image_generation: false, validator: true });
+    expect(request.story_options).toMatchObject({
+      opening_hook: 'bandit_trail',
+      opening_hook_label: 'Bandit Trail',
+      opening_pace: 'immediate_action',
+      relationship_label: 'Known contact nearby',
+      relationship_preset: 'known_contact_nearby',
+    });
   });
 
   it('falls back to nullable seed and normalized safe defaults', () => {
@@ -65,19 +78,25 @@ describe('RPG campaign creation state', () => {
       combatLethality: 'forgiving',
       difficulty: 'story',
       economyPressure: 'low',
+      openingHook: undefined,
+      openingPace: undefined,
       powerSource: 'technique',
       primaryCapability: 'recon',
+      relationshipPreset: undefined,
       seed: '',
       startingLocation: 'rusty-flagons',
       worldActivity: 'quiet',
-    });
+    }) as Record<string, unknown>;
 
     expect(request).toMatchObject({
       combat_lethality: 'safe',
       difficulty: 'story',
       economy_pressure: 'relaxed',
+      opening_hook: 'tavern_rumor',
+      opening_pace: 'balanced',
       power_source: 'martial',
       primary_capability: 'recon',
+      relationship_preset: 'unknown_outsider',
       seed: null,
       starting_location: 'rusty_flagon_tavern',
       world_activity: 'quiet',

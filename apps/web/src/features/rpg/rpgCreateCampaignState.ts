@@ -37,9 +37,12 @@ export interface CampaignCreationSelections {
   combatLethality: string;
   difficulty: string;
   economyPressure: string;
+  openingHook?: string;
+  openingPace?: string;
   powerSource: string;
   primaryCapability: string;
   pronouns: string;
+  relationshipPreset?: string;
   seed: string;
   startingLocation: string;
   stats: Record<string, number>;
@@ -139,6 +142,29 @@ export const primaryCapabilities: SelectOption[] = [
   { value: 'craft', label: 'Craft / Technical', detail: 'Item use, crafting, salvage, repair, and knowledge items.' },
 ];
 
+export const openingHooks: SelectOption[] = [
+  { value: 'tavern-rumor', label: 'Tavern Rumor', detail: 'Social opening with inn, rumor, service, and local NPC coverage.' },
+  { value: 'bandit-trail', label: 'Bandit Trail', detail: 'Recon-forward danger hook with tracks, witnesses, and combat pressure.' },
+  { value: 'missing-person', label: 'Missing Person', detail: 'Investigation hook with clues, urgency, and relationship stakes.' },
+  { value: 'guard-trouble', label: 'Guard Trouble', detail: 'Starts with guard attention, strict responses, and social consequences.' },
+  { value: 'merchant-job', label: 'Merchant Job', detail: 'Economy/service opening with prices, delivery, and trade affordances.' },
+  { value: 'random-seed', label: 'Random from Seed', detail: 'Deterministically picks an opening hook from the visible seed.' },
+];
+
+export const openingPaces: SelectOption[] = [
+  { value: 'slow-roleplay', label: 'Slow roleplay', detail: 'More room for NPC dialogue, service menus, and scene grounding.' },
+  { value: 'balanced', label: 'Balanced', detail: 'Mix of setup, objectives, and immediate actionable pressure.' },
+  { value: 'immediate-action', label: 'Immediate action', detail: 'Starts close to danger or a concrete objective.' },
+];
+
+export const relationshipPresets: SelectOption[] = [
+  { value: 'unknown-outsider', label: 'Unknown outsider', detail: 'NPCs begin neutral and learn about the player through play.' },
+  { value: 'local-regular', label: 'Local regular', detail: 'Starts with light tavern familiarity and stronger local rumor access.' },
+  { value: 'known-contact', label: 'Known contact nearby', detail: 'Seeds one nearby NPC as a useful contact or possible companion.' },
+  { value: 'owes-favor', label: 'Owes someone a favor', detail: 'Adds a relationship debt that can become an opening objective.' },
+  { value: 'guard-suspicion', label: 'Guard suspicion', detail: 'Starts with watch tension and stricter guard response flavor.' },
+];
+
 export const creationStages: CreationStage[] = [
   { label: 'Validated setup', detail: 'Required fields, toggles, and point-buy totals checked.' },
   { label: 'Resolved seed', detail: 'Visible or random seed converted into deterministic campaign entropy.' },
@@ -165,6 +191,12 @@ export const initialStats = Object.fromEntries(statDefinitions.map((stat) => [st
 
 export function buildRpgNewGameRequest(selections: CampaignCreationSelections): RpgNewGameRequest {
   const selectedBuild = buildTemplates.find((template) => template.key === selections.buildKey) ?? buildTemplates[0];
+  const openingHook = selections.openingHook ?? 'tavern-rumor';
+  const openingPace = selections.openingPace ?? 'balanced';
+  const relationshipPreset = selections.relationshipPreset ?? 'unknown-outsider';
+  const selectedHook = openingHooks.find((option) => option.value === openingHook) ?? openingHooks[0];
+  const selectedPace = openingPaces.find((option) => option.value === openingPace) ?? openingPaces[1];
+  const selectedRelationship = relationshipPresets.find((option) => option.value === relationshipPreset) ?? relationshipPresets[0];
   const primary = mapPrimaryCapability(selections.primaryCapability);
   const secondary = (Object.entries(selections.capabilities) as Array<[Capability, boolean]>)
     .filter(([, enabled]) => enabled)
@@ -187,7 +219,7 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     secondary_capabilities: secondary,
     power_source: mapPowerSource(selections.powerSource),
     generated_class_name: selectedBuild.label,
-    generated_class_summary: `${selectedBuild.detail} Starter gear: ${selectedBuild.starterGear.join(', ')}.`,
+    generated_class_summary: `${selectedBuild.detail} Starter gear: ${selectedBuild.starterGear.join(', ')}. Opening: ${selectedHook.label}.`,
     difficulty: mapDifficulty(selections.difficulty),
     world_activity: mapWorldActivity(selections.worldActivity),
     economy_pressure: mapEconomyPressure(selections.economyPressure),
@@ -198,6 +230,17 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     initial_stats: { ...selections.stats },
     starter_gear: [...selectedBuild.starterGear],
     starting_build: selectedBuild.label,
+    opening_hook: mapOpeningHook(openingHook),
+    opening_pace: mapOpeningPace(openingPace),
+    relationship_preset: mapRelationshipPreset(relationshipPreset),
+    story_options: {
+      opening_hook: mapOpeningHook(openingHook),
+      opening_hook_label: selectedHook.label,
+      opening_pace: mapOpeningPace(openingPace),
+      opening_pace_label: selectedPace.label,
+      relationship_preset: mapRelationshipPreset(relationshipPreset),
+      relationship_label: selectedRelationship.label,
+    },
     system_options: { ...selections.systems },
     features: {
       autosave: selections.systems.autosave,
@@ -256,6 +299,38 @@ function mapStartingLocation(value: string): string {
     'old-quarry': 'old_quarry_edge',
     'rusty-flagons': 'rusty_flagon_tavern',
     'watch-post': 'northern_watch_post',
+  };
+  return mapping[value] ?? value;
+}
+
+function mapOpeningHook(value: string): string {
+  const mapping: Record<string, string> = {
+    'bandit-trail': 'bandit_trail',
+    'guard-trouble': 'guard_trouble',
+    'merchant-job': 'merchant_job',
+    'missing-person': 'missing_person',
+    'random-seed': 'random_from_seed',
+    'tavern-rumor': 'tavern_rumor',
+  };
+  return mapping[value] ?? value;
+}
+
+function mapOpeningPace(value: string): string {
+  const mapping: Record<string, string> = {
+    balanced: 'balanced',
+    'immediate-action': 'immediate_action',
+    'slow-roleplay': 'slow_roleplay',
+  };
+  return mapping[value] ?? value;
+}
+
+function mapRelationshipPreset(value: string): string {
+  const mapping: Record<string, string> = {
+    'guard-suspicion': 'guard_suspicion',
+    'known-contact': 'known_contact_nearby',
+    'local-regular': 'local_regular',
+    'owes-favor': 'owes_someone_a_favor',
+    'unknown-outsider': 'unknown_outsider',
   };
   return mapping[value] ?? value;
 }

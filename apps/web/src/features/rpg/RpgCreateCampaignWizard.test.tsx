@@ -13,13 +13,25 @@ function renderWithTheme(element: ReactElement) {
   );
 }
 
+function getSelectByVisibleLabel(label: string): HTMLSelectElement {
+  const labelNode = screen.getByText(label).closest('label');
+  const select = labelNode?.querySelector('select');
+  if (!select) {
+    throw new Error(`Could not find select for ${label}`);
+  }
+  return select;
+}
+
 describe('RpgCreateCampaignWizard', () => {
-  it('renders deep setup controls, point buy, starter gear, and supported systems', () => {
+  it('renders deep setup controls, point buy, story hooks, starter gear, and supported systems', () => {
     renderWithTheme(<RpgCreateCampaignWizard />);
 
     expect(screen.getByRole('heading', { name: 'Create Campaign' })).toBeInTheDocument();
     expect(screen.getByLabelText('Secondary capabilities')).toHaveTextContent('Combat');
     expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent('Rusty Flagon Tavern');
+    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent('Tavern Rumor');
+    expect(screen.getByLabelText('Campaign setup summary')).toHaveTextContent('Unknown outsider');
+    expect(screen.getByText('Opening story')).toBeInTheDocument();
     expect(screen.getByText('Starter gear')).toBeInTheDocument();
     expect(screen.getByText('Grounding validator')).toBeInTheDocument();
     expect(screen.getByText('20 points left')).toBeInTheDocument();
@@ -47,6 +59,8 @@ describe('RpgCreateCampaignWizard', () => {
     );
     renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} onSelectCommand={onSelectCommand} />);
 
+    fireEvent.change(getSelectByVisibleLabel('Opening hook'), { target: { value: 'merchant-job' } });
+    fireEvent.change(getSelectByVisibleLabel('Relationship preset'), { target: { value: 'known-contact' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
     expect(screen.getByRole('dialog', { name: 'Creating Campaign' })).toBeInTheDocument();
@@ -56,9 +70,13 @@ describe('RpgCreateCampaignWizard', () => {
       expect.objectContaining({
         companions_enabled: true,
         initial_stats: expect.objectContaining({ strength: 8, perception: 8 }),
+        opening_hook: 'merchant_job',
+        opening_pace: 'balanced',
         player: expect.objectContaining({ build: 'balanced_adventurer', name: 'Elara', pronouns: 'she/her' }),
         primary_capability: 'recon',
+        relationship_preset: 'known_contact_nearby',
         starting_location: 'rusty_flagon_tavern',
+        story_options: expect.objectContaining({ opening_hook_label: 'Merchant Job', relationship_label: 'Known contact nearby' }),
       }),
     );
 
@@ -81,6 +99,7 @@ describe('RpgCreateCampaignWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
     expect(onSelectCommand).toHaveBeenCalledWith(expect.stringContaining('Session session-new is ready'));
+    expect(onSelectCommand).toHaveBeenCalledWith(expect.stringContaining('Opening: Merchant Job'));
     vi.useRealTimers();
   });
 
