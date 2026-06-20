@@ -66,7 +66,6 @@ class RpgNewGameRequest(BaseModel):
     companions_enabled: bool = True
     permadeath: bool = False
     seed: int | None = None
-    initial_stats: dict[str, Any] = Field(default_factory=dict)
     features: RpgFeatureOptions = Field(default_factory=RpgFeatureOptions)
 
 
@@ -423,6 +422,26 @@ def _normalize_initial_stats(initial_stats: dict[str, Any] | None) -> dict[str, 
     return normalized
 
 
+def _stats_from_summary(summary: str | None) -> dict[str, int]:
+    value = _summary_field(summary, "Stats")
+    if not value:
+        return {}
+    raw_stats: dict[str, Any] = {}
+    for entry in value.split(","):
+        label = entry.strip()
+        if not label:
+            continue
+        key_text, _, value_text = label.replace(":", " ").rpartition(" ")
+        key = _normal_key(key_text, "")
+        if key:
+            raw_stats[key] = value_text.strip()
+    return _normalize_initial_stats(raw_stats)
+
+
+def _initial_stats_from_request(request: RpgNewGameRequest) -> dict[str, int]:
+    return _stats_from_summary(request.generated_class_summary)
+
+
 def _resource_snapshot(value: dict[str, Any]) -> dict[str, int]:
     maximum = int(value.get("max") or value.get("current") or 0)
     current = int(value.get("current") or maximum)
@@ -451,7 +470,7 @@ def _derive_resources(build: dict[str, Any], stats: dict[str, int]) -> dict[str,
 
 
 def _player_stat_profile(request: RpgNewGameRequest, build: dict[str, Any]) -> dict[str, Any]:
-    normalized = _normalize_initial_stats(request.initial_stats)
+    normalized = _initial_stats_from_request(request)
     core_stats = {key: int(value) for key, value in dict(build["stats"]).items()}
     for frontend_key, core_key in CORE_STAT_MAP.items():
         if frontend_key in normalized:
