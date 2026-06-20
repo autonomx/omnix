@@ -66,6 +66,7 @@ class RpgNewGameRequest(BaseModel):
     companions_enabled: bool = True
     permadeath: bool = False
     seed: int | None = None
+    initial_stats: dict[str, Any] = Field(default_factory=dict)
     features: RpgFeatureOptions = Field(default_factory=RpgFeatureOptions)
 
 
@@ -107,6 +108,19 @@ STARTING_BUILDS: dict[str, dict[str, Any]] = {
         "mana": {"current": 50, "max": 50},
     },
 }
+
+CAMPAIGN_STAT_KEYS = ("strength", "agility", "endurance", "intellect", "charisma", "perception", "archery", "survival")
+CAMPAIGN_STAT_MIN = 8
+CAMPAIGN_STAT_MAX = 16
+CORE_STAT_MAP = {
+    "strength": "strength",
+    "agility": "dexterity",
+    "endurance": "constitution",
+    "intellect": "intelligence",
+    "charisma": "charisma",
+    "perception": "wisdom",
+}
+RPG_ONLY_STAT_KEYS = ("archery", "survival")
 
 
 STARTING_LOCATIONS: dict[str, dict[str, Any]] = {
@@ -379,6 +393,94 @@ def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], see
     }
 
 
+def _coerce_initial_stat(raw_value: Any) -> int | None:
+    if isinstance(raw_value, bool) or raw_value is None:
+        return None
+    if isinstance(raw_value, int):
+        value = raw_value
+    elif isinstance(raw_value, float) and raw_value.is_integer():
+        value = int(raw_value)
+    elif isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text or not text.lstrip("-").isdigit():
+            return None
+        value = int(text)
+    else:
+        return None
+    return max(CAMPAIGN_STAT_MIN, min(CAMPAIGN_STAT_MAX, value))
+
+
+def _normalize_initial_stats(initial_stats: dict[str, Any] | None) -> dict[str, int]:
+    if not isinstance(initial_stats, dict):
+        return {}
+    normalized: dict[str, int] = {}
+    for key in CAMPAIGN_STAT_KEYS:
+        if key not in initial_stats:
+            continue
+        value = _coerce_initial_stat(initial_stats.get(key))
+        if value is not None:
+            normalized[key] = value
+    return normalized
+
+
+def _resource_snapshot(value: dict[str, Any]) -> dict[str, int]:
+    maximum = int(value.get("max") or value.get("current") or 0)
+    current = int(value.get("current") or maximum)
+    return {"current": current, "max": maximum}
+
+
+def _derive_resources(build: dict[str, Any], stats: dict[str, int]) -> dict[str, dict[str, int]]:
+    baseline_stats = {key: int(value) for key, value in dict(build["stats"]).items()}
+    base_hp = _resource_snapshot(dict(build["hp"]))["max"]
+    base_stamina = _resource_snapshot(dict(build["stamina"]))["max"]
+    base_mana = _resource_snapshot(dict(build["mana"]))["max"]
+    constitution_delta = stats["constitution"] - baseline_stats["constitution"]
+    dexterity_delta = stats["dexterity"] - baseline_stats["dexterity"]
+    strength_delta = stats["strength"] - baseline_stats["strength"]
+    intelligence_delta = stats["intelligence"] - baseline_stats["intelligence"]
+    wisdom_delta = stats["wisdom"] - baseline_stats["wisdom"]
+    charisma_delta = stats["charisma"] - baseline_stats["charisma"]
+    hp = max(50, base_hp + constitution_delta * 8)
+    stamina = max(40, base_stamina + constitution_delta * 3 + dexterity_delta * 4 + strength_delta * 2)
+    mana = max(0, base_mana + intelligence_delta * 5 + wisdom_delta * 3 + charisma_delta * 2)
+    return {
+        "hp": {"current": hp, "max": hp},
+        "stamina": {"current": stamina, "max": stamina},
+        "mana": {"current": mana, "max": mana},
+    }
+
+
+def _player_stat_profile(request: RpgNewGameRequest, build: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_initial_stats(request.initial_stats)
+    core_stats = {key: int(value) for key, value in dict(build["stats"]).items()}
+    for frontend_key, core_key in CORE_STAT_MAP.items():
+        if frontend_key in normalized:
+            core_stats[core_key] = normalized[frontend_key]
+    rpg_only_stats = {key: normalized[key] for key in RPG_ONLY_STAT_KEYS if key in normalized}
+    source = "new_game_point_buy" if normalized else "build_default"
+    resources = _derive_resources(build, core_stats) if normalized else {
+        "hp": _resource_snapshot(dict(build["hp"])),
+        "stamina": _resource_snapshot(dict(build["stamina"])),
+        "mana": _resource_snapshot(dict(build["mana"])),
+    }
+    skill_progression = {
+        "starting_stats": {key: {"value": value, "source": source} for key, value in rpg_only_stats.items()}
+    } if rpg_only_stats else {}
+    affordance = {
+        "core_stats": dict(core_stats),
+        "rpg_only_stats": rpg_only_stats,
+        "source": source,
+    }
+    return {
+        "initial_stats": normalized,
+        "stat_source": source,
+        "stats": core_stats,
+        "resources": resources,
+        "skill_progression": skill_progression,
+        "affordance": affordance,
+    }
+
+
 def _starter_gear_labels(request: RpgNewGameRequest) -> list[str]:
     value = _summary_field(request.generated_class_summary, "Starter gear")
     if not value:
@@ -498,6 +600,7 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     identity = progression["character_identity"]
     story_setup = _build_story_setup(request, location, seed)
     loadout = _starter_loadout(request)
+    stat_profile = _player_stat_profile(request, build)
     timeline = [*location["timeline"], *story_setup["timeline"]]
     return {
         "contract_version": NEW_GAME_CONTRACT_VERSION,
@@ -526,6 +629,8 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "opening_pace": story_setup["opening_pace"],
             "relationship_preset": story_setup["relationship_preset"],
             "starter_gear": loadout["starter_gear"],
+            "initial_stats": stat_profile["initial_stats"],
+            "stat_source": stat_profile["stat_source"],
             "seed": seed,
             "created_from_preset": None,
         },
@@ -533,9 +638,14 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "ability_tree": progression["ability_tree"],
         "ability_state": progression["ability_state"],
         "hotbar": progression["hotbar"],
-        "skill_progression": {},
+        "skill_progression": stat_profile["skill_progression"],
         "mechanics": {"dimension_effects": [], "pending_dimension_effects": []},
-        "narrative_affordances": {"opening_story": story_setup, "starter_loadout": loadout, "suggested_actions": story_setup["quick_actions"]},
+        "narrative_affordances": {
+            "opening_story": story_setup,
+            "starter_loadout": loadout,
+            "stat_profile": stat_profile["affordance"],
+            "suggested_actions": story_setup["quick_actions"],
+        },
         "player": {
             "name": request.player.name,
             "pronouns": request.player.pronouns,
@@ -545,8 +655,8 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "build": request.player.build,
             "level": 1,
             "xp": {"current": 0, "max": 100},
-            "stats": build["stats"],
-            "resources": {"hp": build["hp"], "stamina": build["stamina"], "mana": build["mana"]},
+            "stats": stat_profile["stats"],
+            "resources": stat_profile["resources"],
             "currency": loadout["currency"],
             "renown": "Unknown (0)",
             "equipment": loadout["equipment"],
