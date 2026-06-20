@@ -13,6 +13,15 @@ function renderWithTheme(element: ReactElement) {
   );
 }
 
+function getSelectByVisibleLabel(label: string): HTMLSelectElement {
+  const labelNode = screen.getByText(label).closest('label');
+  const select = labelNode?.querySelector('select');
+  if (!select) {
+    throw new Error(`Could not find select for ${label}`);
+  }
+  return select;
+}
+
 describe('RpgCreateCampaignWizard', () => {
   it('renders deep setup controls, point buy, story hooks, starter gear, and supported systems', () => {
     renderWithTheme(<RpgCreateCampaignWizard />);
@@ -50,8 +59,8 @@ describe('RpgCreateCampaignWizard', () => {
     );
     renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} onSelectCommand={onSelectCommand} />);
 
-    fireEvent.change(screen.getByLabelText('Opening hook'), { target: { value: 'merchant-job' } });
-    fireEvent.change(screen.getByLabelText('Relationship preset'), { target: { value: 'known-contact' } });
+    fireEvent.change(getSelectByVisibleLabel('Opening hook'), { target: { value: 'merchant-job' } });
+    fireEvent.change(getSelectByVisibleLabel('Relationship preset'), { target: { value: 'known-contact' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Campaign' }));
 
     expect(screen.getByRole('dialog', { name: 'Creating Campaign' })).toBeInTheDocument();
