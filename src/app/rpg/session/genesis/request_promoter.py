@@ -32,7 +32,10 @@ def _origin_from_background(background: str) -> str:
         "local": "rusty_flagon_district",
         "wanderer": "open_road",
     }
-    return mapping.get(_normal_key(background), _normal_key(background, "unknown_origin"))
+    return mapping.get(
+        _normal_key(background),
+        _normal_key(background, "unknown_origin"),
+    )
 
 
 def _motivation(opening_hook: str) -> dict[str, Any]:
@@ -71,11 +74,20 @@ def promote_new_game_request_to_genesis(request: dict[str, Any]) -> CampaignGene
     features = _safe_dict(request.get("features"))
     story_options = _safe_dict(request.get("story_options"))
     system_options = _safe_dict(request.get("system_options"))
-    background = _safe_str(player.get("background") or request.get("background"), "wanderer")
-    opening_hook = _safe_str(story_options.get("opening_hook") or request.get("opening_hook"), "tavern_rumor")
+    background = _safe_str(
+        player.get("background") or request.get("background"),
+        "wanderer",
+    )
+    opening_hook = _safe_str(
+        story_options.get("opening_hook") or request.get("opening_hook"),
+        "tavern_rumor",
+    )
     return CampaignGenesisContract.model_validate(
         {
-            "campaign_template": _safe_str(request.get("campaign_template"), "deterministic_rpg_campaign"),
+            "campaign_template": _safe_str(
+                request.get("campaign_template"),
+                "deterministic_rpg_campaign",
+            ),
             "genre": request.get("genre"),
             "tone": _safe_str(request.get("tone"), "heroic adventure"),
             "identity": {
@@ -86,7 +98,10 @@ def promote_new_game_request_to_genesis(request: dict[str, Any]) -> CampaignGene
                 "power_source": request.get("power_source"),
             },
             "drivers": {
-                "archetype": _normal_key(request.get("generated_class_name") or player.get("build"), "balanced_adventurer"),
+                "archetype": _normal_key(
+                    request.get("generated_class_name") or player.get("build"),
+                    "balanced_adventurer",
+                ),
                 "motivation": _motivation(opening_hook),
                 "flaw": request.get("flaw"),
                 "talents": _talents(request),
@@ -97,11 +112,15 @@ def promote_new_game_request_to_genesis(request: dict[str, Any]) -> CampaignGene
             "story_options": {
                 "opening_hook": opening_hook,
                 "opening_pace": story_options.get("opening_pace") or request.get("opening_pace"),
-                "relationship_preset": story_options.get("relationship_preset") or request.get("relationship_preset"),
+                "relationship_preset": story_options.get("relationship_preset")
+                or request.get("relationship_preset"),
             },
             "world_options": {
                 "world_profile": request.get("world_profile"),
-                "starting_location": _safe_str(request.get("starting_location"), "rusty_flagon_tavern"),
+                "starting_location": _safe_str(
+                    request.get("starting_location"),
+                    "rusty_flagon_tavern",
+                ),
                 "difficulty": request.get("difficulty") or "normal",
                 "world_activity": request.get("world_activity") or "standard",
                 "economy_pressure": request.get("economy_pressure") or "normal",
@@ -109,9 +128,15 @@ def promote_new_game_request_to_genesis(request: dict[str, Any]) -> CampaignGene
                 "seed": request.get("seed"),
             },
             "system_options": {
-                "autosave": bool(system_options.get("autosave", features.get("autosave", True))),
-                "companions": bool(request.get("companions_enabled", system_options.get("companions", True))),
-                "permadeath": bool(request.get("permadeath", system_options.get("permadeath", False))),
+                "autosave": bool(
+                    system_options.get("autosave", features.get("autosave", True))
+                ),
+                "companions": bool(
+                    request.get("companions_enabled", system_options.get("companions", True))
+                ),
+                "permadeath": bool(
+                    request.get("permadeath", system_options.get("permadeath", False))
+                ),
                 "validator": bool(features.get("validator", True)),
                 "background_soft_audit": bool(features.get("background_soft_audit", True)),
                 "llm_narration": bool(features.get("llm_narration", True)),
