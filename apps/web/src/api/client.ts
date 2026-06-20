@@ -88,6 +88,7 @@ export interface RpgNewGameRequest {
   companions_enabled?: boolean;
   permadeath?: boolean;
   seed?: number | null;
+  initial_stats?: Record<string, number>;
   features?: RpgFeatureOptions;
 }
 
