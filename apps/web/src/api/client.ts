@@ -1,4 +1,5 @@
 import type { components, paths } from './generated/types';
+import { withRpgGenesisContract } from './rpgGenesis';
 
 export type GatewayApiPaths = paths;
 export type GatewayApiPath = keyof GatewayApiPaths & string;
@@ -90,6 +91,7 @@ export interface RpgNewGameRequest {
   seed?: number | null;
   initial_stats?: Record<string, number>;
   features?: RpgFeatureOptions;
+  genesis?: Record<string, unknown>;
 }
 
 export interface RpgPresetSummary {
@@ -311,15 +313,16 @@ export class OmnixApiClient {
   }
 
   async createRpgNewGame(request: RpgNewGameRequest = {}): Promise<RpgLaunchResponse> {
+    const genesisRequest = withRpgGenesisContract(request);
     try {
-      return await this.post<RpgNewGameRequest, RpgLaunchResponse>('/api/rpg/new-game', request);
+      return await this.post<RpgNewGameRequest, RpgLaunchResponse>('/api/rpg/new-game', genesisRequest);
     } catch (error) {
       if (!this.isNotFound(error)) {
         throw error;
       }
       return this.post<Record<string, unknown>, RpgLaunchResponse>('/api/rpg/session/get', {
         action: 'new_game',
-        request,
+        request: genesisRequest,
       });
     }
   }
