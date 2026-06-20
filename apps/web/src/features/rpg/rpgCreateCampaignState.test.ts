@@ -63,6 +63,7 @@ describe('RPG campaign creation state', () => {
     expect(request.starter_gear).toContain('Shortbow');
     expect(request.features).toMatchObject({ autosave: true, background_soft_audit: true, image_generation: false, validator: true });
     expect(request.generated_class_summary).toContain('Starter gear: Shortbow, Arrow bundle, Bedroll, Trail rations x4, 6 silver.');
+    expect(request.generated_class_summary).toContain('Stats: Strength 8, Agility 8, Endurance 8, Intellect 8, Charisma 8, Perception 11, Archery 8, Survival 8.');
     expect(request.generated_class_summary).toContain('Opening: Bandit Trail.');
     expect(request.generated_class_summary).toContain('Pace: Immediate action.');
     expect(request.generated_class_summary).toContain('Relationship: Known contact nearby.');
