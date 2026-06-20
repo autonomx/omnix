@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.rpg.session.new_game import RpgNewGameRequest, RpgPlayerOptions, _new_game_state
+from app.rpg.session.starter_kit import build_starter_kit
 
 
 def test_new_game_story_setup_seeds_objective_relationship_and_actions() -> None:
@@ -60,3 +61,51 @@ def test_new_game_story_setup_uses_safe_defaults() -> None:
     assert state["metadata"]["relationship_preset"] == "unknown_outsider"
     assert state["quests"][0]["id"] == "tavern_rumor"
     assert state["relationships"] == []
+
+
+def test_starter_kit_parser_applies_generated_gear_currency_and_equipment() -> None:
+    starter = build_starter_kit("Road scout. Starter gear: Shortbow, Arrow bundle, Bedroll, Trail rations x4, 6 silver. Opening: Bandit Trail.")
+
+    inventory = {item["id"]: item for item in starter["inventory"]}
+    assert starter["source"] == "generated_class_summary"
+    assert starter["currency"] == {"gold": 0, "silver": 6, "copper": 0}
+    assert inventory["shortbow"]["quantity"] == 1
+    assert inventory["arrow"]["quantity"] == 20
+    assert inventory["ration"]["quantity"] == 4
+    assert inventory["bedroll"]["quantity"] == 1
+    assert inventory["journal"]["quantity"] == 1
+    assert starter["equipment"] == [{"slot": "Ranged", "name": "Shortbow"}]
+
+
+def test_new_game_applies_starter_kit_to_player_state() -> None:
+    state = _new_game_state(
+        RpgNewGameRequest(
+            seed=123,
+            generated_class_summary="Road scout. Starter gear: Shortbow, Arrow bundle, Bedroll, Trail rations x4, 6 silver. Opening: Bandit Trail.",
+        ),
+        "rpg_starter",
+        "2026-06-20T00:00:00Z",
+    )
+
+    inventory = {item["id"]: item for item in state["player"]["inventory"]}
+    assert state["metadata"]["starter_kit_source"] == "generated_class_summary"
+    assert state["player"]["currency"] == {"gold": 0, "silver": 6, "copper": 0}
+    assert inventory["shortbow"]["name"] == "Shortbow"
+    assert inventory["ration"]["quantity"] == 4
+    assert state["player"]["equipment"] == [{"slot": "Ranged", "name": "Shortbow"}]
+    assert state["narrative_affordances"]["starter_kit"]["source"] == "generated_class_summary"
+
+
+def test_starter_kit_falls_back_to_default_inventory_and_currency() -> None:
+    state = _new_game_state(RpgNewGameRequest(), "rpg_default_kit", "2026-06-20T00:00:00Z")
+
+    inventory = {item["id"]: item for item in state["player"]["inventory"]}
+    assert state["metadata"]["starter_kit_source"] == "default"
+    assert state["player"]["currency"] == {"gold": 10, "silver": 25, "copper": 50}
+    assert inventory["iron_dagger"]["quantity"] == 1
+    assert inventory["ration"]["quantity"] == 3
+    assert state["player"]["equipment"] == [
+        {"slot": "Weapon", "name": "Iron dagger"},
+        {"slot": "Ranged", "name": "Simple bow"},
+        {"slot": "Cloak", "name": "Traveler's cloak"},
+    ]
