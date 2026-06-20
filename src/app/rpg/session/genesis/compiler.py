@@ -11,6 +11,14 @@ _WORLD_PROFILE_TRAITS = {
     "harsh_frontier": ["scarce_resources", "remote_start", "active_factions"],
     "quiet_start": ["low_pressure", "local_rumors"],
 }
+_FLAW_BIASES = {
+    "greedy": {"reward_weight": 1.2, "altruism_weight": 0.8},
+    "reckless": {"risk_weight": 1.2, "caution_weight": 0.85},
+    "cowardly": {"retreat_weight": 1.2, "resolve_weight": 0.85},
+    "arrogant": {"deference_weight": 0.8, "challenge_weight": 1.15},
+    "naive": {"trust_weight": 1.2, "suspicion_weight": 0.8},
+    "impulsive": {"delay_weight": 0.8, "immediacy_weight": 1.2},
+}
 
 
 def _normal_key(value: object) -> str:
@@ -38,6 +46,39 @@ def _gear_intents(contract: CampaignGenesisContract) -> list[dict[str, str]]:
     ]
 
 
+def _goal_id(primary: str, target: str | None) -> str:
+    suffix = _normal_key(target, "purpose") if target else "purpose"
+    mapping = {
+        "discovery": "discover_" + suffix,
+        "freedom": "secure_freedom_from_" + suffix,
+        "justice": "resolve_injustice_around_" + suffix,
+        "protection": "protect_" + suffix,
+        "revenge": "settle_score_with_" + suffix,
+        "survival": "secure_safe_foothold",
+        "wealth": "earn_stable_reward_from_" + suffix,
+    }
+    return mapping.get(primary, "pursue_" + primary + "_for_" + suffix)
+
+
+def _motivation_goals(contract: CampaignGenesisContract) -> list[dict[str, Any]]:
+    motivation = contract.drivers.motivation
+    primary = _normal_key(motivation.primary, "survival")
+    priority = max(1, min(100, int(motivation.intensity or 0)))
+    return [
+        {
+            "id": _goal_id(primary, motivation.target),
+            "source": f"motivation:{primary}",
+            "priority": priority,
+            "status": "complete" if motivation.fulfilled else "active",
+        }
+    ]
+
+
+def _decision_biases(contract: CampaignGenesisContract) -> dict[str, float]:
+    flaw = _normal_key(contract.drivers.flaw, "")
+    return dict(_FLAW_BIASES.get(flaw, {}))
+
+
 def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any]:
     """Compile declarative genesis into deterministic pre-bootstrap state."""
 
@@ -52,9 +93,10 @@ def compile_campaign_genesis(contract: CampaignGenesisContract) -> dict[str, Any
                 "source": "genesis:bootstrap",
                 "priority": 50,
                 "status": "active",
-            }
+            },
+            *_motivation_goals(contract),
         ],
-        "compiled_decision_biases": {},
+        "compiled_decision_biases": _decision_biases(contract),
         "compiled_gear_intents": _gear_intents(contract),
         "compiled_story_state": contract.story_options.model_dump(mode="json", exclude_none=True),
         "compiled_feature_flags": contract.system_options.model_dump(mode="json"),
