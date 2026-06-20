@@ -9,6 +9,7 @@ SOURCE = "campaign_genesis_validation_v2"
 LEGACY_SOURCE = "wizard_new_game_validation_v1"
 GENESIS_CONTRACT_VERSION = "rpg_genesis_v2"
 GENESIS_COMPILER_VERSION = "rpg_genesis_compiler_v1"
+MANDATORY_TURN_THRESHOLD = 100
 
 REQUIRED_STATE_KEYS = (
     "contract_version",
@@ -96,6 +97,14 @@ def _legacy_detected(
     )
 
 
+def _effective_required(required: bool, turns_requested: int | None) -> bool:
+    if required:
+        return True
+    if turns_requested is None:
+        return False
+    return int(turns_requested) >= MANDATORY_TURN_THRESHOLD
+
+
 def _has_initial_stats(metadata: Mapping[str, object], setup_payload: Mapping[str, object]) -> bool:
     if isinstance(metadata.get("initial_stats"), Mapping) and bool(metadata.get("initial_stats")):
         return True
@@ -167,6 +176,7 @@ def build_wizard_new_game_validation(
     setup_payload = _setup_payload(prepared_map)
     metadata = _metadata(state, manifest)
     narrative = _mapping(state.get("narrative_affordances"))
+    effective_required = _effective_required(required, turns_requested)
     missing_state_keys = [key for key in REQUIRED_STATE_KEYS if key not in state]
     missing_genesis_keys = [key for key in GENESIS_REQUIRED_KEYS if not _snapshot(state, runtime_state, setup_payload, key)]
     genesis_checks = _genesis_checks(state, runtime_state, setup_payload, manifest)
@@ -186,13 +196,15 @@ def build_wizard_new_game_validation(
     failed_checks = [key for key, ok in checks.items() if not ok]
     detected = genesis_detected or legacy_detected
     status = "validated" if detected and not failed_checks else "not_detected"
-    if required and (not genesis_detected or failed_checks):
+    if effective_required and (not genesis_detected or failed_checks):
         status = "failed"
     return {
         "ok": status != "failed",
         "source": SOURCE if genesis_detected else LEGACY_SOURCE,
         "status": status,
-        "required": bool(required),
+        "required": bool(effective_required),
+        "explicitly_required": bool(required),
+        "mandatory_turn_threshold": MANDATORY_TURN_THRESHOLD,
         "detected": bool(detected),
         "genesis_detected": bool(genesis_detected),
         "legacy_detected": bool(legacy_detected),
