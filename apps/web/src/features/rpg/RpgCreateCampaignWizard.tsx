@@ -338,7 +338,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
           </div>
         </div>
 
-        <div className="rpg-create-section rpg-create-section-story">
+        <div className="rpg-create-section rpg-create-section-world rpg-create-section-story">
           <h4>Opening story</h4>
           <div className="rpg-create-field-grid">
             <OptionSelect label="Opening hook" value={openingHook} onChange={setOpeningHook} options={openingHooks} detail={selectedOpeningHook.detail} />
