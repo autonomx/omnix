@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { omnixApiClient, type RpgLoadoutActionRequest } from '../../api/client';
+import { omnixApiClient, type RpgLoadoutActionRequest, type RpgNewGameRequest } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
@@ -268,6 +268,12 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
       await invalidateRpgWorkspaceQueries();
     },
   });
+  const createCampaignMutation = useMutation({
+    mutationFn: (request: RpgNewGameRequest) => omnixApiClient.createRpgNewGame(request),
+    onSuccess: async () => {
+      await invalidateRpgWorkspaceQueries();
+    },
+  });
   const autoplayMutation = useMutation({
     mutationFn: () => {
       if (activeAutoplayJob) {
@@ -326,7 +332,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     <WorkspacePanel className="rpg-workstation">
       <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
 
-      <RpgCreateCampaignWizard onSelectCommand={selectCommand} />
+      <RpgCreateCampaignWizard onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)} onSelectCommand={selectCommand} />
 
       <div className="rpg-layout-controls" aria-label="Workspace layout controls">
         <button
