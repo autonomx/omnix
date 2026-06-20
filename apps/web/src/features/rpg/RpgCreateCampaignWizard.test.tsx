@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
@@ -46,7 +46,9 @@ describe('RpgCreateCampaignWizard', () => {
     expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '0');
     expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
 
-    vi.advanceTimersByTime(4200);
+    act(() => {
+      vi.advanceTimersByTime(4200);
+    });
 
     expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '100');
     expect(screen.getByRole('button', { name: 'Enter World' })).not.toBeDisabled();
