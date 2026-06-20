@@ -3,7 +3,7 @@ import type { RpgCapability, RpgNewGameRequest } from './client';
 const GENESIS_VERSION = 'rpg_genesis_v2';
 
 const CAPABILITY_TALENT_IDS: Partial<Record<RpgCapability, string>> = {
-  combat: 'combat_readiness',
+  combat: 'action_readiness',
   influence: 'social_leverage',
   knowledge: 'field_knowledge',
   recon: 'reconnaissance',
@@ -12,14 +12,26 @@ const CAPABILITY_TALENT_IDS: Partial<Record<RpgCapability, string>> = {
   technical: 'technical_handling',
 };
 
+interface GenesisTalentInput {
+  id?: unknown;
+  rank?: unknown;
+}
+
 interface LooseRequest extends RpgNewGameRequest {
   genesis?: Record<string, unknown>;
+  flaw?: string | null;
+  motivation?: Record<string, unknown>;
+  motivation_primary?: string;
+  motivation_target?: string | null;
   opening_hook?: string;
   opening_pace?: string;
+  origin?: string;
   relationship_preset?: string;
   starter_gear_tags?: string[];
   story_options?: Record<string, unknown>;
   system_options?: Record<string, unknown>;
+  talents?: GenesisTalentInput[];
+  values?: string[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -32,6 +44,11 @@ function asString(value: unknown, fallback: string): string {
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function asInteger(value: unknown, fallback: number): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric) : fallback;
 }
 
 function normalizeStats(value: unknown): Record<string, number> {
@@ -48,7 +65,34 @@ function normalizeStats(value: unknown): Record<string, number> {
   };
 }
 
+function normalizeValues(value: unknown): string[] {
+  const values = Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0) : [];
+  return values.length > 0 ? values.map((entry) => entry.trim()) : ['agency'];
+}
+
+function normalizeProvidedTalents(value: unknown): Array<{ id: string; rank: number }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const talents: Array<{ id: string; rank: number }> = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const record = asRecord(entry);
+    const id = asString(record.id, '').replace('-', '_');
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    talents.push({ id, rank: Math.max(1, asInteger(record.rank, 1)) });
+  }
+  return talents;
+}
+
 function buildTalents(request: LooseRequest): Array<{ id: string; rank: number }> {
+  const provided = normalizeProvidedTalents(request.talents);
+  if (provided.length > 0) {
+    return provided;
+  }
   const talents: Array<{ id: string; rank: number }> = [];
   const seen = new Set<string>();
   const addTalent = (capability: unknown, rank: number): void => {
@@ -80,10 +124,25 @@ function fallbackGearTags(request: LooseRequest): string[] {
   if (capabilities.includes('knowledge') || capabilities.includes('technical')) {
     tags.add('field_notes');
   }
-  if (capabilities.includes('recon')) {
-    tags.add('ranged_weapon');
-  }
   return Array.from(tags);
+}
+
+function normalizeMotivation(request: LooseRequest, storyOptions: Record<string, unknown>): Record<string, unknown> {
+  const provided = asRecord(request.motivation);
+  const primary = asString(
+    provided.primary ?? request.motivation_primary ?? storyOptions.opening_hook ?? request.opening_hook,
+    'survival',
+  );
+  const target = asString(
+    provided.target ?? request.motivation_target ?? storyOptions.relationship_preset ?? request.relationship_preset,
+    '',
+  );
+  return {
+    primary,
+    target: target || null,
+    intensity: Math.max(1, Math.min(100, asInteger(provided.intensity, 100))),
+    fulfilled: asBoolean(provided.fulfilled, false),
+  };
 }
 
 export function withRpgGenesisContract(request: RpgNewGameRequest = {}): RpgNewGameRequest {
@@ -105,20 +164,15 @@ export function withRpgGenesisContract(request: RpgNewGameRequest = {}): RpgNewG
       name: asString(player.name, 'Alyndra'),
       pronouns: asString(player.pronouns, 'she/her'),
       background: asString(player.background ?? request.background, 'wanderer'),
-      origin: asString(player.background ?? request.background, 'wanderer'),
+      origin: asString(loose.origin ?? player.origin ?? player.background ?? request.background, 'wanderer'),
       power_source: request.power_source ?? null,
     },
     drivers: {
       archetype: asString(player.build, asString(request.generated_class_name, 'balanced_adventurer')),
-      motivation: {
-        primary: asString(storyOptions.opening_hook ?? loose.opening_hook, 'survival'),
-        target: asString(storyOptions.relationship_preset ?? loose.relationship_preset, '' ) || null,
-        intensity: 100,
-        fulfilled: false,
-      },
-      flaw: null,
+      motivation: normalizeMotivation(loose, storyOptions),
+      flaw: typeof loose.flaw === 'string' && loose.flaw.trim() ? loose.flaw.trim() : null,
       talents: buildTalents(loose),
-      values: ['agency'],
+      values: normalizeValues(loose.values),
     },
     initial_stats: normalizeStats(loose.initial_stats),
     starter_gear_tags: fallbackGearTags(loose),
