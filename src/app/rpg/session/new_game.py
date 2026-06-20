@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.rpg.session.ability_coverage import write_ability_coverage_snapshot
 from app.rpg.session.ability_system import build_progression_package
+from app.rpg.session.new_game_settings import build_new_game_setup_effects
 from app.rpg.session.service import archive_session, load_session, save_session
 
 DEMO_PRESET_ID = "demo_glimmerdeep_pass_lvl14"
@@ -620,7 +621,10 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     story_setup = _build_story_setup(request, location, seed)
     loadout = _starter_loadout(request)
     stat_profile = _player_stat_profile(request, build)
-    timeline = [*location["timeline"], *story_setup["timeline"]]
+    setting_effects = build_new_game_setup_effects(request, loadout, story_setup, location)
+    loadout = setting_effects["loadout"]
+    quick_actions = setting_effects["quick_actions"]
+    timeline = [*location["timeline"], *story_setup["timeline"], *setting_effects["timeline"]]
     return {
         "contract_version": NEW_GAME_CONTRACT_VERSION,
         "session_id": session_id,
@@ -658,12 +662,21 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "ability_state": progression["ability_state"],
         "hotbar": progression["hotbar"],
         "skill_progression": stat_profile["skill_progression"],
-        "mechanics": {"dimension_effects": [], "pending_dimension_effects": []},
+        "mechanics": {
+            "dimension_effects": [],
+            "pending_dimension_effects": [],
+            "setup_effects": setting_effects["setup_effects"],
+            "defeat_rules": setting_effects["defeat_rules"],
+            "economy": setting_effects["economy"],
+            "encounter_pressure": setting_effects["encounter_pressure"],
+            "living_world": setting_effects["living_world"],
+        },
         "narrative_affordances": {
             "opening_story": story_setup,
             "starter_loadout": loadout,
             "stat_profile": stat_profile["affordance"],
-            "suggested_actions": story_setup["quick_actions"],
+            "setup_effects": setting_effects["setup_effects"],
+            "suggested_actions": quick_actions,
         },
         "player": {
             "name": request.player.name,
@@ -686,14 +699,21 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "weather": location["weather"],
             "temperature": location.get("temperature"),
             "reputation": {"label": "Unknown", "score": 0},
+            "activity": setting_effects["world_activity"],
         },
         "party": [],
         "quests": story_setup["quests"],
         "relationships": story_setup["relationships"],
-        "encounter": {"status": "inactive", "title": "No active combat", "summary": "All quiet for now."},
+        "encounter": {
+            "status": "inactive",
+            "title": "No active combat",
+            "summary": "All quiet for now.",
+            "pressure": setting_effects["encounter_pressure"],
+            "safety": setting_effects["combat"]["safety"],
+        },
         "timeline": timeline,
         "journal": {"entries": timeline},
-        "quick_actions": story_setup["quick_actions"],
+        "quick_actions": quick_actions,
         "features": {**features, "companions_enabled": request.companions_enabled, "permadeath": request.permadeath},
     }
 
