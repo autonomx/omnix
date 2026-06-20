@@ -66,10 +66,6 @@ class RpgNewGameRequest(BaseModel):
     companions_enabled: bool = True
     permadeath: bool = False
     seed: int | None = None
-    opening_hook: str = "tavern_rumor"
-    opening_pace: str = "balanced"
-    relationship_preset: str = "unknown_outsider"
-    story_options: dict[str, Any] = Field(default_factory=dict)
     features: RpgFeatureOptions = Field(default_factory=RpgFeatureOptions)
 
 
@@ -259,6 +255,10 @@ RELATIONSHIP_PRESETS: dict[str, dict[str, Any]] = {
     },
 }
 
+OPENING_HOOK_LABELS = {value["label"].lower(): key for key, value in OPENING_HOOKS.items()} | {"random from seed": "random_from_seed"}
+OPENING_PACE_KEYS_BY_LABEL = {label.lower(): key for key, label in OPENING_PACE_LABELS.items()}
+RELATIONSHIP_KEYS_BY_LABEL = {value["label"].lower(): key for key, value in RELATIONSHIP_PRESETS.items()}
+
 DEFAULT_INVENTORY: list[dict[str, Any]] = [
     {"id": "travelers_cloak", "name": "Traveler's cloak", "quantity": 1, "type": "clothing"},
     {"id": "bedroll", "name": "Bedroll", "quantity": 1, "type": "camping"},
@@ -277,9 +277,34 @@ def _normal_key(value: Any, fallback: str) -> str:
     return text or fallback
 
 
+def _summary_field(summary: str | None, field_name: str) -> str | None:
+    if not summary:
+        return None
+    marker = f"{field_name}:"
+    start = summary.lower().find(marker.lower())
+    if start < 0:
+        return None
+    start += len(marker)
+    end = summary.find(".", start)
+    value = summary[start : end if end >= 0 else len(summary)].strip()
+    return value or None
+
+
 def _story_option(request: RpgNewGameRequest, field_name: str, fallback: str) -> str:
-    story_options = request.story_options if isinstance(request.story_options, dict) else {}
-    return _normal_key(getattr(request, field_name, None) or story_options.get(field_name), fallback)
+    summary = request.generated_class_summary
+    if field_name == "opening_hook":
+        label = _summary_field(summary, "Opening")
+        if label:
+            return OPENING_HOOK_LABELS.get(label.lower(), _normal_key(label, fallback))
+    if field_name == "opening_pace":
+        label = _summary_field(summary, "Pace")
+        if label:
+            return OPENING_PACE_KEYS_BY_LABEL.get(label.lower(), _normal_key(label, fallback))
+    if field_name == "relationship_preset":
+        label = _summary_field(summary, "Relationship")
+        if label:
+            return RELATIONSHIP_KEYS_BY_LABEL.get(label.lower(), _normal_key(label, fallback))
+    return fallback
 
 
 def _resolve_opening_hook(request: RpgNewGameRequest, seed: int) -> str:
@@ -295,7 +320,9 @@ def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], see
     if pace_key not in OPENING_PACE_LABELS:
         pace_key = "balanced"
     relationship_key = _story_option(request, "relationship_preset", "unknown_outsider")
-    relationship = RELATIONSHIP_PRESETS.get(relationship_key, RELATIONSHIP_PRESETS["unknown_outsider"])
+    if relationship_key not in RELATIONSHIP_PRESETS:
+        relationship_key = "unknown_outsider"
+    relationship = RELATIONSHIP_PRESETS[relationship_key]
     hook = OPENING_HOOKS[hook_key]
     time_label = str(location.get("time_label") or "Day 1 • 08:00")
     timeline = [{"turn": 0, "time": time_label, **hook["timeline"]}]
@@ -314,7 +341,7 @@ def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], see
         "opening_hook_label": hook["label"],
         "opening_pace": pace_key,
         "opening_pace_label": OPENING_PACE_LABELS[pace_key],
-        "relationship_preset": relationship_key if relationship_key in RELATIONSHIP_PRESETS else "unknown_outsider",
+        "relationship_preset": relationship_key,
         "relationship_label": relationship["label"],
         "summary": hook["summary"],
         "quests": [dict(hook["quest"])],
