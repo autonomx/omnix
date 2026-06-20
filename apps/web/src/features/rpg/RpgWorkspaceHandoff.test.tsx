@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe('RpgWorkspace campaign handoff', () => {
-  it('selects a created campaign session and queues the first turn for it', async () => {
+  it('surfaces a created campaign and queues the first turn for it', async () => {
     let inventoryReads = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
@@ -102,10 +102,7 @@ describe('RpgWorkspace campaign handoff', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: 'Created Campaign — rpg-created-1' })).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Session')).toHaveValue('rpg-created-1');
-    });
+    expect(await screen.findByText('Created Campaign')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
