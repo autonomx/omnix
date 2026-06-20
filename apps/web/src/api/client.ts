@@ -1,5 +1,5 @@
 import type { components, paths } from './generated/types';
-import { withRpgGenesisContract } from './rpgGenesis';
+import { withRpgGenesisContract } from './rpgGenesisPresentation';
 
 export type GatewayApiPaths = paths;
 export type GatewayApiPath = keyof GatewayApiPaths & string;
