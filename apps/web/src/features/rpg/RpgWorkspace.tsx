@@ -7,6 +7,7 @@ import { WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { RpgActionComposer } from './RpgActionComposer';
 import { RpgCombatSurface } from './RpgCombatSurface';
+import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
 import { RpgLiveDataStatus, type RpgLiveDataStatusCard } from './RpgLiveDataStatus';
 import { RpgLoadoutTabs } from './RpgLoadoutTabs';
 import { RpgNarrativeTabs } from './RpgNarrativeTabs';
@@ -324,6 +325,8 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   return (
     <WorkspacePanel className="rpg-workstation">
       <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
+
+      <RpgCreateCampaignWizard onSelectCommand={selectCommand} />
 
       <div className="rpg-layout-controls" aria-label="Workspace layout controls">
         <button
