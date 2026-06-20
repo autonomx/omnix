@@ -191,6 +191,74 @@ STARTING_LOCATIONS: dict[str, dict[str, Any]] = {
 }
 
 
+OPENING_HOOKS: dict[str, dict[str, Any]] = {
+    "tavern_rumor": {
+        "label": "Tavern Rumor",
+        "summary": "A fresh rumor is already moving through the room, giving the first turn an immediate social lead.",
+        "quest": {"id": "tavern_rumor", "title": "Rumor at the Rusty Flagon", "status": "active", "objective": "Ask Bran or the tavern regulars which rumor is true."},
+        "timeline": {"title": "Rumor overheard", "detail": "A low conversation near the hearth hints at trouble outside town.", "kind": "rumor"},
+        "quick_actions": ["Ask Bran about the rumor", "Listen to the hearth-side conversation", "Check the notice board"],
+    },
+    "bandit_trail": {
+        "label": "Bandit Trail",
+        "summary": "A witness points to fresh tracks and missing supplies, pushing the first objective toward recon and danger.",
+        "quest": {"id": "bandit_trail", "title": "Bandit Trail", "status": "active", "objective": "Question the witness and inspect the tracks before the trail goes cold."},
+        "timeline": {"title": "Bandit trail reported", "detail": "A road-worn witness describes raiders and fresh hoofprints beyond the market road.", "kind": "danger"},
+        "quick_actions": ["Question the witness", "Inspect the tracks", "Prepare for a road fight"],
+    },
+    "missing_person": {
+        "label": "Missing Person",
+        "summary": "A local disappearance creates an investigation-forward start with clear stakes and witnesses.",
+        "quest": {"id": "missing_person", "title": "Missing Person", "status": "active", "objective": "Find out who vanished and collect the first clue."},
+        "timeline": {"title": "Missing person reported", "detail": "A worried local asks for help finding someone who failed to return by dawn.", "kind": "investigation"},
+        "quick_actions": ["Speak to the worried local", "Search for the first clue", "Ask who saw them last"],
+    },
+    "guard_trouble": {
+        "label": "Guard Trouble",
+        "summary": "The watch is already paying attention, turning the opening toward authority, consequences, and guarded choices.",
+        "quest": {"id": "guard_trouble", "title": "Trouble with the Watch", "status": "active", "objective": "Learn why the guards are watching you and avoid escalating the scene."},
+        "timeline": {"title": "Guard attention", "detail": "A watch captain studies you from the doorway while a patrol blocks the street outside.", "kind": "faction"},
+        "quick_actions": ["Approach the watch captain", "Keep a low profile", "Ask Bran why the guards are tense"],
+    },
+    "merchant_job": {
+        "label": "Merchant Job",
+        "summary": "A merchant has paid work ready, making trade, supplies, and delivery pressure available immediately.",
+        "quest": {"id": "merchant_job", "title": "Merchant's Ledger", "status": "active", "objective": "Speak with Elara about a paid delivery job before leaving the tavern."},
+        "timeline": {"title": "Merchant job offered", "detail": "Elara taps a ledger and mentions paid work for someone who can move quietly and quickly.", "kind": "economy"},
+        "quick_actions": ["Speak with Elara", "Review the delivery terms", "Buy supplies for the job"],
+    },
+}
+
+OPENING_HOOK_ORDER = ["tavern_rumor", "bandit_trail", "missing_person", "guard_trouble", "merchant_job"]
+OPENING_PACE_LABELS = {"slow_roleplay": "Slow roleplay", "balanced": "Balanced", "immediate_action": "Immediate action"}
+RELATIONSHIP_PRESETS: dict[str, dict[str, Any]] = {
+    "unknown_outsider": {"label": "Unknown outsider", "relationships": [], "timeline": None},
+    "local_regular": {
+        "label": "Local regular",
+        "relationships": [{"name": "Bran", "stance": "Familiar", "score": 18, "role": "Innkeeper"}],
+        "timeline": {"title": "Recognized by Bran", "detail": "Bran remembers your usual seat and starts neutral-warm.", "kind": "relationship"},
+    },
+    "known_contact_nearby": {
+        "label": "Known contact nearby",
+        "relationships": [{"name": "Elara", "stance": "Contact", "score": 24, "role": "Merchant"}],
+        "timeline": {"title": "Known contact nearby", "detail": "Elara recognizes you and can be approached as an opening contact.", "kind": "relationship"},
+    },
+    "owes_someone_a_favor": {
+        "label": "Owes someone a favor",
+        "relationships": [{"name": "Bran", "stance": "Favor owed", "score": 10, "role": "Innkeeper"}],
+        "timeline": {"title": "Favor owed", "detail": "Someone nearby remembers a debt that can become an early objective.", "kind": "relationship"},
+    },
+    "guard_suspicion": {
+        "label": "Guard suspicion",
+        "relationships": [{"name": "Captain Aldric", "stance": "Suspicious", "score": -12, "role": "Guard"}],
+        "timeline": {"title": "Guard suspicion", "detail": "Captain Aldric has already heard your name and watches for trouble.", "kind": "relationship"},
+    },
+}
+
+OPENING_HOOK_LABELS = {value["label"].lower(): key for key, value in OPENING_HOOKS.items()} | {"random from seed": "random_from_seed"}
+OPENING_PACE_KEYS_BY_LABEL = {label.lower(): key for key, label in OPENING_PACE_LABELS.items()}
+RELATIONSHIP_KEYS_BY_LABEL = {value["label"].lower(): key for key, value in RELATIONSHIP_PRESETS.items()}
+
 DEFAULT_INVENTORY: list[dict[str, Any]] = [
     {"id": "travelers_cloak", "name": "Traveler's cloak", "quantity": 1, "type": "clothing"},
     {"id": "bedroll", "name": "Bedroll", "quantity": 1, "type": "camping"},
@@ -202,6 +270,85 @@ DEFAULT_INVENTORY: list[dict[str, Any]] = [
     {"id": "arrow", "name": "Arrow", "quantity": 20, "type": "ammo"},
     {"id": "journal", "name": "Journal", "quantity": 1, "type": "quest"},
 ]
+
+
+def _normal_key(value: Any, fallback: str) -> str:
+    text = str(value or "").strip().lower().replace("-", "_")
+    return text or fallback
+
+
+def _summary_field(summary: str | None, field_name: str) -> str | None:
+    if not summary:
+        return None
+    marker = f"{field_name}:"
+    start = summary.lower().find(marker.lower())
+    if start < 0:
+        return None
+    start += len(marker)
+    end = summary.find(".", start)
+    value = summary[start : end if end >= 0 else len(summary)].strip()
+    return value or None
+
+
+def _story_option(request: RpgNewGameRequest, field_name: str, fallback: str) -> str:
+    summary = request.generated_class_summary
+    if field_name == "opening_hook":
+        label = _summary_field(summary, "Opening")
+        if label:
+            return OPENING_HOOK_LABELS.get(label.lower(), _normal_key(label, fallback))
+    if field_name == "opening_pace":
+        label = _summary_field(summary, "Pace")
+        if label:
+            return OPENING_PACE_KEYS_BY_LABEL.get(label.lower(), _normal_key(label, fallback))
+    if field_name == "relationship_preset":
+        label = _summary_field(summary, "Relationship")
+        if label:
+            return RELATIONSHIP_KEYS_BY_LABEL.get(label.lower(), _normal_key(label, fallback))
+    return fallback
+
+
+def _resolve_opening_hook(request: RpgNewGameRequest, seed: int) -> str:
+    hook = _story_option(request, "opening_hook", "tavern_rumor")
+    if hook in {"random", "random_seed", "random_from_seed"}:
+        return OPENING_HOOK_ORDER[seed % len(OPENING_HOOK_ORDER)]
+    return hook if hook in OPENING_HOOKS else "tavern_rumor"
+
+
+def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], seed: int) -> dict[str, Any]:
+    hook_key = _resolve_opening_hook(request, seed)
+    pace_key = _story_option(request, "opening_pace", "balanced")
+    if pace_key not in OPENING_PACE_LABELS:
+        pace_key = "balanced"
+    relationship_key = _story_option(request, "relationship_preset", "unknown_outsider")
+    if relationship_key not in RELATIONSHIP_PRESETS:
+        relationship_key = "unknown_outsider"
+    relationship = RELATIONSHIP_PRESETS[relationship_key]
+    hook = OPENING_HOOKS[hook_key]
+    time_label = str(location.get("time_label") or "Day 1 • 08:00")
+    timeline = [{"turn": 0, "time": time_label, **hook["timeline"]}]
+    if relationship.get("timeline"):
+        timeline.append({"turn": 0, "time": time_label, **relationship["timeline"]})
+    base_actions = list(hook["quick_actions"])
+    location_actions = list(location.get("quick_actions") or [])
+    if pace_key == "slow_roleplay":
+        quick_actions = ["Take in the scene", *location_actions[:2], *base_actions[:2]]
+    elif pace_key == "immediate_action":
+        quick_actions = [base_actions[0], *base_actions[1:], "Check supplies"]
+    else:
+        quick_actions = [base_actions[0], *location_actions[:2], *base_actions[1:]]
+    return {
+        "opening_hook": hook_key,
+        "opening_hook_label": hook["label"],
+        "opening_pace": pace_key,
+        "opening_pace_label": OPENING_PACE_LABELS[pace_key],
+        "relationship_preset": relationship_key,
+        "relationship_label": relationship["label"],
+        "summary": hook["summary"],
+        "quests": [dict(hook["quest"])],
+        "relationships": [dict(entry) for entry in relationship.get("relationships", [])],
+        "timeline": timeline,
+        "quick_actions": list(dict.fromkeys(quick_actions))[:6],
+    }
 
 
 def _simulation_state_stub(seed: int) -> dict[str, Any]:
@@ -237,13 +384,15 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     request_payload = request.model_dump(mode="json")
     progression = build_progression_package(request_payload, build_id=request.player.build, level=1, seed=seed)
     identity = progression["character_identity"]
+    story_setup = _build_story_setup(request, location, seed)
+    timeline = [*location["timeline"], *story_setup["timeline"]]
     return {
         "contract_version": NEW_GAME_CONTRACT_VERSION,
         "session_id": session_id,
         "title": f"{request.player.name} — {location['title']}",
         "location": location["location"],
         "current_location": location["location"],
-        "summary": location["summary"],
+        "summary": f"{location['summary']} {story_setup['summary']}",
         "current_turn": 0,
         "turn_count": 0,
         "updated_at": now,
@@ -260,6 +409,9 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "world_activity": request.world_activity,
             "economy_pressure": request.economy_pressure,
             "combat_lethality": request.combat_lethality,
+            "opening_hook": story_setup["opening_hook"],
+            "opening_pace": story_setup["opening_pace"],
+            "relationship_preset": story_setup["relationship_preset"],
             "seed": seed,
             "created_from_preset": None,
         },
@@ -269,7 +421,7 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "hotbar": progression["hotbar"],
         "skill_progression": {},
         "mechanics": {"dimension_effects": [], "pending_dimension_effects": []},
-        "narrative_affordances": {},
+        "narrative_affordances": {"opening_story": story_setup, "suggested_actions": story_setup["quick_actions"]},
         "player": {
             "name": request.player.name,
             "pronouns": request.player.pronouns,
@@ -297,14 +449,12 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "reputation": {"label": "Unknown", "score": 0},
         },
         "party": [],
-        "quests": [
-            {"id": "notice_board_work", "title": "Work on the Notice Board", "status": "active", "objective": "Read the tavern notice board for available work."}
-        ],
-        "relationships": [],
+        "quests": story_setup["quests"],
+        "relationships": story_setup["relationships"],
         "encounter": {"status": "inactive", "title": "No active combat", "summary": "All quiet for now."},
-        "timeline": location["timeline"],
-        "journal": {"entries": location["timeline"]},
-        "quick_actions": location.get("quick_actions", ["Look around", "Talk to someone nearby", "Check supplies", "Travel onward"]),
+        "timeline": timeline,
+        "journal": {"entries": timeline},
+        "quick_actions": story_setup["quick_actions"],
         "features": {**features, "companions_enabled": request.companions_enabled, "permadeath": request.permadeath},
     }
 
@@ -363,11 +513,7 @@ def _demo_state(session_id: str, now: str) -> dict[str, Any]:
             "role": "recon",
             "level": 14,
             "xp": {"current": 7450, "max": 12000},
-            "resources": {
-                "hp": {"current": 86, "max": 110},
-                "stamina": {"current": 72, "max": 100},
-                "mana": {"current": 64, "max": 120},
-            },
+            "resources": {"hp": {"current": 86, "max": 110}, "stamina": {"current": 72, "max": 100}, "mana": {"current": 64, "max": 120}},
             "currency": {"gold": 1248},
             "renown": "Honored (35)",
             "equipment": [
