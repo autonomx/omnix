@@ -22,6 +22,28 @@ function getSelectByVisibleLabel(label: string): HTMLSelectElement {
   return select;
 }
 
+function backendStages(status: 'completed' | 'failed' = 'completed') {
+  const labels = [
+    'Backend validated setup',
+    'Backend resolved seed',
+    'Backend created player',
+    'Backend applied stats',
+    'Backend assigned gear',
+    'Backend location',
+    'Backend seeded NPCs',
+    'Backend opening hook',
+    'Backend saved session',
+    'Backend first turn',
+  ];
+  return labels.map((label, index) => ({
+    detail: index === 9 ? 'Backend context ready' : `Backend stage ${index}`,
+    index,
+    label,
+    progress: [8, 18, 31, 44, 56, 68, 78, 88, 96, 100][index],
+    status: status === 'completed' ? 'done' : index < 5 ? 'done' : index === 5 ? 'failed' : 'pending',
+  }));
+}
+
 describe('RpgCreateCampaignWizard', () => {
   it('renders deep setup controls, point buy, story hooks, starter gear, and supported systems', () => {
     renderWithTheme(<RpgCreateCampaignWizard />);
@@ -47,13 +69,17 @@ describe('RpgCreateCampaignWizard', () => {
     expect(screen.getByLabelText('Derived stat preview')).toHaveTextContent('Strength: 10');
   });
 
-  it('posts a normalized new-game request and fills an enter-world command after API completion', async () => {
+  it('uses backend progress and fills an enter-world command after API completion', async () => {
     vi.useFakeTimers();
     const onSelectCommand = vi.fn();
-    let resolveLaunch!: (value: { ok: true; session_id: string }) => void;
+    let resolveLaunch!: (value: {
+      creation_progress: Record<string, unknown>;
+      ok: true;
+      session_id: string;
+    }) => void;
     const onCreateCampaign = vi.fn(
       () =>
-        new Promise<{ ok: true; session_id: string }>((resolve) => {
+        new Promise<{ creation_progress: Record<string, unknown>; ok: true; session_id: string }>((resolve) => {
           resolveLaunch = resolve;
         }),
     );
@@ -84,15 +110,27 @@ describe('RpgCreateCampaignWizard', () => {
       vi.advanceTimersByTime(1200);
     });
 
-    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).not.toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '0');
 
     await act(async () => {
-      resolveLaunch({ ok: true, session_id: 'session-new' });
+      resolveLaunch({
+        ok: true,
+        session_id: 'session-new',
+        creation_progress: {
+          current_stage_index: 9,
+          progress: 100,
+          stage: 'prepare_first_turn',
+          stage_label: 'Backend first turn',
+          stages: backendStages('completed'),
+          status: 'completed',
+        },
+      });
       await Promise.resolve();
     });
 
     expect(screen.getByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.getByText('Backend first turn: Backend context ready')).toBeInTheDocument();
     expect(screen.getByText('Session session-new')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enter World' })).not.toBeDisabled();
 
@@ -103,8 +141,20 @@ describe('RpgCreateCampaignWizard', () => {
     vi.useRealTimers();
   });
 
-  it('keeps the modal open and reports errors when campaign creation fails', async () => {
-    const onCreateCampaign = vi.fn(async () => ({ ok: false, error: 'invalid point-buy payload' }));
+  it('keeps the modal open and reports backend creation progress errors', async () => {
+    const onCreateCampaign = vi.fn(async () => ({
+      ok: false,
+      error: 'invalid point-buy payload',
+      creation_progress: {
+        current_stage_index: 5,
+        error: 'invalid point-buy payload',
+        progress: 68,
+        stage: 'prepare_location',
+        stage_label: 'Backend location',
+        stages: backendStages('failed'),
+        status: 'failed',
+      },
+    }));
     renderWithTheme(<RpgCreateCampaignWizard onCreateCampaign={onCreateCampaign} />);
 
     await act(async () => {
@@ -113,7 +163,8 @@ describe('RpgCreateCampaignWizard', () => {
     });
 
     expect(screen.getByRole('dialog', { name: 'Campaign Creation Failed' })).toBeInTheDocument();
-    expect(screen.getByText(/invalid point-buy payload/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Campaign creation progress' })).toHaveAttribute('aria-valuenow', '68');
+    expect(screen.getByText(/Failed at Backend location: invalid point-buy payload/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enter World' })).toBeDisabled();
   });
 });
