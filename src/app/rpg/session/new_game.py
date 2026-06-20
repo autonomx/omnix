@@ -270,6 +270,34 @@ DEFAULT_INVENTORY: list[dict[str, Any]] = [
     {"id": "arrow", "name": "Arrow", "quantity": 20, "type": "ammo"},
     {"id": "journal", "name": "Journal", "quantity": 1, "type": "quest"},
 ]
+DEFAULT_CURRENCY = {"gold": 10, "silver": 25, "copper": 50}
+DEFAULT_EQUIPMENT = [
+    {"slot": "Weapon", "name": "Iron dagger"},
+    {"slot": "Ranged", "name": "Simple bow"},
+    {"slot": "Cloak", "name": "Traveler's cloak"},
+]
+REQUIRED_STARTER_ITEMS = [
+    {"id": "waterskin", "name": "Waterskin", "quantity": 1, "type": "supply"},
+    {"id": "journal", "name": "Journal", "quantity": 1, "type": "quest"},
+]
+STARTER_GEAR_CATALOG: dict[str, dict[str, Any]] = {
+    "travel cloak": {"id": "travel_cloak", "name": "Travel cloak", "type": "clothing", "slot": "Cloak"},
+    "fine cloak": {"id": "fine_cloak", "name": "Fine cloak", "type": "clothing", "slot": "Cloak"},
+    "iron dagger": {"id": "iron_dagger", "name": "Iron dagger", "type": "weapon", "slot": "Weapon"},
+    "shortbow": {"id": "shortbow", "name": "Shortbow", "type": "weapon", "slot": "Ranged"},
+    "hand axe": {"id": "hand_axe", "name": "Hand axe", "type": "weapon", "slot": "Weapon"},
+    "arrow bundle": {"id": "arrow", "name": "Arrow", "type": "ammo", "quantity": 20},
+    "trail rations": {"id": "ration", "name": "Trail rations", "type": "food"},
+    "rations": {"id": "ration", "name": "Rations", "type": "food"},
+    "torch": {"id": "torch", "name": "Torch", "type": "tool"},
+    "bedroll": {"id": "bedroll", "name": "Bedroll", "type": "camping"},
+    "ledger note": {"id": "ledger_note", "name": "Ledger note", "type": "quest"},
+    "field kit": {"id": "field_kit", "name": "Field kit", "type": "tool"},
+    "rope coil": {"id": "rope_coil", "name": "Rope coil", "type": "tool"},
+    "field journal": {"id": "field_journal", "name": "Field journal", "type": "quest"},
+    "ink kit": {"id": "ink_kit", "name": "Ink kit", "type": "tool"},
+    "old map": {"id": "old_map", "name": "Old map", "type": "quest"},
+}
 
 
 def _normal_key(value: Any, fallback: str) -> str:
@@ -351,6 +379,90 @@ def _build_story_setup(request: RpgNewGameRequest, location: dict[str, Any], see
     }
 
 
+def _starter_gear_labels(request: RpgNewGameRequest) -> list[str]:
+    value = _summary_field(request.generated_class_summary, "Starter gear")
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _split_quantity(raw_label: str) -> tuple[str, int]:
+    label = raw_label.strip()
+    name, marker, quantity_text = label.rpartition(" x")
+    if marker and quantity_text.isdigit():
+        return name.strip(), max(1, int(quantity_text))
+    return label, 1
+
+
+def _currency_from_label(raw_label: str) -> tuple[str, int] | None:
+    parts = raw_label.strip().lower().split()
+    if len(parts) != 2 or not parts[0].isdigit():
+        return None
+    coin = parts[1].rstrip("s")
+    if coin not in {"gold", "silver", "copper"}:
+        return None
+    return coin, int(parts[0])
+
+
+def _gear_key(label: str) -> str:
+    return label.strip().lower().replace("'", "").replace("’", "")
+
+
+def _add_inventory_item(inventory: list[dict[str, Any]], item: dict[str, Any]) -> None:
+    key = str(item.get("id") or item.get("name") or "").lower()
+    for existing in inventory:
+        existing_key = str(existing.get("id") or existing.get("name") or "").lower()
+        if existing_key == key:
+            existing["quantity"] = int(existing.get("quantity") or 1) + int(item.get("quantity") or 1)
+            return
+    inventory.append(dict(item))
+
+
+def _starter_item_from_label(raw_label: str) -> tuple[dict[str, Any], dict[str, str] | None]:
+    base_name, quantity = _split_quantity(raw_label)
+    catalog = STARTER_GEAR_CATALOG.get(_gear_key(base_name))
+    if catalog is None:
+        item = {"id": _gear_key(base_name).replace(" ", "_"), "name": base_name, "quantity": quantity, "type": "misc"}
+        return item, None
+    item_quantity = int(catalog.get("quantity") or 1) * quantity
+    item = {key: value for key, value in catalog.items() if key != "slot"}
+    item["quantity"] = item_quantity
+    equipment = {"slot": str(catalog["slot"]), "name": str(catalog["name"])} if catalog.get("slot") else None
+    return item, equipment
+
+
+def _starter_loadout(request: RpgNewGameRequest) -> dict[str, Any]:
+    labels = _starter_gear_labels(request)
+    if not labels:
+        return {
+            "starter_gear": [],
+            "inventory": [dict(item) for item in DEFAULT_INVENTORY],
+            "currency": dict(DEFAULT_CURRENCY),
+            "equipment": [dict(item) for item in DEFAULT_EQUIPMENT],
+        }
+    inventory: list[dict[str, Any]] = []
+    equipment_by_slot: dict[str, dict[str, str]] = {}
+    currency = {"gold": 0, "silver": 0, "copper": 0}
+    for label in labels:
+        coin = _currency_from_label(label)
+        if coin is not None:
+            coin_name, amount = coin
+            currency[coin_name] += amount
+            continue
+        item, equipment = _starter_item_from_label(label)
+        _add_inventory_item(inventory, item)
+        if equipment is not None:
+            equipment_by_slot.setdefault(equipment["slot"], equipment)
+    for item in REQUIRED_STARTER_ITEMS:
+        _add_inventory_item(inventory, item)
+    return {
+        "starter_gear": labels,
+        "inventory": inventory,
+        "currency": currency,
+        "equipment": list(equipment_by_slot.values()),
+    }
+
+
 def _simulation_state_stub(seed: int) -> dict[str, Any]:
     return {
         "seed": seed,
@@ -385,6 +497,7 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     progression = build_progression_package(request_payload, build_id=request.player.build, level=1, seed=seed)
     identity = progression["character_identity"]
     story_setup = _build_story_setup(request, location, seed)
+    loadout = _starter_loadout(request)
     timeline = [*location["timeline"], *story_setup["timeline"]]
     return {
         "contract_version": NEW_GAME_CONTRACT_VERSION,
@@ -412,6 +525,7 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "opening_hook": story_setup["opening_hook"],
             "opening_pace": story_setup["opening_pace"],
             "relationship_preset": story_setup["relationship_preset"],
+            "starter_gear": loadout["starter_gear"],
             "seed": seed,
             "created_from_preset": None,
         },
@@ -421,7 +535,7 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
         "hotbar": progression["hotbar"],
         "skill_progression": {},
         "mechanics": {"dimension_effects": [], "pending_dimension_effects": []},
-        "narrative_affordances": {"opening_story": story_setup, "suggested_actions": story_setup["quick_actions"]},
+        "narrative_affordances": {"opening_story": story_setup, "starter_loadout": loadout, "suggested_actions": story_setup["quick_actions"]},
         "player": {
             "name": request.player.name,
             "pronouns": request.player.pronouns,
@@ -433,14 +547,10 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
             "xp": {"current": 0, "max": 100},
             "stats": build["stats"],
             "resources": {"hp": build["hp"], "stamina": build["stamina"], "mana": build["mana"]},
-            "currency": {"gold": 10, "silver": 25, "copper": 50},
+            "currency": loadout["currency"],
             "renown": "Unknown (0)",
-            "equipment": [
-                {"slot": "Weapon", "name": "Iron dagger"},
-                {"slot": "Ranged", "name": "Simple bow"},
-                {"slot": "Cloak", "name": "Traveler's cloak"},
-            ],
-            "inventory": DEFAULT_INVENTORY,
+            "equipment": loadout["equipment"],
+            "inventory": loadout["inventory"],
         },
         "world": {
             "time": location["time_label"],
