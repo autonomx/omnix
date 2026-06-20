@@ -28,8 +28,34 @@ interface RpgCreateCampaignWizardProps {
   onSelectCommand?: (command: string) => void;
 }
 
+interface BackendCreationStage {
+  detail?: string;
+  label?: string;
+  progress?: number;
+  status?: string;
+}
+
+interface BackendCreationProgress {
+  current_stage_index?: number;
+  error?: string;
+  progress?: number;
+  stage_label?: string;
+  stages?: BackendCreationStage[];
+  status?: string;
+}
+
+interface BackendCreationJob {
+  error?: string;
+  progress?: number;
+  status?: string;
+}
+
+type LaunchResponseWithProgress = RpgLaunchResponse & {
+  creation_job?: BackendCreationJob;
+  creation_progress?: BackendCreationProgress;
+};
+
 const FALLBACK_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 96, 100];
-const API_PROGRESS_STEPS = [8, 18, 31, 44, 56, 68, 78, 88, 92];
 
 export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: RpgCreateCampaignWizardProps) {
   const progressTimers = useRef<Array<ReturnType<typeof window.setTimeout>>>([]);
@@ -81,8 +107,9 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
   const activeCapabilities = (Object.entries(capabilities) as Array<[Capability, boolean]>)
     .filter(([, enabled]) => enabled)
     .map(([capability]) => capabilityLabels[capability]);
-  const activeStageIndex = Math.min(creationStages.length - 1, Math.floor((progress / 100) * creationStages.length));
-  const progressPercent = Math.max(0, Math.min(100, progress));
+  const creationProgress = getCreationProgress(launchResponse);
+  const progressPercent = clampProgress(progress);
+  const activeStageIndex = normalizeStageIndex(creationProgress?.current_stage_index, progressPercent);
   const selectedBackground = backgrounds.find((option) => option.value === background) ?? backgrounds[0];
   const selectedLocation = locations.find((option) => option.value === startingLocation) ?? locations[0];
   const selectedOpeningHook = openingHooks.find((option) => option.value === openingHook) ?? openingHooks[0];
@@ -197,15 +224,22 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
       return;
     }
 
-    scheduleProgress(API_PROGRESS_STEPS);
+    clearProgressTimers();
     try {
       const result = await onCreateCampaign(campaignRequest);
-      if (result.ok === false) {
-        throw new Error(result.error || 'Campaign creation failed before a session was returned.');
-      }
+      const progressAwareResult = result as LaunchResponseWithProgress;
+      const backendStatus = getCreationStatus(progressAwareResult);
+      const backendProgressValue = getCreationProgressValue(progressAwareResult, result.ok === false ? 68 : 100);
+      const backendError = getCreationError(progressAwareResult);
+
       clearProgressTimers();
-      setLaunchResponse(result);
-      setProgress(100);
+      setLaunchResponse(progressAwareResult);
+      setProgress(backendProgressValue);
+      if (result.ok === false || backendStatus === 'failed') {
+        setCreationError(backendError || 'Campaign creation failed before a session was returned.');
+        setIsCreated(false);
+        return;
+      }
       setIsCreated(true);
     } catch (error) {
       clearProgressTimers();
@@ -230,6 +264,13 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
   };
 
   const stageState = (index: number): CreationStageState => {
+    const backendState = creationProgress?.stages?.[index]?.status;
+    if (backendState === 'done' || backendState === 'active' || backendState === 'pending') {
+      return backendState;
+    }
+    if (backendState === 'failed') {
+      return 'active';
+    }
     if (progressPercent >= 100 || index < activeStageIndex) {
       return 'done';
     }
@@ -425,6 +466,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
           characterName={characterName}
           closeProgress={closeProgress}
           creationError={creationError}
+          creationProgress={creationProgress}
           enterWorld={enterWorld}
           isCreated={isCreated}
           progressPercent={progressPercent}
@@ -440,6 +482,34 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
       ) : null}
     </section>
   );
+}
+
+function getCreationProgress(response: RpgLaunchResponse | null): BackendCreationProgress | undefined {
+  return (response as LaunchResponseWithProgress | null)?.creation_progress;
+}
+
+function getCreationStatus(response: LaunchResponseWithProgress): string | undefined {
+  return response.creation_progress?.status ?? response.creation_job?.status ?? response.status;
+}
+
+function getCreationError(response: LaunchResponseWithProgress): string | undefined {
+  return response.error ?? response.creation_progress?.error ?? response.creation_job?.error;
+}
+
+function getCreationProgressValue(response: LaunchResponseWithProgress, fallback: number): number {
+  return clampProgress(response.creation_progress?.progress ?? response.creation_job?.progress ?? fallback);
+}
+
+function clampProgress(value: unknown): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function normalizeStageIndex(value: unknown, progressPercent: number): number {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return Math.max(0, Math.min(creationStages.length - 1, value));
+  }
+  return Math.min(creationStages.length - 1, Math.floor((progressPercent / 100) * creationStages.length));
 }
 
 interface OptionSelectProps {
@@ -496,6 +566,7 @@ interface ProgressModalProps {
   characterName: string;
   closeProgress: () => void;
   creationError: string | null;
+  creationProgress?: BackendCreationProgress;
   enterWorld: () => void;
   isCreated: boolean;
   progressPercent: number;
@@ -515,6 +586,7 @@ function ProgressModal({
   characterName,
   closeProgress,
   creationError,
+  creationProgress,
   enterWorld,
   isCreated,
   progressPercent,
@@ -528,7 +600,12 @@ function ProgressModal({
   stageState,
 }: ProgressModalProps) {
   const title = creationError ? 'Campaign Creation Failed' : isCreated ? 'Campaign Ready' : 'Creating Campaign';
-  const activeStage = creationStages[activeStageIndex];
+  const activeStage = creationProgress?.stages?.[activeStageIndex] ?? creationStages[activeStageIndex];
+  const displayedStages = creationStages.map((stage, index) => ({
+    detail: creationProgress?.stages?.[index]?.detail ?? stage.detail,
+    label: creationProgress?.stages?.[index]?.label ?? stage.label,
+    state: stageState(index),
+  }));
 
   return (
     <div className="rpg-create-progress-overlay" role="dialog" aria-modal="true" aria-labelledby="rpg-create-progress-title">
@@ -550,9 +627,9 @@ function ProgressModal({
           <p className="rpg-create-current-stage">{activeStage.label}: {activeStage.detail}</p>
         )}
         <div className="rpg-create-stage-list">
-          {creationStages.map((stage, index) => (
-            <div className={`rpg-create-stage-row rpg-create-stage-${stageState(index)}`} key={stage.label}>
-              <span aria-hidden="true">{stageState(index) === 'done' ? '✓' : stageState(index) === 'active' ? '•' : '○'}</span>
+          {displayedStages.map((stage, index) => (
+            <div className={`rpg-create-stage-row rpg-create-stage-${stage.state}`} key={`${stage.label}-${index}`}>
+              <span aria-hidden="true">{stage.state === 'done' ? '✓' : stage.state === 'active' ? '•' : '○'}</span>
               <div>
                 <strong>{stage.label}</strong>
                 <small>{stage.detail}</small>
