@@ -62,6 +62,10 @@ describe('RPG campaign creation state', () => {
     expect(request.initial_stats).toMatchObject({ perception: 11 });
     expect(request.starter_gear).toContain('Shortbow');
     expect(request.features).toMatchObject({ autosave: true, background_soft_audit: true, image_generation: false, validator: true });
+    expect(request.generated_class_summary).toContain('Starter gear: Shortbow, Arrow bundle, Bedroll, Trail rations x4, 6 silver.');
+    expect(request.generated_class_summary).toContain('Opening: Bandit Trail.');
+    expect(request.generated_class_summary).toContain('Pace: Immediate action.');
+    expect(request.generated_class_summary).toContain('Relationship: Known contact nearby.');
     expect(request.story_options).toMatchObject({
       opening_hook: 'bandit_trail',
       opening_hook_label: 'Bandit Trail',
@@ -101,6 +105,8 @@ describe('RPG campaign creation state', () => {
       starting_location: 'rusty_flagon_tavern',
       world_activity: 'quiet',
     });
+    expect(request.generated_class_summary).toContain('Pace: Balanced.');
+    expect(request.generated_class_summary).toContain('Relationship: Unknown outsider.');
     expect(request.player).toMatchObject({ build: 'silver_tongue', portrait_seed: null });
   });
 });

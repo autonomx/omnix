@@ -219,7 +219,7 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     secondary_capabilities: secondary,
     power_source: mapPowerSource(selections.powerSource),
     generated_class_name: selectedBuild.label,
-    generated_class_summary: `${selectedBuild.detail} Starter gear: ${selectedBuild.starterGear.join(', ')}. Opening: ${selectedHook.label}.`,
+    generated_class_summary: `${selectedBuild.detail} Starter gear: ${selectedBuild.starterGear.join(', ')}. Opening: ${selectedHook.label}. Pace: ${selectedPace.label}. Relationship: ${selectedRelationship.label}.`,
     difficulty: mapDifficulty(selections.difficulty),
     world_activity: mapWorldActivity(selections.worldActivity),
     economy_pressure: mapEconomyPressure(selections.economyPressure),
