@@ -10,6 +10,12 @@ RECENT_CONDITION_DEFAULTS = {
     "snow_minutes_24h": 0,
     "dry_minutes_72h": 0,
     "freezing_minutes_24h": 0,
+    "storm_minutes_24h": 0,
+    "mud_minutes_72h": 0,
+    "snowpack_minutes_72h": 0,
+    "dust_minutes_72h": 0,
+    "drought_minutes_7d": 0,
+    "thaw_minutes_24h": 0,
 }
 
 DERIVED_ENVIRONMENT_FIELDS = {
