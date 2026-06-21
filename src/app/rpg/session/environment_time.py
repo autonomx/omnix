@@ -5,16 +5,11 @@ from copy import deepcopy
 from typing import Any
 
 from app.rpg.session.environment_calendar import derive_calendar_state
+from app.rpg.session.environment_memory import advance_environment_memory
 from app.rpg.session.environment_weather import generate_weather_event
 
 DEFAULT_TURN_MINUTES = 10
-RECENT_24H_MINUTES = 24 * 60
-RECENT_72H_MINUTES = 72 * 60
 DEFAULT_HISTORY_LIMIT = 12
-
-RAIN_CONDITIONS = {"rain", "storm"}
-SNOW_CONDITIONS = {"snow", "blizzard"}
-DRY_CONDITIONS = {"clear", "cloudy", "overcast", "windy"}
 
 
 def advance_environment_time(environment: dict[str, Any], *, elapsed_minutes: int = DEFAULT_TURN_MINUTES) -> dict[str, Any]:
@@ -52,7 +47,7 @@ def advance_environment_time(environment: dict[str, Any], *, elapsed_minutes: in
 
     weather_expired = any(event.get("type") == "weather" for event in expired_events)
     env["event_history"] = _bounded_history(env.get("event_history"), expired_events, _history_limit(env))
-    env["recent_conditions"] = _advance_recent_conditions(env.get("recent_conditions"), active_weather_condition, elapsed)
+    env["recent_conditions"] = advance_environment_memory(env.get("recent_conditions"), condition=active_weather_condition, elapsed_minutes=elapsed)
     if weather_expired and not any(event.get("type") == "weather" for event in kept_events):
         kept_events.append(_next_weather_event(env, started_at_minute=next_minutes))
 
@@ -97,31 +92,6 @@ def _bounded_history(history: Any, expired_events: list[dict[str, Any]], limit: 
 def _history_limit(environment: dict[str, Any]) -> int:
     limit = _coerce_int(environment.get("event_history_limit"), DEFAULT_HISTORY_LIMIT)
     return max(1, limit)
-
-
-def _advance_recent_conditions(recent_conditions: Any, condition: str, elapsed: int) -> dict[str, int]:
-    recent = recent_conditions if isinstance(recent_conditions, dict) else {}
-    rain = _coerce_int(recent.get("rain_minutes_24h"), 0)
-    snow = _coerce_int(recent.get("snow_minutes_24h"), 0)
-    dry = _coerce_int(recent.get("dry_minutes_72h"), 0)
-    freezing = _coerce_int(recent.get("freezing_minutes_24h"), 0)
-    if condition in RAIN_CONDITIONS:
-        rain += elapsed
-        dry = max(0, dry - elapsed)
-    elif condition in SNOW_CONDITIONS:
-        snow += elapsed
-        freezing += elapsed
-        dry = max(0, dry - elapsed)
-    elif condition in DRY_CONDITIONS:
-        dry += elapsed
-    else:
-        dry = max(0, dry - elapsed // 2)
-    return {
-        "rain_minutes_24h": min(RECENT_24H_MINUTES, rain),
-        "snow_minutes_24h": min(RECENT_24H_MINUTES, snow),
-        "dry_minutes_72h": min(RECENT_72H_MINUTES, dry),
-        "freezing_minutes_24h": min(RECENT_24H_MINUTES, freezing),
-    }
 
 
 def _coerce_int(value: Any, fallback: int) -> int:
