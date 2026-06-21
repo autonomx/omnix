@@ -11,8 +11,19 @@ interface RpgWorkspaceHeaderProps {
 
 export function RpgWorkspaceHeader({ module, selectedSessionSummary, submitStatus }: RpgWorkspaceHeaderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
   const headerDetailsId = 'rpg-workstation-header-details';
   const headerClassName = isExpanded ? 'rpg-workstation-header' : 'rpg-workstation-header rpg-workstation-header-collapsed';
+
+  if (isHidden) {
+    return (
+      <div className="rpg-layout-controls" aria-label="RPG header visibility controls">
+        <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden(false)}>
+          Show RPG header
+        </button>
+      </div>
+    );
+  }
 
   return (
     <header className={headerClassName}>
@@ -38,6 +49,9 @@ export function RpgWorkspaceHeader({ module, selectedSessionSummary, submitStatu
           onClick={() => setIsExpanded((value) => !value)}
         >
           {isExpanded ? 'Collapse header' : 'Expand header'}
+        </button>
+        <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden(true)}>
+          Hide header
         </button>
       </div>
     </header>
