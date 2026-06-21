@@ -38,6 +38,7 @@ function formatQueryError(error: unknown) {
 
 export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
+  const [isCampaignSetupVisible, setIsCampaignSetupVisible] = useState(false);
   const [isPlayerRailCollapsed, setIsPlayerRailCollapsed] = useState(false);
   const [isWorldRailCollapsed, setIsWorldRailCollapsed] = useState(false);
   const [isPlayerRailFullSize, setIsPlayerRailFullSize] = useState(false);
@@ -335,7 +336,26 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     <WorkspacePanel className="rpg-workstation">
       <RpgWorkspaceHeader module={module} selectedSessionSummary={selectedSessionSummary} submitStatus={submitStatus} />
 
-      <RpgCreateCampaignWizard onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)} onSelectCommand={selectCommand} />
+      {isCampaignSetupVisible ? (
+        <RpgCreateCampaignWizard
+          onCreateCampaign={(request) => createCampaignMutation.mutateAsync(request)}
+          onSelectCommand={(command) => {
+            selectCommand(command);
+            setIsCampaignSetupVisible(false);
+          }}
+        />
+      ) : (
+        <section className="rpg-create-campaign-card rpg-create-campaign-card-collapsed" aria-label="Create Campaign">
+          <div>
+            <p className="eyebrow">Campaign setup</p>
+            <h3>Create Campaign</h3>
+            <p>Open the deeper RPG setup flow with point-buy stats, starter gear, story hooks, world rules, and creation progress.</p>
+          </div>
+          <button className="rpg-primary-button" type="button" onClick={() => setIsCampaignSetupVisible(true)}>
+            New Campaign
+          </button>
+        </section>
+      )}
 
       <div className="rpg-layout-controls" aria-label="Workspace layout controls">
         <button
