@@ -13,6 +13,7 @@ from app.rpg.session.durable_store import (
     load_session_from_disk,
     save_session_to_disk,
 )
+from app.rpg.session.environment import ensure_session_environment_seed_state
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.package_bridge import package_to_session, session_to_package
 from app.rpg.session.survival_persistence import normalize_session_survival_for_persistence
@@ -34,6 +35,7 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
     session["manifest"] = manifest
     session.setdefault("installed_packs", [])
     session.setdefault("simulation_state", {})
+    session = ensure_session_environment_seed_state(session)
     session = normalize_session_survival_for_persistence(session)
     # Living-world: ensure ambient runtime state exists and is bounded
     runtime_state = _safe_dict(session.get("runtime_state"))
