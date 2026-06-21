@@ -20,8 +20,6 @@ interface RpgPlayerRailProps {
 
 export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats, heroSummary, partyMembers }: RpgPlayerRailProps) {
   const railClassName = className ? `rpg-left-rail ${className}` : 'rpg-left-rail';
-  const isLiveSession = heroSummary.source === 'live';
-  const companionActionLabel = isLiveSession ? 'Companion recruitment is available through story choices.' : 'Preview companions only';
 
   return (
     <aside className={railClassName} aria-label="Player, party, and quests">
@@ -114,9 +112,6 @@ export function RpgPlayerRail({ activeQuests, className, equippedGear, heroStats
         ) : (
           <p className="rpg-empty-copy">No companions have joined this campaign yet.</p>
         )}
-        <button className="rpg-secondary-button" type="button" disabled aria-label={companionActionLabel} title={companionActionLabel}>
-          + Add companion
-        </button>
       </section>
 
       <section className="rpg-card">
