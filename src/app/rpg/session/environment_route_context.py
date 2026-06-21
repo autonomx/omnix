@@ -1,7 +1,10 @@
 """Route-facing read model for RPG Environment 2.0."""
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
+
+from app.rpg.session.environment_time import advance_environment_time
 
 DIFFICULT_TERRAIN = {"muddy", "deep_snow", "slush", "dusty"}
 LOW_VISIBILITY = {"poor", "low", "reduced", "obscured", "dark"}
@@ -28,6 +31,13 @@ def build_route_environment_context(snapshot: dict[str, Any] | None, *, base_min
         "estimated_minutes": estimated,
         "notes": _route_notes(terrain=terrain, visibility=visibility, light=light, hazards=hazards),
     }
+
+
+def advance_environment_for_route(environment: dict[str, Any], *, elapsed_minutes: int) -> dict[str, Any]:
+    """Pass explicit route elapsed time back to Environment Domain helpers."""
+
+    env = deepcopy(environment) if isinstance(environment, dict) else {}
+    return advance_environment_time(env, elapsed_minutes=elapsed_minutes)
 
 
 def _route_multiplier(*, terrain: str, hazards: list[str]) -> float:
