@@ -104,6 +104,8 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(await screen.findByRole('dialog', { name: 'Campaign Ready' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: 'Created Campaign — rpg-created-1' })).toBeInTheDocument();
     expect(await screen.findByText('Created Campaign')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Thorin Ironfist')).not.toBeInTheDocument());
+    expect(screen.getByText('0 / 4')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
