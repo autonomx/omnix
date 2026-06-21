@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import Any
 
 from app.rpg.session.climate_profiles import resolve_climate_profile
 from app.rpg.session.environment import build_initial_environment_seed_state
@@ -8,8 +9,14 @@ from app.rpg.session.environment_signals import derive_environment_signals
 from app.rpg.session.environment_snapshot import derive_environment_snapshot
 
 
-def _profile(profile_id: str) -> dict[str, object]:
+def _profile(profile_id: str) -> dict[str, Any]:
     return resolve_climate_profile(profile_id)["profile"]
+
+
+def _baseline(profile: dict[str, Any], key: str) -> int:
+    baselines = profile["resource_baselines"]
+    assert isinstance(baselines, dict)
+    return int(baselines[key])
 
 
 def test_environment_signals_apply_season_weather_and_memory() -> None:
@@ -21,8 +28,8 @@ def test_environment_signals_apply_season_weather_and_memory() -> None:
     signals = derive_environment_signals(profile, calendar, event, recent)
 
     assert signals["drought_pressure"] > 10
-    assert signals["soil_moisture"] < profile["resource_baselines"]["soil_moisture"]
-    assert signals["forage_availability"] < profile["resource_baselines"]["forage_availability"]
+    assert signals["soil_moisture"] < _baseline(profile, "soil_moisture")
+    assert signals["forage_availability"] < _baseline(profile, "forage_availability")
 
 
 def test_environment_signals_apply_snow_memory() -> None:
@@ -35,11 +42,18 @@ def test_environment_signals_apply_snow_memory() -> None:
 
     assert signals["snowpack"] >= 35
     assert signals["frost_pressure"] >= 35
-    assert signals["forage_availability"] < profile["resource_baselines"]["forage_availability"]
+    assert signals["forage_availability"] < _baseline(profile, "forage_availability")
 
 
 def test_environment_signals_are_bounded() -> None:
-    profile = {"resource_baselines": {key: 150 for key in ("water_availability", "vegetation", "soil_moisture", "forage_availability")}}
+    profile = {
+        "resource_baselines": {
+            "water_availability": 150,
+            "vegetation": 150,
+            "soil_moisture": 150,
+            "forage_availability": 150,
+        }
+    }
     signals = derive_environment_signals(
         profile,
         {"season_id": "winter"},
