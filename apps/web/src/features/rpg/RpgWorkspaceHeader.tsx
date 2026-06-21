@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill } from '../../design/primitives';
 import type { RpgSessionSummaryPreview } from './rpgUiState';
+import './RpgPlayFocus.css';
 
 interface RpgWorkspaceHeaderProps {
   module: OmnixModuleDefinition;
