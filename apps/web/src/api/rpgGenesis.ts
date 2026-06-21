@@ -34,6 +34,7 @@ interface LooseRequest extends RpgNewGameRequest {
   opening_pace?: string;
   origin?: string;
   relationship_preset?: string;
+  starter_gear?: string[];
   starter_gear_tags?: string[];
   story_options?: Record<string, unknown>;
   system_options?: Record<string, unknown>;
@@ -124,10 +125,20 @@ function addTag(tags: Set<string>, tag: string): void {
   }
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0).map((entry) => entry.trim())
+    : [];
+}
+
 function fallbackGearTags(request: LooseRequest): string[] {
-  const provided = Array.isArray(request.starter_gear_tags) ? request.starter_gear_tags.filter((tag) => typeof tag === 'string') : [];
+  const provided = stringList(request.starter_gear_tags);
   if (provided.length > 0) {
     return provided;
+  }
+  const starterGear = stringList(request.starter_gear);
+  if (starterGear.length > 0) {
+    return starterGear;
   }
   const player = asRecord(request.player);
   const buildKey = asString(player.build, '').replace('-', '_');
