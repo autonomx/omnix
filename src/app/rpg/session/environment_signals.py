@@ -33,7 +33,11 @@ SEASON_SIGNAL_MODIFIERS = {
         "drought_pressure": 8,
         "vegetation": 4,
     },
-    "early_autumn": {"vegetation": -2, "forage_availability": -3, "soil_moisture": 2},
+    "early_autumn": {
+        "vegetation": -2,
+        "forage_availability": -3,
+        "soil_moisture": 2,
+    },
     "late_autumn": {
         "vegetation": -8,
         "forage_availability": -8,
@@ -67,7 +71,11 @@ EVENT_SIGNAL_MODIFIERS = {
         "soil_moisture": 4,
         "forage_availability": -8,
     },
-    "blizzard": {"snowpack": 28, "frost_pressure": 18, "forage_availability": -14},
+    "blizzard": {
+        "snowpack": 28,
+        "frost_pressure": 18,
+        "forage_availability": -14,
+    },
     "clear": {"drought_pressure": 2},
     "windy": {"soil_moisture": -3, "drought_pressure": 3},
     "dust": {
@@ -110,9 +118,16 @@ def derive_environment_signals(
 
 
 def _baseline_signals(profile: dict[str, Any]) -> dict[str, int]:
-    baselines = profile.get("resource_baselines") if isinstance(profile.get("resource_baselines"), dict) else {}
-    signals = {key: _coerce_int(baselines.get(key), fallback) for key, fallback in SIGNAL_DEFAULTS.items()}
-    weights = profile.get("hazard_weights") if isinstance(profile.get("hazard_weights"), dict) else {}
+    baselines = profile.get("resource_baselines")
+    if not isinstance(baselines, dict):
+        baselines = {}
+    signals = {
+        key: _coerce_int(baselines.get(key), fallback)
+        for key, fallback in SIGNAL_DEFAULTS.items()
+    }
+    weights = profile.get("hazard_weights")
+    if not isinstance(weights, dict):
+        weights = {}
     signals["flood_pressure"] += _scaled_weight(weights, "flash_flood_risk")
     signals["flood_pressure"] += _scaled_weight(weights, "flooded_road_risk")
     signals["frost_pressure"] += _scaled_weight(weights, "frost_risk")
@@ -144,7 +159,12 @@ def _apply_memory(signals: dict[str, int], recent: dict[str, Any]) -> None:
     )
 
 
-def _apply_modifiers(signals: dict[str, int], modifiers: dict[str, int], *, scale: float = 1.0) -> None:
+def _apply_modifiers(
+    signals: dict[str, int],
+    modifiers: dict[str, int],
+    *,
+    scale: float = 1.0,
+) -> None:
     for key, value in modifiers.items():
         if key in signals:
             signals[key] += int(round(value * scale))
