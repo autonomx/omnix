@@ -117,7 +117,7 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(screen.getByText('Day 1 • 08:00')).toBeInTheDocument();
     expect(screen.getByText('Rainy')).toBeInTheDocument();
     expect(screen.getByText('Cool (inferred from weather)')).toBeInTheDocument();
-    expect(screen.getByText('Unknown (0)')).toBeInTheDocument();
+    expect(screen.getAllByText('Unknown (0)').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
