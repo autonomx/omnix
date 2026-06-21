@@ -365,7 +365,7 @@ export function RpgCreateCampaignWizard({ onCreateCampaign, onSelectCommand }: R
             </label>
             <OptionSelect label="Primary talent" value={primaryCapability} onChange={setPrimaryCapability} options={primaryCapabilities} detail={selectedPrimary.detail} />
           </div>
-          <div className="rpg-capability-grid" aria-label="Secondary capabilities">
+          <div className="rpg-capability-grid" aria-label="Secondary capabilities" role="group">
             {(Object.keys(capabilityLabels) as Capability[]).map((capability) => (
               <label key={capability} className="rpg-create-check-row">
                 <input type="checkbox" checked={capabilities[capability]} onChange={() => toggleCapability(capability)} />
