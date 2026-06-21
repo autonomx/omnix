@@ -63,7 +63,7 @@ export function RpgWorldRail({
   const railClassName = className ? `rpg-right-rail ${className}` : 'rpg-right-rail';
   const displayedWorldStateRows = worldStateRows.map((row) => ({
     ...row,
-    value: displayWorldStateValue(row, worldStateRows, selectedSessionSummary),
+    value: displayWorldStateValue(row, selectedSessionSummary),
   }));
 
   return (
@@ -201,22 +201,14 @@ export function RpgWorldRail({
   );
 }
 
-function displayWorldStateValue(
-  row: RpgWorldStateRowPreview,
-  rows: RpgWorldStateRowPreview[],
-  selectedSessionSummary: RpgSessionSummaryPreview,
-): string {
+function displayWorldStateValue(row: RpgWorldStateRowPreview, selectedSessionSummary: RpgSessionSummaryPreview): string {
   const value = row.value.trim();
-  if (row.label === 'Temperature' && isMissingWorldValue(value)) {
-    const weather = rows.find((candidate) => candidate.label === 'Weather')?.value;
-    return inferTemperatureLabel(weather, selectedSessionSummary.location) ?? 'Not tracked yet';
-  }
 
   if (row.label === 'Time' && isMissingWorldValue(value)) {
     return selectedSessionSummary.turnLabel;
   }
 
-  if ((row.label === 'Weather' || row.label === 'Reputation') && isMissingWorldValue(value)) {
+  if ((row.label === 'Weather' || row.label === 'Temperature' || row.label === 'Reputation') && isMissingWorldValue(value)) {
     return 'Not tracked yet';
   }
 
@@ -230,25 +222,4 @@ function isMissingWorldValue(value: string): boolean {
   }
 
   return !normalized || normalized === 'unknown' || normalized.includes('unknown') || normalized.includes('not tracked');
-}
-
-function inferTemperatureLabel(weather: string | undefined, location: string): string | undefined {
-  const normalizedWeather = String(weather ?? '').toLowerCase();
-  const normalizedLocation = location.toLowerCase();
-  const source = normalizedWeather && !isMissingWorldValue(normalizedWeather) ? 'weather' : 'location';
-  const text = `${normalizedWeather} ${normalizedLocation}`;
-
-  if (/(frost|ice|snow|freez|cold|glimmerdeep|mountain)/.test(text)) {
-    return `Cold (inferred from ${source})`;
-  }
-
-  if (/(rain|cloud|overcast|grey|wind|wet|tavern|market|road|quarry)/.test(text)) {
-    return `Cool (inferred from ${source})`;
-  }
-
-  if (/(sun|warm|desert|heat|summer)/.test(text)) {
-    return `Warm (inferred from ${source})`;
-  }
-
-  return undefined;
 }
