@@ -106,6 +106,8 @@ describe('RpgWorkspace campaign handoff', () => {
     expect(await screen.findByText('Created Campaign')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Thorin Ironfist')).not.toBeInTheDocument());
     expect(screen.getByText('0 / 4')).toBeInTheDocument();
+    expect(screen.getByText('No companions have joined this campaign yet.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Companion recruitment is available through story choices.' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Enter World' }));
 
