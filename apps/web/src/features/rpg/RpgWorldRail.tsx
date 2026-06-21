@@ -7,9 +7,6 @@ import type {
   RpgSessionSummaryPreview,
   RpgWorldStateRowPreview,
 } from './rpgUiState';
-import './RpgVisualAssets.css';
-
-const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
 
 interface RpgReportAssetPreview {
   id: unknown;
@@ -71,16 +68,11 @@ export function RpgWorldRail({
         <div className="rpg-section-heading">
           <p className="eyebrow">World & location</p>
         </div>
-        <div className="rpg-map-preview rpg-map-preview-has-image" aria-label={`${selectedSessionSummary.location} travel map`}>
-          <img className="rpg-map-image" src={MAP_ART_SRC} alt="" aria-hidden="true" loading="lazy" />
-          <span className="rpg-map-pin" aria-hidden="true" />
-          <div className="rpg-map-controls" aria-hidden="true">
-            <span>+</span>
-            <span>−</span>
-            <span>◎</span>
-          </div>
+        <div className="rpg-location-summary" aria-label={`${selectedSessionSummary.location} current location`}>
+          <strong>{selectedSessionSummary.location}</strong>
+          <span>{selectedSessionSummary.turnLabel}</span>
+          <small>Travel and location changes happen through story commands and resolved turns.</small>
         </div>
-        <strong>{selectedSessionSummary.location}</strong>
       </section>
 
       <section className="rpg-card rpg-world-grid-card">
