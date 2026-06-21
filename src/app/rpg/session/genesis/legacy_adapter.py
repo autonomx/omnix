@@ -20,6 +20,31 @@ _ARCHETYPE_TO_BUILD = {
     "silver_tongue": "silver_tongue",
     "face": "silver_tongue",
 }
+_ARCHETYPE_TO_PRIMARY_CAPABILITY = {
+    "balanced_adventurer": "recon",
+    "warrior": "combat",
+    "ranger": "recon",
+    "scout": "recon",
+    "silver_tongue": "influence",
+    "face": "influence",
+}
+_CAPABILITY_IDS = {"combat", "recon", "influence", "technical", "survival", "knowledge", "support"}
+_TALENT_CAPABILITY_ALIASES = {
+    "action_readiness": "combat",
+    "archery": "recon",
+    "bowcraft": "recon",
+    "combat_readiness": "combat",
+    "combat_survival": "combat",
+    "diplomacy": "influence",
+    "fieldcraft": "survival",
+    "lore": "knowledge",
+    "medicine": "support",
+    "reconnaissance": "recon",
+    "scouting": "recon",
+    "social": "influence",
+    "survival_sense": "survival",
+    "tracking": "recon",
+}
 _GEAR_TAG_LABELS = {
     "close_weapon": "Iron dagger",
     "melee_weapon": "Iron dagger",
@@ -53,6 +78,21 @@ def _normal_key(value: object, fallback: str = "custom") -> str:
 def _title_from_key(value: object, fallback: str = "Adventurer") -> str:
     text = str(value or fallback).strip().replace("_", " ")
     return " ".join(part.capitalize() for part in text.split()) or fallback
+
+
+def _capability_from_key(key: str) -> str | None:
+    capability = _TALENT_CAPABILITY_ALIASES.get(key, key)
+    return capability if capability in _CAPABILITY_IDS else None
+
+
+def _capabilities_from_talents(contract: CampaignGenesisContract) -> list[str]:
+    capabilities: list[str] = []
+    for talent in contract.drivers.talents:
+        key = _normal_key(talent.id, "")
+        capability = _capability_from_key(key)
+        if capability and capability not in capabilities:
+            capabilities.append(capability)
+    return capabilities
 
 
 def _gear_labels(tags: list[str]) -> list[str]:
@@ -90,17 +130,14 @@ def _render_genesis_summary(contract: CampaignGenesisContract) -> str:
 def adapt_genesis_payload_to_new_game_payload(payload: dict[str, Any]) -> dict[str, Any]:
     raw = _safe_dict(payload.get("request") or payload)
     contract = CampaignGenesisContract.model_validate(raw.get("genesis") or raw)
-    talent_ids = [_normal_key(talent.id, "") for talent in contract.drivers.talents]
-    talent_ids = [key for key in talent_ids if key]
+    archetype = _normal_key(contract.drivers.archetype)
+    capability_ids = _capabilities_from_talents(contract)
     build = _ARCHETYPE_TO_BUILD.get(
-        _normal_key(contract.drivers.archetype),
+        archetype,
         "balanced_adventurer",
     )
-    primary = (
-        talent_ids[0]
-        if talent_ids
-        else _normal_key(contract.drivers.archetype, "custom")
-    )
+    primary = capability_ids[0] if capability_ids else _ARCHETYPE_TO_PRIMARY_CAPABILITY.get(archetype, "recon")
+    secondary_capabilities = [capability for capability in capability_ids[1:] if capability != primary]
     world = contract.world_options
     system = contract.system_options
     identity = contract.identity
@@ -117,7 +154,7 @@ def adapt_genesis_payload_to_new_game_payload(payload: dict[str, Any]) -> dict[s
             "build": build,
         },
         "primary_capability": primary,
-        "secondary_capabilities": talent_ids[1:],
+        "secondary_capabilities": secondary_capabilities,
         "power_source": identity.power_source,
         "generated_class_name": _title_from_key(contract.drivers.archetype),
         "generated_class_summary": _render_genesis_summary(contract),
