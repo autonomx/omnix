@@ -6,7 +6,7 @@ from typing import Any
 
 DEFAULT_EXPOSURE = "outdoor"
 DEFAULT_SHELTER = "exposed"
-VALID_EXPOSURES = {"indoor", "outdoor", "sheltered", "underground"}
+VALID_EXPOSURES = {"indoor", "outdoor", "sheltered", "underground", "vehicle_like"}
 
 STARTING_LOCATION_CONTEXTS: dict[str, dict[str, Any]] = {
     "rusty_flagon_tavern": {"exposure": "indoor", "shelter": "sheltered", "light_override": "tavern_lit"},
@@ -84,6 +84,8 @@ def transition_scene_context(
 
 def _normalize_exposure(value: Any) -> str:
     exposure = _normalize_identifier(value, DEFAULT_EXPOSURE)
+    if exposure == "vehicle":
+        return "vehicle_like"
     return exposure if exposure in VALID_EXPOSURES else DEFAULT_EXPOSURE
 
 
