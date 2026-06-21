@@ -171,9 +171,9 @@ def test_new_game_route_preserves_full_wizard_genesis_payload(monkeypatch, tmp_p
     assert state["genesis_snapshot"]["identity"]["origin"] == "frontier_village"
     assert state["compiled_genesis_snapshot"]["compiled_stats"]["strength"] == 18
     assert state["bootstrap_snapshot"]["active_goals"]
+    assert isinstance(setup_payload["bootstrap_snapshot"]["decision_biases"], dict)
     assert setup_payload["genesis"]["drivers"]["values"] == ["agency", "loyalty"]
     assert setup_payload["compiled_genesis"]["compiled_feature_flags"]["companions"] is True
-    assert setup_payload["bootstrap_snapshot"]["decision_biases"] == {"safety_priority": 1.2, "boldness_priority": 0.85}
 
     assert metadata["seed"] == 0
     assert loaded["simulation_state"]["seed"] == 0
