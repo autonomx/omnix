@@ -6,13 +6,12 @@ from typing import Any
 
 from .contract import (
     CAMPAIGN_GENESIS_CONTRACT_VERSION,
-    DEFAULT_GENESIS_CREATED_BY,
     CampaignGenesisContract,
     canonical_genesis_payload,
     genesis_contract_hash,
 )
+from .source_info import wizard_source_payload
 
-_CURRENT_WIZARD_BUILD = "636"
 _ARCHETYPE_TO_BUILD = {
     "balanced_adventurer": "balanced_adventurer",
     "warrior": "warrior",
@@ -129,14 +128,16 @@ def adapt_genesis_payload_to_new_game_payload(payload: dict[str, Any]) -> dict[s
 
 
 def _provenance(contract: CampaignGenesisContract) -> dict[str, Any]:
+    source = wizard_source_payload()
     return {
-        "created_by": DEFAULT_GENESIS_CREATED_BY,
+        "created_by": source["source_kind"],
         "contract_version": CAMPAIGN_GENESIS_CONTRACT_VERSION,
         "compiler_version": None,
         "creation_seed": contract.world_options.seed,
         "contract_hash": genesis_contract_hash(contract),
-        "wizard_build": _CURRENT_WIZARD_BUILD,
-        "created_from": "rpg_create_campaign_wizard",
+        "wizard_build": source["source_build"],
+        "created_from": source["source_name"],
+        "source": source,
     }
 
 
