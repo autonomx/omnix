@@ -194,6 +194,14 @@ export const capabilityLabels: Record<Capability, string> = {
 
 export const initialStats = Object.fromEntries(statDefinitions.map((stat) => [stat.key, BASE_STAT])) as Record<string, number>;
 
+export function applyBuildBoosts(stats: Record<string, number>, selectedBuild: BuildTemplate): Record<string, number> {
+  const merged = { ...stats };
+  Object.entries(selectedBuild.boosts).forEach(([key, boost]) => {
+    merged[key] = Math.min(MAX_STAT + 2, (merged[key] ?? BASE_STAT) + boost);
+  });
+  return merged;
+}
+
 export function buildRpgNewGameRequest(selections: CampaignCreationSelections): RpgNewGameRequest {
   const selectedBuild = buildTemplates.find((template) => template.key === selections.buildKey) ?? buildTemplates[0];
   const openingHook = selections.openingHook ?? 'tavern-rumor';
@@ -208,6 +216,7 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     .map(([capability]) => mapSecondaryCapability(capability))
     .filter((capability, index, all) => capability !== primary && all.indexOf(capability) === index);
   const seed = parseSeed(selections.seed);
+  const derivedStats = applyBuildBoosts(selections.stats, selectedBuild);
   const request: RpgNewGameRequest & Record<string, unknown> = {
     campaign_template: 'deterministic_rpg_campaign',
     tone: selectedBuild.detail,
@@ -232,8 +241,9 @@ export function buildRpgNewGameRequest(selections: CampaignCreationSelections): 
     companions_enabled: selections.systems.companions,
     permadeath: selections.systems.permadeath,
     seed,
-    initial_stats: { ...selections.stats },
+    initial_stats: derivedStats,
     starter_gear: [...selectedBuild.starterGear],
+    starter_gear_tags: [...selectedBuild.starterGear],
     starting_build: selectedBuild.label,
     opening_hook: mapOpeningHook(openingHook),
     opening_pace: mapOpeningPace(openingPace),
@@ -271,8 +281,11 @@ function parseSeed(value: string): number | null {
   if (!trimmed) {
     return null;
   }
+  if (!/^[+-]?\d+$/.test(trimmed)) {
+    return null;
+  }
   const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 function parseValueList(value?: string): string[] {
