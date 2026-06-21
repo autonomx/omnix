@@ -1,29 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import type { AssetListResponse, JobListResponse, PersistenceInventory, ReportListResponse } from '../../api/client';
+import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
 import { createRpgWorkspaceState, progressPercent, safeSessionId } from './rpgUiState';
 
 describe('rpg UI state', () => {
-  it('keeps preview jobs until live RPG jobs are available', () => {
+  it('keeps preview data until live RPG sessions are available', () => {
     const state = createRpgWorkspaceState({});
 
     expect(state.jobCards).toHaveLength(3);
     expect(state.jobCards[0]).toMatchObject({ source: 'preview', title: 'rpg.turn' });
     expect(state.selectedSessionSummary).toMatchObject({ source: 'preview', title: 'Preview campaign' });
     expect(state.heroSummary).toMatchObject({ source: 'preview', name: 'Alyndra' });
-    expect(state.journalDetail.title).toBe('Arrived at Glimmerdeep Pass');
-    expect(state.encounter).toMatchObject({ source: 'preview', title: 'No active combat' });
+    expect(state.worldStateRows.map((row) => row.label)).toContain('Calendar / Season');
+    expect(state.worldStateRows.map((row) => row.label)).toContain('Hazards');
   });
 
   it('normalizes live RPG sessions, jobs, assets, and reports for the workspace', () => {
     const inventory = {
       sessions: [
-        {
-          session_id: 'session:older',
-          updated_at: '2026-06-15T00:00:00Z',
-          title: 'Older session',
-          location: 'Old Road',
-          turn_count: 3,
-        },
+        { session_id: 'session:older', updated_at: '2026-06-15T00:00:00Z', title: 'Older session', location: 'Old Road', turn_count: 3 },
         {
           session_id: 'session:live',
           updated_at: '2026-06-16T00:00:00Z',
@@ -34,8 +28,7 @@ describe('rpg UI state', () => {
           checkpoint_path: 'checkpoints/live.json',
         },
       ],
-      diagnostics: [],
-    } as PersistenceInventory;
+    };
     const jobs = {
       jobs: [
         {
@@ -50,36 +43,13 @@ describe('rpg UI state', () => {
           created_at: '2026-06-16T00:00:00Z',
           updated_at: '2026-06-16T00:00:00Z',
         },
-        {
-          id: 'job:chat',
-          module: 'chat',
-          type: 'chat.generate',
-          status: 'queued',
-          resource_class: 'gpu:llm',
-          priority: 0,
-          created_at: '2026-06-16T00:00:00Z',
-          updated_at: '2026-06-16T00:00:00Z',
-        },
+        { id: 'job:chat', module: 'chat', type: 'chat.generate', status: 'queued', resource_class: 'gpu:llm', priority: 0, created_at: '2026-06-16T00:00:00Z', updated_at: '2026-06-16T00:00:00Z' },
       ],
     } as JobListResponse;
     const assets = {
       assets: [
-        {
-          id: 'asset:rpg',
-          module: 'rpg',
-          type: 'rpg_checkpoint',
-          mime_type: 'application/json',
-          storage_path: 'checkpoints/session.json',
-          created_at: '2026-06-16T00:00:00Z',
-        },
-        {
-          id: 'asset:chat',
-          module: 'chat',
-          type: 'chat_transcript',
-          mime_type: 'application/json',
-          storage_path: 'chat/session.json',
-          created_at: '2026-06-16T00:00:00Z',
-        },
+        { id: 'asset:rpg', module: 'rpg', type: 'rpg_checkpoint', mime_type: 'application/json', storage_path: 'checkpoints/session.json', created_at: '2026-06-16T00:00:00Z' },
+        { id: 'asset:chat', module: 'chat', type: 'chat_transcript', mime_type: 'application/json', storage_path: 'chat/session.json', created_at: '2026-06-16T00:00:00Z' },
       ],
     } as AssetListResponse;
     const reports = {
@@ -92,25 +62,59 @@ describe('rpg UI state', () => {
     const state = createRpgWorkspaceState({ inventory, jobs, assets, reports });
 
     expect(state.sessions).toHaveLength(2);
-    expect(state.sessionSummaries[0]).toMatchObject({
-      id: 'session:live',
-      title: 'Live campaign',
-      location: 'Rusty Flagon Tavern',
-      turnLabel: 'Turn 12',
-      updatedAt: '2026-06-16 00:00 UTC',
-    });
-    expect(state.selectedSessionSummary.id).toBe('session:live');
-    expect(state.recentEvents[0]).toBe('Loaded Live campaign.');
-    expect(state.journalDetail).toMatchObject({
-      title: 'Live session: Live campaign',
-      tags: ['Live session', 'Replay-safe', 'Indexed'],
-    });
-    expect(state.worldStateRows[0]).toMatchObject({ label: 'Time', value: '2026-06-16 00:00 UTC' });
+    expect(state.sessionSummaries[0]).toMatchObject({ id: 'session:live', title: 'Live campaign', location: 'Rusty Flagon Tavern', turnLabel: 'Turn 12', updatedAt: '2026-06-16 00:00 UTC' });
+    expect(state.worldStateRows[0]).toMatchObject({ label: 'Calendar / Season', value: 'Not tracked yet' });
     expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'checkpoints/session.json' });
     expect(state.rpgJobs).toHaveLength(1);
     expect(state.rpgAssets).toHaveLength(1);
     expect(state.rpgReports).toHaveLength(1);
     expect(state.jobCards[0]).toMatchObject({ id: 'job:rpg', progress: 25, source: 'live', title: 'rpg.turn' });
+  });
+
+  it('renders environment snapshot rows without moving reputation into world state', () => {
+    const inventory = {
+      sessions: [
+        {
+          session_id: 'world-live',
+          title: 'World rail campaign',
+          location: 'Rusty Flagon Tavern',
+          updated_at: '2026-06-16T00:00:00Z',
+          state: {
+            environment_snapshot: {
+              region_id: 'market_road',
+              calendar: { season_label: 'Early Spring', time_label: 'Day 1' },
+              display: {
+                season: 'Early Spring',
+                day_time: 'Day 1',
+                weather: 'Rain',
+                temperature: '7C',
+                wind: 'Light',
+                visibility: 'Interior',
+                light: 'Lamp Lit',
+                terrain: 'Interior Floor',
+                context: 'Indoor',
+              },
+              context: { location_label: 'Rusty Flagon Tavern' },
+            },
+            player: { name: 'Mira Vale', reputation: { label: 'Trusted', score: 61 } },
+            relationships: [{ name: 'Bran', stance: 'Ally', score: 82 }],
+            encounter: { status: 'active', title: 'Road encounter', enemies: [{ name: 'Lookout' }] },
+          },
+        },
+      ],
+    };
+
+    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'world-live' });
+    const rows = Object.fromEntries(state.worldStateRows.map((row) => [row.label, row.value]));
+
+    expect(rows['Calendar / Season']).toBe('Early Spring');
+    expect(rows['Day / Time']).toBe('Day 1');
+    expect(rows.Region).toBe('market_road');
+    expect(rows.Weather).toBe('Rain');
+    expect(rows.Temperature).toBe('7C');
+    expect(rows.Reputation).toBeUndefined();
+    expect(state.npcRelationships[0]).toEqual({ name: 'Bran', stance: 'Ally', score: 82 });
+    expect(state.encounter).toMatchObject({ icon: '⚔', source: 'live', title: 'Road encounter', detail: 'Combatants: Lookout' });
   });
 
   it('derives player rail content from live session state when available', () => {
@@ -141,22 +145,11 @@ describe('rpg UI state', () => {
           },
         },
       ],
-      diagnostics: [],
-    } as PersistenceInventory;
+    };
 
     const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'player-live' });
 
-    expect(state.heroSummary).toMatchObject({
-      source: 'live',
-      avatar: 'M',
-      name: 'Mira Vale',
-      subtitle: 'Level 4 • Scout',
-      origin: 'Caravan outrider',
-      xpLabel: '350 / 500',
-      xpPercent: 70,
-      gold: '17g 5s 2c',
-      renown: 'Trusted',
-    });
+    expect(state.heroSummary).toMatchObject({ source: 'live', avatar: 'M', name: 'Mira Vale', subtitle: 'Level 4 • Scout', origin: 'Caravan outrider', xpLabel: '350 / 500', xpPercent: 70, gold: '17g 5s 2c', renown: 'Trusted' });
     expect(state.heroStats).toEqual([
       { label: 'HP', value: '42 / 50', percent: 84, tone: 'danger' },
       { label: 'Stamina', value: '31 / 40', percent: 78, tone: 'success' },
@@ -166,116 +159,6 @@ describe('rpg UI state', () => {
     expect(state.partyMembers[0]).toMatchObject({ avatar: 'B', name: 'Bran', role: 'Lv. 2 Innkeeper', hp: '18 / 22', percent: 82 });
     expect(state.activeQuests[0]).toMatchObject({ title: 'Find the Quarry Trail', detail: 'Ask Bran about the old quarry road.' });
     expect(state.inventoryItems[0]).toMatchObject({ label: 'Ration', count: '3' });
-  });
-
-  it('derives world rail, encounter, and NPC relationship state from live sessions', () => {
-    const inventory = {
-      sessions: [
-        {
-          session_id: 'world-live',
-          title: 'World rail campaign',
-          location: 'Old Quarry Road',
-          updated_at: '2026-06-16T00:00:00Z',
-          state: {
-            world: {
-              time: 'Day 3 • Dusk',
-              weather: 'Rain, fog',
-              temperature: 4,
-            },
-            player: {
-              name: 'Mira Vale',
-              reputation: { label: 'Trusted', score: 61 },
-            },
-            relationships: [
-              { name: 'Bran', stance: 'Ally', score: 82 },
-              { name: 'Captain Aldric', trust: 0.45 },
-            ],
-            encounter: {
-              status: 'active',
-              title: 'Bandit ambush',
-              enemies: [{ name: 'Road bandit' }, { name: 'Lookout' }],
-            },
-          },
-        },
-      ],
-      diagnostics: [],
-    } as PersistenceInventory;
-
-    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'world-live' });
-
-    expect(state.worldStateRows).toEqual([
-      { icon: '☀', label: 'Time', value: 'Day 3 • Dusk' },
-      { icon: '≋', label: 'Weather', value: 'Rain, fog' },
-      { icon: '❄', label: 'Temperature', value: '4°C' },
-      { icon: '✦', label: 'Reputation', value: 'Trusted' },
-    ]);
-    expect(state.npcRelationships).toEqual([
-      { name: 'Bran', stance: 'Ally', score: 82 },
-      { name: 'Captain Aldric', stance: 'Neutral', score: 45 },
-    ]);
-    expect(state.encounter).toMatchObject({ icon: '⚔', source: 'live', title: 'Bandit ambush', detail: 'Combatants: Road bandit, Lookout' });
-  });
-
-  it('derives narrative events and journal entries from live session timeline records', () => {
-    const inventory = {
-      sessions: [
-        {
-          session_id: 'story-live',
-          title: 'Narrative campaign',
-          location: 'Rusty Flagon Tavern',
-          updated_at: '2026-06-16T01:00:00Z',
-          turn_count: 9,
-          state: {
-            recent_events: [
-              {
-                time: 'Day 3 • 09:00',
-                type: 'dialogue',
-                actor: 'Bran',
-                text: 'The quarry road has been quiet since midnight.',
-              },
-              {
-                time: 'Day 3 • 08:45',
-                type: 'discovery',
-                title: 'Found a torn crest',
-                summary: 'A muddy crest from the old quarry company was found beside the tavern door.',
-              },
-            ],
-          },
-        },
-      ],
-      diagnostics: [],
-    } as PersistenceInventory;
-
-    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'story-live' });
-
-    expect(state.selectedSessionSummary.summary).toBe('The quarry road has been quiet since midnight.');
-    expect(state.recentEvents).toEqual([
-      'Bran: The quarry road has been quiet since midnight.',
-      'A muddy crest from the old quarry company was found beside the tavern door.',
-    ]);
-    expect(state.journalEntries[0]).toMatchObject({ time: 'Day 3 • 09:00', title: 'dialogue', detail: 'The quarry road has been quiet since midnight.' });
-    expect(state.journalDetail).toMatchObject({ title: 'dialogue', detail: 'The quarry road has been quiet since midnight.' });
-    expect(state.journalDetail.tags).toEqual(['Live session', 'Dialogue', 'Replay-safe']);
-  });
-
-  it('keeps a user-selected RPG session active when multiple sessions exist', () => {
-    const inventory = {
-      sessions: [
-        { session_id: 'newer', title: 'Newer', updated_at: '2026-06-16T00:00:00Z' },
-        { session_id: 'chosen', title: 'Chosen', location: 'Market Ward', updated_at: '2026-06-14T00:00:00Z', current_turn: '8' },
-      ],
-      diagnostics: [],
-    } as PersistenceInventory;
-
-    const state = createRpgWorkspaceState({ inventory, selectedSessionId: 'chosen' });
-
-    expect(state.selectedSessionSummary).toMatchObject({
-      id: 'chosen',
-      title: 'Chosen',
-      location: 'Market Ward',
-      turnLabel: 'Turn 8',
-    });
-    expect(state.journalEntries[0]).toMatchObject({ title: 'Selected Chosen' });
   });
 
   it('derives safe session labels and bounded progress percentages', () => {

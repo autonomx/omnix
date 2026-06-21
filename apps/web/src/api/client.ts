@@ -121,6 +121,7 @@ export interface RpgLaunchResponse {
   status?: string;
   session?: Record<string, unknown>;
   game?: Record<string, unknown>;
+  environment_snapshot?: Record<string, unknown>;
   error?: string;
 }
 
@@ -191,11 +192,15 @@ export class OmnixApiClient {
   }
 
   async post<TRequest, TResponse>(path: `/api/${string}`, body: TRequest, options: ApiRequestOptions = {}): Promise<TResponse> {
-    return this.request<TResponse>(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }, options);
+    return this.request<TResponse>(
+      path,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      options
+    );
   }
 
   async listChatSessions(): Promise<ChatSessionListResponse> {
@@ -211,10 +216,7 @@ export class OmnixApiClient {
   }
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
-    return this.post<SendChatMessageRequest, SendChatMessageResponse>(
-      `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
-      request,
-    );
+    return this.post<SendChatMessageRequest, SendChatMessageResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, request);
   }
 
   async listProviders(): Promise<ProviderFacadePayload> {
@@ -242,9 +244,7 @@ export class OmnixApiClient {
   }
 
   async deleteModelResidency(modelId: string): Promise<ModelResidencyDiagnostics> {
-    return this.request<ModelResidencyDiagnostics>(`/api/model-residency/${encodeURIComponent(modelId)}`, {
-      method: 'DELETE',
-    });
+    return this.request<ModelResidencyDiagnostics>(`/api/model-residency/${encodeURIComponent(modelId)}`, { method: 'DELETE' });
   }
 
   async listJobs(): Promise<JobListResponse> {
@@ -272,9 +272,7 @@ export class OmnixApiClient {
   }
 
   async previewLegacyNonImageAssetImport(): Promise<AssetLegacyImportDryRun> {
-    return this.request<AssetLegacyImportDryRun>('/api/assets/migrations/legacy-non-image/dry-run', {
-      method: 'POST',
-    });
+    return this.request<AssetLegacyImportDryRun>('/api/assets/migrations/legacy-non-image/dry-run', { method: 'POST' });
   }
 
   async listReports(): Promise<ReportListResponse> {
@@ -282,7 +280,14 @@ export class OmnixApiClient {
   }
 
   async getReplayPersistenceInventory(): Promise<PersistenceInventory> {
-    return this.get<PersistenceInventory>('/api/replay/persistence/inventory');
+    try {
+      return (await this.listRpgSessions()) as unknown as PersistenceInventory;
+    } catch (error) {
+      if (!this.isNotFound(error)) {
+        throw error;
+      }
+      return this.get<PersistenceInventory>('/api/replay/persistence/inventory');
+    }
   }
 
   async listRpgPresets(): Promise<RpgPresetListResponse> {
@@ -299,10 +304,7 @@ export class OmnixApiClient {
 
   async listRpgSessions(): Promise<RpgSessionListResponse> {
     try {
-      const [sessions, presets] = await Promise.all([
-        this.get<RpgSessionListResponse>('/api/rpg/sessions'),
-        this.listRpgPresets(),
-      ]);
+      const [sessions, presets] = await Promise.all([this.get<RpgSessionListResponse>('/api/rpg/sessions'), this.listRpgPresets()]);
       return { ...sessions, presets: presets.presets };
     } catch (error) {
       if (!this.isNotFound(error)) {

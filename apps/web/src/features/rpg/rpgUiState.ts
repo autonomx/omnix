@@ -1,4 +1,4 @@
-import type { AssetListResponse, JobListResponse, PersistenceInventory, ReportListResponse } from '../../api/client';
+import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
 
 export interface RpgHeroSummaryPreview {
   avatar: string;
@@ -116,7 +116,7 @@ export interface RpgCheckpointSummaryPreview {
   source: 'live' | 'preview';
 }
 
-type RpgSession = NonNullable<PersistenceInventory['sessions']>[number];
+type RpgSession = Record<string, unknown>;
 type RpgJob = JobListResponse['jobs'][number];
 type RpgAsset = AssetListResponse['assets'][number];
 type RpgReport = NonNullable<ReportListResponse['reports']>[number];
@@ -147,7 +147,7 @@ export interface RpgWorkspaceState {
 }
 
 export interface RpgWorkspaceStateSources {
-  inventory?: PersistenceInventory;
+  inventory?: { sessions?: RpgSession[] };
   jobs?: JobListResponse;
   assets?: AssetListResponse;
   reports?: ReportListResponse;
@@ -161,6 +161,8 @@ interface TimelineEvent {
   actor?: string;
   kind?: string;
 }
+
+const NOT_TRACKED = 'Not tracked yet';
 
 export const previewHeroSummary: RpgHeroSummaryPreview = {
   avatar: 'A',
@@ -248,10 +250,17 @@ export const hotbarAbilities: RpgHotbarAbilityPreview[] = [
 ];
 
 export const previewWorldStateRows: RpgWorldStateRowPreview[] = [
-  { icon: '☀', label: 'Time', value: 'Day 18 • 09:42' },
-  { icon: '≋', label: 'Weather', value: 'Cold, Windy' },
+  { icon: '☀', label: 'Calendar / Season', value: 'Early Spring' },
+  { icon: '◷', label: 'Day / Time', value: 'Day 18 • 09:42' },
+  { icon: '⌖', label: 'Region', value: 'mountain_pass' },
+  { icon: '≋', label: 'Weather', value: 'Moderate Windy' },
   { icon: '❄', label: 'Temperature', value: '-12°C' },
-  { icon: '✦', label: 'Reputation', value: 'Honored (35)' },
+  { icon: '↝', label: 'Wind', value: 'Strong' },
+  { icon: '◌', label: 'Visibility', value: 'Clear' },
+  { icon: '✦', label: 'Light', value: 'Daylight' },
+  { icon: '▧', label: 'Terrain', value: 'Dry' },
+  { icon: '⌂', label: 'Context', value: 'Outdoor • Exposed' },
+  { icon: '⚠', label: 'Hazards', value: NOT_TRACKED },
 ];
 
 export const npcRelationships: RpgNpcRelationshipPreview[] = [
@@ -341,7 +350,6 @@ export function progressPercent(progress: { current: number; total: number } | u
   if (!progress || progress.total <= 0) {
     return 0;
   }
-
   return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
@@ -354,32 +362,26 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
   const state = recordValue(session.state);
   const payload = recordValue(session.payload);
   const latestTimeline = buildTimelineEvents(session)[0];
+  const snapshot = getEnvironmentSnapshot(session);
+  const context = recordValue(snapshot?.context);
   const id = safeSessionId(session, index);
-  const updatedRaw = firstString(
-    session.updated_at,
-    session.updatedAt,
-    session.modified_at,
-    session.created_at,
-    metadata?.updated_at,
-    latestTimeline?.time
-  );
+  const updatedRaw = firstString(session.updated_at, session.updatedAt, session.modified_at, session.created_at, metadata?.updated_at, latestTimeline?.time);
   const turnCount = firstNumber(session.turn_count, session.turns, session.current_turn, metadata?.turn_count, state?.turn_count);
   const checkpointLabel = firstString(session.checkpoint_id, session.checkpoint, session.checkpoint_path, session.storage_path, payload?.checkpoint_id) ?? 'Checkpoint indexed';
   const title = firstString(session.title, session.name, session.label, session.session_id, session.id) ?? id;
-  const location =
-    firstString(session.location, session.current_location, session.currentLocation, metadata?.location, metadata?.current_location, state?.location, payload?.location) ??
-    previewSessionSummary.location;
+  const location = firstString(
+    context?.location_label,
+    session.location,
+    session.current_location,
+    session.currentLocation,
+    metadata?.location,
+    metadata?.current_location,
+    state?.location,
+    payload?.location
+  ) ?? previewSessionSummary.location;
   const summary =
-    firstString(
-      latestTimeline?.detail,
-      session.summary,
-      session.description,
-      session.last_event,
-      metadata?.summary,
-      metadata?.last_event,
-      state?.summary,
-      payload?.summary
-    ) ?? 'Live replay-persistence session indexed by the backend.';
+    firstString(latestTimeline?.detail, session.summary, session.description, session.last_event, metadata?.summary, metadata?.last_event, state?.summary, payload?.summary) ??
+    'Live replay-persistence session indexed by the backend.';
 
   return {
     id,
@@ -396,10 +398,7 @@ function toSessionSummary(session: RpgSession, index: number): RpgSessionSummary
 
 function buildHeroSummary(session: RpgSession | undefined): RpgHeroSummaryPreview {
   const player = getPlayerRecord(session);
-  if (!player) {
-    return previewHeroSummary;
-  }
-
+  if (!player) return previewHeroSummary;
   const stats = recordValue(player.stats);
   const resources = recordValue(player.resources);
   const reputation = recordValue(player.reputation);
@@ -417,47 +416,25 @@ function buildHeroSummary(session: RpgSession | undefined): RpgHeroSummaryPrevie
     (firstNumber(player.renown, player.reputation_score, reputation?.score) !== undefined
       ? `Renown ${formatNumber(firstNumber(player.renown, player.reputation_score, reputation?.score) ?? 0)}`
       : previewHeroSummary.renown);
-
-  return {
-    avatar: initialFor(name),
-    name,
-    subtitle: [level !== undefined ? `Level ${level}` : undefined, role].filter(Boolean).join(' • '),
-    origin,
-    xpLabel,
-    xpPercent,
-    gold,
-    renown,
-    source: 'live',
-  };
+  return { avatar: initialFor(name), name, subtitle: [level !== undefined ? `Level ${level}` : undefined, role].filter(Boolean).join(' • '), origin, xpLabel, xpPercent, gold, renown, source: 'live' };
 }
 
 function buildHeroStats(session: RpgSession | undefined): RpgStatPreview[] {
   const player = getPlayerRecord(session);
-  if (!player) {
-    return heroStats;
-  }
-
+  if (!player) return heroStats;
   const stats = recordValue(player.stats);
   const resources = recordValue(player.resources);
   const sources = [player, stats, resources];
   const hp = readMetric(sources, ['hp', 'health', 'hit_points'], ['max_hp', 'max_health', 'health_max', 'hp_max', 'max_hit_points']);
   const stamina = readMetric(sources, ['stamina', 'energy'], ['max_stamina', 'stamina_max', 'max_energy', 'energy_max']);
   const mana = readMetric(sources, ['mana', 'mp'], ['max_mana', 'mana_max', 'max_mp', 'mp_max']);
-
-  return [
-    hp ? toStat('HP', hp, 'danger') : heroStats[0],
-    stamina ? toStat('Stamina', stamina, 'success') : heroStats[1],
-    mana ? toStat('Mana', mana, 'mana') : heroStats[2],
-  ];
+  return [hp ? toStat('HP', hp, 'danger') : heroStats[0], stamina ? toStat('Stamina', stamina, 'success') : heroStats[1], mana ? toStat('Mana', mana, 'mana') : heroStats[2]];
 }
 
 function buildEquippedGear(session: RpgSession | undefined): RpgGearPreview[] {
   const player = getPlayerRecord(session);
   const equipment = firstArray(player?.equipment, player?.equipped, player?.gear, recordValue(player?.inventory)?.equipped);
-  if (!equipment.length) {
-    return equippedGear;
-  }
-
+  if (!equipment.length) return equippedGear;
   return equipment.slice(0, 5).map((item, index) => {
     const record = recordValue(item) ?? { name: item };
     const slot = firstString(record.slot, record.type, record.category) ?? `Slot ${index + 1}`;
@@ -469,33 +446,21 @@ function buildEquippedGear(session: RpgSession | undefined): RpgGearPreview[] {
 function buildPartyMembers(session: RpgSession | undefined): RpgPartyMemberPreview[] {
   const roots = getSessionRecords(session);
   const party = firstArray(...roots.flatMap((root) => [root.party, root.companions, root.party_members]));
-  if (!party.length) {
-    return partyMembers;
-  }
-
+  if (!party.length) return partyMembers;
   return party.slice(0, 4).map((member, index) => {
     const record = recordValue(member) ?? { name: member };
     const name = firstString(record.name, record.id, record.label) ?? `Companion ${index + 1}`;
     const level = firstNumber(record.level, record.lv);
     const role = firstString(record.role, record.class, record.archetype, record.type) ?? 'Companion';
     const hp = readMetric([record, recordValue(record.stats), recordValue(record.resources)], ['hp', 'health'], ['max_hp', 'max_health', 'health_max']);
-    return {
-      avatar: initialFor(name),
-      name,
-      role: [level !== undefined ? `Lv. ${level}` : undefined, role].filter(Boolean).join(' '),
-      hp: hp ? metricLabel(hp.current, hp.max) : 'HP unknown',
-      percent: hp ? metricPercent(hp.current, hp.max) : 50,
-    };
+    return { avatar: initialFor(name), name, role: [level !== undefined ? `Lv. ${level}` : undefined, role].filter(Boolean).join(' '), hp: hp ? metricLabel(hp.current, hp.max) : 'HP unknown', percent: hp ? metricPercent(hp.current, hp.max) : 50 };
   });
 }
 
 function buildActiveQuests(session: RpgSession | undefined): RpgQuestPreview[] {
   const roots = getSessionRecords(session);
   const quests = firstArray(...roots.flatMap((root) => [root.quests, root.active_quests, root.objectives, recordValue(root.journal)?.quests]));
-  if (!quests.length) {
-    return activeQuests;
-  }
-
+  if (!quests.length) return activeQuests;
   return quests.slice(0, 4).map((quest, index) => {
     const record = recordValue(quest) ?? { title: quest };
     const title = firstString(record.title, record.name, record.id) ?? `Quest ${index + 1}`;
@@ -508,10 +473,7 @@ function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemP
   const player = getPlayerRecord(session);
   const roots = getSessionRecords(session);
   const inventory = firstArray(player?.inventory, recordValue(player?.inventory)?.items, ...roots.map((root) => recordValue(root.inventory)?.items ?? root.items));
-  if (!inventory.length) {
-    return inventoryItems;
-  }
-
+  if (!inventory.length) return inventoryItems;
   return inventory.slice(0, 8).map((item, index) => {
     const record = recordValue(item) ?? { name: item };
     const label = firstString(record.name, record.label, record.id) ?? `Item ${index + 1}`;
@@ -521,132 +483,91 @@ function buildInventoryItems(session: RpgSession | undefined): RpgInventoryItemP
 }
 
 function buildRecentEvents(selectedSession: RpgSessionSummaryPreview, timeline: TimelineEvent[]): string[] {
-  if (selectedSession.source === 'preview') {
-    return previewRecentEvents;
-  }
-
-  if (timeline.length) {
-    return timeline.slice(0, 4).map((event) => formatTimelineEvent(event));
-  }
-
-  return [
-    `Loaded ${selectedSession.title}.`,
-    `Current location: ${selectedSession.location}.`,
-    `${selectedSession.turnLabel} • ${selectedSession.updatedAt}.`,
-  ];
+  if (selectedSession.source === 'preview') return previewRecentEvents;
+  if (timeline.length) return timeline.slice(0, 4).map((event) => formatTimelineEvent(event));
+  return [`Loaded ${selectedSession.title}.`, `Current location: ${selectedSession.location}.`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}.`];
 }
 
 function buildJournalEntries(selectedSession: RpgSessionSummaryPreview, timeline: TimelineEvent[]): RpgJournalEntryPreview[] {
-  if (selectedSession.source === 'preview') {
-    return previewJournalEntries;
-  }
-
-  if (timeline.length) {
-    return timeline.slice(0, 6).map((event) => ({ time: event.time, title: event.title, detail: event.detail }));
-  }
-
+  if (selectedSession.source === 'preview') return previewJournalEntries;
+  if (timeline.length) return timeline.slice(0, 6).map((event) => ({ time: event.time, title: event.title, detail: event.detail }));
   return [
-    {
-      time: selectedSession.updatedAt,
-      title: `Selected ${selectedSession.title}`,
-      detail: selectedSession.summary,
-    },
-    {
-      time: selectedSession.turnLabel,
-      title: 'Latest deterministic checkpoint',
-      detail: selectedSession.checkpointLabel,
-    },
-    {
-      time: 'Replay',
-      title: 'Session ready',
-      detail: 'Replay-preserving turn commands will continue from this indexed state.',
-    },
+    { time: selectedSession.updatedAt, title: `Selected ${selectedSession.title}`, detail: selectedSession.summary },
+    { time: selectedSession.turnLabel, title: 'Latest deterministic checkpoint', detail: selectedSession.checkpointLabel },
+    { time: 'Replay', title: 'Session ready', detail: 'Replay-preserving turn commands will continue from this indexed state.' },
   ];
 }
 
 function buildJournalDetail(selectedSession: RpgSessionSummaryPreview, timeline: TimelineEvent[]): RpgJournalDetailPreview {
-  if (selectedSession.source === 'preview') {
-    return previewJournalDetail;
-  }
-
+  if (selectedSession.source === 'preview') return previewJournalDetail;
   const latest = timeline[0];
   if (latest) {
     return {
       title: latest.title,
       detail: latest.detail,
-      bullets: [
-        `Session id: ${selectedSession.id}`,
-        `Location: ${selectedSession.location}`,
-        `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`,
-        `Checkpoint: ${selectedSession.checkpointLabel}`,
-      ],
+      bullets: [`Session id: ${selectedSession.id}`, `Location: ${selectedSession.location}`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`, `Checkpoint: ${selectedSession.checkpointLabel}`],
       tags: ['Live session', latest.kind ? titleCase(latest.kind) : 'Timeline', 'Replay-safe'],
     };
   }
-
   return {
     title: `Live session: ${selectedSession.title}`,
     detail: selectedSession.summary,
-    bullets: [
-      `Session id: ${selectedSession.id}`,
-      `Location: ${selectedSession.location}`,
-      `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`,
-      `Checkpoint: ${selectedSession.checkpointLabel}`,
-    ],
+    bullets: [`Session id: ${selectedSession.id}`, `Location: ${selectedSession.location}`, `${selectedSession.turnLabel} • ${selectedSession.updatedAt}`, `Checkpoint: ${selectedSession.checkpointLabel}`],
     tags: ['Live session', 'Replay-safe', 'Indexed'],
   };
 }
 
 function buildWorldStateRows(selectedSession: RpgSessionSummaryPreview, session: RpgSession | undefined): RpgWorldStateRowPreview[] {
-  if (selectedSession.source === 'preview' || !session) {
-    return previewWorldStateRows;
+  if (selectedSession.source === 'preview' || !session) return previewWorldStateRows;
+  const snapshot = getEnvironmentSnapshot(session);
+  if (!snapshot) {
+    return environmentRowsFromValues({});
   }
+  const calendar = recordValue(snapshot.calendar);
+  const weather = recordValue(snapshot.weather);
+  const context = recordValue(snapshot.context);
+  const display = recordValue(snapshot.display);
+  const hazards = firstArray(snapshot.hazards);
+  return environmentRowsFromValues({
+    season: firstString(display?.season, calendar?.season_label, snapshot.season_label),
+    dayTime: firstString(display?.day_time, calendar?.time_label, snapshot.time_label),
+    region: firstString(snapshot.region_id),
+    weather: firstString(display?.weather, weather?.label, weather?.condition),
+    temperature: firstString(display?.temperature, snapshot.temperature_label, snapshot.temperature_c),
+    wind: firstString(display?.wind, snapshot.wind),
+    visibility: firstString(display?.visibility, snapshot.visibility),
+    light: firstString(display?.light, snapshot.light_level),
+    terrain: firstString(display?.terrain, snapshot.terrain_condition),
+    context: firstString(display?.context, context?.label, context?.exposure),
+    hazards: hazards.length ? hazards.map((hazard) => firstString(recordValue(hazard)?.id, hazard)).filter(Boolean).join(', ') : undefined,
+  });
+}
 
-  const roots = getSessionRecords(session);
-  const world = firstRecord(
-    ...roots.flatMap((root) => [root.world, root.world_state, root.environment, root.location_state, root.locationContext, recordValue(root.state)?.world])
-  );
-  const clock = firstRecord(...roots.flatMap((root) => [root.clock, root.time, root.calendar, world?.clock, world?.time]));
-  const player = getPlayerRecord(session);
-  const reputation = recordValue(player?.reputation);
-  const time = firstString(
-    world?.time,
-    world?.time_label,
-    world?.day_time,
-    clock?.label,
-    clock?.time,
-    clock?.day,
-    ...roots.map((root) => root.time_label ?? root.time)
-  ) ?? selectedSession.updatedAt;
-  const weather = firstString(world?.weather, world?.conditions, world?.weather_label, ...roots.map((root) => root.weather ?? root.conditions));
-  const temperatureNumber = firstNumber(world?.temperature, world?.temp, ...roots.map((root) => root.temperature ?? root.temp));
-  const temperature =
-    firstString(world?.temperature_label, world?.temperature, world?.temp, ...roots.map((root) => root.temperature_label)) ??
-    (temperatureNumber !== undefined ? `${formatNumber(temperatureNumber)}°C` : undefined);
-  const reputationLabel =
-    firstString(player?.renown, player?.reputation_label, reputation?.label, reputation?.standing, reputation?.name) ??
-    (firstNumber(player?.renown, player?.reputation_score, reputation?.score) !== undefined
-      ? `Renown ${formatNumber(firstNumber(player?.renown, player?.reputation_score, reputation?.score) ?? 0)}`
-      : undefined);
-
+function environmentRowsFromValues(values: Record<string, string | undefined>): RpgWorldStateRowPreview[] {
   return [
-    { icon: '☀', label: 'Time', value: time },
-    { icon: '≋', label: 'Weather', value: weather ?? 'Weather unknown' },
-    { icon: '❄', label: 'Temperature', value: temperature ?? 'Unknown' },
-    { icon: '✦', label: 'Reputation', value: reputationLabel ?? 'Reputation unknown' },
+    { icon: '☀', label: 'Calendar / Season', value: values.season ?? NOT_TRACKED },
+    { icon: '◷', label: 'Day / Time', value: values.dayTime ?? NOT_TRACKED },
+    { icon: '⌖', label: 'Region', value: values.region ?? NOT_TRACKED },
+    { icon: '≋', label: 'Weather', value: values.weather ?? NOT_TRACKED },
+    { icon: '❄', label: 'Temperature', value: values.temperature ?? NOT_TRACKED },
+    { icon: '↝', label: 'Wind', value: values.wind ?? NOT_TRACKED },
+    { icon: '◌', label: 'Visibility', value: values.visibility ?? NOT_TRACKED },
+    { icon: '✦', label: 'Light', value: values.light ?? NOT_TRACKED },
+    { icon: '▧', label: 'Terrain', value: values.terrain ?? NOT_TRACKED },
+    { icon: '⌂', label: 'Context', value: values.context ?? NOT_TRACKED },
+    { icon: '⚠', label: 'Hazards', value: values.hazards ?? NOT_TRACKED },
   ];
+}
+
+function getEnvironmentSnapshot(session: RpgSession | undefined): Record<string, unknown> | undefined {
+  const state = recordValue(session?.state);
+  const payload = recordValue(session?.payload);
+  return firstRecord(session?.environment_snapshot, state?.environment_snapshot, payload?.environment_snapshot);
 }
 
 function buildNpcRelationships(session: RpgSession | undefined): RpgNpcRelationshipPreview[] {
   const roots = getSessionRecords(session);
-  const candidates = roots.flatMap((root) => [
-    root.npc_relationships,
-    root.relationships,
-    root.social_state,
-    root.social,
-    recordValue(root.npcs)?.relationships,
-    recordValue(root.memory)?.npc_relationships,
-  ]);
+  const candidates = roots.flatMap((root) => [root.npc_relationships, root.relationships, root.social_state, root.social, recordValue(root.npcs)?.relationships, recordValue(root.memory)?.npc_relationships]);
   const relationshipArray = firstArray(...candidates);
   const relationshipRecord = relationshipArray.length ? undefined : firstRecord(...candidates);
   const relationshipItems = relationshipArray.length
@@ -654,11 +575,7 @@ function buildNpcRelationships(session: RpgSession | undefined): RpgNpcRelations
     : relationshipRecord
       ? Object.entries(relationshipRecord).map(([name, value]) => ({ ...(recordValue(value) ?? { score: value }), name }))
       : [];
-
-  if (!relationshipItems.length) {
-    return npcRelationships;
-  }
-
+  if (!relationshipItems.length) return npcRelationships;
   return relationshipItems.slice(0, 5).map((relationship, index) => {
     const record = recordValue(relationship) ?? { name: relationship };
     const name = firstString(record.name, record.npc, record.character, record.id, record.label) ?? `NPC ${index + 1}`;
@@ -670,13 +587,8 @@ function buildNpcRelationships(session: RpgSession | undefined): RpgNpcRelations
 
 function buildEncounter(session: RpgSession | undefined): RpgEncounterPreview {
   const roots = getSessionRecords(session);
-  const encounter = firstRecord(
-    ...roots.flatMap((root) => [root.encounter, root.encounter_state, root.current_encounter, root.combat, root.combat_state, recordValue(root.state)?.combat])
-  );
-  if (!encounter) {
-    return previewEncounter;
-  }
-
+  const encounter = firstRecord(...roots.flatMap((root) => [root.encounter, root.encounter_state, root.current_encounter, root.combat, root.combat_state, recordValue(root.state)?.combat]));
+  if (!encounter) return previewEncounter;
   const status = firstString(encounter.status, encounter.state, encounter.phase, encounter.mode);
   const enemies = firstArray(encounter.enemies, encounter.opponents, encounter.hostiles, encounter.combatants)
     .map((enemy, index) => firstString(recordValue(enemy)?.name, recordValue(enemy)?.id, enemy) ?? `Combatant ${index + 1}`)
@@ -684,16 +596,8 @@ function buildEncounter(session: RpgSession | undefined): RpgEncounterPreview {
   const statusText = String(status ?? '').toLowerCase();
   const active = Boolean(status && !['none', 'idle', 'inactive', 'resolved', 'complete', 'completed'].some((token) => statusText.includes(token)));
   const title = firstString(encounter.title, encounter.name, encounter.label) ?? (active ? 'Active encounter' : 'Encounter indexed');
-  const detail =
-    firstString(encounter.summary, encounter.detail, encounter.description, encounter.objective) ??
-    (enemies.length ? `Combatants: ${enemies.join(', ')}` : status ? `Status: ${status}` : 'Encounter state indexed from live session.');
-
-  return {
-    icon: active ? '⚔' : '◇',
-    title,
-    detail,
-    source: 'live',
-  };
+  const detail = firstString(encounter.summary, encounter.detail, encounter.description, encounter.objective) ?? (enemies.length ? `Combatants: ${enemies.join(', ')}` : status ? `Status: ${status}` : 'Encounter state indexed from live session.');
+  return { icon: active ? '⚔' : '◇', title, detail, source: 'live' };
 }
 
 function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionSummaryPreview): RpgCheckpointSummaryPreview {
@@ -704,14 +608,8 @@ function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionS
       source: selectedSession.source,
     };
   }
-
   const latestAsset = [...assets].sort((left, right) => timestampRank(right.created_at) - timestampRank(left.created_at))[0];
-
-  return {
-    label: 'Latest checkpoint',
-    detail: String(latestAsset.storage_path ?? latestAsset.id),
-    source: 'live',
-  };
+  return { label: 'Latest checkpoint', detail: String(latestAsset.storage_path ?? latestAsset.id), source: 'live' };
 }
 
 function toJobCard(job: RpgJob): RpgJobCardPreview {
@@ -731,28 +629,10 @@ function toStat(label: string, metric: { current: number; max: number }, tone: R
 
 function buildTimelineEvents(session: RpgSession | undefined): TimelineEvent[] {
   const roots = getSessionRecords(session);
-  if (!roots.length) {
-    return [];
-  }
-
-  const timelineArrays = roots.flatMap((root) => [
-    root.timeline,
-    root.recent_events,
-    root.events,
-    root.event_log,
-    root.turn_history,
-    root.turns,
-    root.history,
-    root.dialogue_log,
-    root.dialogue,
-    root.logs,
-    recordValue(root.journal)?.entries,
-  ]);
-  const items = firstArray(...timelineArrays);
-  if (!items.length) {
-    return [];
-  }
-
+  if (!roots.length) return [];
+  const items = firstArray(
+    ...roots.flatMap((root) => [root.timeline, root.recent_events, root.events, root.event_log, root.turn_history, root.turns, root.history, root.dialogue_log, root.dialogue, root.logs, recordValue(root.journal)?.entries])
+  );
   return items
     .map(toTimelineEvent)
     .filter((event): event is TimelineEvent => Boolean(event))
@@ -760,40 +640,21 @@ function buildTimelineEvents(session: RpgSession | undefined): TimelineEvent[] {
 }
 
 function toTimelineEvent(item: unknown, index: number): TimelineEvent | undefined {
-  if (typeof item === 'string' && item.trim()) {
-    return { time: `Event ${index + 1}`, title: item.trim(), detail: item.trim(), kind: 'event' };
-  }
-
+  if (typeof item === 'string' && item.trim()) return { time: `Event ${index + 1}`, title: item.trim(), detail: item.trim(), kind: 'event' };
   const record = recordValue(item);
-  if (!record) {
-    return undefined;
-  }
-
+  if (!record) return undefined;
   const actor = firstString(record.actor, record.speaker, record.character, record.npc, record.source);
   const command = firstString(record.command, record.action, record.player_action, record.playerAction, record.input);
   const narration = firstString(record.narration, record.response, record.output, record.summary, record.result, record.text, record.message, record.description);
   const detail = narration ?? command ?? firstString(record.detail, record.title, record.label, record.event) ?? 'RPG event indexed from live session.';
-  const title =
-    firstString(record.title, record.label, record.event, record.kind, record.type) ??
-    (command ? 'Player command' : actor ? `${actor} speaks` : `Session event ${index + 1}`);
+  const title = firstString(record.title, record.label, record.event, record.kind, record.type) ?? (command ? 'Player command' : actor ? `${actor} speaks` : `Session event ${index + 1}`);
   const time = firstString(record.time, record.timestamp, record.created_at, record.updated_at, record.turn_label) ?? turnLabelFor(record, index);
   const kind = firstString(record.kind, record.type, record.category, command ? 'command' : undefined);
-
-  return {
-    time: compactTimestamp(time) ?? time,
-    title,
-    detail,
-    actor,
-    kind,
-  };
+  return { time: compactTimestamp(time) ?? time, title, detail, actor, kind };
 }
 
 function formatTimelineEvent(event: TimelineEvent): string {
-  if (event.actor && !event.detail.startsWith(`${event.actor}:`)) {
-    return `${event.actor}: ${event.detail}`;
-  }
-
-  return event.detail;
+  return event.actor && !event.detail.startsWith(`${event.actor}:`) ? `${event.actor}: ${event.detail}` : event.detail;
 }
 
 function turnLabelFor(record: Record<string, unknown>, index: number): string {
@@ -802,51 +663,26 @@ function turnLabelFor(record: Record<string, unknown>, index: number): string {
 }
 
 function getPlayerRecord(session: RpgSession | undefined): Record<string, unknown> | undefined {
-  if (!session) {
-    return undefined;
-  }
-
   const roots = getSessionRecords(session);
-  return firstRecord(
-    ...roots.flatMap((root) => [root.player, root.hero, root.character, root.player_state, root.character_state, recordValue(root.state)?.player])
-  );
+  return firstRecord(...roots.flatMap((root) => [root.player, root.hero, root.character, root.player_state, root.character_state, recordValue(root.state)?.player]));
 }
 
 function getSessionRecords(session: RpgSession | undefined): Record<string, unknown>[] {
-  if (!session) {
-    return [];
-  }
-
-  const sessionRecord = session as Record<string, unknown>;
-  return [sessionRecord, recordValue(sessionRecord.metadata), recordValue(sessionRecord.state), recordValue(sessionRecord.payload)].filter(
-    (record): record is Record<string, unknown> => Boolean(record)
-  );
+  if (!session) return [];
+  return [session, recordValue(session.metadata), recordValue(session.state), recordValue(session.payload)].filter((record): record is Record<string, unknown> => Boolean(record));
 }
 
-function readMetric(
-  records: Array<Record<string, unknown> | undefined>,
-  currentKeys: string[],
-  maxKeys: string[]
-): { current: number; max: number } | undefined {
+function readMetric(records: Array<Record<string, unknown> | undefined>, currentKeys: string[], maxKeys: string[]): { current: number; max: number } | undefined {
   for (const record of records) {
-    if (!record) {
-      continue;
-    }
-
+    if (!record) continue;
     const nestedMetric = firstRecord(...currentKeys.map((key) => recordValue(record[key])));
     const nestedCurrent = firstNumber(nestedMetric?.current, nestedMetric?.value, nestedMetric?.amount);
     const nestedMax = firstNumber(nestedMetric?.max, nestedMetric?.total, nestedMetric?.maximum);
-    if (nestedCurrent !== undefined && nestedMax !== undefined) {
-      return { current: nestedCurrent, max: nestedMax };
-    }
-
+    if (nestedCurrent !== undefined && nestedMax !== undefined) return { current: nestedCurrent, max: nestedMax };
     const current = firstNumber(...currentKeys.flatMap((key) => [record[key], record[`current_${key}`], record[`current${titleCase(key)}`]]));
     const max = firstNumber(...maxKeys.flatMap((key) => [record[key], record[`maximum_${key}`]]));
-    if (current !== undefined && max !== undefined) {
-      return { current, max };
-    }
+    if (current !== undefined && max !== undefined) return { current, max };
   }
-
   return undefined;
 }
 
@@ -862,12 +698,8 @@ function formatCurrency(...values: unknown[]): string {
         .join(' ');
     }
   }
-
   const numeric = firstNumber(...values);
-  if (numeric !== undefined) {
-    return formatNumber(numeric);
-  }
-
+  if (numeric !== undefined) return formatNumber(numeric);
   return firstString(...values) ?? previewHeroSummary.gold;
 }
 
@@ -876,22 +708,13 @@ function metricLabel(current: number, max: number): string {
 }
 
 function metricPercent(current: number, max: number): number {
-  if (max <= 0) {
-    return 0;
-  }
-
+  if (max <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((current / max) * 100)));
 }
 
 function relationshipScore(value: number | undefined): number {
-  if (value === undefined) {
-    return 50;
-  }
-
-  if (value > 0 && value <= 1) {
-    return Math.round(value * 100);
-  }
-
+  if (value === undefined) return 50;
+  if (value > 0 && value <= 1) return Math.round(value * 100);
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
@@ -905,28 +728,20 @@ function stanceForScore(score: number): string {
 
 function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim()) {
-      return value;
-    }
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   }
-
   return undefined;
 }
 
 function firstNumber(...values: unknown[]): number | undefined {
   for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string' && value.trim()) {
       const parsed = Number(value.replace(/,/g, ''));
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
+      if (Number.isFinite(parsed)) return parsed;
     }
   }
-
   return undefined;
 }
 
@@ -936,42 +751,26 @@ function firstRecord(...values: unknown[]): Record<string, unknown> | undefined 
 
 function firstArray(...values: unknown[]): unknown[] {
   for (const value of values) {
-    if (Array.isArray(value)) {
-      return value;
-    }
+    if (Array.isArray(value)) return value;
   }
-
   return [];
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) return value as Record<string, unknown>;
   return undefined;
 }
 
 function compactTimestamp(value: string | undefined): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  if (!value.includes('T')) {
-    return value;
-  }
-
+  if (!value) return undefined;
+  if (!value.includes('T')) return value;
   const [date, time = ''] = value.split('T');
   const [hour = '00', minute = '00'] = time.split(':');
-
   return `${date} ${hour}:${minute} UTC`;
 }
 
 function timestampRank(value: string | undefined): number {
-  if (!value) {
-    return 0;
-  }
-
+  if (!value) return 0;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
