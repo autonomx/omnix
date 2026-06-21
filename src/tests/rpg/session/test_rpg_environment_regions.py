@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from typing import Any
 
 from app.rpg.session.environment import build_initial_environment_seed_state
 from app.rpg.session.environment_regions import (
@@ -12,7 +13,7 @@ from app.rpg.session.environment_regions import (
 )
 
 
-def _environment(location_id: str, condition: str, region_id: str) -> dict[str, object]:
+def _environment(location_id: str, condition: str, region_id: str) -> dict[str, Any]:
     state = build_initial_environment_seed_state(
         campaign_seed=88,
         campaign_contract={"campaign_template": "classic_fantasy", "tone": "regional test"},
@@ -29,7 +30,7 @@ def _environment(location_id: str, condition: str, region_id: str) -> dict[str, 
     return environment
 
 
-def _world() -> dict[str, object]:
+def _world() -> dict[str, Any]:
     return {
         "environment": {"active_region_id": "northern_mountains"},
         "regions": {
@@ -43,6 +44,10 @@ def _world() -> dict[str, object]:
     }
 
 
+def _region_condition(world: dict[str, Any], region_id: str) -> str:
+    return str(world["regions"][region_id]["environment"]["active_events"][0]["condition"])
+
+
 def test_region_snapshots_keep_separate_weather() -> None:
     world = _world()
     north = derive_active_region_snapshot(world, {"exposure": "outdoor", "shelter": "exposed"})
@@ -53,7 +58,7 @@ def test_region_snapshots_keep_separate_weather() -> None:
     assert north["weather"]["condition"] == "snow"
     assert south["region_id"] == "southern_coast"
     assert south["weather"]["condition"] == "rain"
-    assert world["regions"]["northern_mountains"]["environment"]["active_events"][0]["condition"] == "snow"
+    assert _region_condition(world, "northern_mountains") == "snow"
 
 
 def test_switch_active_region_does_not_rewrite_region_environments() -> None:
