@@ -26,3 +26,14 @@ def test_ten_default_steps_advance_one_hundred_minutes() -> None:
     assert environment["calendar"] == {"year": 1, "day_of_year": 1, "days_per_year": 360}
     assert environment["active_events"][0]["remaining_minutes"] == initial_remaining - 100
     assert environment["recent_conditions"]["rain_minutes_24h"] == 100
+
+
+def test_same_elapsed_sequence_replays_same_clock_state() -> None:
+    first = _seed_environment()
+    second = _seed_environment()
+
+    for elapsed_minutes in (10, 10, 20, 5, 45):
+        first = advance_environment_time(first, elapsed_minutes=elapsed_minutes)
+        second = advance_environment_time(second, elapsed_minutes=elapsed_minutes)
+
+    assert first == second
