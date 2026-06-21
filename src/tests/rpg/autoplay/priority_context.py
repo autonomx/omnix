@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .weight_context import action_with_weight_note
+
 _PRIORITY_KEY = "_".join(("active", "goals"))
 _COMPILED_KEY = "_".join(("compiled", "goals"))
 
@@ -55,6 +57,7 @@ def apply_priority_context(base_text: str, state: Mapping[str, object]) -> str:
 
 
 def autoplay_action_text(turn_index: int, state: Mapping[str, object]) -> str:
-    """Return the standard autoplay turn action with priority context applied."""
+    """Return the standard autoplay turn action with compiled setup context applied."""
 
-    return apply_priority_context(f"continue turn {int(turn_index)}", state)
+    priority_text = apply_priority_context(f"continue turn {int(turn_index)}", state)
+    return action_with_weight_note(priority_text, state)
